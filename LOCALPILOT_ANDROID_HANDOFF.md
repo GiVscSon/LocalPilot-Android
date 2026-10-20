@@ -39,7 +39,7 @@
 - `:app:assembleDebug :app:lintDebug :app:assembleDebugAndroidTest` прошли. **Lint: 0 ошибок, 15 предупреждений**; подавления или baseline не добавлялись. Предупреждения относятся к ресурсам/локализации, accessibility custom views, static service reference, backup rules, API31-атрибуту и RTL.
 - Dev APK и instrumentation APK проходят apksigner verify. `aapt` подтверждает отдельный пакет `org.localpilot.android.dev`, 0.3.2-dev/code6, Android11+, target35.
 - Дополнительный `build_debug.py` тоже реально собрал, выровнял и подписал Dev APK. Ключ `.build/debug.keystore` остаётся локальным и игнорируется Git.
-- Сквозной Android-тест **пока не выполнен**. Его сборка не доказывает работу overlay, screenshot или жестов на телефоне.
+- Сквозной Android-тест **не выполнен**. Его сборка не доказывает работу overlay, screenshot или жестов на телефоне. API30 x86_64 эмулятор работает без KVM: после сохранения/удаления подтверждённо устаревших locks повторная загрузка дошла до PM/window/accessibility, но `zygote`/framework перезапустились до запуска приложения. `adb install` завершился exit1: `cmd: Failure calling service package: Broken pipe (32)`. Это отказ тестовой среды; приложение не запускалось. Повторять такой же запуск без изменения стенда не нужно.
 
 ## APK и подпись
 

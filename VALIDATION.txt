@@ -18,8 +18,12 @@ PASS aapt: org.localpilot.android.dev, version0.3.2-dev/code6, min30/target35.
 PASS standalone build_debug.py compilation, zipalign and v3 signing.
 PASS Python syntax and git diff --check.
 
-Android instrumentation: COMPILED, NOT RUN yet. The software-only API30 emulator
-has no KVM, framework startup is slow; installation is being investigated.
+Android instrumentation: COMPILED, NOT RUN. Software-only API30 emulator has no
+KVM. Stale AVD locks were backed up and removed after ownership checks. A retry
+reached PM/window/accessibility, then zygote/framework restarted before app launch.
+adb install exited1: cmd: Failure calling service package: Broken pipe(32).
+No app/gameplay run occurred; this is a test-environment failure, not an APK
+functional result. No installation retry after the framework restart was made.
 No phone gameplay, real screenshot/gesture chain, overlay focus, rotation,
 Stop-race on Android, thermal/FPS, physical power-loss or GitHub CI result claimed.
 No full fix of the user's READ/POLICY/ACK n=0 claimed without device evidence.
