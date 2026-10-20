@@ -1,19 +1,30 @@
-PASS 27 experience persistence/import/limits assertions
-PASS 6 metrics assertions
-PASS 13 gate checks
-PASS 6131 board/reader/parity assertions
-PASS 2634 hardening/mini-game assertions
+LocalPilot Android 0.3.2-dev — current checks, 2026-10-20
 
-Note: /workspace/scratch/b6361cf32ee0/LocalPilot_Android/app/src/main/java/org/localpilot/android/PilotService.java uses or overrides a deprecated API.
-Note: Recompile with -Xlint:deprecation for details.
-Verifies
-Verified using v1 scheme (JAR signing): false
-Verified using v2 scheme (APK Signature Scheme v2): false
-Verified using v3 scheme (APK Signature Scheme v3): true
-Verified using v3.1 scheme (APK Signature Scheme v3.1): false
-Verified using v4 scheme (APK Signature Scheme v4): false
-Verified for SourceStamp: false
-Number of signers: 1
-{"apk": "/workspace/scratch/b6361cf32ee0/LocalPilot_Android_0.3.2_signed.apk", "sha256": "62a04efaf19a216c0f9bf3a79008dd767a44f00a0cab12b1518ed575b8d0949e", "bytes": 53722}
+PASS original ZIP CRC and SHA256 manifest: 36/36 source files.
+PASS baseline original0.3.2 JVM Verify: 8811 assertions.
+PASS current JVM Verify: 8902 assertions, 0 failed, none skipped:
+  27 experience persistence/import/limits
+  59 stage metrics/counters/percentiles
+  38 real parser + diagnostic integration fixtures (synthetic pixels)
+  13 action gate
+  6131 board/reader/parity
+  2634 hardening/mini-game
 
-Device0.3.2/Gradle/lint/CI/physicalpowerloss NOT RUN.
+PASS Gradle8.9 wrapper version, official distribution and wrapper-JAR checksums.
+PASS ./gradlew :app:assembleDebug :app:lintDebug :app:assembleDebugAndroidTest
+Lint: 0 errors, 15 warnings. No suppression/baseline added.
+PASS apksigner verification of Gradle app and instrumentation APKs.
+PASS aapt: org.localpilot.android.dev, version0.3.2-dev/code6, min30/target35.
+PASS standalone build_debug.py compilation, zipalign and v3 signing.
+PASS Python syntax and git diff --check.
+
+Android instrumentation: COMPILED, NOT RUN yet. The software-only API30 emulator
+has no KVM, framework startup is slow; installation is being investigated.
+No phone gameplay, real screenshot/gesture chain, overlay focus, rotation,
+Stop-race on Android, thermal/FPS, physical power-loss or GitHub CI result claimed.
+No full fix of the user's READ/POLICY/ACK n=0 claimed without device evidence.
+
+Gradle Dev certificate SHA256:
+55626377256dda3a6b5824b7278eb12db75b8a7d1c80baa9d2af4402ccac2684
+Original0.3.2 certificate differs; original signing key was not supplied.
+Private keys and build caches are excluded from Git and source packages.

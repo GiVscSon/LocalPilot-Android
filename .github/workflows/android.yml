@@ -1,5 +1,7 @@
 name: Build Android debug APK
-on: [workflow_dispatch, push]
+on: [workflow_dispatch, push, pull_request]
+permissions:
+ contents: read
 jobs:
  build:
   runs-on: ubuntu-latest
@@ -15,8 +17,10 @@ jobs:
       gradle-version: '8.9'
    - run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
    - run: java tests/Verify.java tests/legacy_parity.txt
-   - run: gradle --no-daemon :app:assembleDebug :app:lintDebug
+   - run: ./gradlew --no-daemon :app:assembleDebug :app:lintDebug :app:assembleDebugAndroidTest
    - uses: actions/upload-artifact@v4
      with:
       name: LocalPilot-Android-debug
-      path: app/build/outputs/apk/debug/app-debug.apk
+      path: |
+       app/build/outputs/apk/debug/app-debug.apk
+       app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk

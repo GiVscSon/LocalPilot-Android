@@ -2,7 +2,13 @@ plugins { id 'com.android.application' }
 android {
  namespace 'org.localpilot.android'
  compileSdk 35
- defaultConfig { applicationId 'org.localpilot.android'; minSdk 30; targetSdk 35; versionCode 6; versionName '0.3.2' }
- buildTypes { debug { debuggable false } }
+ defaultConfig { applicationId 'org.localpilot.android'; minSdk 30; targetSdk 35; versionCode 6; versionName '0.3.2'; testInstrumentationRunner 'org.localpilot.android.PilotUiInstrumentation' }
+ buildTypes {
+  debug {
+   applicationIdSuffix '.dev'
+   versionNameSuffix '-dev'
+   debuggable false
+  }
+ }
  compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
 }
