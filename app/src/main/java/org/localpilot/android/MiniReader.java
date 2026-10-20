@@ -1,0 +1,5 @@
+package org.localpilot.android;
+public final class MiniReader {
+ public static final int[] TTT_COLORS={0xe6dfd3,0x1976d2,0xd32f2f},LIGHT_COLORS={0x263238,0xffd600};
+ public static int[] read(int kind,PixelBoardReader.Pixels pixels,int w,int h,int l,int t,int r,int b){int side=MiniPolicy.size(kind);if(l<0||t<0||r>w||b>h||r-l<160||Math.abs((r-l)-(b-t))>(r-l)*.08)throw new IllegalArgumentException("Выделите квадрат поля");int[] colors=kind==0?TTT_COLORS:LIGHT_COLORS,board=new int[side*side];for(int y=0;y<side;y++)for(int x=0;x<side;x++){int value=-1;for(double off:new double[]{.22,.30,.38}){int rgb=pixels.rgb(l+(int)((x+off)*(r-l)/side),t+(int)((y+.23)*(b-t)/side));int found=-1;for(int i=0;i<colors.length;i++){int p=colors[i];if(Math.max(Math.abs((rgb&255)-(p&255)),Math.max(Math.abs(((rgb>>8)&255)-((p>>8)&255)),Math.abs(((rgb>>16)&255)-((p>>16)&255))))<=8){if(found!=-1)throw new IllegalArgumentException("Неоднозначный цвет");found=i;}}if(found<0||value!=-1&&found!=value)throw new IllegalArgumentException("Неизвестное поле/анимация");value=found;}board[y*side+x]=value;}return board;}
+}
