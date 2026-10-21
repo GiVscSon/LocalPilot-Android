@@ -1,34 +1,54 @@
-LocalPilot Android 0.3.2-dev — current checks, 2026-10-20
+LocalPilot Android 0.3.3-dev / code7 — current checks, 2026-10-21
 
-PASS original ZIP CRC and SHA256 manifest: 36/36 source files.
+PASS original0.3.2 ZIP CRC and SHA256 manifest: 36/36 source files.
 PASS baseline original0.3.2 JVM Verify: 8811 assertions.
-PASS current JVM Verify: 8902 assertions, 0 failed, none skipped:
+PASS current JVM Verify: 9224 assertions, 0 failed, none skipped:
   27 experience persistence/import/limits
-  59 stage metrics/counters/percentiles
+  83 stage metrics/counters/percentiles/bounded error histograms
   38 real parser + diagnostic integration fixtures (synthetic pixels)
-  13 action gate
+  125 automatic board selection/bounds/ambiguity
+  51 pixel board locator/budgets/cancellation/clipping/overlay fixtures
+  135 action gate checks, including exact rejection reasons
   6131 board/reader/parity
   2634 hardening/mini-game
 
 PASS Gradle8.9 wrapper version, official distribution and wrapper-JAR checksums.
 PASS ./gradlew :app:assembleDebug :app:lintDebug :app:assembleDebugAndroidTest
-Lint: 0 errors, 15 warnings. No suppression/baseline added.
+Final build completed successfully after worker and target-binding race changes.
+Lint: 0 errors, 20 warnings. No suppression/baseline added.
 PASS apksigner verification of Gradle app and instrumentation APKs.
-PASS aapt: org.localpilot.android.dev, version0.3.2-dev/code6, min30/target35.
+PASS aapt: org.localpilot.android.dev, version0.3.3-dev/code7, min30/target35.
 PASS standalone build_debug.py compilation, zipalign and v3 signing.
-PASS Python syntax and git diff --check.
+Standalone verification APK is separate from the delivered Gradle APK and signer.
+PASS Python syntax, source secret-pattern scan and git diff --check.
+Portable ZIP integrity and file exclusions are checked during release packaging.
+
+Supplied previous-APK logs: 20 contiguous valid 2048 transitions, reward148,
+32 PROPOSED with 32 ANDROID_COMPLETED; journal SHA chain and experience validated.
+READ44 successes/48 attempts (4 errors), ACK32 successes/218 attempts (186 errors).
+Last codes PARSE_REJECTED and STALE_TICKET identify latest errors ONLY, not the
+cause of every failure. Raw logs remain private outside Git/source archives.
+These logs do not establish acceptance of the new0.3.3 features.
 
 Android instrumentation: COMPILED, NOT RUN. Software-only API30 emulator has no
 KVM. Stale AVD locks were backed up and removed after ownership checks. A retry
 reached PM/window/accessibility, then zygote/framework restarted before app launch.
 adb install exited1: cmd: Failure calling service package: Broken pipe(32).
-No app/gameplay run occurred; this is a test-environment failure, not an APK
-functional result. No installation retry after the framework restart was made.
-No phone gameplay, real screenshot/gesture chain, overlay focus, rotation,
-Stop-race on Android, thermal/FPS, physical power-loss or GitHub CI result claimed.
-No full fix of the user's READ/POLICY/ACK n=0 claimed without device evidence.
+No app/gameplay run occurred in that attempt; this is a test-environment failure.
+No unchanged emulator retry was performed for0.3.3.
+
+UNRUN on a physical Android device: automatic board geometry, pixel discovery,
+installed-game picker/binding, overlay focus, rotation, capture/read/policy/gesture,
+Stop races, thermal/FPS and physical power-loss.
+No GitHub CI result claimed. No Doodle Jump/runner gameplay profile implemented.
+
+Official arcade screenshots: NOT DOWNLOADED. App Store/Google Play proxy CONNECT
+requests denied403 because domains are outside the running allowlist.
+No image dimensions, phone/tablet media sets or Android-version matches verified.
+Network domain additions are SAVED IN DRAFT, not applied/published runtime access.
 
 Gradle Dev certificate SHA256:
 55626377256dda3a6b5824b7278eb12db75b8a7d1c80baa9d2af4402ccac2684
+Same certificate as previous Gradle0.3.2 Dev, package remains .dev.
 Original0.3.2 certificate differs; original signing key was not supplied.
 Private keys and build caches are excluded from Git and source packages.

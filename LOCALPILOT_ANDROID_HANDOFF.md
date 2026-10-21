@@ -1,76 +1,89 @@
-# LocalPilot Android — точка продолжения
+# LocalPilot Android — точка продолжения 0.3.3 Dev
 
-Проверено в текущей облачной среде 20 октября 2026 года. Основной LocalPilot для ПК остаётся отдельной задачей в `GiVscSon/my-agent`; Android-код туда не переносился.
+Проверки: 21 октября 2026. Основной LocalPilot для ПК остаётся отдельной задачей в `GiVscSon/my-agent`; Android-код туда не переносился.
 
-## Репозиторий и исходники
+## Исходники и сохранение
 
-- Checkout: `/workspace/LocalPilot-Android`, origin: `https://github.com/GiVscSon/LocalPilot-Android.git`.
-- База `main`: `2ff0f2165ea5b2f90ffe9af33942f0428b99dedc` — ранее содержала только этот handoff. Применимых AGENTS.md при проверке нет; в новом чате проверить снова.
-- Рабочая ветка: `fix/android-pipeline-diagnostics`. Оригинальные исходники 0.3.2 импортированы отдельным коммитом `c1cbf3f`.
-- Пользователь предоставил ZIP 0.3.1, затем актуальный ZIP 0.3.2. Использована полная база 0.3.2, а не независимый старый прототип `android-logic-pilot` и не проект для ПК.
-- Архив 0.3.2: 113815 байт, SHA-256 `9cde636c6d3248e24ab3cb0016e88e5608ecdcd03227796a6ab0e97dfc34401c`; CRC и 36/36 исходных хэшей проверены. Подробности и резервная копия — `docs/imports/0.3.2/PROVENANCE.md`.
-- APK, модели, SDK, кеши и приватные ключи в Git не включены. Архив не добавляет сторонних runtime-зависимостей.
+Checkout: `/workspace/LocalPilot-Android`, origin `https://github.com/GiVscSon/LocalPilot-Android.git`, ветка `fix/android-pipeline-diagnostics`. Перед продолжением проверить фактические HEAD/status и AGENTS.md (при последней проверке применимых инструкций не найдено). Main остаётся `2ff0f2165ea5b2f90ffe9af33942f0428b99dedc`.
 
-## Что установлено по исходникам
+Полная база — пользовательский Android0.3.2 ZIP, импортированный коммитом `c1cbf3f`, а не старый прототип android-logic-pilot или проект для ПК. ZIP: 113815 байт, SHA256 `9cde636c6d3248e24ab3cb0016e88e5608ecdcd03227796a6ab0e97dfc34401c`; проверены CRC и36/36 исходных хэшей. Происхождение — `docs/imports/0.3.2/PROVENANCE.md`.
 
-Пользователь сообщал `CAPTURE n=2`, остальные этапы `n=0`, и остановку тестового игрока после скрытия панели. Точной причины отказа на его телефоне пока нет.
+Полная резервная копия checkout до импорта, включая .git: `/workspace/localpilot-backups/LocalPilot-Android-before-import-20261020T211624142405Z/checkout-full.tar.gz`. Предыдущее опубликованное состояние ветки — `057cd6e8e9a05c8baed8b47a5996fcb150fb42ae`. Приватные ключи/SDK/кеши/APK не включаются в Git. Основной архив ПК LocalPilot_project(3).zip пока не получен.
 
-1. В исходной версии `hidePanel()` всегда вызывал Stop, отзывал ввод, очищал ROI и отменял callbacks. Это полное скрытие с остановкой, а не сворачивание.
-2. Демо запускалось под большой панелью без её сворачивания. Проверка пересечения в `send()` могла корректно блокировать первый жест.
-3. CAPTURE записывался до вызова parser, READ — только после успешного чтения. Исключение parser оставляло READ/POLICY/ACK равными нулю без счётчика ошибок. Это совместимо с наблюдаемыми метриками, но не доказывает конкретную ошибку ROI или палитры на телефоне.
-4. Stop удалял общий таймаут захвата, оставляя `captureBusy` до прихода callback. Если callback не приходил, новый авторежим мог остаться заблокирован.
+## Пользовательские логи: что действительно работает
 
-## Изменения
+Оригиналы и подробный отчёт сохранены вне Git в `/workspace/localpilot-diagnostics/2026-10-21-user-run/`. Не публиковать raw logs или пользовательские кадры.
 
-- Отдельная кнопка «Свернуть / Развернуть» сохраняет привязку, разрешение и текущий режим; STOP остаётся доступен. «STOP и скрыть» по-прежнему останавливает работу. После создания новой панели флаг сворачивания сбрасывается.
-- Демо сворачивает панель и ждёт pre-draw после layout до первого шага. Отложенный старт всё равно проверяет epoch; Stop не позволяет возобновить его.
-- `StageMetrics` сохраняет прежние успешные n/процентили и добавляет lifetime attempts/errors/cancelled/last_error. Коды ошибок ограничены; raw exception messages и кадры в экспорт метрик не попадают.
-- `PipelineRead` оборачивает настоящий parser: отказ даёт `READ n=0 attempts=1 errors=1 last_error=PARSE_REJECTED` либо `READER_FAILED`, а панель показывает этап и причину. READ не становится успешным при исключении.
-- Начало/ошибка CAPTURE, POLICY и ANDROID_ACK тоже учитываются. Stop/таймаут инвалидируют request ID, освобождают ожидание; старый callback закрывает свой buffer, не возобновляя игру и не меняя новый захват.
-- Ограничения ROI, палитры, свежести, окна, лимитов и разрешения сохранены. Гипотеза о `isActive() && isFocused()` при касаниях overlay пока не проверена на устройстве; условие не ослаблялось.
-- Исправлены два исходных lint WrongConstant: символическая `LinearLayout.VERTICAL` вместо числа.
+- Проверены20 корректных последовательных переходов2048: легальные ходы, одна новая плитка, награды и хэши. Сумма награды148, максимальная плитка32. Все ppo=false: запись опыта, не обучение нейросети.
+- В audit319 корректных записей:32 PROPOSED,32 ANDROID_COMPLETED,20 VERIFIED_2048,235 STOP. Все отправленные жесты имеют ACK; отказов/отмен отправленных жестов в журнале нет.
+- Полная серия20 ходов завершилась по бюджету; STOP внутри неё отсутствует. Другие события нельзя однозначно отнести к режиму без дополнительных данных.
+- CAPTURE48/48 успешных, READ44/48 (4 ошибки), POLICY20/20, ACK32/218 (186 ошибок). last_error=STALE_TICKET — только последняя ошибка ACK, а не доказательство причины всех186.
+- Первоначальный общий отказ «все n=0» для этого запуска не подтверждён. Причины четырёх отдельных READ-отказов без кадров не установлены. Старый журнал не сохранял причины каждого STOP/отказа.
 
-## Проверки этой задачи
+Эти логи относятся к прежнему APK и не заменяют приёмку новой0.3.3 на устройстве.
 
-- Исходная 0.3.2: JVM Verify прошёл 8811 assertions. Это базовый прогон до исправлений.
-- Текущая версия: **8902 assertions PASS**, без пропусков: 27 experience, 59 metrics, 38 pipeline-read, 13 gate, 6131 board/reader/parity, 2634 hardening/mini. Это проверочные утверждения внутри JVM runner, не 8902 Android-теста.
-- Новые parser fixtures используют настоящие PixelBoardReader/MiniReader: корректные палитры 2048/TTT/Lights, неправильный ROI, неизвестная палитра, неожиданное исключение. Подтверждают диагностику ошибок, не реальный screenshot pipeline.
-- Gradle wrapper 8.9 проверен по официальным SHA-256 distribution и JAR. `./gradlew --version` выполнен.
-- `:app:assembleDebug :app:lintDebug :app:assembleDebugAndroidTest` прошли. **Lint: 0 ошибок, 15 предупреждений**; подавления или baseline не добавлялись. Предупреждения относятся к ресурсам/локализации, accessibility custom views, static service reference, backup rules, API31-атрибуту и RTL.
-- Dev APK и instrumentation APK проходят apksigner verify. `aapt` подтверждает отдельный пакет `org.localpilot.android.dev`, 0.3.2-dev/code6, Android11+, target35.
-- Дополнительный `build_debug.py` тоже реально собрал, выровнял и подписал Dev APK. Ключ `.build/debug.keystore` остаётся локальным и игнорируется Git.
-- Сквозной Android-тест **не выполнен**. Его сборка не доказывает работу overlay, screenshot или жестов на телефоне. API30 x86_64 эмулятор работает без KVM: после сохранения/удаления подтверждённо устаревших locks повторная загрузка дошла до PM/window/accessibility, но `zygote`/framework перезапустились до запуска приложения. `adb install` завершился exit1: `cmd: Failure calling service package: Broken pipe (32)`. Это отказ тестовой среды; приложение не запускалось. Повторять такой же запуск без изменения стенда не нужно.
+## Изменения 0.3.3
 
-## APK и подпись
+1. STOP явно убирает привязку в статусе; ручные кнопки недоступны без действующего разрешения. Повторное нажатие без binding/permit даёт инструкцию без фиктивного send.
+2. ActionGate различает отсутствие/устаревание/чужой ticket, смену пакета, окна, размеров и истечение TTL. TTL700мс, одноразовое потребление и проверки окна сохранены.
+3. Метрики сохраняют прежние n/attempts/errors/cancelled/last_error и добавляют ограниченную гистограмму error_counts/error_overflow. Последняя ошибка явно отделена от распределения всех ошибок.
+4. «Автополе» получает реальные нарисованные границы встроенных2048/TTT/Lights из виртуального Accessibility-узла. Узел передаёт только геометрию/профиль, не скрытые значения клеток: чтение остаётся по пикселям.
+5. Внешний автопоиск поддерживает только стандартную палитру2048: единственная полная доска, проверка16 клеток/разделителей/краёв, отказ при неоднозначности, перекрытии, обрезке и неизвестной палитре. Не универсальное OCR.
+6. Поиск работает в worker с собственной ограниченной копией кадра; STOP/таймаут инвалидируют поздний результат. Копирование до8млн пикселей выполняется синхронно в callback; большее разрешение требует ручного выбора. Кадры не сохраняются.
+7. Компактная панель пробует переместиться вне поля; если не помещается, работа останавливается. Основные кнопки прокручиваются, STOP остаётся сверху. После поиска всё равно нужны стабильные кадры и подтверждение клеток перед вводом.
+8. «Установленные игры» показывает доступные launcher-приложения: фильтр игр/все, поиск. Выбор открывает приложение и ждёт стабильного совпадения пакета/окна/границ, затем привязывает без разрешения ввода. Нет QUERY_ALL_PACKAGES, INTERNET или новых runtime-зависимостей.
 
-Gradle APK: `app/build/outputs/apk/debug/app-debug.apk`. Имя приложения **LocalPilot Android Dev**, package `org.localpilot.android.dev`; он устанавливается рядом с оригиналом. Нужна отдельная активация его Accessibility-службы; данные оригинала не копируются и не удаляются.
+Сохранены прежние исправления0.3.2 Dev: отдельное сворачивание без STOP, hide со STOP, ожидание layout перед демо, диагностика parser и отмена зависшего/позднего screenshot callback.
 
-Исходный ключ подписи оригинала отсутствует. Dev нельзя выдавать за обновление установленного `org.localpilot.android`. Не удалять оригинал ради установки. Gradle и standalone по умолчанию используют разные локальные debug-ключи; для дальнейших обновлений Dev сохранять выбранный способ и ключ.
+Doodle Jump, Mega Jump, Sonic Jump, Icy Tower, Kid Icarus, Subway Surfers, Temple Run, Jetpack Joyride, Sonic Dash и Sonic Jump Fever пока не имеют игровых автопрофилей. Выбор приложения и ручные жесты не означают автономную игру. Пользователь выбрал управление касаниями/экранными кнопками. Подробности — `docs/ARCADE_PROFILES.ru.md`.
 
-Переносимый комплект собирается `python3 tools/package_release.py`: Dev APK, source ZIP, README, этот handoff, VALIDATION и SHA-256. Ключи, .build, build, кеши и SDK исключены. Папка release не коммитится.
+## Проверки и ограничения
 
-## Android instrumentation и продолжение
+Фактический итог текущей сборки — `VALIDATION.txt`.
 
-Добавлен native runner `PilotUiInstrumentation` без AndroidX. Он должен проверить реальные кнопки привязки/согласия и Demo×10, видимый STOP, сворачивание с сохранением binding/permit, первое сворачивание после hide/show и остановку будущих ходов. Setup hide/show использует public service API и отражён в evidence. Чтение пикселей этим runner не проверяется.
+- JVM Verify:9224 утверждения PASS без пропусков:27 experience,83 metrics,38 pipeline-read,125 board-selection,51 pixel-locator,135 gate,6131 board/reader/parity,2634 hardening/mini. Синтетические изображения не заменяют реальные кадры игр.
+- Gradle8.9 wrapper/distribution проверены по официальным SHA256. Обязательные цели: assembleDebug,lintDebug,assembleDebugAndroidTest.
+- Android UI runner: COMPILED, NOT RUN. Нет KVM; программный API30 эмулятор перезапустил framework до запуска APK, adb install завершился `cmd: Failure calling service package: Broken pipe (32)`. Это отказ стенда, не результат работы приложения. Не повторять неизменённый стенд.
+- Новые автопоиск/панель/выбор приложения не проверены на физическом устройстве. Не заявлять фактический screenshot→read→gesture, focus/rotation/Stop-race, FPS/энергопотребление новой0.3.3 без реальной проверки.
 
-На отдельном готовом тестовом устройстве установить app-debug.apk и app-debug-androidTest.apk, включить Dev Accessibility-службу и выполнить:
+## Сборка и подпись
+
+Gradle APK: `app/build/outputs/apk/debug/app-debug.apk`. Приложение **LocalPilot Android Dev**, пакет `org.localpilot.android.dev`, version0.3.3-dev/code7, Android11+, target35. Устанавливается рядом с оригиналом и обновляет прежнюю Gradle Dev-сборку с тем же локальным ключом.
+
+Gradle certificate SHA256: `55626377256dda3a6b5824b7278eb12db75b8a7d1c80baa9d2af4402ccac2684`. Ключ оригинального org.localpilot.android не предоставлен. Оригинал не удалять. Standalone использует другой debug-ключ; не смешивать способы обновления Dev.
+
+Инструменты сохранены в /workspace/android-build-tools: jdk-21.0.12.1+1, sdk, gradle-home и приватный android-user. Из корня проекта:
+
+```bash
+/workspace/android-build-tools/jdk-21.0.12.1+1/bin/java tests/Verify.java tests/legacy_parity.txt
+JAVA_HOME=/workspace/android-build-tools/jdk-21.0.12.1+1 GRADLE_USER_HOME=/workspace/android-build-tools/gradle-home ANDROID_HOME=/workspace/android-build-tools/sdk ANDROID_USER_HOME=/workspace/android-build-tools/android-user JAVA_TOOL_OPTIONS=-Djavax.net.ssl.trustStore=/etc/ssl/certs/java/cacerts ./gradlew --no-daemon -Dhttp.proxyHost=proxy -Dhttp.proxyPort=8080 -Dhttps.proxyHost=proxy -Dhttps.proxyPort=8080 :app:assembleDebug :app:lintDebug :app:assembleDebugAndroidTest
+python3 tools/package_release.py
+```
+
+Упаковщик создаёт отдельные файлы0.3.3 в release, сохраняя прежние0.3.2. Ключи, .build/build, SDK, кеши и пользовательские данные исключены.
+
+## Приёмка на готовом устройстве
+
+1. Установить Dev APK, включить именно Dev Accessibility-службу, сохранить прежнее приложение/данные.
+2. Открыть встроенную2048 → «Автополе», сверить16 клеток до подтверждения20 ходов. Повторить для TTT/Lights, проверить положение панели.
+3. Проверить STOP во время поиска/игры, сворачивание, истечение разрешения, поворот/смену окна. Неизвестная палитра/неполное поле должны остановить ввод.
+4. Выбор установленной игры сам не разрешает ввод. Сторонняя2048 требует отдельной проверки реального кадра; для аркад пока выбор/наблюдение/ручные разрешённые жесты.
+5. Экспорт метрик/опыта/audit останавливает ввод. Смотреть новые коды и гистограммы, не принимать last_error за все отказы.
+
+Native PilotUiInstrumentation без AndroidX предназначен для Demo×10/STOP/сворачивания, а не для новых ROI. После установки app и androidTest APK на готовом стенде и включения Dev-службы:
 
 ```text
 adb shell am instrument -w org.localpilot.android.dev.test/org.localpilot.android.PilotUiInstrumentation
 ```
 
-Считать успехом только явный `result=PASS` и JSON evidence, а не exit code adb. JSON: external files приложения, `instrumentation/pilot-ui-evidence.json`. UiAutomation использует FLAG_DONT_SUPPRESS_ACCESSIBILITY_SERVICES; обычный uiautomator dump может отключить проверяемую службу.
+Нужны явный result=PASS и JSON external files `instrumentation/pilot-ui-evidence.json`. Runner использует FLAG_DONT_SUPPRESS_ACCESSIBILITY_SERVICES. Компиляция или exit code adb сами по себе не подтверждают успех.
 
-После устройства нужен отдельный реальный screenshot→read→policy→gesture прогон 2048/мини-игры с проверенным ROI и Stop/focus/rotation. Для пользовательского n=0 нужны текст ошибки панели и экспорт новых метрик. Не объявлять полный отказ распознавания исправленным по JVM-тестам или сборке.
+## GitHub и скриншоты
 
-В начале нового чата проверить git status, ветку, свежие изменения и этот файл. Исходные заявления из архивного handoff сохранены как данные в docs/imports/0.3.2/ARCHIVE_HANDOFF.md и не заменяют фактическую проверку.
+Git read/push по github.com работает; main не менялась. Проверка/создание PR через REST/GraphQL api.github.com вернули Forbidden. PR не создан, CI/Release не подтверждены. Описание: `docs/PR_DESCRIPTION.md`.
 
-## Публикация — 21 октября 2026
+Сравнение: https://github.com/GiVscSon/LocalPilot-Android/compare/main...fix/android-pipeline-diagnostics?expand=1
 
-Ветка `fix/android-pipeline-diagnostics` отправлена в GitHub; удалённая ссылка проверена через `git ls-remote`. `main` не менялась. Передача Android в `my-agent` не выполнялась.
+Если доступ к API изменится, сначала проверить существующий PR, затем создать draft с body file. Не извлекать прокси-ключи и не просить секреты в чате.
 
-PR **не создан**: и проверка существующих PR, и фактический `gh pr create --draft` возвращают `Post https://api.github.com/graphql: Forbidden`; REST чтение того же репозитория через `api.github.com` тоже запрещено. Git по `github.com` работает. Не считать этот отказ доказательством испорченного APK или требованием передать секрет в чат.
-
-Для ручного открытия PR: https://github.com/GiVscSon/LocalPilot-Android/compare/main...fix/android-pipeline-diagnostics?expand=1
-
-Подготовленное описание: `docs/PR_DESCRIPTION.md`. Если API станет доступен, сначала проверить, не создан ли PR вручную, затем повторить создание с этим body file. Публикация ветки не означает публикацию GitHub Release, успешный CI или выполненную Android-проверку.
+Пользователь попросил реальные игровые скриншоты для телефона и планшета. Запросы itunes.apple.com и play.google.com блокируются прокси: домены отсутствуют в allowlist. Изображения не получены, размеры не подтверждены. В сохранённый черновик среды добавлены itunes.apple.com,apps.apple.com,play.google.com,play-lh.googleusercontent.com,*.mzstatic.com с сохранением прежних правил (включая api.github.com). Черновик не применяет сеть: нужны review/save/publish в настройках среды. После применения возобновить загрузку; фиксировать источник, версию, исходные размеры и phone/tablet-категорию. iOS-референс не считать кадром пользовательской Android-версии.

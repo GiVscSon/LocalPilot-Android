@@ -1,16 +1,18 @@
-The repository previously contained only a handoff. This imports the complete Android 0.3.2 source supplied by the user; ZIP CRC and all 36 source checksums matched. No APK, signing key, SDK, model, cache, or user data is committed.
+The repository previously contained only a handoff. This imports the complete Android 0.3.2 source supplied by the user and develops it into **0.3.3-dev / versionCode 7**. ZIP CRC and all 36 original source checksums matched. No APK, signing key, SDK, model, cache, or raw user log is committed. Desktop LocalPilot remains separate in `GiVscSon/my-agent`.
 
-The original Hide action stopped playback, and Demo x10 started under the expanded overlay. Collapse/Expand now keeps STOP visible and preserves the active binding; Stop and Hide still revoke input. The demo waits for the compact panel layout before its first gesture.
+The original Hide action stopped playback, and Demo x10 started under the expanded overlay. Collapse/Expand now keeps STOP visible and preserves the active binding; Stop and Hide still revoke input. The demo waits for the compact panel layout before its first gesture. Expanded controls scroll, and unarmed/manual-without-consent actions no longer enter the dispatch path and inflate ACK failures.
 
-A rejected parser previously left READ/POLICY/ANDROID_ACK at n=0 without an error count. Stage reports now include attempts, errors, cancellations, and stable last-error codes while retaining successful latency samples. Stop/timeout retires pending capture requests so a late callback cannot resume playback or overwrite a new capture.
+A rejected parser previously left READ/POLICY/ANDROID_ACK at n=0 without an error count. Stage reports retain successful latency samples and add attempts, errors, cancellations, precise gate rejection codes, and per-code error histograms. Each stage retains at most 32 distinct codes with an explicit overflow counter. `last_error` remains the last failure only; it is not the cause of every error in the aggregate. Stop/timeout retires pending capture requests so a late callback cannot resume playback or overwrite a new capture.
+
+The new Auto Board control binds the active window, uses actual Accessibility board bounds for the built-in 2048/TTT/Lights games, then continues to read pixels through the existing strict parsers. For external games, automatic discovery supports only the standard 2048 palette. Discovery is bounded/cancellable, rejects ambiguity, moves the compact panel outside the selected board when possible, and still requires the user to confirm the parsed matrix before input. A searchable installed-game picker launches a chosen app and prepares an observation-only binding; selecting an app does not enable autoplay or consent. Doodle Jump, runners, and arbitrary-game policies are not implemented.
 
 Debug builds use org.localpilot.android.dev and install alongside the existing signed app. The original signing key was not provided. Gradle wrapper, a native UI instrumentation runner, portable packaging, and an updated handoff are included.
 
-Validation:
+Validation and limits:
 
-- JVM Verify passed 8902 assertions, including real parser fixtures for valid palettes, rejected ROI/palette, and diagnostic failure propagation.
-- Gradle app, Android test APK, and lint passed: 0 errors, 15 warnings. App/test signatures verified.
-- Standalone build, zipalign, and signing passed; wrapper checksums verified against official values.
-- Android instrumentation was compiled but did not run. The software-only API30 emulator restarted zygote/framework before app launch; adb install failed with Package Manager Broken pipe. This is an environment blocker, not a gameplay result.
+- JVM Verify passed **9224 assertions**, covering pure-Java algorithms, synthetic pixel readers/locator fixtures, board selection, bounded histograms, exact gate rejection reasons, and persistence. These are assertions inside a JVM runner, not Android test cases.
+- The native Android UI runner is compiled but unrun. The previous software-only API30 attempt restarted zygote/framework before app launch and `adb install` failed with Package Manager Broken pipe. It provides no device result for the new APK. Final Gradle/lint results are recorded in `VALIDATION.txt` and the handoff.
+- Supplied exports from the previous APK contain 32 completed Android acknowledgements and 20 contiguous valid 2048 transitions, consistent with a complete bounded round and cumulative merge reward 148. They do not establish acceptance of 0.3.3-dev, auto-board discovery, installed-game selection, overlay/focus/rotation, or all game profiles.
+- The old latency export reports 186 ACK-stage errors and last code STALE_TICKET. It does **not** establish that all 186 failures had that cause. Four READ-stage failures also occurred, with latest code PARSE_REJECTED; the aggregate does not identify the cause of every READ failure. Raw user logs remain outside Git.
 
-The specific n=0 failure on the user's phone remains unconfirmed. Device validation still needs actual capture/read/policy/gesture rounds and Stop/focus/rotation checks. This draft is ready for code review, not a claim of full Android acceptance.
+Device validation still needs actual 0.3.3-dev capture/read/policy/gesture rounds, auto-board and picker UI, and Stop/focus/rotation checks. This is a prepared review description, not a claim of full Android acceptance or an already-created PR: GitHub REST/GraphQL API access remains blocked with Forbidden.

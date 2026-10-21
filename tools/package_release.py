@@ -6,7 +6,7 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 OUTPUT = ROOT / "release"
-NAME = "LocalPilot_Android_0.3.2_dev"
+NAME = "LocalPilot_Android_0.3.3_dev"
 EXCLUDED = {".git", ".gradle", ".build", "build", "release", "evidence", ".idea", "__pycache__"}
 
 

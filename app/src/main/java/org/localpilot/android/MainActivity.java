@@ -4,11 +4,13 @@ public class MainActivity extends Activity {
  public static final String PREF="pilot";
  private TextView status;
  @Override public void onCreate(Bundle b){super.onCreate(b);LinearLayout box=new LinearLayout(this);box.setOrientation(LinearLayout.VERTICAL);box.setPadding(24,24,24,24);ScrollView scroll=new ScrollView(this);scroll.addView(box);setContentView(scroll);
-  TextView title=new TextView(this);title.setText("LocalPilot Android"+(getPackageName().endsWith(".dev")?" Dev":"")+" · 0.3.2\nПанель + один исполнитель");title.setTextSize(24);box.addView(title);
+  TextView title=new TextView(this);title.setText("LocalPilot Android"+(getPackageName().endsWith(".dev")?" Dev":"")+" · 0.3.3\nАвтополе и установленные игры");title.setTextSize(24);box.addView(title);
   TextView help=new TextView(this);help.setText("1. Включите службу LocalPilot в специальных возможностях.\n2. Откройте игру. В панели нажмите «Привязать».\n3. Введите X/Y в процентах и отправьте один жест.\n\nStop отменяет будущие действия; начатый жест до 120 мс может завершиться. Авто2048: открыть 2048, привязать окно, выделить квадрат поля, нажать Авто2048 и сверить матрицу. Только стандартная палитра, до 20 ходов. Нейросеть и RL ещё не подключены.\n\nСлужба видит элементы интерфейса активного окна. По вашей кнопке Авто2048 получает снимки экрана, читает выделенное поле в оперативной памяти. Кадры не сохраняются и не передаются. Разрешение можно отозвать в настройках Android.");box.addView(help);
   button(box,"Открыть специальные возможности",()->startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)));
   TextView panelHelp=new TextView(this);panelHelp.setText("«Свернуть» оставляет STOP и продолжает текущий режим. «STOP и скрыть» прекращает работу и отзывает ввод. При ошибке чтения панель покажет READ и причину; в экспорте задержек доступны attempts/errors/last_error.");box.addView(panelHelp);
   button(box,"Показать панель",()->{if(PilotService.instance!=null)PilotService.instance.showPanel();else toast("Сначала включите службу");});
+  button(box,"Выбрать установленную игру",()->startActivity(new Intent(this,GamePickerActivity.class)));
+  TextView autoHelp=new TextView(this);autoHelp.setText("«Автополе» само привязывает открытое окно и ищет поле: точная разметка встроенных игр или стандартная палитра 2048. Панель передвигается с найденного поля. Перед ходами сверьте клетки и подтвердите ввод. Другие игры можно выбрать и управлять касаниями вручную; автоматические профили Doodle Jump и раннеров пока не готовы.");box.addView(autoHelp);
   button(box,"Открыть 2048",()->startActivity(new Intent(this,Game2048Activity.class)));
   button(box,"Крестики-нолики",()->startActivity(new Intent(this,MiniGamesActivity.class).putExtra("kind",0)));
   button(box,"Погаси свет",()->startActivity(new Intent(this,MiniGamesActivity.class).putExtra("kind",1)));
