@@ -1,3 +1,52 @@
+# LocalPilot Android — текущая точка продолжения 0.4.0 Dev
+
+21 октября 2026. Рабочая ветка **feat/android-arcade-training**, база36974ddddf839463b2c8ac55e47ea107a32358bc. Перед продолжением читать git status/HEAD и новые AGENTS.md; здесь применимых инструкций не найдено. Android не переносить в my-agent.
+
+## Согласованные требования и реализация
+
+Пользователь выбрал: обучение сначала на Android, затем перенос на ПК; сначала собственные симуляторы, потом сторонние игры; координаты объектов вместо CNN; пауза при уходе Activity в фон. Первый целевой реальный профиль — Doodle Jump с экранным управлением. Версия/кадры установленного Doodle Jump не получены.
+
+Добавлены четыре оригинальных seeded среды JUMPER/PLATFORMER/LANES/JETPACK, общая физика60Hz и4 ticks/action, observation64. Pure-Java Double DQN64→64→64→actions, Adam/Huber, replay20000, gamma0,99, lr0,001, warmup1000, batch32, update/4steps, target/1000updates, epsilon1→0,05/50000steps. Точные контракты — training/README.ru.md и manifest checkpoint.
+
+TrainingActivity предоставляет обучение/паузу/STOP/greedy-playback/оценку50seed/экспорт. Один worker, UI получает immutable сцены, обучение сохраняется при паузе и каждые30с. Checkpoint ZIP хранит весь trainer/replay/RNG/environment с SHA256 и строгой конфигурацией; атомарное сохранение и backup, восстановление корректного backup сохраняет повреждённый исходник отдельно. Приватные модели находятся в files/arcade-rl и не включены в Git/APK.
+
+Автоуправление выбранной поддерживаемой игрой теперь default=true, настройка сохраняется. Повторных consent/preview диалогов в обычном авторежиме нет. InputPermit имеет session grant без искусственных лимитов действий/времени; ограниченный grant сохранён для диагностики. Отдельный Demo×10 остаётся ограниченным тестом. STOP отзывает epoch; возврат/перезапуск службы не возобновляет игру. Выбор приложения запускает автопоиск, неизвестный профиль не допускает автоматический ввод.
+
+Панель160×48dp, фон55% непрозрачности, отдельные непрозрачные STOP/разворачивание. Перекрытие поля/жеста не разрешается прозрачностью. Журнал ротируется:8 сегментов до512КиБ, отдельныеv1 цепочки, экспорт ZIP; старый audit-v1.log не меняется, отдельная legacy-копия. Заполнение примеров выключает сбор с уведомлением, не игру; настоящая IO-ошибка останавливает ввод.
+
+## Проверки и честные ограничения
+
+Финальный статус сборки/подписи/упаковки — VALIDATION.txt. JVM:9224 прежних assertions и680187 новых RL/environment/checkpoint/session/journal assertions; это повторяемые численные проверки, не столько независимых Android-тестов. Численный градиент, уменьшение Huber-ошибки, exact resume, backup recovery и10000 session actions проверены. Четыре настоящих Gymnasium check_env прошли.
+
+Эксперимент100000 шагов на жанр/24751 updates/50 evaluation seeds выполнен на Linux JVM, не Android. Результаты — docs/RL_EXPERIMENT_2026-10-21.ru.md: LANES/JETPACK лучше random в этом тесте, JUMPER не подтвердил преимущество, PLATFORMER регрессировал. Все четыре обученные политики не готовы для реальных игр. Рабочий тренер не равен успешной политике.
+
+Физическое устройство недоступно; новый UI, обучение/нагрев/FPS/пауза Android, overlay и реальные жесты не проверены. Instrumentation скомпилирован, не выполнен. Старый software API30 стенд падал до установки APK с Package Manager Broken pipe и не имеет KVM; не повторять неизменённый запуск.
+
+Пакетorg.localpilot.android.dev, version0.4.0-dev/code8, min30/target35, тот же Gradle debug-сертификат55...2684. Оригинальный org.localpilot.android не удалять. Перед работой сохранён проверенный git bundle: /workspace/localpilot-backups/android-before-rl-20261021/source.bundle.
+
+## Воспроизведение
+
+Из /workspace/LocalPilot-Android:
+
+```bash
+/workspace/android-build-tools/jdk-21.0.12.1+1/bin/java tests/Verify.java tests/legacy_parity.txt
+/workspace/android-build-tools/jdk-21.0.12.1+1/bin/java tests/RlVerify.java
+JAVA_HOME=/workspace/android-build-tools/jdk-21.0.12.1+1 GRADLE_USER_HOME=/workspace/android-build-tools/gradle-home ANDROID_HOME=/workspace/android-build-tools/sdk ANDROID_USER_HOME=/workspace/android-build-tools/android-user JAVA_TOOL_OPTIONS=-Djavax.net.ssl.trustStore=/etc/ssl/certs/java/cacerts ./gradlew --no-daemon -Dhttp.proxyHost=proxy -Dhttp.proxyPort=8080 -Dhttps.proxyHost=proxy -Dhttps.proxyPort=8080 :app:assembleDebug :app:lintDebug :app:assembleDebugAndroidTest
+JAVA_HOME=/workspace/android-build-tools/jdk-21.0.12.1+1 python3 training/build_core.py
+JAVA_HOME=/workspace/android-build-tools/jdk-21.0.12.1+1 /workspace/android-build-tools/rl-python/bin/python training/check_gymnasium.py
+python3 tools/package_release.py
+```
+
+Изолированный PC Python venv сохранён в /workspace/android-build-tools/rl-python; версии зафиксированы в training/requirements-pc.txt. Android от него не зависит. Для продолжения модели на ПК: LOCALPILOT_CORE_JAR указывает на core-JAR, training/train_pc.py принимает --genre/--steps/--checkpoint. Проверен short continuation smoke; Windows не проверен.
+
+Следующий обязательный device-pass: native обучение→пауза→resume→экспорт, auto2048 бездиалогов больше20 ходов, мини-игры, STOP во время поиска/dispatch, полупрозрачная панель/поворот/перекрытие. Затем отдельный профиль реального Doodle Jump; не объявлять его реализованным по симулятору.
+
+GitHub API ранее Forbidden, Git read/push работает. Описание PR актуализировано в docs/PR_DESCRIPTION.md. Сравнение новой ветки: https://github.com/GiVscSon/LocalPilot-Android/compare/main...feat/android-arcade-training?expand=1 . Проверять фактическую публикацию/PR/CI, не считать их успешными по этому тексту.
+
+## Исторический handoff 0.3.3
+
+Следующий раздел сохранён для происхождения и прежних результатов; его лимиты/порядок разрешения ввода заменены текущими требованиями выше.
+
 # LocalPilot Android — точка продолжения 0.3.3 Dev
 
 Проверки: 21 октября 2026. Основной LocalPilot для ПК остаётся отдельной задачей в `GiVscSon/my-agent`; Android-код туда не переносился.

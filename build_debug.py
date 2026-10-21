@@ -4,7 +4,7 @@ import xml.etree.ElementTree as ET
 ROOT=pathlib.Path(__file__).resolve().parent
 NAMESPACE='org.localpilot.android'
 APPLICATION_ID=NAMESPACE+'.dev'
-VERSION_NAME='0.3.3-dev'
+VERSION_NAME='0.4.0-dev'
 ANDROID_NS='http://schemas.android.com/apk/res/android'
 
 def write_dev_manifest(source,output):
@@ -25,7 +25,7 @@ def write_dev_manifest(source,output):
  tree.write(output,encoding='utf-8',xml_declaration=True)
 
 def main():
- p=argparse.ArgumentParser();p.add_argument('--sdk',default=os.environ.get('ANDROID_HOME') or os.environ.get('ANDROID_SDK_ROOT'));p.add_argument('--output',default='LocalPilot_Android_0.3.3_dev_debug.apk');a=p.parse_args()
+ p=argparse.ArgumentParser();p.add_argument('--sdk',default=os.environ.get('ANDROID_HOME') or os.environ.get('ANDROID_SDK_ROOT'));p.add_argument('--output',default='LocalPilot_Android_0.4.0_dev_debug.apk');a=p.parse_args()
  if not a.sdk:p.error('Set --sdk PATH or ANDROID_HOME to installed Android SDK')
  sdk=pathlib.Path(a.sdk).resolve();tools=sdk/'build-tools/35.0.0';jar=sdk/'platforms/android-35/android.jar'
  if not jar.is_file():p.error('Android platform 35 missing')
@@ -45,7 +45,7 @@ def main():
  for f in ('resources.zip','base.apk','unsigned.apk','aligned.apk'):
   (b/f).unlink(missing_ok=True)
  run([sdktool('aapt2'),'compile','--dir',ROOT/'app/src/main/res','-o',b/'resources.zip'])
- run([sdktool('aapt2'),'link','-I',jar,'--manifest',b/'AndroidManifest.xml','--min-sdk-version','30','--target-sdk-version','35','--version-code','7','--version-name',VERSION_NAME,'-o',b/'base.apk',b/'resources.zip'])
+ run([sdktool('aapt2'),'link','-I',jar,'--manifest',b/'AndroidManifest.xml','--min-sdk-version','30','--target-sdk-version','35','--version-code','8','--version-name',VERSION_NAME,'-o',b/'base.apk',b/'resources.zip'])
  run([sdktool('d8'),'--lib',jar,'--min-api','30','--output',dex,b/'classes.jar'])
  shutil.copyfile(b/'base.apk',b/'unsigned.apk')
  with zipfile.ZipFile(b/'unsigned.apk','a',zipfile.ZIP_DEFLATED) as z:

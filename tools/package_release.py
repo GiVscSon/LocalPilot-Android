@@ -6,8 +6,8 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 OUTPUT = ROOT / "release"
-NAME = "LocalPilot_Android_0.3.3_dev"
-EXCLUDED = {".git", ".gradle", ".build", "build", "release", "evidence", ".idea", "__pycache__"}
+NAME = "LocalPilot_Android_0.4.0_dev"
+EXCLUDED = {".git", ".gradle", ".build", "build", "release", "evidence", ".idea", "__pycache__", ".venv", ".venv-rl"}
 
 
 def digest(path):
@@ -19,14 +19,15 @@ def main():
     if not apk.is_file():
         raise SystemExit("Build :app:assembleDebug first")
     OUTPUT.mkdir(exist_ok=True)
-    names = [NAME + ".apk", "README.md", "LOCALPILOT_ANDROID_HANDOFF.md", "VALIDATION.txt"]
+    names = [NAME + ".apk", "README.md", "LOCALPILOT_ANDROID_HANDOFF.md", "VALIDATION.txt", "training/README.ru.md", "docs/RL_EXPERIMENT_2026-10-21.ru.md"]
     for source, name in [(apk, names[0]), *((ROOT / n, n) for n in names[1:])]:
+        (OUTPUT / name).parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(source, OUTPUT / name)
     source_zip = OUTPUT / (NAME + "_source.zip")
     with zipfile.ZipFile(source_zip, "w", zipfile.ZIP_DEFLATED) as archive:
         for path in sorted(ROOT.rglob("*")):
             relative = path.relative_to(ROOT)
-            if any(part in EXCLUDED for part in relative.parts):
+            if any(part in EXCLUDED or part.endswith(".egg-info") for part in relative.parts):
                 continue
             if path.is_symlink():
                 raise SystemExit("Source symlink: " + str(relative))

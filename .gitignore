@@ -15,3 +15,6 @@ __pycache__/
 *.pyc
 .idea/
 *.iml
+*.egg-info/
+.venv/
+.venv-rl/

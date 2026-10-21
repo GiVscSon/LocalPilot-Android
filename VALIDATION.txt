@@ -1,54 +1,53 @@
-LocalPilot Android 0.3.3-dev / code7 — current checks, 2026-10-21
+LocalPilot Android0.4.0-dev/code8 — checks, 2026-10-21
 
-PASS original0.3.2 ZIP CRC and SHA256 manifest: 36/36 source files.
-PASS baseline original0.3.2 JVM Verify: 8811 assertions.
-PASS current JVM Verify: 9224 assertions, 0 failed, none skipped:
-  27 experience persistence/import/limits
-  83 stage metrics/counters/percentiles/bounded error histograms
-  38 real parser + diagnostic integration fixtures (synthetic pixels)
-  125 automatic board selection/bounds/ambiguity
-  51 pixel board locator/budgets/cancellation/clipping/overlay fixtures
-  135 action gate checks, including exact rejection reasons
-  6131 board/reader/parity
-  2634 hardening/mini-game
+PASS existing JVM suite:9224 assertions, none skipped.
+PASS new JVM RL/environment/checkpoint/session/journal suite:680187 assertions.
+These are repeated numeric assertions inside runners, not689411 independent tests.
+Includes seeded determinism/ranges for four environments, camera/reward isolation,
+collision/jump/release semantics, terminated vs truncated, numerical gradients,
+Huber error reduction, real Double DQN updates, exact resume including optimizer,
+backup recovery for missing/corrupt primary,10000 session actions, journal rotation.
 
-PASS Gradle8.9 wrapper version, official distribution and wrapper-JAR checksums.
-PASS ./gradlew :app:assembleDebug :app:lintDebug :app:assembleDebugAndroidTest
-Final build completed successfully after worker and target-binding race changes.
-Lint: 0 errors, 20 warnings. No suppression/baseline added.
-PASS apksigner verification of Gradle app and instrumentation APKs.
-PASS aapt: org.localpilot.android.dev, version0.3.3-dev/code7, min30/target35.
-PASS standalone build_debug.py compilation, zipalign and v3 signing.
-Standalone verification APK is separate from the delivered Gradle APK and signer.
-PASS Python syntax, source secret-pattern scan and git diff --check.
-Portable ZIP integrity and file exclusions are checked during release packaging.
+PASS four real Gymnasium1.4.0 check_env calls on the same Java simulation core.
+Python3.12.14, JPype1.7.1, NumPy2.5.4, Linux/JDK21.
+PASS separate-process PC checkpoint continuation:100 to1100 steps,26 updates.
+This is a portability/functional check, not a Windows or phone measurement.
 
-Supplied previous-APK logs: 20 contiguous valid 2048 transitions, reward148,
-32 PROPOSED with 32 ANDROID_COMPLETED; journal SHA chain and experience validated.
-READ44 successes/48 attempts (4 errors), ACK32 successes/218 attempts (186 errors).
-Last codes PARSE_REJECTED and STALE_TICKET identify latest errors ONLY, not the
-cause of every failure. Raw logs remain private outside Git/source archives.
-These logs do not establish acceptance of the new0.3.3 features.
+PASS Gradle8.9 :app:assembleDebug :app:lintDebug :app:assembleDebugAndroidTest.
+Final delivery build successful,2m36s; lint0 errors,26 warnings.
+PASS final main Java sources no newer than compiled classes.
+PASS Gradle app/instrumentation APK signature verification.
+PASS aapt:org.localpilot.android.dev,0.4.0-dev/code8,min30,target35.
+PASS standalone final source compilation,zipalign,v3 signing.
+Standalone uses a different local debug signer from the delivered Gradle APK.
+PASS Python AST/source secret-pattern scan/git diff --check.
+Release packaging verifies ZIP CRC and includes SHA256; keys,caches,generated
+models,replay,user logs,SDK,virtualenv and egg-info are excluded.
 
-Android instrumentation: COMPILED, NOT RUN. Software-only API30 emulator has no
-KVM. Stale AVD locks were backed up and removed after ownership checks. A retry
-reached PM/window/accessibility, then zygote/framework restarted before app launch.
-adb install exited1: cmd: Failure calling service package: Broken pipe(32).
-No app/gameplay run occurred in that attempt; this is a test-environment failure.
-No unchanged emulator retry was performed for0.3.3.
+Functional training experiment:100000 steps/24751 updates per genre,one training
+seed20261021;50 paired evaluation seeds700000..700049,1000 bootstrap resamples.
+JUMPER:model1243.04 vs random1012.96;95% difference CI[-41.75,506.25],not confirmed.
+PLATFORMER:model352.79 vs random805.04;CI[-622.25,-290.00],regression.
+LANES:model5520.41 vs random626.68;CI[3858.35,6006.20],advantage in this experiment.
+JETPACK:model2893.09 vs random1162.62;CI[995.22,2634.81],advantage in this experiment.
+Initial untrained networks already beat random in LANES/JETPACK; see full report.
+This does not prove convergence across training seeds, real games or Android.
+Generated experimental models are not shipped in the APK or committed.
+The experiment predates metadata/backup refinements; physics/network unchanged.
 
-UNRUN on a physical Android device: automatic board geometry, pixel discovery,
-installed-game picker/binding, overlay focus, rotation, capture/read/policy/gesture,
-Stop races, thermal/FPS and physical power-loss.
-No GitHub CI result claimed. No Doodle Jump/runner gameplay profile implemented.
+Android instrumentation:COMPILED,NOT RUN. No ready physical device/KVM.
+Previous software API30 framework restarted before app launch;adb install failed
+with Package Manager Broken pipe(32). No unchanged emulator retry made.
+UNRUN on phone:new training UI/lifecycle/thermal/FPS,auto-selection/no-dialog
+gameplay,compact translucent panel,rotation/focus/Stop races,real capture/gestures.
+Existing native UI runner covers Demo/Stop,not the new trainer screen.
+No Doodle Jump or third-party arcade vision/control profile implemented.
+No live-device acceptance,GitHub CI,GitHub Release or created-PR claim.
 
-Official arcade screenshots: NOT DOWNLOADED. App Store/Google Play proxy CONNECT
-requests denied403 because domains are outside the running allowlist.
-No image dimensions, phone/tablet media sets or Android-version matches verified.
-Network domain additions are SAVED IN DRAFT, not applied/published runtime access.
-
-Gradle Dev certificate SHA256:
+Original user0.3.2 archive CRC/36source hashes preserved in provenance docs.
+Old original app/key/data remain separate. Current Dev uses same Gradle key:
 55626377256dda3a6b5824b7278eb12db75b8a7d1c80baa9d2af4402ccac2684
-Same certificate as previous Gradle0.3.2 Dev, package remains .dev.
-Original0.3.2 certificate differs; original signing key was not supplied.
-Private keys and build caches are excluded from Git and source packages.
+Backup before this change:/workspace/localpilot-backups/android-before-rl-20261021/source.bundle
+
+Official arcade screenshots remain unavailable under the running network policy;
+prior domain changes are drafts,not proof of applied access or downloaded images.

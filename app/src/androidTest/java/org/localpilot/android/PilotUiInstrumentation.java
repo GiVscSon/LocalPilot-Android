@@ -183,7 +183,6 @@ public final class PilotUiInstrumentation extends Instrumentation {
 
     private void allowInput() throws Exception {
         click("Разрешить ввод");
-        click("Разрешить");
         await(() -> onMain(() -> permit().allows(gate().epoch(), SystemClock.elapsedRealtime())),
                 2_000, "Input permission dialog did not grant bounded consent");
     }
