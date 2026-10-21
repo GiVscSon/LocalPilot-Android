@@ -64,3 +64,13 @@ adb shell am instrument -w org.localpilot.android.dev.test/org.localpilot.androi
 После устройства нужен отдельный реальный screenshot→read→policy→gesture прогон 2048/мини-игры с проверенным ROI и Stop/focus/rotation. Для пользовательского n=0 нужны текст ошибки панели и экспорт новых метрик. Не объявлять полный отказ распознавания исправленным по JVM-тестам или сборке.
 
 В начале нового чата проверить git status, ветку, свежие изменения и этот файл. Исходные заявления из архивного handoff сохранены как данные в docs/imports/0.3.2/ARCHIVE_HANDOFF.md и не заменяют фактическую проверку.
+
+## Публикация — 21 октября 2026
+
+Ветка `fix/android-pipeline-diagnostics` отправлена в GitHub; удалённая ссылка проверена через `git ls-remote`. `main` не менялась. Передача Android в `my-agent` не выполнялась.
+
+PR **не создан**: и проверка существующих PR, и фактический `gh pr create --draft` возвращают `Post https://api.github.com/graphql: Forbidden`; REST чтение того же репозитория через `api.github.com` тоже запрещено. Git по `github.com` работает. Не считать этот отказ доказательством испорченного APK или требованием передать секрет в чат.
+
+Для ручного открытия PR: https://github.com/GiVscSon/LocalPilot-Android/compare/main...fix/android-pipeline-diagnostics?expand=1
+
+Подготовленное описание: `docs/PR_DESCRIPTION.md`. Если API станет доступен, сначала проверить, не создан ли PR вручную, затем повторить создание с этим body file. Публикация ветки не означает публикацию GitHub Release, успешный CI или выполненную Android-проверку.
