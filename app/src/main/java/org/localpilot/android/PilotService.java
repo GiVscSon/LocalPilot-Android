@@ -2,7 +2,7 @@ package org.localpilot.android;
 import android.accessibilityservice.*;import android.app.AlertDialog;import android.app.KeyguardManager;import android.content.*;import android.graphics.*;import android.os.*;import android.view.*;import android.view.accessibility.*;import android.widget.*;
 public class PilotService extends AccessibilityService {
  public static PilotService instance;
- private ExperienceStore experience;private boolean collecting;
+ private ExperienceStore experience;private ArcadeLearningStore arcadeLearning;private boolean collecting;
  public void enableExamples(){stop("Сбор примеров включён; привяжите игру заново");if(experience==null){note="Хранилище недоступно; сбор выключен";update();return;}collecting=true;update();}
  public void disableExamples(){collecting=false;stop("Сбор примеров выключен");}
  public byte[] exportExamples()throws java.io.IOException{stop("Экспорт примеров: STOP");if(experience==null)throw new java.io.IOException("Хранилище недоступно");return experience.snapshot();}
@@ -200,7 +200,7 @@ public class PilotService extends AccessibilityService {
  }
 
 
- @Override protected void onServiceConnected(){instance=this;try{experience=new ExperienceStore(new java.io.File(getFilesDir(),"experience-v1.log"));}catch(java.io.IOException e){experience=null;}try{journal=new RotatingJournal(new java.io.File(getFilesDir(),"audit-segments"),new java.io.File(getFilesDir(),"audit-v1.log"));}catch(java.io.IOException e){journal=null;}wm=(WindowManager)getSystemService(WINDOW_SERVICE);gate.stop();showPanel();}
+ @Override protected void onServiceConnected(){instance=this;try{experience=new ExperienceStore(new java.io.File(getFilesDir(),"experience-v1.log"));}catch(java.io.IOException e){experience=null;}try{arcadeLearning=new ArcadeLearningStore(new java.io.File(getFilesDir(),"arcade-learning-v1.log"));}catch(java.io.IOException e){arcadeLearning=null;}try{journal=new RotatingJournal(new java.io.File(getFilesDir(),"audit-segments"),new java.io.File(getFilesDir(),"audit-v1.log"));}catch(java.io.IOException e){journal=null;}wm=(WindowManager)getSystemService(WINDOW_SERVICE);gate.stop();showPanel();}
  public void showPanel(){selectedProfile=Math.max(0,Math.min(5,getSharedPreferences("panel",MODE_PRIVATE).getInt("profile",0)));if(panel!=null){compact(false);return;}gate.stop();panelCompact=false;controls=null;manualControls.clear();panel=new LinearLayout(this);panel.setOrientation(LinearLayout.VERTICAL);panel.setPadding(8,4,8,4);panel.setBackgroundColor(0xEE202830);
   TextView header=new TextView(this);header.setText("LocalPilot · тянуть здесь");header.setTextColor(Color.WHITE);panel.addView(header);
   header.setOnTouchListener(new View.OnTouchListener(){float x,y;int ox,oy;public boolean onTouch(View v,android.view.MotionEvent e){if(e.getAction()==MotionEvent.ACTION_DOWN){x=e.getRawX();y=e.getRawY();ox=layout.x;oy=layout.y;return true;}if(e.getAction()==MotionEvent.ACTION_MOVE){layout.x=Math.max(0,ox+(int)(e.getRawX()-x));layout.y=Math.max(0,oy+(int)(e.getRawY()-y));wm.updateViewLayout(panel,layout);return true;}return true;}});
@@ -265,7 +265,7 @@ public class PilotService extends AccessibilityService {
   if(!isYandexMarketTarget()){note="Откройте «"+profile.label+"» внутри Яндекс Маркета";update();return;}
   if(!automatic()&&!permit.allows(gate.epoch(),SystemClock.elapsedRealtime())){note="Сначала разрешите ввод для этой сессии";update();return;}
   if(automatic())permit.grantSession(gate.epoch(),SystemClock.elapsedRealtime());
-  captureProfile=profile;jumperResponseFailures=0;jumperResponsePaused=false;arcadeLastUsable=null;arcadeController.reset();arcadeFeedback.reset();clearDiagnosticFrame();sceneRecovery.reset();arcadeRoundSeen=false;arcadeState=null;arcadeBefore=null;arcadePending=null;arcadeAck=false;
+  captureProfile=profile;jumperResponseFailures=0;jumperResponsePaused=false;arcadeLastUsable=null;arcadeController.reset();if(arcadeLearning!=null)arcadeController.restore(arcadeLearning.get(profile));arcadeFeedback.reset();clearDiagnosticFrame();sceneRecovery.reset();arcadeRoundSeen=false;arcadeState=null;arcadeBefore=null;arcadePending=null;arcadeAck=false;
   arcadeVerified=0;arcadeLastAction=0;
   jumperColorProfile=profile==ArcadeProfile.ARI?loadJumperColors(target):null;
   playingJumper=true;jumperConsentPending=true;jumperCaptureReady=false;
@@ -524,7 +524,7 @@ public class PilotService extends AccessibilityService {
    long verifiedBefore=arcadeFeedback.verified();
    ArcadeFeedback.State feedback=arcadeFeedback.observe(observation,now);
    if(arcadeFeedback.verified()>verifiedBefore){
-    arcadeController.observeGesture(arcadePending,arcadeBefore,observation);
+    arcadeController.observeGesture(arcadePending,arcadeBefore,observation);if(arcadeLearning!=null)try{arcadeLearning.save(captureProfile,arcadeController.model());}catch(java.io.IOException ignored){}
     arcadeVerified++;arcadePending=null;arcadeBefore=null;arcadeAck=false;
    }
    if(feedback==ArcadeFeedback.State.PAUSED){note="Нет видимого ответа на 3 касания · захват сохранён. Нажмите Старт для повторной проверки";update();return;}
@@ -588,7 +588,7 @@ public class PilotService extends AccessibilityService {
    float dx=state.player.centerX()-jumperPendingStartX;long age=now-jumperPendingActionMs;
    float requiredMotion=Math.max(2,7*JumperPolicy.coordinateScale(state));
    boolean moved=jumperPendingAction==JumperPolicy.Action.TAP_LEFT?dx<=-requiredMotion:dx>=requiredMotion;
-   if(moved){jumperAwaitingVerification=false;jumperResponseFailures=0;note="Движение подтверждено · "+jumperPendingAction;}
+   if(moved){jumperAwaitingVerification=false;jumperResponseFailures=0;if(arcadeLearning!=null)try{arcadeLearning.save(ArcadeProfile.ARI,arcadeController.model());}catch(java.io.IOException ignored){}note="Движение подтверждено · "+jumperPendingAction;}
    else if(age>650){jumperAwaitingVerification=false;jumperResponseFailures++;metrics.failure(StageMetrics.Stage.POLICY,"ARI_VISUAL_RESPONSE_RETRY");if(jumperResponseFailures>=3){jumperResponsePaused=true;note="Ари: нет ответа на 3 касания · захват сохранён. Нажмите Старт";update();return;}}
    else{note="Проверяю направление касания…";update();return;}
   }

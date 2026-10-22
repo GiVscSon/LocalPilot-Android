@@ -42,6 +42,7 @@ public final class ArcadeController {
 
  }
  public String report(){return model();}
+ public void restore(String saved){if(saved==null||saved.isEmpty())return;try{for(String p:saved.split(" ")){String[] kv=p.split("=",2);if(kv.length!=2)continue;float v=Float.parseFloat(kv[1]);switch(kv[0]){case "roadSpeed":trafficSpeed=v;break;case "scroll":scrollSpeed=v;break;case "gravity":gravity=v;break;case "flap":flapVelocity=v;break;case "steering":steeringSpeed=v;break;}}}catch(RuntimeException ignored){}}
  public String model(){return "roadSpeed="+trafficSpeed+" scroll="+scrollSpeed+" gravity="+gravity+" flap="+flapVelocity+" steering="+steeringSpeed+" continuous="+continuousSteering;}
  private void learn(ArcadeObservation s,long now){
   if(previous==null)return;
