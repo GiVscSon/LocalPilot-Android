@@ -1,5 +1,13 @@
 # LocalPilot Android — история и внешняя новая точка сохранения
 
+## НОВЕЙШАЯ ВЕРСИЯ: SOURCE GATE 0.7.11 (22.10.2026)
+
+Полные исходники 0.7.11-dev/code27 **пока не найдены** в GitHub, Google Drive, ChatGPT Library; получен лишь APK 0.7.10-dev/code26. Проведён read-only DEX аудит APK 0.7.10: отсутствуют `ArcadeController` и `ArcadeFeedback` из фрагмента кода 0.7.11; поэтому **все предыдущие 0.6.0 патчи не являются новыми выпусками** и не переносятся вслепую. Подготовлен fail-closed gate проверки реального checkout на `versionName 0.7.11-dev/code27` и полноту 7 исходников, 9 самостоятельных тестов PASS; на настоящем 0.6.0 Stage3 gate правильно вернул BLOCKED. **На актуальном 0.7.11 ни исходники, ни APK не изменялись/не собирались.**
+
+См. [изолированную GitHub ветку-аудит](https://github.com/GiVscSon/LocalPilot-Android/blob/audit/localpilot-0711-source-gate-20261022/docs/labs/VERIFY_LATEST_0711_2026-10-22.md) и пакет `LOCALPILOT_ANDROID_LATEST_0711_GATE_2026-10-22.zip` в https://drive.google.com/drive/folders/1nhnjW4e3CAz8hQiOtKSosZGY2PVcEYOM . Следующее действие: сначала восстановить настоящий 0.7.11 checkout, проверить gate, затем полноценные тесты и Android-сборку, не размывая доказательств успеха 0.6 / 0.7.10 / 0.7.11.
+
+---
+
 ## STAGE 3: POST-ACK ВИЗУАЛЬНАЯ ПРОВЕРКА (22.10.2026)
 
 **Изолированный исходник 0.6.0-dev после Stage2, НЕ 0.7.11 APK:** в реальном `PilotService` воспроизведён риск преждевременного подтверждения жеста по кадру, снятому до Android `onCompleted()` и обработанному после него. Реализовано `ArcadePolicy.responseAfterAck`, требует timestamp кадра строго позже времени ACK; `PilotService` сохраняет ACK время через `SystemClock.elapsedRealtime()` и сбрасывает при STOP/смене действия/успешной проверке. Безопасность нового метода и подготовленного инварианта подтверждена **276 Java assertions (258 временных комбинаций)**, всего **9691 JVM assertions PASS** с полным набором. RL Stage3 повторно запустили, но он был прерван тайм-аутом; не объявлять его новым PASS. Предыдущий RL Stage2 успешно проходил 680187 assertions, его код Stage3 не изменён.
