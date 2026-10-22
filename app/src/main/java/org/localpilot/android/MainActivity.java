@@ -10,7 +10,7 @@ public class MainActivity extends Activity {
   void close(){if(frame!=null&&!frame.isRecycled())frame.recycle();}
  }
  @Override public void onCreate(Bundle b){super.onCreate(b);Object retained=getLastNonConfigurationInstance();if(retained instanceof DiagnosticRequest)diagnosticRequest=(DiagnosticRequest)retained;LinearLayout box=new LinearLayout(this);box.setOrientation(LinearLayout.VERTICAL);box.setPadding(24,24,24,24);ScrollView scroll=new ScrollView(this);scroll.addView(box);setContentView(scroll);
-  TextView title=new TextView(this);title.setText("LocalPilot Android"+(getPackageName().endsWith(".dev")?" Dev":"")+" · 0.7.14\nАркады и обучение на телефоне");title.setTextSize(24);box.addView(title);
+  TextView title=new TextView(this);title.setText("LocalPilot Android"+(getPackageName().endsWith(".dev")?" Dev":"")+" · 0.7.15\nАркады и обучение на телефоне");title.setTextSize(24);box.addView(title);
   TextView help=new TextView(this);help.setText("1. Откройте игру и выберите её профиль: «Игра».\n2. Нажмите «Окно» и выберите приложение с игрой.\n3. Нажмите «Старт» и разрешите показ экрана.\n\nSTOP останавливает игру агента. В первый раз включите управление кнопкой ниже.");box.addView(help);
   button(box,"Включить управление",()->startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)));
   TextView panelHelp=new TextView(this);panelHelp.setText("Панель можно свернуть. STOP всегда остаётся доступным.");box.addView(panelHelp);

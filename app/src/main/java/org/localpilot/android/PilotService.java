@@ -265,7 +265,7 @@ public class PilotService extends AccessibilityService {
   if(!isYandexMarketTarget()){note="Откройте «"+profile.label+"» внутри Яндекс Маркета";update();return;}
   if(!automatic()&&!permit.allows(gate.epoch(),SystemClock.elapsedRealtime())){note="Сначала разрешите ввод для этой сессии";update();return;}
   if(automatic())permit.grantSession(gate.epoch(),SystemClock.elapsedRealtime());
-  captureProfile=profile;jumperResponseFailures=0;jumperResponsePaused=false;arcadeLastUsable=null;arcadeController.reset();if(arcadeLearning!=null)arcadeController.restore(arcadeLearning.get(profile));arcadeFeedback.reset();clearDiagnosticFrame();sceneRecovery.reset();arcadeRoundSeen=false;arcadeState=null;arcadeBefore=null;arcadePending=null;arcadeAck=false;
+  captureProfile=profile;jumperResponseFailures=0;jumperResponsePaused=false;arcadeLastUsable=null;arcadeController.reset();if(arcadeLearning!=null){arcadeController.restore(arcadeLearning.get(profile));JumperPolicy.restore(arcadeLearning.get(ArcadeProfile.ARI));}arcadeFeedback.reset();clearDiagnosticFrame();sceneRecovery.reset();arcadeRoundSeen=false;arcadeState=null;arcadeBefore=null;arcadePending=null;arcadeAck=false;
   arcadeVerified=0;arcadeLastAction=0;
   jumperColorProfile=profile==ArcadeProfile.ARI?loadJumperColors(target):null;
   playingJumper=true;jumperConsentPending=true;jumperCaptureReady=false;
@@ -588,8 +588,8 @@ public class PilotService extends AccessibilityService {
    float dx=state.player.centerX()-jumperPendingStartX;long age=now-jumperPendingActionMs;
    float requiredMotion=Math.max(2,7*JumperPolicy.coordinateScale(state));
    boolean moved=jumperPendingAction==JumperPolicy.Action.TAP_LEFT?dx<=-requiredMotion:dx>=requiredMotion;
-   if(moved){jumperAwaitingVerification=false;jumperResponseFailures=0;if(arcadeLearning!=null)try{arcadeLearning.save(ArcadeProfile.ARI,arcadeController.model());}catch(java.io.IOException ignored){}note="Движение подтверждено · "+jumperPendingAction;}
-   else if(age>650){jumperAwaitingVerification=false;jumperResponseFailures++;metrics.failure(StageMetrics.Stage.POLICY,"ARI_VISUAL_RESPONSE_RETRY");if(jumperResponseFailures>=3){jumperResponsePaused=true;note="Ари: нет ответа на 3 касания · захват сохранён. Нажмите Старт";update();return;}}
+   if(moved){jumperAwaitingVerification=false;jumperResponseFailures=0;JumperPolicy.learn(true);if(arcadeLearning!=null)try{arcadeLearning.save(ArcadeProfile.ARI,JumperPolicy.model());}catch(java.io.IOException ignored){}note="Движение подтверждено · "+jumperPendingAction;}
+   else if(age>650){jumperAwaitingVerification=false;jumperResponseFailures++;JumperPolicy.learn(false);if(arcadeLearning!=null)try{arcadeLearning.save(ArcadeProfile.ARI,JumperPolicy.model());}catch(java.io.IOException ignored){}metrics.failure(StageMetrics.Stage.POLICY,"ARI_VISUAL_RESPONSE_RETRY");if(jumperResponseFailures>=3){jumperResponsePaused=true;note="Ари: нет ответа на 3 касания · захват сохранён. Нажмите Старт";update();return;}}
    else{note="Проверяю направление касания…";update();return;}
   }
   if(busy||now-jumperLastActionMs<180){update();return;}

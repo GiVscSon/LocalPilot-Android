@@ -3,9 +3,9 @@ package org.localpilot.android;
 /** Conservative target-selection policy used before real-game RL examples exist. */
 public final class JumperPolicy {
     public enum Action { TAP_LEFT, TAP_RIGHT, WAIT }
-    private static final float TRACK_TOLERANCE = 38f;
-    private static final float MAX_VERTICAL_REACH = 430f;
-    private static final float MAX_HORIZONTAL_REACH = 390f;
+ private static float trackTolerance = 38f;
+ private static float maxVerticalReach = 430f;
+ private static float maxHorizontalReach = 390f;
 
     private JumperPolicy() { }
 
@@ -19,7 +19,7 @@ public final class JumperPolicy {
         for (JumperState.ObjectBox platform : state.platforms) {
             float vertical = Math.abs(platform.centerY() - player.centerY());
             float horizontal = Math.abs(platform.centerX() - player.centerX());
-            if (vertical < 52f*scale || vertical > MAX_VERTICAL_REACH*scale || horizontal > MAX_HORIZONTAL_REACH*scale) continue;
+            if (vertical < 52f*scale || vertical > maxVerticalReach*scale || horizontal > maxHorizontalReach*scale) continue;
             if(verticalMotion < -28f*scale && platform.centerY() >= player.centerY()) continue;
             if(verticalMotion > 28f*scale && platform.centerY() <= player.centerY()) continue;
             if (unsafeLanding(platform, player, state)) continue;
@@ -40,13 +40,16 @@ public final class JumperPolicy {
         if (dangerRight && !dangerLeft) return Action.TAP_LEFT;
         if (target == null) return Action.WAIT;
         float delta = target.centerX() - player.centerX();
-        if (Math.abs(delta) <= TRACK_TOLERANCE*scale) return Action.WAIT;
+        if (Math.abs(delta) <= trackTolerance*scale) return Action.WAIT;
         return delta < 0 ? Action.TAP_LEFT : Action.TAP_RIGHT;
     }
 
     public static float coordinateScale(JumperState state){
         return Math.min((state.roiRight-state.roiLeft)/854f,(state.roiBottom-state.roiTop)/1280f);
     }
+    public static void restore(String model){if(model==null)return;try{for(String p:model.split(" ")){String[] kv=p.split("=",2);if(kv.length!=2)continue;float v=Float.parseFloat(kv[1]);switch(kv[0]){case "tolerance":trackTolerance=Math.max(18,Math.min(70,v));break;case "vertical":maxVerticalReach=Math.max(260,Math.min(650,v));break;case "horizontal":maxHorizontalReach=Math.max(220,Math.min(560,v));break;}}}catch(RuntimeException ignored){}}
+    public static String model(){return "tolerance="+trackTolerance+" vertical="+maxVerticalReach+" horizontal="+maxHorizontalReach;}
+    public static void learn(boolean successful){if(successful){trackTolerance=Math.max(18,trackTolerance*.995f);maxVerticalReach=Math.min(650,maxVerticalReach+1.5f);}else{trackTolerance=Math.min(70,trackTolerance+1.5f);maxVerticalReach=Math.max(260,maxVerticalReach-4f);}}
 
     private static boolean unsafeLanding(JumperState.ObjectBox platform, JumperState.ObjectBox player,
                                          JumperState state) {
