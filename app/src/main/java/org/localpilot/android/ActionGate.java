@@ -28,6 +28,12 @@ public final class ActionGate {
   if(now-t.created>TTL_MS)return "TICKET_EXPIRED";
   return null;
  }
+ /** Completion can arrive late; only an already consumed ticket in the same live binding is accepted. */
+ public String completionRejection(Ticket t,long now,String p,int w,int x,int y){
+  String reason=rejection(t,now,p,w,x,y);
+  if(reason!=null&&!"TICKET_EXPIRED".equals(reason))return reason;
+  return t.consumed?null:"TICKET_NOT_CONSUMED";
+ }
  public boolean valid(Ticket t,long now,String p,int w,int x,int y){return rejection(t,now,p,w,x,y)==null;}
  public boolean consume(Ticket t,long now,String p,int w,int x,int y){if(!valid(t,now,p,w,x,y)||t.consumed)return false;t.consumed=true;return true;}
  public boolean armed(){return armed;}

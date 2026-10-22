@@ -6,7 +6,7 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 OUTPUT = ROOT / "release"
-NAME = "LocalPilot_Android_0.4.0_dev"
+NAME = "LocalPilot_Android_0.7.11_dev"
 EXCLUDED = {".git", ".gradle", ".build", "build", "release", "evidence", ".idea", "__pycache__", ".venv", ".venv-rl"}
 
 
@@ -19,7 +19,7 @@ def main():
     if not apk.is_file():
         raise SystemExit("Build :app:assembleDebug first")
     OUTPUT.mkdir(exist_ok=True)
-    names = [NAME + ".apk", "README.md", "LOCALPILOT_ANDROID_HANDOFF.md", "VALIDATION.txt", "training/README.ru.md", "docs/RL_EXPERIMENT_2026-10-21.ru.md"]
+    names = [NAME + ".apk", "README.md", "LOCALPILOT_ANDROID_HANDOFF.md", "LOCALPILOT_MASTER_PROMPT.ru.md", "docs/REQUESTS_AUDIT_2026-10-21.ru.md", "VALIDATION.txt", "README.ru.md", "docs/ARCADE_PROFILES.ru.md", "docs/CAPTURE_STARTUP.ru.md", "docs/WINDOW_PANEL_2026-10-21.ru.md", "docs/GITHUB_PROJECTS_REVIEW_2026-10-21.ru.md", "docs/VIDEO_CAPTURE_HANDOFF_2026-10-21.ru.md", "docs/WEB_LEARNING.ru.md", "docs/REWARD_LEARNING.ru.md", "docs/READINESS_0.7.8.ru.md", "docs/ROUNDS_0.7.9.ru.md", "docs/DRIVING_0.7.10.ru.md", "docs/GAMEPLAY_0.7.11.ru.md", "docs/GAMEPLAY_EVIDENCE_0.7.11.txt", "docs/WEB_PROFILES.ru.md", "docs/CAPTURE_RETURN_2026-10-21.ru.md", "docs/SCENE_RECOVERY.ru.md", "docs/DEVICE_REPORT.ru.md", "training/README.ru.md", "docs/RL_EXPERIMENT_2026-10-21.ru.md"]
     for source, name in [(apk, names[0]), *((ROOT / n, n) for n in names[1:])]:
         (OUTPUT / name).parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(source, OUTPUT / name)

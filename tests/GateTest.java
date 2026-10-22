@@ -4,12 +4,32 @@ public class GateTest {
  private static int checks;
 
  public static void main(String[] args){
+  completedGestureFreshness();
   initialBindingAndFreshness();
   incomingTargetAndPrecedence();
   issuerAndSession();
   consumptionContract();
   diagnosticsDoNotChangeAuthority();
   System.out.println("PASS "+checks+" gate checks");
+ }
+
+ private static void completedGestureFreshness(){
+  for(long delay:new long[]{50,700,701,2000,10000}){
+   ActionGate g=armed();ActionGate.Ticket t=g.offer(1000);
+   check(g.consume(t,1000,"game",3,1080,2400));
+   check(g.completionRejection(t,1000+delay,"game",3,1080,2400)==null);
+   check("TARGET_APP_CHANGED".equals(g.completionRejection(t,1000+delay,"other",3,1080,2400)));
+   check("TARGET_WINDOW_CHANGED".equals(g.completionRejection(t,1000+delay,"game",4,1080,2400)));
+   check("TARGET_BOUNDS_CHANGED".equals(g.completionRejection(t,1000+delay,"game",3,1000,2400)));
+   check("CLOCK_REVERSED".equals(g.completionRejection(t,999,"game",3,1080,2400)));
+   g.stop();check("NOT_BOUND".equals(g.completionRejection(t,1000+delay,"game",3,1080,2400)));
+  }
+  ActionGate g=armed();ActionGate.Ticket t=g.offer(1000);
+  check("TICKET_NOT_CONSUMED".equals(g.completionRejection(t,3000,"game",3,1080,2400)));
+  check(!g.consume(t,3000,"game",3,1080,2400));
+  check("NO_TICKET".equals(g.completionRejection(null,3000,"game",3,1080,2400)));
+  ActionGate other=armed();check("FOREIGN_TICKET".equals(other.completionRejection(t,3000,"game",3,1080,2400)));
+  g.arm("game",3,1080,2400);check("SESSION_CHANGED".equals(g.completionRejection(t,3000,"game",3,1080,2400)));
  }
 
  private static ActionGate armed(){

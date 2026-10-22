@@ -1,4 +1,330 @@
-LocalPilot Android0.4.0-dev/code8 — checks, 2026-10-21
+0.7.11-dev/code27 FINAL predictive controller
+Controller source SHA256876dedcb3f8c47df7446d24ddf10a4c55eed7ef5304007f9d2abf1766710935c
+assembleDebug/lintDebug/compileDebugAndroidTestJavaWithJavac PASS.
+Instrumentation COMPILED ONLY, NOT RUN. No physical device/emulator acceptance.
+Lint0errors/41warnings. All changed class mtimes verified newer than final Java sources.
+APK bytes430446 SHA25688eb1f81b69df24e189916cd7bce2d2871a6ae6bce17b08ac9a03d6e55686278
+Signer SHA25655626377256dda3a6b5824b7278eb12db75b8a7d1c80baa9d2af4402ccac2684 (same Dev certificate).
+
+LocalPilot0.7.11 evidence — 2026-10-22
+Controller SHA256876dedcb3f8c47df7446d24ddf10a4c55eed7ef5304007f9d2abf1766710935c
+
+1. Coordinate-state closed-loop simulations
+Baseline=ArcadePolicy; baseline+feedback and integrated controller use the same ArcadeFeedback/executor rules. Counts are totals across scenarios, not a single run or actual Android scores. Parameters and seeds are in tests/ArcadeControllerTest.java. These simulations use known object coordinates.
+Closed-loop bird simulations: predictive gates=395, baseline gates=205, baseline+feedback gates=315, integrated gates=561, scenarios=72
+Closed-loop road simulations: predictive rows=1004, baseline rows=180, baseline+feedback rows=180, integrated rows=1004, scenarios=48
+Continuous steering hold simulations: predictive rows=911, baseline+feedback rows=118, scenarios=36
+Controller CPU on cloud JVM only: p50=0.011ms p95=0.129ms max=7.856ms
+Arcade controller: 16 assertions PASS. Simulations do not establish physical-device performance.
+
+2. Whole-loop synthetic pixels
+Actual ArcadeVision -> ArcadeController -> ArcadeFeedback -> delayed simulated input -> rendered image. Four cases per mode. Totals are synthetic obstacle rows/gates; scene/render/physics details are in tests/ArcadeSystemTest.java. Bird retains one collision; neither a universal guarantee nor real-device acceptance.
+Pixel closed-loop road-discrete scenarios=4 baseline {passed=7 deaths=4 usable=311/318 actions=6 visualConfirmed=6 paused=0} predictive {passed=34 deaths=0 usable=1070/1098 actions=51 visualConfirmed=50 paused=0}
+Pixel closed-loop road-continuous scenarios=4 baseline {passed=7 deaths=4 usable=311/318 actions=12 visualConfirmed=12 paused=0} predictive {passed=34 deaths=0 usable=1070/1098 actions=47 visualConfirmed=46 paused=0}
+Pixel closed-loop bird scenarios=4 baseline {passed=6 deaths=3 usable=369/376 actions=58 visualConfirmed=57 paused=0} predictive {passed=19 deaths=1 usable=880/903 actions=129 visualConfirmed=128 paused=0}
+Arcade system: 9 assertions PASS; wall=15.44s. Synthetic images and physics; no phone success implied.
+
+3. Real private video replay
+Pixels from existing human recordings; recommendations not dispatched, so replay cannot show autonomous scores. Manually reviewed active intervals: TRAFFIC20..80=61frames, FLAPPY7..57=51frames. Active-frame usability61/61 and51/51; the ten FLAPPY misses in prior version are restored. Tutorial/death/result frames are not counted as active. This is sample coverage, not calibrated recognition accuracy.
+replay PADDLE frames=134 usable=126 recommendations=93 result_frames=0 desktop_p50_ms=27.99 desktop_p95_ms=149.59
+replay TRAFFIC frames=96 usable=61 recommendations=6 result_frames=16 desktop_p50_ms=31.82 desktop_p95_ms=46.85
+replay FLAPPY frames=68 usable=51 recommendations=25 result_frames=9 desktop_p50_ms=33.87 desktop_p95_ms=48.18
+Replay assertions PASS; recommendations are not dispatched, live-game success is UNVERIFIED.
+
+4. Targeted vision regressions
+Arcade vision temporal: 48 assertions PASS (synthetic scenes + optional private real frames)
+
+5. Limits
+No attached physical Android, no successful emulator run. MediaProjection/Accessibility instrumentation compiled only. Native controls for other profiles and general-game mastery remain outside this result. Journal fsync remains synchronous; source interval60ms is an upper frequency request, not measured Android FPS. Model physics is approximate.
+
+Core regression checks:
+Arcade feedback: 22 assertions PASS
+RgbaFrameDecoderTest: 16 assertions PASS
+Game viewport: 15 assertions PASS
+Gesture flight: 19 assertions PASS
+Diagnostic bundle: 21 assertions PASS
+Scene recovery: 154 assertions PASS
+Capture startup: 38 assertions PASS
+arcade-profiles: 60 assertions PASS
+PASS 27 experience persistence/import/limits assertions
+PASS 83 metrics assertions
+PASS 38 pipeline-read assertions
+PASS 125 automatic-board-selection assertions
+PASS 51 pixel-board-locator assertions
+PASS 35 jumper-vision assertions
+PASS 16 jumper-policy assertions
+PASS 124 jumper-frame-geometry assertions
+PASS 175 gate checks
+PASS 4531 board/reader/parity assertions
+PASS 2634 hardening/mini-game assertions
+
+Web regression checks:
+Note: tests/WebHttpTest.java uses or overrides a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+Goal reward: 73 assertions PASS
+Web lesson: 46 assertions PASS; no real game demonstrations were fabricated
+Web profiles: 55 assertions PASS
+Web HTTP: 29 assertions PASS (mock HTTPS, no provider/API call made)
+
+Historical validation follows:
+
+0.7.10-dev/code26: assembleDebug/lintDebug PASS. Physical gameplay NOT RUN.
+Lint warnings: 41; no errors. APK SHA256 4efcaa74f426074bc53c2ee59dcce6a3a647be046752945372e155d6a54928d1
+RgbaFrameDecoderTest: 16 assertions PASS
+Game viewport: 15 assertions PASS
+Gesture flight: 19 assertions PASS
+Diagnostic bundle: 21 assertions PASS
+Scene recovery: 154 assertions PASS
+Capture startup: 38 assertions PASS
+arcade-profiles: 60 assertions PASS
+PASS 27 experience persistence/import/limits assertions
+PASS 83 metrics assertions
+PASS 38 pipeline-read assertions
+PASS 125 automatic-board-selection assertions
+PASS 51 pixel-board-locator assertions
+PASS 35 jumper-vision assertions
+PASS 16 jumper-policy assertions
+PASS 124 jumper-frame-geometry assertions
+PASS 175 gate checks
+PASS 4531 board/reader/parity assertions
+PASS 2634 hardening/mini-game assertions
+
+Historical checks:
+0.7.9-dev/code25: assembleDebug/lintDebug/compileDebugAndroidTestJavaWithJavac PASS.
+Instrumentation NOT RUN. No adb device. Lint: 41 warnings, no errors.
+APK SHA256: 5979f37f7f3ed0ad86a0e03f6e8715dba7e70c67c1164849c565e06e1da50080
+RgbaFrameDecoderTest: 16 assertions PASS
+Game viewport: 15 assertions PASS
+Gesture flight: 19 assertions PASS
+Diagnostic bundle: 21 assertions PASS
+Scene recovery: 154 assertions PASS
+Capture startup: 38 assertions PASS
+arcade-profiles: 56 assertions PASS
+PASS 27 experience persistence/import/limits assertions
+PASS 83 metrics assertions
+PASS 38 pipeline-read assertions
+PASS 125 automatic-board-selection assertions
+PASS 51 pixel-board-locator assertions
+PASS 35 jumper-vision assertions
+PASS 16 jumper-policy assertions
+PASS 124 jumper-frame-geometry assertions
+PASS 175 gate checks
+PASS 4531 board/reader/parity assertions
+PASS 2634 hardening/mini-game assertions
+
+Historical evidence:
+0.7.8-dev/code24 — capture stability
+assembleDebug + lintDebug + compileDebugAndroidTestJavaWithJavac: PASS.
+Instrumentation compiled, NOT executed. adb devices: no device attached.
+Native ImageReader lifecycle fix requires device validation; user SIGSEGV cause not proven.
+Lint: {'Warning': 41}
+APK bytes: 414662
+APK SHA256: e52e2b51c434ac7a18cb2543b273feb505cdcf97ffb4b29dbccda497ba2838e0
+Signer SHA256: 55626377256dda3a6b5824b7278eb12db75b8a7d1c80baa9d2af4402ccac2684
+RgbaFrameDecoderTest: 16 assertions PASS
+Game viewport: 15 assertions PASS
+Gesture flight: 19 assertions PASS
+Diagnostic bundle: 21 assertions PASS
+Scene recovery: 154 assertions PASS
+Capture startup: 38 assertions PASS
+arcade-profiles: 52 assertions PASS
+PASS 27 experience persistence/import/limits assertions
+PASS 83 metrics assertions
+PASS 38 pipeline-read assertions
+PASS 125 automatic-board-selection assertions
+PASS 51 pixel-board-locator assertions
+PASS 35 jumper-vision assertions
+PASS 16 jumper-policy assertions
+PASS 124 jumper-frame-geometry assertions
+PASS 175 gate checks
+PASS 4531 board/reader/parity assertions
+PASS 2634 hardening/mini-game assertions
+Note: tests/WebHttpTest.java uses or overrides a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+Goal reward: 73 assertions PASS
+Web lesson: 46 assertions PASS; no real game demonstrations were fabricated
+Web profiles: 55 assertions PASS
+Web HTTP: 29 assertions PASS (mock HTTPS, no provider/API call made)
+
+Historical validation follows:
+
+LocalPilot Android0.7.7-dev/code23 — outcome-aware web demonstration learning
+PASS203 standalone web assertions:GoalReward73,WebLesson46,WebProfiles55,WebHttp29(mock HTTPS,no provider call). Fresh positive/negative/zero/unknown rewards,source/evidence serialization,finite metrics,stale/early/future/overlapping observations,localized numeric parsing,manual overrides,positive strength,negative veto,neutral/unrated isolation,v1/v2/v3 roundtrips,merge upgrades/conflict rejection,backup preservation,holdout negative avoidance and correct coverage denominator. Log:rewards-web-complete.log. Test data synthetic and not represented as real successful games.
+PASS final offline Gradle assembleDebug,lintDebug,compileDebugAndroidTestJavaWithJavac:BUILD SUCCESSFUL in 2m 9s;lint0errors/41warnings. Instrumentation compiled only,NOT RUN. Runtime source/class freshness checked;WebLesson.class contains the final corrected holdout label. Earlier builds predated final report/source corrections and are not delivered.
+PASS APK org.localpilot.android.dev,0.7.7-dev/code23,min30,target35;414154bytes;SHA256:b0d55bfe1876f869e6835faa8910294aec8af2ce385aec34dea31c7cf57f9dd7;apksigner verified same Dev certificate55626377256dda3a6b5824b7278eb12db75b8a7d1c80baa9d2af4402ccac2684. ANDROID_USER_HOME=/workspace/android-build-tools/android-user retained.
+Manual ratings and measured progress/distance outcomes stored in LOCALPILOT-WEB-v3. UNKNOWN differs from0. Automatic reward requires a configured numeric HTML element and before/after evidence;no OCR/Canvas score inference. Rewards clipped to[-1,+1]. Existing v1/v2 stay ungraded and byte-compatible until rated;first v2→v3 save retains permanent.pre-rewards-v2.bak plus normal atomic.bak. Merge does not duplicate the same transition;conflicting known labels fail without mutating originals.
+Graded nearest-example model uses positive demonstrations,reward-strength preference and negative-action vetoes. Unrated-only datasets retain explicit imitation mode;once graded,unknown/neutral are not positive candidates. Holdout reports separate negative repetition from eligible demonstration coverage. This is outcome-aware imitation,not web DQN/PPO or evidence of wins.
+Manual correction pins its sample/pending result and overrides automatic evaluation;old asynchronous training cannot reinstate a model after corrections. Auto metric reading is local/read-only,session/request/latency scoped;intervening inputs suppress automatic credit. Missing or ambiguous number does not become punishment. Record/train UI adds one outcome menu;native overlay remains compact.
+PASS native PilotService and simulator ArcadeEnv/DqnTrainer sources byte-identical to pre-change backup. Existing simulator physics/rewards/checkpoints unchanged,previous native/core checks historical,not rerun. User chose automatic plus manual feedback. No physical Android attached;WebView DOM measurement,lifecycle,dialogs and actual gameplay remain UNRUN. No universal reward inference for third-party Android/Canvas games added. Backup:/workspace/localpilot-backups/android-before-rewards-20261021.tar.gz. Guide:docs/REWARD_LEARNING.ru.md.
+
+LocalPilot Android0.7.6-dev/code22 — selected window/game region/compact panel/GitHub review
+PASS final offline Gradle assembleDebug,lintDebug,compileDebugAndroidTestJavaWithJavac in2m7s;lint0errors/40warnings. Runtime classes freshness checked after final edits. Instrumentation updated for window menu/compact controls;compiled only,NOT RUN. Earlier2m19s build predates final UI/source edits and is not delivered.
+PASS core acceptance suite:GameViewport15,new/non-square/reverse/outside/tiny selection,matching/unequal/flat sidebars,excluded overlay,offset geometry;JumperFrameGeometry124 including actual tablet game coordinates;JumperVision35,JumperPolicy16 and existing gate/reader/hardening/etc suites. Logs:window-panel-core-acceptance.log. Earlier viewport test exposed insufficient samples under overlay;minimum sampling corrected and negative tests passed. Intermediate geometry assertion used unquantized746 vs mapped746.667 and was corrected;acceptance suite rerun fully.
+PASS actual3-frame replay:automatic ROI from full720x480,known overlay excluded,window0,0–720,470;ROIleft200,right521/522,then usable=true,platforms25/15/29,player277,415/231,332/360,349,actionsLEFT/RIGHT/RIGHT. Tests assert correct player position. This uses extracted user-video frames,not Android live capture/window API. No new recognition model or gameplay win is claimed.
+PASS APK org.localpilot.android.dev,0.7.6-dev/code22,min30,target35;396002bytes;SHA256:89589dfb6fb8d5490251a8786c861ff41b9383b97c8eeb2c1fa302429318379c;apksigner verified same Dev certificate55626377256dda3a6b5824b7278eb12db75b8a7d1c80baa9d2af4402ccac2684. Build used ANDROID_USER_HOME=/workspace/android-build-tools/android-user. Existing data/settings not deleted;manual region/window choice is RAM-only and invalidates on changed window identity/bounds.
+Implemented seven primary controls:Window,Game,Region,Start,More,Collapse,STOP. Chooser lists application windows;bound geometry comes from AccessibilityWindowInfo,not its root node. Manual rectangle and optional matching-sidebar crop feed vision,touch mapping,diagnostic crop consistently. Region preview uses explicit local RAM copy,stops input,does not upload/persist image. Chooser/menu callbacks scoped to current gate epoch;STOP dismisses dialog/cancels picker;window focus wait12s,picker30s. Strict owner/window/bounds/freshness/permit checks unchanged.
+GitHub research:7READMEs;deep source/license review FGA@cfb0593c64aaaceeab3ba56040fa34ab8e32f7ba and Klickr@cf4cdcee9bfaf8ab14f4538ed7a9c0476ff23260. Findings and pinned source links in docs/GITHUB_PROJECTS_REVIEW_2026-10-21.ru.md and sources JSON. No external project code/dependency imported. Template matching/editor and universal CNN/VLM remain future proposals,not implemented.
+No physical Android attached. Chooser/region overlay/consent handoff/live gesture validation remains UNRUN;JVM/build/replay do not establish device acceptance. Backup:/workspace/localpilot-backups/android-before-window-panel-20261021.tar.gz. Guide:docs/WINDOW_PANEL_2026-10-21.ru.md.
+
+LocalPilot Android0.7.5-dev/code21 — video capture handoff and scaled Ari detection
+PASS core JVM suite,including CaptureStartup38,JumperVision35,JumperPolicy16 assertions. New coverage:consent-stage closure for startup/ready/STOP/stale sessions; bounded shapes/pillarboxes/excluded player;saturated wide-body vs beige/noise; policy action invariance at3scales. Log:consent-handshake-core-final.log.
+PASS real video still replay at0/8/18s:720x480,explicit ROI200,0–520,470; usable=true,platforms25/15/29,player277,415/231,332/360,349; actionsLEFT/RIGHT/RIGHT. Player position checked to reject background selection. Baseline first-frame replay had0platforms and unusable scene. This is not live MediaProjection or a win test. Hazards may include false positives; count accuracy is not established.
+PASS final offline Gradle assembleDebug,lintDebug,compileDebugAndroidTestJavaWithJavac in2m59s;lint0errors/36warnings. Instrumentation compiled,NOT RUN. Runtime classes freshness checked after final edits. Earlier3m25s build preceded final vision/policy changes and is not delivered.
+PASS APK org.localpilot.android.dev,0.7.5-dev/code21,min30,target35;389767bytes;SHA256:1a1809b72bd982a6f940848f21aa5b264372ea6942a3ff638191d1737547348e. Re-signed with existing android-build-tools/android-user/debug.keystore;apksigner verifies v2 and same certificate as0.7.4:55626377256dda3a6b5824b7278eb12db75b8a7d1c80baa9d2af4402ccac2684. Initial Gradle default user key differed and was not delivered. Reusable build environment must include ANDROID_USER_HOME=/workspace/android-build-tools/android-user; never distribute keys.
+Consent Activity now translucent,removes its transient task only after service readiness and resumed state,or STOP/error/stale session. Service timeout10s remains. Precise ActionGate reason appended to accessibility-event STOP; authority checks unchanged. This addresses observed weaknesses but the device's root cause is not established by video. No physical Android available; consent return/live input/automatic ROI UNRUN. Latest recordings show native Ari,not web training;version cannot be read. Backup:/workspace/localpilot-backups/android-before-capture-handoff-20261021.tar.gz. Details:docs/VIDEO_CAPTURE_HANDOFF_2026-10-21.ru.md.
+
+LocalPilot Android0.7.4-dev/code20 — named web game profiles and mixed-data quarantine, 2026-10-21
+
+User explicitly confirmed different games in one URL-only web dataset. Implemented named profile identity and isolation, not automatic labeling of those games. PASS WebVerify:46 lesson+55 profiles+29 mocked-HTTPS assertions=130. Cross-game opposite actions for same URL/observation remain separate; merging/profile mismatch rejected. v1/v2 roundtrip, header identity, legacy quarantine, reviewed session copying, archives/backup and safe namespace paths pass. HTTP provider not called.
+PASS real uploaded5,545,545-byte dataset:1000 rows/6 sessions decode and byte-exact v1 roundtrip; unassigned predict/train blocked; named profiles start empty; legacy source/archive bytes preserved. No real game names were assigned, no examples copied into APK/Git, no model trained on mixed rows. Prior35/506 coverage was on a mixed dataset and is not a clean single-game holdout score.
+PASS final Gradle --offline assembleDebug/lintDebug/assembleDebugAndroidTest,3m45s;lint0errors/36warnings. All runtime classes current with source, including final off-main export/merge changes. Instrumentation compile-only,NOT RUN. Initial build2m33s preceded final UI edits and is not the delivered artifact.
+PASS APK:org.localpilot.android.dev,0.7.4-dev/code20,min30,target35;384996bytes;SHA256:258d114d8216b9717d16a0e4673d63030a43cfc2833a7e92089fa2ad8e06d222. apksigner v2 verified; unchanged Dev certificate55626377256dda3a6b5824b7278eb12db75b8a7d1c80baa9d2af4402ccac2684.
+New files use LOCALPILOT-WEB-v2 (same256 features/actions, plus checksummed profile ID/name), web-lessons-v2/<url-hash>/<profile-id>.lpweb. Legacy v1 remains unassigned/readable/exportable; original URL-only files/backups are not rewritten by opening a named profile. Import archives legacy data; copying a session into a selected profile requires explicit user confirmation that the whole session is one game. Same-origin legacy reassignment to a changed URL is explicit; named data cannot use this migration route. Names are not filesystem paths.
+Profile/page switch cancels old model/gesture/suggestion/frame, stale import results are ignored, and debounced saves retain their source dataset. Export serialization and merging run off-main. Model gate checks URL and profile identity. Up to1000 examples/8MiB per game,32 named profiles per page. No automatic SPA mini-game detection is claimed:the user must select the right profile before recording another game. A recording session may itself be mixed; unknown sessions stay archived.
+Native arcade/scene recovery/gesture/report implementation unchanged apart from build title/version; prior9677 core checks are historical and were not rerun for this web-only change. No physical device attached. Android profile UI/SAF/lifecycle and actual gameplay remain UNRUN; build/JVM validation does not prove wins or fix the native-game window failure. Backup:/workspace/localpilot-backups/android-before-web-profiles-20261021.tar.gz. Details:docs/WEB_PROFILES.ru.md.
+
+Historical0.7.3 validation follows:
+
+LocalPilot Android0.7.3-dev/code19 — gesture callback deadline and explicit game diagnostic, 2026-10-21
+
+PASS core JVM Verify:9677 assertions, including19 GestureFlight and21 DiagnosticBundle assertions. Covers missing/late/foreign/duplicate callbacks, old watchdog vs newer flight, deadlines, post-STOP-like completion and reset; real PNG roundtrip, fixed ZIP names, UTF-8, SHA256, absent frame and byte/dimension limits. Prior9637 core assertions still pass. Replay/perception code is unchanged from0.7.2; prior298-frame/30 tall-phone checks were not rerun.
+PASS Gradle --offline assembleDebug/lintDebug/assembleDebugAndroidTest:2m5s;lint0errors/35warnings. All runtime classes and changed instrumentation current with source. Instrumentation COMPILED ONLY; full-demo now starts through visible «Начать проверку ×10».
+PASS APK metadata:org.localpilot.android.dev,0.7.3-dev/code19,min30,target35;359876bytes;SHA256:555baf777060b228097cf25ace682e9e1aee52de2520e85b792254cbf358f36c. apksigner v2 verified; preserved Dev certificate55626377256dda3a6b5824b7278eb12db75b8a7d1c80baa9d2af4402ccac2684.
+A code review found busy could remain true if Android never called the gesture callback; this has not been established as the affected phone's root cause. A3s watchdog on the separate gesture handler survives STOP and settles only its own flight. Stale callbacks cannot clear a newer gesture. Actual Android behavior remains unrun.
+One visible DemoActivity start button binds only its own marked target, places compact STOP at the top and starts existing ten score-verified touches. This is a device self-test, not evidence of successful external gameplay.
+Explicit user export «Отчёт с кадром игры» creates bounded localpilot-diagnostic.zip with session/device/crash/manifest and optional game-only PNG. One crop is retained in RAM, at most1Hz, only while the bound target is focused; new profile clears it. STOP retains last-session metadata in RAM. PNG/ZIP write occurs off-main only on export. No automatic upload or disk persistence of gameplay imagery. Report state is captured before SAF; Activity rotation retains the pending snapshot, process loss explicitly lacks RAM image/data.
+PHONE ACCEPTANCE NOT RUN:adb devices -l empty. Actual gestures, timeout callback integration, new test button, Pixel/Canvas frame retention, Activity/SAF lifecycle and output file on Android require device acceptance. The source review and JVM tests do not establish root cause of prior failures or live-game success. Existing crash diagnostics remain available without the service. Backup:/workspace/localpilot-backups/android-before-flight-report-20261021.tar.gz.
+
+Historical0.7.2 validation follows:
+
+LocalPilot Android0.7.2-dev/code18 — repeat scene recognition, 2026-10-21
+
+PASS core JVM Verify:9637 assertions, including154 new SceneRecovery assertions (long loss/reacquisition, two consecutive fresh observations, duplicate/out-of-order frames, exposure variants, blank frames, dark game objects, wood false positives, raw-result priority and Ari recovery). PASS ArcadeVerify replay of298 private frames: PADDLE126/134 usable, TRAFFIC61/96, FLAPPY41/68; existing policy/result/bounds regressions pass. PASS30 recorded tall-phone checks (324/480 width x3 exposure modes); no gestures dispatched.
+PASS Gradle --offline assembleDebug/lintDebug/assembleDebugAndroidTest,2m40s;lint0 errors/34 warnings. Instrumentation compile-only. All runtime classes current with source.
+APK metadata verified:org.localpilot.android.dev,0.7.2-dev/code18,min30,target35;345312bytes;SHA256:0be3e2b67da004010e8ad963e1675f29c7532f0d4f92bb96e138c3070c416451. PASS apksigner v2 verification; unchanged Dev certificate55626377256dda3a6b5824b7278eb12db75b8a7d1c80baa9d2af4402ccac2684.
+Recovery replaces the2.5s unknown-scene stop and Ari's three-miss permit revocation. At most one exposure retry plus the original pass per received frame. Two consecutive usable frames gate new policy actions; unknown observations keep capture active without generating gestures. Raw result detection wins. Pending action response is checked after visibility returns; actual no-response, STOP, wrong-window, lock and capture failures still terminate control. The previous bad tracking estimate is dropped and manual calibration is preserved.
+Recovery metadata is exported without pixels. No universal model, automatic unsupported-game discovery or blind exploratory input is claimed. The optional web-learning module and native simulator weights are unchanged; their prior checks are historical, not rerun for this release.
+PHONE ACCEPTANCE NOT RUN. No Android device is attached. Task return, real MediaProjection, recovery-to-gesture integration and actual gameplay still require device acceptance. Instrumentation is compiled only. Recommendations on recorded images do not prove successful live gameplay. Backup:/workspace/localpilot-backups/android-before-scene-recovery-20261021.tar.gz. Existing data/checkpoints/signing/release history preserved.
+
+Historical0.7.1 validation follows:
+
+LocalPilot Android0.7.1-dev/code17 — consent task return and paddle perception, 2026-10-21
+
+PASS core JVM Verify:9483 assertions, including8 new paddle-perception regressions. Before the fix the new test failed:wooden brick selected as ball at y=.2833. PASS ArcadeVerify on298 private replay frames (PADDLE134/TRAFFIC96/FLAPPY68); retained recorded scene/result and bounded-action checks. Additional10 assertions PASS on the latest real phone still downscaled to324/480 width:ball y~.882, basket aligned, policy WAIT; no Android gestures dispatched.
+PASS Gradle --offline :app:assembleDebug :app:lintDebug :app:assembleDebugAndroidTest,3m9s;lint0 errors/34 warnings. Instrumentation compile-only, NOT RUN. All runtime Java classes are current with source.
+APK metadata verified:org.localpilot.android.dev,0.7.1-dev/code17,min30,target35;342356bytes;SHA256:b49c74cb152c6fb81717286e5829802cd154dde764a42d660935d2130bfd6a5a. PASS apksigner v2 verification; same Dev certificate55626377256dda3a6b5824b7278eb12db75b8a7d1c80baa9d2af4402ccac2684.
+All prior core checks passed. Web modes unchanged; their prior46 format and29 mocked-HTTPS checks passed for0.7.0; not rerun in0.7.1. Previous startup matrix223 scenarios/464 assertions is unchanged, but does NOT exercise Android task navigation or the new window-return integration.
+Consent now owns a separate transient task and removes it after the result, instead of reusing MainActivity's task. Initial handoff can rebind a new window ID only for the original package and identical bounds on an unlocked device; later window changes still stop control. Actual Android task stack and gesture delivery are NOT RUN:no attached phone. The observed task-return symptom comes from the user's report; the latest video ends on the system consent dialog. This release does not establish successful live gameplay or the root cause of every unknown scene/crash.
+Dedicated saturated-red ball mask prevents wood-grain false positives without changing other profiles' generic red mask. Explicit missing-object messages replace the generic initial scene wait. No blind fallback taps, automatic ad/menu actions or reset launch of the game were added.
+Backup:/workspace/localpilot-backups/android-before-consent-return-20261021.tar.gz. APK/source/checkpoint/signing history preserved. Details:docs/CAPTURE_RETURN_2026-10-21.ru.md.
+
+Historical0.7.0 validation follows:
+
+LocalPilot Android0.7.0-dev/code16 — unified delivery, 2026-10-21
+
+PASS core JVM Verify:9475 assertions. PASS WebLesson:46 assertions. PASS WebHttp:29 mocked HTTPS assertions; no real API/provider request. PASS CaptureMatrixVerify:223 scenarios/464 assertions. Total10014 assertions. Matrix report:/tmp/localpilot-capture-matrix.csv.
+PASS Gradle :app:assembleDebug :app:lintDebug :app:assembleDebugAndroidTest:BUILD SUCCESSFUL in10m40s;lint0 errors/34 warnings. Instrumentation APK COMPILED, NOT RUN. Log:/workspace/android-build-tools/web-learning-delivery.log.
+PASS APK metadata:org.localpilot.android.dev,0.7.0-dev/code16,min30,target35;341064bytes;SHA256:4ed95905aa89162cfad4d12deec861f5bd6b84cc8e9257c1ed190b5ebf032f1f. apksigner verified v2 signature with preserved Dev certificate55626377256dda3a6b5824b7278eb12db75b8a7d1c80baa9d2af4402ccac2684. All runtime Java classes are current with source.
+Main instruction reduced to three steps; explicit arcade profile selection automatically binds the focused supported game. Before the first playable round, unknown/result scenes wait for manual start instead of triggering an idle stop. This UI workflow is not exercised by pure JVM tests.
+Web modes integrated:record real user actions in an embedded HTTPS WebView, import/export bounded .lpweb examples and optionally request a vision-API suggestion with manual application. Local nearest-demonstration policy abstains on distant/ambiguous observations. Examples are not native DQN checkpoints. Key entry is user-controlled and optional persistence uses Android Keystore; no keys shipped.
+PHONE ACCEPTANCE NOT RUN:adb devices -l is empty. Instrumentation is compile-only. MediaProjection, real gesture delivery, game response, WebView/PixelCopy, Android Keystore and actual provider behavior remain unverified. No crash stack has been supplied from the affected phone, so the reported crash cause remains unconfirmed. Limited capture resolution reduces allocation pressure; previous actual failures must be checked with exported localpilot-crash.txt.
+User audit ZIP is0bytes; it provides no training examples or runtime evidence. Private videos/checkpoints, release history and local keys are preserved. Backup:/workspace/localpilot-backups/android-before-web-learning-20261021.tar.gz.
+
+Historical0.6.4 validation follows:
+
+LocalPilot Android0.6.4-dev/code15 — bounded capture and crash diagnostics, 2026-10-21
+
+PASS JVM Verify:9475 assertions, including100 additional resolution/scaled-display geometry checks; physical displays from120x180 to7680x4320 are bounded to720x480 (at most345600 decoded pixels). All existing gate, arcade, board, persistence and metrics checks passed.
+PASS Gradle :app:assembleDebug :app:lintDebug :app:assembleDebugAndroidTest (5m38s), lint0 errors/28 warnings. Instrumentation COMPILED, NOT RUN.
+PASS APK metadata org.localpilot.android.dev,0.6.4-dev/code15,min30,target35. Bytes:296232. SHA256:c19bd87ba11b1db5eeda96e02188aee3d71348c834bd841735e73074fdd722b2. apksigner verified, same prior Dev certificate55626377256dda3a6b5824b7278eb12db75b8a7d1c80baa9d2af4402ccac2684.
+Capture now uses a bounded VirtualDisplay/ImageReader surface and a reusable ARGB buffer. PilotService receives physical display dimensions; scaled full-display geometry maps the app ROI and touches back to the phone. Single-app geometry remains a separate legacy constructor. Capture OutOfMemoryError is handled; analyzer OutOfMemoryError produces a failed read instead of an abandoned future.
+New PilotApplication installs a bounded uncaught-Java-crash metadata handler before components start. Only exception type, method/line stack and stage are saved; no message, screenshots, URLs or tokens. «Экспорт диагностики сбоя» works without the accessibility service and runs file export off the UI thread. It includes Android ApplicationExitInfo for prior native/low-memory/ANR exits. System kills may not invoke the Java handler.
+PHONE ACCEPTANCE NOT RUN. User reports closure after capture, but no crash stack/exit metadata has been received. Full-size frame allocation is a plausible memory risk removed by this update, not a confirmed root cause. Test this APK and attach localpilot-crash.txt if closure recurs. Backup:/workspace/localpilot-backups/android-before-web-learning-20261021.tar.gz.
+Web-learning modes are work in progress and are NOT exposed by this APK. The pure WebLesson data-format class is staged in source; browser/network/UI helpers are outside the checkout under /workspace/localpilot-web-development pending integration and tests. No real training examples were recovered from uploaded audit ZIP:that attachment has0 bytes. Do not describe web training as released in0.6.4.
+
+Historical0.6.3 validation follows:
+
+LocalPilot Android0.6.3-dev/code14 — late gesture completion and verified demo, 2026-10-21
+
+PASS JVM Verify:9375 assertions, including40 new completion-context regression assertions (GateTest175 total). Late consumed-ticket ACK remains accepted in the same binding; STOP/session/app/window/bounds/clock reversal/foreign or unconsumed tickets are rejected. Dispatch TTL700ms remains unchanged.
+Reproduced before fix:dispatch consume at1050 succeeded for ticket1000; same binding at2200 was incorrectly rejected by the completion path as TICKET_EXPIRED. This is a code-level reproduction; the user's phone stop reason remains unknown (reported only «демо стоп»).
+PASS Gradle :app:assembleDebug :app:lintDebug :app:assembleDebugAndroidTest (9m39s), lint0 errors/28 warnings. Changed app sources compiled. Instrumentation test compiles with65s timeout for the60s demo budget; NOT RUN on Android.
+PASS apksigner verification; same previous Dev signer SHA25655626377256dda3a6b5824b7278eb12db75b8a7d1c80baa9d2af4402ccac2684.
+PASS APK metadata:org.localpilot.android.dev,0.6.3-dev/code14,min30,target35,bytes279440,SHA256:0ca027947e2a3557f6d4231935b060f3551ad32f11b3394f0403771d450f3bac.
+Demo now refreshes target node coordinates before every tap, reads the target-side score marker after each ACK and advances only on +1. Ten Android ACKs are no longer treated as proof of ten target clicks. Missing score response after2s produces DEMO_NO_TOUCH_RESPONSE; unexpected multi-increment stops. Demo remains10 actions, with60s watchdog. LAST_STOP survives metrics exports; original installations, checkpoints and prior APKs preserved.
+PHONE ACCEPTANCE NOT RUN:the user observed2–3 demo score increments in a prior version, confirming some gesture delivery by user report. No logs or precise cause available. New10-click sequence, Android cache refresh timing, actual foreground target and real-game control need physical-device testing. Do not declare these successful based on JVM/build results.
+Backup:/workspace/localpilot-backups/android-before-late-ack-20261021.tar.gz. Checklist:open a fresh test game;bind;allow input;Demo×10;do not touch target manually;expect target score10 and10/10 verified hits, then STOP. If stopped early export «Экспорт задержек» to inspect LAST_STOP and ANDROID_ACK error codes.
+
+Historical0.6.2 validation follows:
+
+LocalPilot Android0.6.2-dev/code13 — full-display request and input diagnostics, 2026-10-21
+
+PASS Gradle :app:assembleDebug :app:lintDebug :app:assembleDebugAndroidTest (4m28s); lint0 errors/28 warnings. Changed Java sources compiled. Instrumentation APK COMPILED, NOT RUN.
+PASS JVM Verify:9335 assertions. PASS CaptureMatrixVerify:223 scenarios/464 assertions. These are core logic tests, not Android picker, MediaProjection or live gameplay acceptance.
+PASS APK metadata:org.localpilot.android.dev,0.6.2-dev/code13,min30,target35. APK bytes:276120,SHA256:5ca130ada0ae7bf8a842a6f194f889fb5224d9bf300bbd664f8389815926c30f.
+PASS apksigner verification; signer matches previous Dev release:55626377256dda3a6b5824b7278eb12db75b8a7d1c80baa9d2af4402ccac2684.
+Android14+ requests the default display using MediaProjectionConfig.createConfigForDefaultDisplay(); older Android retains the legacy system screen-capture request. Mandatory system confirmation remains. Device/OEM behavior NOT RUN.
+Counters in panel and exported metrics distinguish received frames, completed read callbacks, strategy calls (including WAIT), accepted dispatchGesture calls and Android-completed gestures (not proof of game motion). Stage errors expand the panel. Stop and existing target checks are unchanged.
+User reports no actions but supplied no current version/stage/metrics. Phone failure root cause remains UNCONFIRMED. Previously supplied video shows a result screen; automatic retry/menu/ad clicking is not implemented.
+No physical Android device is connected. Verify installation of this new APK, manually start a game round, bind the correct game and profile, confirm screen sharing; if no input, export through MainActivity button «Экспорт задержек» without restarting the service.
+Backup:/workspace/localpilot-backups/android-before-full-display-20261021.tar.gz. Existing APKs/checkpoints/signing data preserved.
+
+Historical0.6.1 validation follows:
+
+LocalPilot Android0.6.1-dev/code12 — capture startup, 2026-10-21
+
+PASS JVM Verify:9335 assertions, including30 new startup-state/timeouts/stale-session/error-code assertions.
+Capture readiness is now published on the main thread before registering the image listener; a pending first image is explicitly drained. Startup callbacks and frames are scoped to a unique session. Duplicate consent results cannot reuse a projection token. Consent Activity restores pending-request flags and diagnoses a return without a result. Startup watchdogs cover consent120s, service10s, first frame3s; STOP invalidates the session.
+CAPTURE STARTUP is a bounded40-event RAM diagnostic included in exported metrics: timestamps, session IDs, stages and exception types only; no screen contents or projection data. Error codes fit StageMetrics constraints.
+PASS final Gradle8.9 :app:assembleDebug :app:lintDebug :app:assembleDebugAndroidTest (2m45s), lint0 errors/28 warnings. Instrumentation APK compiled, NOT RUN. All five changed Java source files are no newer than their compiled classes.
+PASS APK:org.localpilot.android.dev,0.6.1-dev/code12,min30,target35,275012bytes. SHA256:30da8b9a6e2cb9c11635273512945f960eb3b3586bf7892a88b1eae8eb102b44.
+PASS apksigner verification; certificate SHA25655626377256dda3a6b5824b7278eb12db75b8a7d1c80baa9d2af4402ccac2684 matches preserved0.6.0 APK. No uninstall or key replacement performed.
+Physical Android checks:NOT RUN; adb devices lists no device. System picker, Activity rotation, actual MediaProjection frames, target control and gesture response still require device acceptance. The user's23.3s recording shows selection and a stationary Market Rush result555m with the prior permission label; it does not establish the runtime root cause. No claim of a successful phone fix.
+Backup before changes:/workspace/localpilot-backups/android-before-capture-startup-20261021.tar.gz. User checkpoints, previous release files, original installations and signing data preserved.
+Acceptance checklist:docs/CAPTURE_STARTUP.ru.md.
+
+Historical0.6.0 validation follows:
+
+LocalPilot Android0.6.0-dev/code11 — checks, 2026-10-21
+
+PASS JVM Verify:9305 assertions, including44 new arcade policy/perception/response checks. Existing board, persistence, metrics, gate, mini-game and Ari checks passed.
+PASS private user-video replay:298 frames at8fps,480px wide; same Java detector/policy as Android, no gestures dispatched. PADDLE127/134 usable,89 recommendations; TRAFFIC61/96 usable,6 recommendations,16 result frames; FLAPPY41/68 usable,18 recommendations,9 result frames. Counts describe feature sufficiency, not annotated accuracy or gameplay wins. Selected tutorial/loading/result and obstacle-response regressions passed.
+PASS Gradle8.9 :app:assembleDebug :app:lintDebug :app:assembleDebugAndroidTest (5m8s), lint0 errors,28 warnings. All main Java sources are no newer than their compiled classes.
+PASS APK signature verification, same Gradle signer SHA25655626377256dda3a6b5824b7278eb12db75b8a7d1c80baa9d2af4402ccac2684.
+PASS APK metadata:org.localpilot.android.dev,0.6.0-dev/code11,min30,target35.
+APK SHA256:772c2b7571d2afebc09c40f565a28062ba68cbc8ece780db914c854b766432f5.
+Android instrumentation APK:COMPILED,NOT RUN. No physical Android device is attached. Actual MediaProjection/UI/gesture timing, response feedback, Stop/focus/rotation behavior and sustained real-game results remain UNRUN. JVM and replay do not establish live Android success or trained RL control of these games.
+The three added profiles are selected explicitly inside Yandex Market; they do not automatically tap advertisements, restart buttons or level maps. A post-ACK response, current bound window and fresh recognized scene are required for subsequent input. Diagnostics stops input. Ari calibration suspends analysis while frames are delivered.
+Online lookup of game rules via Google,Yandex,official Market site and Bing was blocked by proxy403. Sources used:the user's control clarification, tutorials and five videos. The recordings/frames are not shipped, committed or included as fixtures. Private replay images reside under /tmp only.
+Backup before0.6.0:/workspace/localpilot-backups/android-before-real-profiles-20261021T112310Z.tar.gz. Prior release artifacts and installations preserved.
+
+Historical validation record for0.5.1 (below is not the current build):
+
+LocalPilot Android0.5.1-dev/code10 — incremental update from user gameplay videos, 2026-10-21
+
+PASS `:app:assembleDebug` after adding the experimental `Color2048Reader` and manual color-2048 mode. This proves Java/resource compilation and APK packaging only; the build also completed its `lintVitalDebug` tasks.
+NOT RUN in this update: JVM test suite, full `:app:lintDebug`, instrumentation and physical-device checks. The 0.5.0/code9 test/build results below are historical and do not exercise the new reader.
+The five user MP4s were visually reviewed from temporary files under `/tmp`; none is included in source, APK, release archives or fixtures. Observed custom 2048 tile colors map only to2/4/8/16. No reader-on-video validation was run. Unknown tile colors fail closed. The other four clips do not establish action causality; no new controller was claimed for Karanoid, Gosha or Market Rush.
+Physical Android is not attached. The user still needs to verify field selection, color parsing, at least one accepted move, transition verification and STOP before relying on this profile.
+Packaged: `release/LocalPilot_Android_0.5.1_dev.apk` (242404 bytes; SHA256 `736dd49ec7d82bad3f717c2162ebefe8f706917f1485fee817f370fc3469b9a4`), matching source and bundle ZIPs generated by `tools/package_release.py`.
+
+Historical validation for LocalPilot Android0.5.0-dev/code9, 2026-10-21
+
+PASS current JVM verification after the Yandex Market "Прыгун Ари" controller:
+27 experience,83 metrics,38 pipeline-read,125 automatic-board,51 pixel-locator,
+14 jumper-vision,7 jumper-policy,16 jumper-frame-geometry,135 gate,
+4531 board/reader/parity,2634 hardening/mini-game assertions (7661 total).
+The37 new Jumper assertions use synthetic scenes and coordinate transforms;
+user-supplied game screenshots were not stored as fixtures or pixel-tested.
+PASS Gradle8.9 :app:assembleDebug :app:lintDebug :app:assembleDebugAndroidTest,
+after the final bounded-frame-queue and UI copy changes; lint0 errors,28 warnings.
+PASS aapt metadata:org.localpilot.android.dev,0.5.0-dev/code9,min30,target35.
+PASS Gradle app and instrumentation APK signature verification.
+APK output:app/build/outputs/apk/debug/app-debug.apk.
+Android instrumentation APK:COMPILED,NOT RUN. `adb` is not installed here;
+no physical Android device is attached.
+Jumper Ari MediaProjection delivery, real Yandex gameplay, colors, FPS,
+gesture response, capture revocation and device UI acceptance remain UNRUN.
 
 PASS existing JVM suite:9224 assertions, none skipped.
 PASS new JVM RL/environment/checkpoint/session/journal suite:680187 assertions.
@@ -17,7 +343,8 @@ PASS Gradle8.9 :app:assembleDebug :app:lintDebug :app:assembleDebugAndroidTest.
 Final delivery build successful,2m36s; lint0 errors,26 warnings.
 PASS final main Java sources no newer than compiled classes.
 PASS Gradle app/instrumentation APK signature verification.
-PASS aapt:org.localpilot.android.dev,0.4.0-dev/code8,min30,target35.
+Historical 0.4.0-dev/code8 metadata and source-signing checks are retained below;
+current 0.5.0-dev/code9 metadata and signatures were checked above.
 PASS standalone final source compilation,zipalign,v3 signing.
 Standalone uses a different local debug signer from the delivered Gradle APK.
 PASS Python AST/source secret-pattern scan/git diff --check.
@@ -41,7 +368,9 @@ with Package Manager Broken pipe(32). No unchanged emulator retry made.
 UNRUN on phone:new training UI/lifecycle/thermal/FPS,auto-selection/no-dialog
 gameplay,compact translucent panel,rotation/focus/Stop races,real capture/gestures.
 Existing native UI runner covers Demo/Stop,not the new trainer screen.
-No Doodle Jump or third-party arcade vision/control profile implemented.
+The only screenshot-based third-party controller is the unverified Yandex Market
+"Прыгун Ари" profile above; Doodle Jump and other installed arcade games have no
+dedicated control profile. Simulator DQN policies do not control real games.
 No live-device acceptance,GitHub CI,GitHub Release or created-PR claim.
 
 Original user0.3.2 archive CRC/36source hashes preserved in provenance docs.

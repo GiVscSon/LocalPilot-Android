@@ -1,18 +1,24 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+ <uses-permission android:name="android.permission.INTERNET"/>
+ <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+ <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION"/>
  <queries>
   <intent><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent>
   <intent><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.HOME"/></intent>
  </queries>
- <application android:theme="@android:style/Theme.Material.NoActionBar" android:label="LocalPilot Android" android:allowBackup="false" android:usesCleartextTraffic="false" android:supportsRtl="true">
+ <application android:name=".PilotApplication" android:theme="@android:style/Theme.Material.NoActionBar" android:label="LocalPilot Android" android:allowBackup="false" android:usesCleartextTraffic="false" android:supportsRtl="true">
   <activity android:name=".MainActivity" android:exported="true"><intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter></activity>
   <activity android:name=".Game2048Activity" android:exported="false"/>
   <activity android:name=".MiniGamesActivity" android:exported="false"/>
   <activity android:name=".DemoActivity" android:exported="false"/>
   <activity android:name=".GamePickerActivity" android:exported="false"/>
+  <activity android:name=".WebLearningActivity" android:exported="false"/>
   <activity android:name=".TrainingActivity" android:exported="false"/>
+  <activity android:name=".JumperCaptureConsentActivity" android:taskAffinity="" android:excludeFromRecents="true" android:exported="false" android:theme="@android:style/Theme.Translucent.NoTitleBar"/>
   <service android:name=".PilotService" android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE" android:exported="true">
    <intent-filter><action android:name="android.accessibilityservice.AccessibilityService"/></intent-filter>
    <meta-data android:name="android.accessibilityservice" android:resource="@xml/pilot_service"/>
   </service>
+  <service android:name=".JumperCaptureService" android:exported="false" android:foregroundServiceType="mediaProjection"/>
  </application>
 </manifest>

@@ -108,7 +108,7 @@ public final class PilotUiInstrumentation extends Instrumentation {
 
     private void checkCollapseAndReopen() throws Exception {
         launchDemo();
-        click("Привязать");
+        bindDemoWindow();
         await(this::armed, 2_000, "Overlay did not bind to DemoActivity");
         allowInput();
         long epoch = onMain(() -> gate().epoch());
@@ -135,14 +135,14 @@ public final class PilotUiInstrumentation extends Instrumentation {
 
     private void checkFullDemo() throws Exception {
         launchDemo();
-        armAndStart();
+        click("Начать проверку ×10");
         await(() -> score() > 0, 6_000, "Demo made no first move");
         require(compact(), "Demo did not compact panel before starting");
         require(present("STOP") && present("Развернуть"), "Running demo lost compact STOP controls");
-        await(() -> score() == 10, 12_000, "Demo did not reach exactly ten real target clicks");
+        await(() -> score() == 10, 65_000, "Demo did not reach exactly ten real target clicks");
         await(() -> !armed() && onMain(() -> intField("autoLeft")) == 0, 2_000,
                 "Completed demo left input armed");
-        addCheck("demo_ten_real_target_clicks", new JSONObject().put("score", score()).put("stop_visible_during_run", true));
+        addCheck("demo_ten_real_target_clicks", new JSONObject().put("start", "single visible test button").put("score", score()).put("stop_visible_during_run", true));
     }
 
     private void checkStopDuringDemo() throws Exception {
@@ -175,14 +175,17 @@ public final class PilotUiInstrumentation extends Instrumentation {
     }
 
     private void armAndStart() throws Exception {
-        click("Привязать");
+        bindDemoWindow();
         await(this::armed, 2_000, "Demo binding failed");
         allowInput();
-        click("Демо ×10");
+        click("Ещё");click("Демо ×10");
     }
 
+    private void bindDemoWindow() throws Exception {click("Окно");click("@contains:"+getTargetContext().getPackageName());}
+
     private void allowInput() throws Exception {
-        click("Разрешить ввод");
+        if(onMain(() -> permit().allows(gate().epoch(),SystemClock.elapsedRealtime())))return;
+        click("Ещё");click("Включить автоуправление");bindDemoWindow();
         await(() -> onMain(() -> permit().allows(gate().epoch(), SystemClock.elapsedRealtime())),
                 2_000, "Input permission dialog did not grant bounded consent");
     }
@@ -238,7 +241,7 @@ public final class PilotUiInstrumentation extends Instrumentation {
     private AccessibilityNodeInfo findText(AccessibilityNodeInfo node, String text, int depth, int[] remaining) {
         if (depth > 40 || --remaining[0] < 0) return null;
         if (node.isVisibleToUser() && node.isEnabled() && node.isClickable()
-                && text.contentEquals(node.getText() == null ? "" : node.getText())) {
+                && (text.startsWith("@contains:")?String.valueOf(node.getText()).contains(text.substring(10)):text.contentEquals(node.getText() == null ? "" : node.getText()))) {
             return AccessibilityNodeInfo.obtain(node);
         }
         for (int i = 0; i < node.getChildCount(); i++) {

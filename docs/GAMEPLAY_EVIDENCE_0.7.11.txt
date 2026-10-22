@@ -1,0 +1,30 @@
+LocalPilot0.7.11 evidence — 2026-10-22
+Controller SHA256876dedcb3f8c47df7446d24ddf10a4c55eed7ef5304007f9d2abf1766710935c
+
+1. Coordinate-state closed-loop simulations
+Baseline=ArcadePolicy; baseline+feedback and integrated controller use the same ArcadeFeedback/executor rules. Counts are totals across scenarios, not a single run or actual Android scores. Parameters and seeds are in tests/ArcadeControllerTest.java. These simulations use known object coordinates.
+Closed-loop bird simulations: predictive gates=395, baseline gates=205, baseline+feedback gates=315, integrated gates=561, scenarios=72
+Closed-loop road simulations: predictive rows=1004, baseline rows=180, baseline+feedback rows=180, integrated rows=1004, scenarios=48
+Continuous steering hold simulations: predictive rows=911, baseline+feedback rows=118, scenarios=36
+Controller CPU on cloud JVM only: p50=0.011ms p95=0.129ms max=7.856ms
+Arcade controller: 16 assertions PASS. Simulations do not establish physical-device performance.
+
+2. Whole-loop synthetic pixels
+Actual ArcadeVision -> ArcadeController -> ArcadeFeedback -> delayed simulated input -> rendered image. Four cases per mode. Totals are synthetic obstacle rows/gates; scene/render/physics details are in tests/ArcadeSystemTest.java. Bird retains one collision; neither a universal guarantee nor real-device acceptance.
+Pixel closed-loop road-discrete scenarios=4 baseline {passed=7 deaths=4 usable=311/318 actions=6 visualConfirmed=6 paused=0} predictive {passed=34 deaths=0 usable=1070/1098 actions=51 visualConfirmed=50 paused=0}
+Pixel closed-loop road-continuous scenarios=4 baseline {passed=7 deaths=4 usable=311/318 actions=12 visualConfirmed=12 paused=0} predictive {passed=34 deaths=0 usable=1070/1098 actions=47 visualConfirmed=46 paused=0}
+Pixel closed-loop bird scenarios=4 baseline {passed=6 deaths=3 usable=369/376 actions=58 visualConfirmed=57 paused=0} predictive {passed=19 deaths=1 usable=880/903 actions=129 visualConfirmed=128 paused=0}
+Arcade system: 9 assertions PASS; wall=15.44s. Synthetic images and physics; no phone success implied.
+
+3. Real private video replay
+Pixels from existing human recordings; recommendations not dispatched, so replay cannot show autonomous scores. Manually reviewed active intervals: TRAFFIC20..80=61frames, FLAPPY7..57=51frames. Active-frame usability61/61 and51/51; the ten FLAPPY misses in prior version are restored. Tutorial/death/result frames are not counted as active. This is sample coverage, not calibrated recognition accuracy.
+replay PADDLE frames=134 usable=126 recommendations=93 result_frames=0 desktop_p50_ms=27.99 desktop_p95_ms=149.59
+replay TRAFFIC frames=96 usable=61 recommendations=6 result_frames=16 desktop_p50_ms=31.82 desktop_p95_ms=46.85
+replay FLAPPY frames=68 usable=51 recommendations=25 result_frames=9 desktop_p50_ms=33.87 desktop_p95_ms=48.18
+Replay assertions PASS; recommendations are not dispatched, live-game success is UNVERIFIED.
+
+4. Targeted vision regressions
+Arcade vision temporal: 48 assertions PASS (synthetic scenes + optional private real frames)
+
+5. Limits
+No attached physical Android, no successful emulator run. MediaProjection/Accessibility instrumentation compiled only. Native controls for other profiles and general-game mastery remain outside this result. Journal fsync remains synchronous; source interval60ms is an upper frequency request, not measured Android FPS. Model physics is approximate.
