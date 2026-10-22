@@ -15,6 +15,8 @@ public final class ArcadeController {
  public void reset(){previous=null;trafficSpeed=.55f;scrollSpeed=.28f;gravity=1.5f;flapVelocity=-.44f;lastFlap=lastLane=-10000;intendedLane=-1;steeringSpeed=1.1f;lastHold=150;continuousSteering=false;}
  /** New episode in the same window: keep learned physics, discard old objects/actions. */
  public void nextRound(){previous=null;lastFlap=lastLane=-10000;intendedLane=-1;}
+ /** Penalize the last policy after a terminal/game-over screen. */
+ public void penalize(){steeringSpeed=Math.min(2.5f,steeringSpeed*1.04f);flapVelocity=Math.max(-1.2f,flapVelocity*.98f);previous=null;lastFlap=lastLane=-10000;intendedLane=-1;}
  public ArcadePolicy.Decision decide(ArcadeObservation s,long now){
   if(s==null||!s.usable()||now<s.timestampMs||now-s.timestampMs>450)return waitFor("Ожидаю свежую игровую сцену");
   if(previous!=null&&(previous.profile!=s.profile||s.timestampMs<previous.timestampMs))reset();
