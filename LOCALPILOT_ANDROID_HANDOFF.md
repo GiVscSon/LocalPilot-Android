@@ -1,5 +1,14 @@
 # LocalPilot Android — история и внешняя новая точка сохранения
 
+## ПОДТВЕРЖДЁННЫЕ ВЛОЖЕНИЯ 0.6.0 SOURCE + 0.7.0 APK (22.10.2026)
+
+Из нового пользовательского загрузочного набора **независимо проверено**:
+- `LocalPilot_Android_0.7.0_dev.apk`: package `org.localpilot.android.dev`, version `0.7.0-dev`/code16, min30/target35, 341064 байта; SHA256 `4ed95905aa89162cfad4d12deec861f5bd6b84cc8e9257c1ed190b5ebf032f1f`; APK v2 RSA/SHA256 signature **cryptographically verified**, certificate `55626377256dda3a6b5824b7278eb12db75b8a7d1c80baa9d2af4402ccac2684`.
+- `LocalPilot_Android_0.6.0_dev_source.zip`: 230662 байта, 91 элемент, CRC PASS, SHA256 `1b73a854804a80e6a10727882956ea2594b8d26b260c1293891381253b69abaa`; независимые Java тесты Verify 9305 assertions PASS, RL Verify 680187 assertions PASS.
+- **Критическая несовместимость обновления:** ранее выданный CI debug APK 0.4.0 имел тот же applicationId, но иной debug-certificate `b2d5475f207ec1e77d6d5716861a24e6b01b2e2894b832457cc7dc6bd88316e0`. Не удалять старую Dev-установку без экспорта приватных данных/чекпоинтов; Android обновление с несовместимой подписью не сработает.
+- APK 0.7 включает классы `WebLearningActivity`, `WebVault`, `WebHttp`, `CaptureStartup`, `CrashDiagnostics` и INTERNET permission, которых нет в 0.6 источниках. Следовательно 0.6 ZIP **не полный source для APK 0.7**. Полного 0.7 source / APK 0.7.11 в этом checkout пока нет.
+- Бэкап + матрица: https://drive.google.com/drive/folders/1nhnjW4e3CAz8hQiOtKSosZGY2PVcEYOM , `LOCALPILOT_ANDROID_070_CHECKPOINT_2026-10-22.zip` и `AUDIT_LOCALPILOT_ANDROID_2026-10-22.md`. Не смешивать 0.4 GitHub source, 0.6 source, 0.7 APK и 0.7.11 удалённый Cloud source. **Живую приёмку Android не выполняли.**
+
 ## ВНЕШНЯЯ ТОЧКА 0.7.11-dev, 22.10.2026: НЕ ПЕРЕЗАПИСЫВАТЬ НОВУЮ РАБОТУ
 
 **Источник:** пользователь прислал четыре скриншота отдельного Cloud-проекта и скрипт финализации версии 0.7.11-dev/code27. Эта версия **не содержится в текущем GitHub checkout**, где исходники 0.4.0-dev/code8; нынешний GitHub CI подтверждает только 0.4.0-dev (`dd2d87e3fbea469bb47b91151b58ade62244b87a`, https://github.com/GiVscSon/LocalPilot-Android/actions/runs/39776351133). В отдельной Cloud-среде вероятное расположение новой версии: `/workspace/LocalPilot-Android`; **здесь доступа к этим файлам нет**.
