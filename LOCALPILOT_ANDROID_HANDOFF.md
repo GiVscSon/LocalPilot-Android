@@ -1,5 +1,17 @@
 # LocalPilot Android — история и внешняя новая точка сохранения
 
+## ПОЛУЧЕН И ПРОВЕРЕН APK 0.7.10-dev (22.10.2026)
+
+**Последняя фактически полученная Android-сборка:** `LocalPilot_Android_0.7.10_dev.apk` (пакет `org.localpilot.android.dev`, versionName `0.7.10-dev`, versionCode26, Android11+/minSdk30, targetSdk35), **415914 байт**, SHA256 `4efcaa74f426074bc53c2ee59dcce6a3a647be046752945372e155d6a54928d1`.
+- Проверка структуры ZIP CRC PASS, бинарного манифеста и APK v2 RSA/SHA256 (криптографическая подпись и content digest) PASS; сертификат SHA256 `55626377256dda3a6b5824b7278eb12db75b8a7d1c80baa9d2af4402ccac2684`, совпадает с APK 0.7.0, но НЕ с CI APK 0.4.0.
+- Дельта от полученного 0.7.0 APK/code16: `GameViewport`, `GameAreaOverlay`, `RgbaFrameDecoder`, `SceneRecovery`, `GestureFlight`, `DiagnosticBundle`, `web/GoalReward`, `web/WebLessonStore` в DEX. Это бинарное наличие классов, **не результат испытаний на реальном телефоне**.
+- Одновременно пользователь передал `GITHUB_PROJECTS_REVIEW_2026-10-21.ru.md`: сравнительный документ по FGA, Klick'r, Airtest, Droidrun, AndroidWorld, uiautomator2, GKD; документ не доказывает интеграцию чужих алгоритмов.
+- Бэкап APK 0.7.10 + APK 0.7.0 + исходники 0.6.0 + обзор + аудит и манифест: https://drive.google.com/drive/folders/1nhnjW4e3CAz8hQiOtKSosZGY2PVcEYOM (`LOCALPILOT_ANDROID_0710_CHECKPOINT_2026-10-22.zip`, `AUDIT_LOCALPILOT_ANDROID_0710_2026-10-22.md`), копия в Библиотеке ChatGPT `/LocalPilot Android/`.
+- **Не путать**: 0.7.10 = последний физически полученный APK, 0.7.11/code27 = ещё более поздняя **отдельная Cloud-версия по скриншотам**, исходники и APK не получены. Исходники 0.6.0 не пересоздают 0.7.10, актуальные исходники остаются в внешнем Cloud-workspace. Не применять старый checkout 0.4 поверх новых исходников.
+- Приёмка на Android ещё не выполнена. Не удалять установленную 0.4.0-dev без сохранения приватных данных, т.к. её debug-подпись несовместима с текущей Dev-линейкой.
+
+---
+
 ## ПОДТВЕРЖДЁННЫЕ ВЛОЖЕНИЯ 0.6.0 SOURCE + 0.7.0 APK (22.10.2026)
 
 Из нового пользовательского загрузочного набора **независимо проверено**:
