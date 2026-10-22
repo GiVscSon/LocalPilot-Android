@@ -507,7 +507,7 @@ public class PilotService extends AccessibilityService {
   jumperConsentPending=false;
   arcadeState=observation;
   if(observation!=null&&observation.terminal){
-   arcadeController.penalize();if(captureProfile==ArcadeProfile.ARI)JumperPolicy.learn(false);if(arcadeLearning!=null)try{arcadeLearning.save(captureProfile, captureProfile==ArcadeProfile.ARI?JumperPolicy.model():arcadeController.model());}catch(java.io.IOException ignored{})
+   arcadeController.penalize();if(captureProfile==ArcadeProfile.ARI)JumperPolicy.learn(false);if(arcadeLearning!=null)try{arcadeLearning.save(captureProfile, captureProfile==ArcadeProfile.ARI?JumperPolicy.model():arcadeController.model());}catch(java.io.IOException ignored){}
    sceneRecovery.reset();arcadeController.nextRound();arcadeFeedback.reset();arcadeLastUsable=null;arcadeRoundSeen=false;arcadePending=null;arcadeBefore=null;arcadeAck=false;arcadeState=null;
    note="Раунд завершён · нажмите «Играть снова» в игре. Захват и настройка сохранены";update();return;
   }
