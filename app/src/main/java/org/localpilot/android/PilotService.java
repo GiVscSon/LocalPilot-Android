@@ -37,6 +37,7 @@ public class PilotService extends AccessibilityService {
  private boolean jumperConsentPending,jumperAwaitingVerification;
  private boolean jumperCalibrationPending;private long jumperLastFrameMs,jumperLastActionMs,jumperPendingActionMs;private float jumperPendingStartX;
  private JumperPolicy.Action jumperPendingAction=JumperPolicy.Action.WAIT;private JumperState jumperState;
+ private int jumperResponseFailures;private boolean jumperResponsePaused;
  private JumperVision.ColorProfile jumperColorProfile;private JumperCalibrationOverlay jumperCalibrationOverlay;
  private int jumperDisplayWidth,jumperDisplayHeight;private JumperFrameGeometry jumperFrameGeometry;
  private final Object jumperFrameLock=new Object();
@@ -58,11 +59,11 @@ public class PilotService extends AccessibilityService {
    if(diagnosticFrame!=null&&!diagnosticFrame.isRecycled())diagnosticFrame.recycle();
    diagnosticFrame=copy;copy=null;diagnosticFrameAt=timestamp;
    diagnosticFrameGeometry="frame_elapsed_ms="+timestamp+" crop="+diagnosticFrame.getWidth()+"x"+diagnosticFrame.getHeight()
-      +" screen_bounds="+armedBounds.toShortString()+" display="+jumperDisplayWidth+"x"+jumperDisplayHeight+" profile="+captureProfile;
+      +" screen_bounds="+armedBounds.toShortString()+" display="+jumperDisplayWidth+"x"+jumperDisplayHeight+" profile="+profileLabel();
   }catch(RuntimeException|OutOfMemoryError error){/* Reporting must not interrupt gameplay. */}
   finally{if(copy!=null&&!copy.isRecycled())copy.recycle();}
  }
- public Bitmap copyDiagnosticFrame(){try{return diagnosticFrame==null||diagnosticFrame.isRecycled()?null:diagnosticFrame.copy(Bitmap.Config.ARGB_8888,false);}catch(RuntimeException|OutOfMemoryError error){return null;}}
+ public Bitmap copyDiagnosticFrame(){try{return diagnosticFrame==null||diagnosticFrame.isRecycled()||SystemClock.elapsedRealtime()-diagnosticFrameAt>5000?null:diagnosticFrame.copy(Bitmap.Config.ARGB_8888,false);}catch(RuntimeException|OutOfMemoryError error){return null;}}
  private String diagnosticState(){
   long now=SystemClock.elapsedRealtime();
   StringBuilder out=new StringBuilder("LocalPilot game-session-v1\nelapsed_ms=").append(now)
@@ -155,9 +156,9 @@ public class PilotService extends AccessibilityService {
  }
  private void startSelected(){
   if(!bindSelectedWindow())return;
-  if(playingJumper&&arcadeFeedback.paused()&&selectedProfile<4&&ArcadeProfile.values()[selectedProfile]==captureProfile){
+  if(playingJumper&&(arcadeFeedback.paused()||jumperResponsePaused)&&selectedProfile<4&&ArcadeProfile.values()[selectedProfile]==captureProfile){
    if(busy){note="Дождитесь завершения касания";update();return;}
-   arcadeController.reset();arcadeFeedback.reset();arcadePending=null;arcadeBefore=null;arcadeAck=false;arcadeLastUsable=null;sceneRecovery.reset();
+   arcadeController.reset();arcadeFeedback.reset();arcadePending=null;arcadeBefore=null;arcadeAck=false;arcadeLastUsable=null;sceneRecovery.reset();jumperResponsePaused=false;jumperResponseFailures=0;jumperAwaitingVerification=false;
    note="Продолжаю текущий захват · проверяю свежую сцену";update();return;
   }
   if(selectedProfile>=4&&manualVisualRoi&&visualRoi!=null)boardRoi=new Rect(visualRoi);
@@ -264,7 +265,7 @@ public class PilotService extends AccessibilityService {
   if(!isYandexMarketTarget()){note="Откройте «"+profile.label+"» внутри Яндекс Маркета";update();return;}
   if(!automatic()&&!permit.allows(gate.epoch(),SystemClock.elapsedRealtime())){note="Сначала разрешите ввод для этой сессии";update();return;}
   if(automatic())permit.grantSession(gate.epoch(),SystemClock.elapsedRealtime());
-  captureProfile=profile;arcadeLastUsable=null;arcadeController.reset();arcadeFeedback.reset();clearDiagnosticFrame();sceneRecovery.reset();arcadeRoundSeen=false;arcadeState=null;arcadeBefore=null;arcadePending=null;arcadeAck=false;
+  captureProfile=profile;jumperResponseFailures=0;jumperResponsePaused=false;arcadeLastUsable=null;arcadeController.reset();arcadeFeedback.reset();clearDiagnosticFrame();sceneRecovery.reset();arcadeRoundSeen=false;arcadeState=null;arcadeBefore=null;arcadePending=null;arcadeAck=false;
   arcadeVerified=0;arcadeLastAction=0;
   jumperColorProfile=profile==ArcadeProfile.ARI?loadJumperColors(target):null;
   playingJumper=true;jumperConsentPending=true;jumperCaptureReady=false;
@@ -518,7 +519,7 @@ public class PilotService extends AccessibilityService {
   }
   arcadeRoundSeen=true;captureStartup.recognized(captureSession,now);
 
-  boolean temporal=captureProfile==ArcadeProfile.TRAFFIC||captureProfile==ArcadeProfile.FLAPPY;
+  boolean temporal=captureProfile==ArcadeProfile.TRAFFIC||captureProfile==ArcadeProfile.FLAPPY||captureProfile==ArcadeProfile.PADDLE;
   if(temporal){
    long verifiedBefore=arcadeFeedback.verified();
    ArcadeFeedback.State feedback=arcadeFeedback.observe(observation,now);
@@ -582,15 +583,16 @@ public class PilotService extends AccessibilityService {
   }
   arcadeRoundSeen=true;captureStartup.recognized(captureSession,now);
 
+  if(jumperResponsePaused){note="Ари: нет ответа на 3 касания · захват сохранён. Нажмите Старт";update();return;}
   if(jumperAwaitingVerification){
    float dx=state.player.centerX()-jumperPendingStartX;long age=now-jumperPendingActionMs;
    float requiredMotion=Math.max(2,7*JumperPolicy.coordinateScale(state));
    boolean moved=jumperPendingAction==JumperPolicy.Action.TAP_LEFT?dx<=-requiredMotion:dx>=requiredMotion;
-   if(moved){jumperAwaitingVerification=false;note="Движение подтверждено · "+jumperPendingAction;}
-   else if(age>1100){failStage(StageMetrics.Stage.POLICY,"NO_CONTROL_RESPONSE","Касание не изменило положение Ари");return;}
+   if(moved){jumperAwaitingVerification=false;jumperResponseFailures=0;note="Движение подтверждено · "+jumperPendingAction;}
+   else if(age>650){jumperAwaitingVerification=false;jumperResponseFailures++;metrics.failure(StageMetrics.Stage.POLICY,"ARI_VISUAL_RESPONSE_RETRY");if(jumperResponseFailures>=3){jumperResponsePaused=true;note="Ари: нет ответа на 3 касания · захват сохранён. Нажмите Старт";update();return;}}
    else{note="Проверяю направление касания…";update();return;}
   }
-  if(busy||now-jumperLastActionMs<420){update();return;}
+  if(busy||now-jumperLastActionMs<180){update();return;}
   captureDecisions++;
   JumperPolicy.Action action=JumperPolicy.nextAction(state);
   uiStats="Ари "+Math.round(state.player.centerX())+"×"+Math.round(state.player.centerY())
@@ -607,7 +609,7 @@ public class PilotService extends AccessibilityService {
   long policyStart=SystemClock.elapsedRealtimeNanos();metrics.attempt(StageMetrics.Stage.POLICY);
   metrics.record(StageMetrics.Stage.POLICY,SystemClock.elapsedRealtimeNanos()-policyStart);
   note="Касание "+action+" · проверю движение Ари";update();
-  send(x,y,x,y,ticket,()->{note="Android завершил касание · ожидаю новый кадр";update();});
+  sendObserved(x,y,x,y,ticket,()->{note="Android завершил касание · ожидаю новый кадр";update();},timestampMs,120);
  }
  private void send(float x,float y,float ex,float ey,ActionGate.Ticket ticket,Runnable done){sendObserved(x,y,ex,ey,ticket,done,-1);}
  private void sendObserved(float x,float y,float ex,float ey,ActionGate.Ticket ticket,Runnable done,long frameAt){sendObserved(x,y,ex,ey,ticket,done,frameAt,50);}
@@ -805,6 +807,14 @@ public class PilotService extends AccessibilityService {
      hardware=Bitmap.wrapHardwareBuffer(buffer,shot.getColorSpace());if(hardware==null)throw new IllegalArgumentException("Нет пикселей");bitmap=hardware.copy(Bitmap.Config.ARGB_8888,false);
      Point size=new Point();wm.getDefaultDisplay().getRealSize(size);if(bitmap.getWidth()!=size.x||bitmap.getHeight()!=size.y)throw new IllegalArgumentException("Масштаб снимка не подтверждён");
      final Bitmap pixels=bitmap;
+     // Board games use Accessibility screenshots rather than MediaProjection.
+     // Refresh their preview too, so it cannot keep showing the last arcade.
+     long previewAt=SystemClock.elapsedRealtime();
+     if(diagnosticFrameAt<0||previewAt-diagnosticFrameAt>=1000){
+      clearDiagnosticFrame();
+      try{diagnosticFrame=Bitmap.createBitmap(roi.width(),roi.height(),Bitmap.Config.ARGB_8888);new Canvas(diagnosticFrame).drawBitmap(pixels,roi,new Rect(0,0,roi.width(),roi.height()),null);diagnosticFrameAt=previewAt;diagnosticFrameGeometry="profile="+profileLabel()+" roi="+roi.toShortString()+" frame_elapsed_ms="+previewAt;}
+      catch(RuntimeException|OutOfMemoryError ignored){clearDiagnosticFrame();}
+     }
      if(!valid(ticket)){failStage(StageMetrics.Stage.CAPTURE,"FRAME_TTL_EXPIRED","Обработка кадра превысила TTL");return;}metrics.record(StageMetrics.Stage.CAPTURE,SystemClock.elapsedRealtimeNanos()-captureNs);captured=true;result.ready(pixels,ticket,SystemClock.elapsedRealtime()-request);
     }catch(RuntimeException error){if(epoch==gate.epoch()){if(!captured)failStage(StageMetrics.Stage.CAPTURE,"BITMAP_FAILED","Не удалось подготовить пиксели: "+error.getMessage());else stop("Обработка прочитанного кадра: "+error.getMessage());}}finally{if(bitmap!=null)bitmap.recycle();if(hardware!=null)hardware.recycle();buffer.close();}
    }

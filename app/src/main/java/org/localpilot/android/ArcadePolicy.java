@@ -37,7 +37,7 @@ public final class ArcadePolicy {
   }
   target=clamp(target,s.left+s.control.width()/2,s.right-s.control.width()/2);
   if(Math.abs(target-s.control.x())<Math.max(.012f,s.control.width()*.14f))return waitFor("Платформа под траекторией шара");
-  return new Decision(Action.MOVE_PADDLE,target,s.control.y(),"Перехватываю шар");
+  return new Decision(Action.MOVE_PADDLE,target,s.control.y(),"Перехватываю шар",120);
  }
  public static float reflect(float x,float left,float right){
   if(right<=left)return left;float width=right-left,phase=(x-left)%(2*width);

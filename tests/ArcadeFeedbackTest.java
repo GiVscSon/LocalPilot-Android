@@ -30,6 +30,14 @@ public final class ArcadeFeedbackTest {
   check(f.observe(state(2200,.25f),2200)==ArcadeFeedback.State.READY,"post-dispatch frame is evidence");
   ArcadeController controller=new ArcadeController();String model=controller.model();
   controller.nextRound();check(model.equals(controller.model()),"new round preserves learned physics");
+  // A dropped paddle drag must allow a fresh attempt rather than stopping capture.
+  var ball=new ArcadeObservation.Box(.7f,.3f,.74f,.34f);
+  var basket=new ArcadeObservation.Box(.2f,.85f,.4f,.9f);
+  var paddle=new ArcadeObservation(ArcadeProfile.PADDLE,3000,ball,basket,List.of(),0,.1f,1,.9f,0,1,0,1,.9f,true,false);
+  var drag=ArcadePolicy.next(paddle);f.reset();id=f.dispatched(drag,paddle,3000);f.acknowledge(id);
+  var unchanged=new ArcadeObservation(ArcadeProfile.PADDLE,3500,ball,basket,List.of(),0,.1f,1,.9f,0,1,0,1,.9f,true,false);
+  check(f.observe(unchanged,3500)==ArcadeFeedback.State.RETRY&&!f.paused(),"first unconfirmed paddle drag retries without pause");
+  check(drag.durationMs>=100,"paddle drag has a measurable hold duration");
   System.out.println("Arcade feedback: "+checks+" assertions PASS");
  }
 }
