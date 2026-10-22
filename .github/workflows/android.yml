@@ -11,13 +11,10 @@ jobs:
      with:
       distribution: temurin
       java-version: '17'
-   # Ubuntu GitHub-hosted runners already provide Android SDK command-line tools.
-   # setup-android@v3 fails while trying to install the removed SDK 'tools' package.
-   - name: Verify preinstalled Android SDK
-     run: |
-      echo "ANDROID_HOME=$ANDROID_HOME"
-      test -x "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" || command -v sdkmanager
-      sdkmanager --version
+   # v4 no longer requests the removed Android SDK 'tools' package.
+   - uses: android-actions/setup-android@v4
+     with:
+      packages: 'platform-tools'
    - uses: gradle/actions/setup-gradle@v4
      with:
       gradle-version: '8.9'
