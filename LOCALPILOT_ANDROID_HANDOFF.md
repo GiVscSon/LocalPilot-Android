@@ -1,5 +1,13 @@
 # LocalPilot Android — история и внешняя новая точка сохранения
 
+## ЛАБОРАТОРНЫЕ ИСПРАВЛЕНИЯ 0.6.0 (22.10.2026)
+
+Подтверждены и исправлены в **изолированной**, ранее загруженной исходной базе 0.6.0-dev две ошибки: masked ROI pixels=black могли имитировать калиброванного тёмного игрока; скорость/скролл продолжали рассчитываться после многосекундных пропусков кадров. 14 новых регрессионных проверок PASS; штатные 9319 JVM assertions + 680187 RL + 44 arcade PASS. Portable Git-патч воспроизводим и протестирован на чистом распакованном исходнике 0.6.0.
+
+**Не применять этот патч к 0.7.10/0.7.11 без проверки свежих исходников; APK 0.7.10 не пересобирался.** Подробности, точные файлы и ограничения: https://github.com/GiVscSon/LocalPilot-Android/blob/feat/android-arcade-training/docs/labs/VISION_MASK_STALE_FRAME_0.6.0_2026-10-22.md . Патч, обновлённый ZIP и логи сохранены в https://drive.google.com/drive/folders/1nhnjW4e3CAz8hQiOtKSosZGY2PVcEYOM и Библиотеке ChatGPT `/LocalPilot Android/`.
+
+---
+
 ## ПОЛУЧЕН И ПРОВЕРЕН APK 0.7.10-dev (22.10.2026)
 
 **Последняя фактически полученная Android-сборка:** `LocalPilot_Android_0.7.10_dev.apk` (пакет `org.localpilot.android.dev`, versionName `0.7.10-dev`, versionCode26, Android11+/minSdk30, targetSdk35), **415914 байт**, SHA256 `4efcaa74f426074bc53c2ee59dcce6a3a647be046752945372e155d6a54928d1`.
