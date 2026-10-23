@@ -1,0 +1,61 @@
+name: Android device acceptance
+on: [workflow_dispatch, push, pull_request]
+permissions:
+ contents: read
+jobs:
+ device:
+  runs-on: ubuntu-24.04
+  timeout-minutes: 20
+  strategy:
+   fail-fast: false
+   matrix:
+    api: [30, 35]
+  steps:
+   - uses: actions/checkout@v4
+   - uses: actions/setup-java@v4
+     with:
+      distribution: temurin
+      java-version: '21'
+   - uses: gradle/actions/setup-gradle@v4
+     with:
+      gradle-version: '8.9'
+   - name: Build app and instrumentation with the same isolated CI signing key
+     run: |
+      set -euo pipefail
+      "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-35' 'build-tools;35.0.0'
+      gradle --no-daemon :app:assembleDebug :app:assembleDebugAndroidTest
+   - name: Enable hosted KVM
+     run: |
+      test -c /dev/kvm
+      sudo chmod 666 /dev/kvm
+   - name: Run actual UI, screenshot and gesture acceptance
+     uses: reactivecircus/android-emulator-runner@v2
+     with:
+      api-level: ${{ matrix.api }}
+      arch: x86_64
+      target: default
+      profile: pixel_2
+      disable-animations: true
+      emulator-boot-timeout: 300
+      emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
+      script: |
+       mkdir -p device-evidence
+       adb install -r app/build/outputs/apk/debug/app-debug.apk
+       adb install -r app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+       adb shell settings put secure enabled_accessibility_services org.localpilot.android.dev/org.localpilot.android.PilotService
+       adb shell settings put secure accessibility_enabled 1
+       adb shell am start -n org.localpilot.android.dev/org.localpilot.android.MainActivity
+       adb shell am instrument -w org.localpilot.android.dev.test/org.localpilot.android.PilotUiInstrumentation > device-evidence/instrumentation.txt 2>&1
+       adb pull /sdcard/Android/data/org.localpilot.android.dev/files/instrumentation/pilot-ui-evidence.json device-evidence/pilot-ui-evidence.json
+       python3 -c 'import json; p=json.load(open("device-evidence/pilot-ui-evidence.json")); print(json.dumps(p,indent=2)); assert p["result"] == "PASS", "Android acceptance failed"'
+   - name: Collect isolated synthetic-device crash evidence
+     if: always()
+     run: |
+      mkdir -p device-evidence
+      adb logcat -d -b crash > device-evidence/crash-logcat.txt 2>&1 || true
+   - uses: actions/upload-artifact@v4
+     if: always()
+     with:
+      name: Android-API${{ matrix.api }}-acceptance-${{ github.sha }}
+      if-no-files-found: error
+      path: device-evidence/

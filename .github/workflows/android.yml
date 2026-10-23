@@ -32,6 +32,8 @@ jobs:
       java tests/LearningVerify.java
       java tests/ProcessExitVerify.java
       java tests/AuditVerify.java
+      java tests/CaptureCleanupVerify.java
+      java tests/RuntimeVerify.java
       java tests/ResultVerify.java
       java tests/UniversalVerify.java
       java tests/ControllerVerify.java

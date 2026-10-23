@@ -20,13 +20,16 @@ public final class ArcadeFeedback {
  public State observe(ArcadeObservation after,long now){
   if(paused)return State.PAUSED;
   if(pending==null)return State.READY;
-  if(!acknowledged||after==null||!after.usable()||after.profile!=before.profile
-    ||after.timestampMs<=dispatchedAt||after.timestampMs>now||now-after.timestampMs>300)return State.WAITING;
-  if(ArcadePolicy.response(pending,before,after)){
+  // Missing ACKs or unusable frames are not success evidence, but must not
+  // suspend the deadline forever. In particular a stale screen can continue
+  // arriving after Android completed a gesture that the game ignored.
+  boolean fresh=acknowledged&&after!=null&&after.usable()&&after.profile==before.profile
+    &&after.timestampMs>dispatchedAt&&after.timestampMs<=now&&now-after.timestampMs<=300;
+  if(fresh&&ArcadePolicy.response(pending,before,after)){
    verified++;failures=0;pending=null;before=null;token=0;return State.READY;
   }
   long limit=before.profile==ArcadeProfile.FLAPPY?300:450;
-  if(now-dispatchedAt<limit)return State.WAITING;
+  if(now<dispatchedAt||now-dispatchedAt<limit)return State.WAITING;
   timeouts++;failures++;pending=null;before=null;token=0;
   if(failures>=3){paused=true;return State.PAUSED;}
   return State.RETRY;

@@ -14,7 +14,7 @@ public final class LearningLifecycleTest {
  }
  private static float param(ArcadeController c,String name){for(String token:c.model().split(" "))if(token.startsWith(name+"="))return Float.parseFloat(token.substring(name.length()+1));throw new AssertionError(name);}
  public static void main(String[]args)throws Exception{
-  motion();response();persistence();rules2048();
+  motion();response();verifiedImpulse();persistence();rules2048();
   System.out.println("Learning lifecycle: "+checks+" assertions PASS (synthetic, no phone test)");
  }
  private static void motion(){
@@ -55,6 +55,37 @@ public final class LearningLifecycleTest {
   ArcadeFeedback f=new ArcadeFeedback();long token=f.dispatched(action,before,1000);f.acknowledge(token);
   check(f.observe(bird(1200,.35f,-.1f,true),1200)==ArcadeFeedback.State.WAITING&&f.verified()==0,"ACK plus passive ascent still unverified");
   check(f.observe(bird(1300,.34f,.05f,true),1300)==ArcadeFeedback.State.RETRY&&f.verified()==0,"ignored flap receives no success count");
+ }
+ private static void verifiedImpulse(){
+  var action=new ArcadePolicy.Decision(ArcadePolicy.Action.FLAP,.6f,.4f,"test");
+  ArcadeController ignored=new ArcadeController();ignored.restore("gravity=1.1 flap=-0.6");
+  var before=bird(1000,.4f,-.4f,true);ignored.decide(before,1000);ignored.actionDispatched(action,1000);
+  ignored.decide(bird(1160,.35f,-.31f,true),1160);
+  var passive=bird(1240,.33f,-.25f,true);ignored.observeGesture(action,before,passive);ignored.decide(passive,1240);
+  check(param(ignored,"flap")==-.6f,"ignored tap during passive ascent cannot calibrate impulse");
+  var unknownBefore=new ArcadeObservation(ArcadeProfile.FLAPPY,1000,null,null,List.of(),0,.04f,1,.9f,.12f,.65f,0,-.4f,0,true,false);
+  ignored.observeGesture(action,unknownBefore,bird(1280,.30f,-.65f,true));
+  check(param(ignored,"flap")==-.6f,"missing baseline object cannot authorize calibration or throw");
+  ignored.decide(bird(1320,.314f,-.20f,true),1320);
+  check(param(ignored,"flap")==-.6f,"later upward samples do not validate ignored tap");
+
+  ArcadeController confirmed=new ArcadeController();confirmed.restore("gravity=1.1 flap=-0.6");
+  var falling=bird(1000,.4f,.2f,true);confirmed.decide(falling,1000);confirmed.actionDispatched(action,1000);
+  var response=bird(1160,.36f,-.5f,true);confirmed.decide(response,1160);
+  check(param(confirmed,"flap")==-.6f,"dispatch plus visible sample still requires explicit response validation");
+  confirmed.observeGesture(action,falling,response);
+  confirmed.decide(bird(1240,.32f,-.48f,true),1240);
+  check(param(confirmed,"flap")<-.6f,"confirmed extra impulse enables later fully post-command sample");
+
+  float learned=param(confirmed,"flap");var nextBefore=bird(1320,.29f,-.30f,true);
+  confirmed.decide(nextBefore,1320);learned=param(confirmed,"flap");confirmed.actionDispatched(action,1320);
+  confirmed.observeGesture(action,falling,response); // Response precedes new dispatch.
+  confirmed.decide(bird(1480,.25f,-.25f,true),1480);
+  confirmed.decide(bird(1560,.235f,-.18f,true),1560);
+  check(param(confirmed,"flap")==learned,"earlier confirmed tap cannot authorize next ignored tap");
+  confirmed.nextRound();confirmed.decide(bird(2000,.4f,-.3f,true),2000);
+  confirmed.decide(bird(2240,.35f,-.2f,true),2240);
+  check(param(confirmed,"flap")==learned,"new round preserves impulse without retaining old response authority");
  }
  private static void persistence()throws Exception{
   Path dir=Files.createTempDirectory("pilot-learning-lifecycle-"),file=dir.resolve("models.log");

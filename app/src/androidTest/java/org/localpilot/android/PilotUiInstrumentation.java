@@ -4,8 +4,12 @@ import android.app.Activity;
 import android.app.Instrumentation;
 import android.app.UiAutomation;
 import android.content.Intent;
+import android.content.res.Configuration;
+import android.graphics.Bitmap;
+import android.graphics.Rect;
 import android.os.Bundle;
 import android.os.SystemClock;
+import android.view.KeyEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.accessibility.AccessibilityNodeInfo;
@@ -29,10 +33,11 @@ import java.util.regex.Pattern;
 /**
  * Native, dependency-free UI smoke test for an isolated Android test device.
  * Enable PilotService before running. UiAutomation must not suppress that service.
- * This exercises DemoActivity and overlay controls, not screenshot/OCR gameplay.
+ * Uses an isolated synthetic device. Input is driven through visible controls;
+ * 2048 progress is independently read from real screenshots, never Android ACK.
  */
 public final class PilotUiInstrumentation extends Instrumentation {
-    private static final long TEST_LIMIT_MS = 90_000;
+    private static final long TEST_LIMIT_MS = 180_000;
     private static final Pattern SCORE = Pattern.compile("^Счёт:\\s*(\\d+)");
 
     private final JSONObject evidence = new JSONObject();
@@ -59,7 +64,7 @@ public final class PilotUiInstrumentation extends Instrumentation {
             info.flags |= android.accessibilityservice.AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS;
             automation.setServiceInfo(info);
             evidence.put("package", getTargetContext().getPackageName());
-            evidence.put("scope", "real DemoActivity gestures and overlay controls; no screenshot parser acceptance");
+            evidence.put("scope", "native launcher/picker/overlay, DemoActivity real touches, rotation STOP, and screenshot-verified built-in 2048; not arbitrary external-game acceptance");
             evidence.put("setup", "showPanel/hidePanel use public service API; gameplay starts only through visible UI");
             evidence.put("checks", checks);
 
@@ -67,13 +72,16 @@ public final class PilotUiInstrumentation extends Instrumentation {
                     "PilotService is not connected; enable its Accessibility service first");
             service = onMain(() -> PilotService.instance);
 
+            checkLauncherAndPicker();
             checkCollapseAndReopen();
             checkFullDemo();
             checkStopDuringDemo();
+            checkRotationStopsInput();
+            check2048ScreenshotProgress();
             evidence.put("metrics", onMain(() -> service.exportMetrics()));
             passed = true;
             result.putString("result", "PASS");
-            result.putString("summary", "Demo x10, compact Stop, collapse binding, reopen collapse, and Stop stability passed");
+            result.putString("summary", "Launcher/picker, panel reopen, Demo x10 actual touches, STOP, rotation disarm, region cancel and screenshot-verified 2048 passed");
         } catch (Throwable error) {
             result.putString("result", "FAIL");
             result.putString("summary", error.toString());
@@ -88,6 +96,10 @@ public final class PilotUiInstrumentation extends Instrumentation {
                 result.putString("cleanup_error", secondary.toString());
             }
         } finally {
+            try {
+                if (automation != null) automation.setRotation(UiAutomation.ROTATION_UNFREEZE);
+                if (service != null) onMain(() -> { service.hidePanel(); return null; });
+            } catch (Throwable ignored) { /* Preserve the primary acceptance result. */ }
             try {
                 evidence.put("result", passed ? "PASS" : "FAIL");
                 evidence.put("duration_ms", SystemClock.uptimeMillis() - started);
@@ -104,6 +116,37 @@ public final class PilotUiInstrumentation extends Instrumentation {
             }
             finish(passed ? Activity.RESULT_OK : Activity.RESULT_CANCELED, result);
         }
+    }
+
+    private void checkLauncherAndPicker() throws Exception {
+        onMain(() -> { service.hidePanel(); return null; });
+        launch(MainActivity.class);
+        click("Показать панель");
+        await(() -> present("STOP") && present("Игра") && present("Окно"), 3_000,
+                "Main screen did not recover visible overlay controls");
+        require(!armed(), "Showing the panel must not authorize input");
+        onMain(() -> { service.hidePanel(); return null; });
+        ActivityMonitor picker = addMonitor(GamePickerActivity.class.getName(), null, false);
+        try {
+            click("Выбрать игру или браузер");
+            require(waitForMonitorWithTimeout(picker, 5_000) != null, "Installed-app picker did not launch");
+            click("Все приложения");
+            await(() -> present("Только игры"), 5_000, "Picker cannot switch to browser/all-app mode");
+            require(!armed(), "Opening the picker must not authorize input");
+        } finally { removeMonitor(picker); }
+        sendKeyDownUpSync(KeyEvent.KEYCODE_BACK);
+        waitForIdleSync();
+        click("Показать панель");
+        await(() -> present("STOP"), 3_000, "Panel could not be reopened after returning from picker");
+        addCheck("launcher_picker_and_panel_recovery", new JSONObject().put("input_armed", false));
+    }
+
+    private Activity launch(Class<? extends Activity> type) {
+        Intent intent = new Intent(getTargetContext(), type)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+        Activity activity = startActivitySync(intent);
+        waitForIdleSync();
+        return activity;
     }
 
     private void checkCollapseAndReopen() throws Exception {
@@ -165,13 +208,112 @@ public final class PilotUiInstrumentation extends Instrumentation {
                 .put("settled_score", settled).put("stable_for_ms", 1_100));
     }
 
+    private void checkRotationStopsInput() throws Exception {
+        launchDemo();
+        click("Начать проверку ×10");
+        await(() -> score() >= 1, 6_000, "No real target touch before rotation");
+        require(automation.setRotation(UiAutomation.ROTATION_FREEZE_90), "Cannot rotate isolated test device");
+        try {
+            await(() -> onMain(() -> service.getResources().getConfiguration().orientation)
+                    == Configuration.ORIENTATION_LANDSCAPE, 6_000, "Landscape configuration was not delivered");
+            await(() -> !armed() && onMain(() -> intField("autoLeft")) == 0, 3_000,
+                    "Rotation did not revoke the active input session");
+            await(() -> present("STOP") && !onMain(() -> booleanField("busy")), 4_000,
+                    "Rotation lost STOP or left a gesture permanently in flight");
+        } finally { require(automation.setRotation(UiAutomation.ROTATION_FREEZE_0), "Cannot restore portrait orientation"); }
+        await(() -> onMain(() -> service.getResources().getConfiguration().orientation)
+                == Configuration.ORIENTATION_PORTRAIT, 6_000, "Portrait configuration was not restored");
+        require(!armed(), "Rotation back silently reauthorized input");
+        addCheck("rotation_stops_and_does_not_rearm", new JSONObject().put("orientations", "portrait-landscape-portrait"));
+    }
+
+    private void check2048ScreenshotProgress() throws Exception {
+        onMain(() -> { service.hidePanel(); return null; });
+        launch(MainActivity.class);
+        ActivityMonitor game = addMonitor(Game2048Activity.class.getName(), null, false);
+        try {
+            click("Открыть 2048");
+            require(waitForMonitorWithTimeout(game, 5_000) != null, "Main screen did not open built-in 2048");
+        } finally { removeMonitor(game); }
+        await(() -> markerBounds("LOCALPILOT_BOARD_2048") != null, 5_000, "2048 board geometry is unavailable");
+        onMain(() -> { service.showPanel(); return null; });
+        click("Игра");click("2048");bindDemoWindow();allowInput();
+
+        click("Область");
+        await(() -> present("Готово") && present("STOP · отмена"), 3_000,
+                "Manual region picker has no initial confirmation/cancel controls");
+        Rect grid = markerBounds("Выделение области игры 4 на 4");
+        require(grid != null && grid.width() > 100 && grid.height() > 100,
+                "Initial 4x4 region selection is not visible");
+        click("STOP · отмена");
+        require(!onMain(() -> booleanField("playing2048")), "Cancelled region picker started automatic input");
+        addCheck("manual_2048_region_visible_and_cancelable", new JSONObject().put("bounds", grid.toShortString()));
+
+        onMain(() -> { service.hidePanel(); return null; });
+        Board2048 before = read2048Screenshot();
+        onMain(() -> { service.showPanel(); return null; });
+        bindDemoWindow();
+        click("Старт");
+        await(() -> onMain(() -> booleanField("playing2048")), 12_000,
+                "2048 did not start through its visible profile/start controls");
+        await(() -> onMain(() -> intField("moves2048")) >= 4, 25_000,
+                "2048 did not produce at least three visually verified swipes");
+        click("STOP");
+        await(() -> !armed() && !onMain(() -> booleanField("busy")), 4_000,
+                "2048 STOP did not settle and revoke input");
+        Board2048 after = read2048Screenshot();
+        require(total(after) > total(before), "2048 screen did not gain spawned tile value after real swipes");
+        int[] settled = after.cells.clone();
+        SystemClock.sleep(600);
+        require(java.util.Arrays.equals(settled, read2048Screenshot().cells), "2048 kept changing after STOP settled");
+        addCheck("2048_real_screenshot_progress_and_stop", new JSONObject()
+                .put("input_start", "visible profile/window/start controls")
+                .put("minimum_visual_verifications", 3)
+                .put("tile_total_before", total(before)).put("tile_total_after", total(after))
+                .put("android_ack_is_not_success", true));
+    }
+
+    private static long total(Board2048 board) { long sum = 0; for (int tile : board.cells) sum += tile; return sum; }
+
+    private Board2048 read2048Screenshot() throws Exception {
+        Rect roi = markerBounds("LOCALPILOT_BOARD_2048");
+        require(roi != null && !roi.isEmpty(), "Visible 2048 board bounds missing");
+        Bitmap screenshot = automation.takeScreenshot();
+        require(screenshot != null, "Android returned no test screenshot");
+        try {
+            return PixelBoardReader.read(screenshot::getPixel, screenshot.getWidth(), screenshot.getHeight(),
+                    roi.left, roi.top, roi.right, roi.bottom);
+        } finally { screenshot.recycle(); }
+    }
+
+    private Rect markerBounds(String marker) {
+        int[] remaining = {2_000};
+        for (AccessibilityWindowInfo window : automation.getWindows()) {
+            AccessibilityNodeInfo root = window.getRoot();
+            if (root == null) continue;
+            try { Rect found = markerBounds(root, marker, 0, remaining); if (found != null) return found; }
+            finally { root.recycle(); }
+        }
+        return null;
+    }
+
+    private Rect markerBounds(AccessibilityNodeInfo node, String marker, int depth, int[] remaining) {
+        if (depth > 40 || --remaining[0] < 0) return null;
+        if (node.isVisibleToUser() && marker.contentEquals(node.getContentDescription() == null ? "" : node.getContentDescription())) {
+            Rect result = new Rect();node.getBoundsInScreen(result);return result;
+        }
+        for (int i = 0; i < node.getChildCount(); i++) {
+            AccessibilityNodeInfo child = node.getChild(i);if (child == null) continue;
+            try { Rect found = markerBounds(child, marker, depth + 1, remaining);if (found != null) return found; }
+            finally { child.recycle(); }
+        }
+        return null;
+    }
+
     private void launchDemo() throws Exception {
         onMain(() -> { service.hidePanel(); service.showPanel(); return null; });
-        Intent intent = new Intent(getTargetContext(), DemoActivity.class)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
-        demo = (DemoActivity) startActivitySync(intent);
-        waitForIdleSync();
-        await(() -> score() == 0 && present("Привязать"), 3_000, "Fresh visible DemoActivity is unavailable");
+        demo = (DemoActivity) launch(DemoActivity.class);
+        await(() -> score() == 0 && present("Начать проверку ×10"), 3_000, "Fresh visible DemoActivity is unavailable");
     }
 
     private void armAndStart() throws Exception {
@@ -212,10 +354,32 @@ public final class PilotUiInstrumentation extends Instrumentation {
     private void click(String text) throws Exception {
         await(() -> {
             AccessibilityNodeInfo node = findText(text);
-            if (node == null) return false;
+            if (node == null) { scrollForward();return false; }
             try { return node.performAction(AccessibilityNodeInfo.ACTION_CLICK); }
             finally { node.recycle(); }
-        }, 4_000, "Visible clickable UI control not found: " + text);
+        }, 6_000, "Visible clickable UI control not found: " + text);
+    }
+
+    private boolean scrollForward() {
+        int[] remaining = {2_000};
+        for (AccessibilityWindowInfo window : automation.getWindows()) {
+            AccessibilityNodeInfo root = window.getRoot();if (root == null) continue;
+            try { if (scrollForward(root, 0, remaining)) return true; }
+            finally { root.recycle(); }
+        }
+        return false;
+    }
+
+    private boolean scrollForward(AccessibilityNodeInfo node, int depth, int[] remaining) {
+        if (depth > 40 || --remaining[0] < 0) return false;
+        if (node.isVisibleToUser() && node.isScrollable()
+                && node.performAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD)) return true;
+        for (int i = 0; i < node.getChildCount(); i++) {
+            AccessibilityNodeInfo child = node.getChild(i);if (child == null) continue;
+            try { if (scrollForward(child, depth + 1, remaining)) return true; }
+            finally { child.recycle(); }
+        }
+        return false;
     }
 
     private boolean present(String text) {
@@ -260,7 +424,7 @@ public final class PilotUiInstrumentation extends Instrumentation {
     private ActionGate gate() throws Exception { return (ActionGate) field("gate"); }
     private InputPermit permit() throws Exception { return (InputPermit) field("permit"); }
     private boolean booleanField(String name) throws Exception { return (Boolean) field(name); }
-    private int intField(String name) throws Exception { return (Integer) field(name); }
+    private int intField(String name) throws Exception { return ((Number) field(name)).intValue(); }
 
     private Object field(String name) throws Exception {
         Field field = PilotService.class.getDeclaredField(name);

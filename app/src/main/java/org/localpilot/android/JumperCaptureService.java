@@ -39,11 +39,14 @@ public final class JumperCaptureService extends Service {
     private HandlerThread thread;
     private Handler worker;
     private MediaProjection projection;
+    private MediaProjection.Callback projectionCallback;
     private VirtualDisplay display;
+    private DisplayManager displayManager;
+    private DisplayManager.DisplayListener displayListener;
     private ImageReader reader;
     private volatile boolean closing;
     private long lastFrameMs;
-    private int width,height,density,screenWidth,screenHeight;
+    private int width,height,density,screenWidth,screenHeight,screenDisplayId;
     private int[] argbBuffer;
 
     @Override public void onCreate() {
@@ -76,7 +79,7 @@ public final class JumperCaptureService extends Service {
             MediaProjectionManager manager = (MediaProjectionManager) getSystemService(Context.MEDIA_PROJECTION_SERVICE);
             projection = manager.getMediaProjection(result, data);
             if (projection == null) throw new IllegalStateException("projection unavailable");
-            projection.registerCallback(new MediaProjection.Callback() {
+            projectionCallback=new MediaProjection.Callback() {
                 @Override public void onStop() {
                     if (!closing) {
                         closing = true;
@@ -85,7 +88,8 @@ public final class JumperCaptureService extends Service {
                     }
                     stopSelf();
                 }
-            }, worker);
+            };
+            projection.registerCallback(projectionCallback, worker);
             createDisplay();
             PilotService pilot = PilotService.instance;
             if (pilot != null) pilot.onJumperCaptureReady(session,screenWidth,screenHeight);
@@ -109,6 +113,7 @@ public final class JumperCaptureService extends Service {
         DisplayMetrics metrics = new DisplayMetrics();
         Display real = ((WindowManager) getSystemService(WINDOW_SERVICE)).getDefaultDisplay();
         real.getRealMetrics(metrics);
+        screenDisplayId=real.getDisplayId();
         screenWidth=metrics.widthPixels;screenHeight=metrics.heightPixels;
         CaptureResolution size=new CaptureResolution(screenWidth,screenHeight);
         width=size.width;height=size.height;
@@ -120,6 +125,34 @@ public final class JumperCaptureService extends Service {
         display = projection.createVirtualDisplay("LocalPilot Arcade", width, height, density,
                 DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR, reader.getSurface(), null, worker);
         if (display == null) throw new IllegalStateException("virtual display unavailable");
+        displayManager=(DisplayManager)getSystemService(DISPLAY_SERVICE);
+        if(displayManager==null)throw new IllegalStateException("display manager unavailable");
+        displayListener=new DisplayManager.DisplayListener(){
+            @Override public void onDisplayAdded(int id){}
+            @Override public void onDisplayRemoved(int id){if(id==screenDisplayId)displayChanged(true);}
+            @Override public void onDisplayChanged(int id){if(id==screenDisplayId)displayChanged(false);}
+        };
+        displayManager.registerDisplayListener(displayListener,worker);
+        // Rotation can complete between reading metrics and installing the listener.
+        // This runs before the first image callback is installed by onStartCommand.
+        if(!worker.post(()->displayChanged(false)))throw new IllegalStateException("capture worker unavailable");
+    }
+
+    /** A rotated mirror is letterboxed in the old surface; its old touch mapping is unsafe. */
+    private synchronized void displayChanged(boolean removed){
+        if(closing||reader==null)return;
+        try{
+            DisplayMetrics current=new DisplayMetrics();
+            Display real=displayManager.getDisplay(screenDisplayId);
+            if(!removed&&real!=null){
+                real.getRealMetrics(current);
+                if(current.widthPixels==screenWidth&&current.heightPixels==screenHeight&&current.densityDpi==density)return;
+            }
+            closing=true;
+            PilotService pilot=PilotService.instance;
+            if(pilot!=null)pilot.onCaptureStartupError(session,"Размер или ориентация экрана изменились. Нажмите Старт повторно","DISPLAY_GEOMETRY_CHANGED");
+            stopSelf();
+        }catch(RuntimeException|OutOfMemoryError error){frameFailure(error);}
     }
 
     private synchronized void onImage(ImageReader source) {
@@ -145,14 +178,21 @@ public final class JumperCaptureService extends Service {
             frame = null;
             pilot.onJumperFrame(session,owned, now);
         } catch (RuntimeException|OutOfMemoryError error) {
-            closing = true;
-            PilotService pilot = PilotService.instance;
-            if (pilot != null) pilot.onCaptureStartupError(session,"Ошибка кадра захвата",error.getClass().getSimpleName());
-            stopSelf();
+            frameFailure(error);
         } finally {
-            if (frame != null) frame.recycle();
-            if (image != null) image.close();
+            // Native releases can fail too. Never let finally throw past this worker
+            // and terminate the whole application via its uncaught handler.
+            if(frame!=null)try{frame.recycle();}catch(RuntimeException|OutOfMemoryError error){frameFailure(error);}
+            if(image!=null)try{image.close();}catch(RuntimeException|OutOfMemoryError error){frameFailure(error);}
         }
+    }
+
+    private void frameFailure(Throwable error){
+        if(closing){stopSelf();return;}
+        closing=true;
+        PilotService pilot=PilotService.instance;
+        if(pilot!=null)pilot.onCaptureStartupError(session,"Ошибка кадра захвата",error.getClass().getSimpleName());
+        stopSelf();
     }
 
     private Notification notification() {
@@ -184,11 +224,22 @@ public final class JumperCaptureService extends Service {
     @Override public synchronized void onDestroy() {
         closing = true;
         argbBuffer=null;
-        if (reader != null) { reader.setOnImageAvailableListener(null, null); reader.close(); reader = null; }
-        if (display != null) { display.release(); display = null; }
-        if (projection != null) { projection.stop(); projection = null; }
-        if (thread != null) { thread.quitSafely(); thread = null; }
-        stopForeground(STOP_FOREGROUND_REMOVE);
+        ImageReader oldReader=reader;reader=null;
+        VirtualDisplay oldDisplay=display;display=null;
+        MediaProjection oldProjection=projection;projection=null;
+        MediaProjection.Callback oldCallback=projectionCallback;projectionCallback=null;
+        DisplayManager oldManager=displayManager;displayManager=null;
+        DisplayManager.DisplayListener oldListener=displayListener;displayListener=null;
+        HandlerThread oldThread=thread;thread=null;
+        CaptureCleanup.run(
+                ()->{if(oldManager!=null&&oldListener!=null)oldManager.unregisterDisplayListener(oldListener);},
+                ()->{if(oldReader!=null)oldReader.setOnImageAvailableListener(null,null);},
+                ()->{if(oldDisplay!=null)oldDisplay.release();},
+                ()->{if(oldReader!=null)oldReader.close();},
+                ()->{if(oldProjection!=null&&oldCallback!=null)oldProjection.unregisterCallback(oldCallback);},
+                ()->{if(oldProjection!=null)oldProjection.stop();},
+                ()->{if(oldThread!=null)oldThread.quitSafely();},
+                ()->stopForeground(STOP_FOREGROUND_REMOVE));
         super.onDestroy();
     }
 }

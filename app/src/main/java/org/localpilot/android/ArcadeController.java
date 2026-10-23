@@ -8,13 +8,13 @@ import java.util.List;
 public final class ArcadeController {
  private ArcadeObservation previous,earlier;
  private float trafficSpeed=.55f, scrollSpeed=.28f, gravity=1.5f, flapVelocity=-.44f;
- private long lastFlap=-10000,lastLane=-10000;
+ private long lastFlap=-10000,lastLane=-10000,verifiedFlap=-10000;
  private int intendedLane=-1,lastHold=150;
  private float steeringSpeed=1.1f,laneStartX;
  private boolean continuousSteering;
- public void reset(){previous=earlier=null;trafficSpeed=.55f;scrollSpeed=.28f;gravity=1.5f;flapVelocity=-.44f;lastFlap=lastLane=-10000;intendedLane=-1;steeringSpeed=1.1f;lastHold=150;continuousSteering=false;}
+ public void reset(){previous=earlier=null;trafficSpeed=.55f;scrollSpeed=.28f;gravity=1.5f;flapVelocity=-.44f;lastFlap=lastLane=verifiedFlap=-10000;intendedLane=-1;steeringSpeed=1.1f;lastHold=150;continuousSteering=false;}
  /** New episode in the same window: keep learned physics, discard old objects/actions. */
- public void nextRound(){previous=earlier=null;lastFlap=lastLane=-10000;intendedLane=-1;}
+ public void nextRound(){previous=earlier=null;lastFlap=lastLane=verifiedFlap=-10000;intendedLane=-1;}
  /** A loss is an outcome, not a measurement of gravity or flap impulse. */
  public void penalize(){nextRound();}
  public ArcadePolicy.Decision decide(ArcadeObservation s,long now){
@@ -29,7 +29,7 @@ public final class ArcadeController {
  /** Call only after dispatch was accepted, not merely when a recommendation was produced. */
  public void actionDispatched(ArcadePolicy.Decision d,long now){
   if(d==null)return;
-  if(d.action==ArcadePolicy.Action.FLAP)lastFlap=now;
+  if(d.action==ArcadePolicy.Action.FLAP){lastFlap=now;verifiedFlap=-10000;}
   if(d.action==ArcadePolicy.Action.LEFT||d.action==ArcadePolicy.Action.RIGHT){lastLane=now;lastHold=d.durationMs;laneStartX=previous==null?0:previous.player.x();
    if(previous!=null){int current=lane(previous.player.x(),previous),direction=d.action==ArcadePolicy.Action.LEFT?-1:1;
     boolean finishing=intendedLane==current&&Math.abs(previous.player.x()-center(current,previous))>.025f
@@ -39,7 +39,13 @@ public final class ArcadeController {
  }
  /** Measured response improves the motion model; an Android ACK alone is not evidence. */
  public void observeGesture(ArcadePolicy.Decision action,ArcadeObservation before,ArcadeObservation after){
-  if(action==null||before==null||after==null||before.profile!=after.profile||!after.usable())return;
+  if(action==null||before==null||after==null||before.profile!=after.profile||!before.usable()||!after.usable())return;
+  // A dispatched tap may have been ignored while an earlier jump still rises.
+  // Only an extra visual impulse from this dispatch enables flap calibration.
+  if(action.action==ArcadePolicy.Action.FLAP&&before.profile==ArcadeProfile.FLAPPY
+    &&lastFlap>=0&&before.timestampMs<=lastFlap&&after.timestampMs>lastFlap
+    &&after.timestampMs-lastFlap<=700&&sameFlightGeometry(before,after)
+    &&ArcadePolicy.response(action,before,after))verifiedFlap=lastFlap;
   if((action.action==ArcadePolicy.Action.LEFT||action.action==ArcadePolicy.Action.RIGHT)&&action.durationMs>0){
    float dx=Math.abs(after.player.x()-before.player.x());
    if(dx>.008f&&dx<.3f)steeringSpeed=blend(steeringSpeed,clamp(dx/(action.durationMs/1000f),.3f,2.5f),.2f);
@@ -78,7 +84,7 @@ public final class ArcadeController {
    speeds.sort(Float::compare);float measured=speeds.get(speeds.size()/2);
    if(measured>.025f){if(s.profile==ArcadeProfile.TRAFFIC)trafficSpeed=blend(trafficSpeed,measured,.45f);else scrollSpeed=blend(scrollSpeed,measured,.35f);}
   }
-  if(s.profile==ArcadeProfile.FLAPPY&&s.tracked){
+  if(s.profile==ArcadeProfile.FLAPPY&&s.tracked&&lastFlap>=0&&verifiedFlap==lastFlap){
    float since=(s.timestampMs-lastFlap)/1000f;
    // First finite-difference response can mix ascent with pre-command descent.
    // Wait until the entire velocity sample is beyond normal input latency.

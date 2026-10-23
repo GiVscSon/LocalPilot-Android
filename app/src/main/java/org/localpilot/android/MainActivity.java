@@ -13,6 +13,7 @@ public class MainActivity extends Activity {
   TextView title=new TextView(this);title.setText("LocalPilot Android"+(getPackageName().endsWith(".dev")?" Dev":"")+" · "+CrashDiagnostics.buildLabel(this)+"\nАркады и головоломки на телефоне");title.setTextSize(24);box.addView(title);
   TextView help=new TextView(this);help.setText("1. Откройте игру и выберите её профиль: «Игра».\n2. Нажмите «Окно» и выберите приложение с игрой.\n3. Нажмите «Старт» и разрешите показ экрана.\n\nSTOP останавливает игру агента. В первый раз включите управление кнопкой ниже.");box.addView(help);
   button(box,"Включить управление",()->startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)));
+  button(box,"Показать панель",()->{PilotService pilot=PilotService.instance;if(pilot==null){toast(CrashDiagnostics.connectionHint(this));return;}pilot.recoverPanel();status.setText(CrashDiagnostics.connectionHint(this));});
   TextView panelHelp=new TextView(this);panelHelp.setText("Панель можно свернуть. STOP всегда остаётся доступным.");box.addView(panelHelp);
   button(box,"Показать панель",()->{if(PilotService.instance!=null)PilotService.instance.showPanel();else toast("Сначала включите службу");});
   button(box,"Web · варианты обучения",()->startActivity(new Intent(this,WebLearningActivity.class)));

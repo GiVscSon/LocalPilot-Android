@@ -1,25 +1,83 @@
 package org.localpilot.android;
-import android.content.Context;import android.graphics.*;import android.view.*;
-/** Native full-display region picker; all touches are consumed locally. */
-final class GameAreaOverlay extends View {
+
+import android.content.Context;
+import android.graphics.*;
+import android.view.*;
+import android.widget.*;
+
+/** Native region editor. Its visible grid is a candidate, confirmed only with Done. */
+final class GameAreaOverlay extends FrameLayout {
  interface Listener{void selected(Rect area);void cancelled();}
- private final Rect window;private final Listener listener;private final Paint paint=new Paint(3);private final RectF box=new RectF();
- private final int rows,cols;private float sx,sy;private boolean dragging,finished;private String message;
+ private final GameViewport.Box window;
+ private final Listener listener;
+ private final Paint paint=new Paint(3);
+ private final RectF box=new RectF();
+ private final int[] origin=new int[2];
+ private final int rows,cols;
+ private final TextView message;
+ private final Button confirm;
+ private GameViewport.Box candidate;
+ private float sx,sy;
+ private boolean dragging,finished;
+
  GameAreaOverlay(Context c,Rect window,Listener listener){this(c,window,4,4,listener);}
- GameAreaOverlay(Context c,Rect window,int rows,int cols,Listener listener){super(c);if(rows<1||rows>10||cols<1||cols>10)throw new IllegalArgumentException("grid size");this.rows=rows;this.cols=cols;this.window=new Rect(window);this.listener=listener;message="Обведите поле "+rows+"×"+cols+" · сверху справа — отмена";setContentDescription("Выделение области игры "+rows+" на "+cols);}
- private int dp(int n){return (int)(n*getResources().getDisplayMetrics().density);}
- @Override protected void onDraw(Canvas c){c.drawColor(0x66303030);paint.setStyle(Paint.Style.STROKE);paint.setStrokeWidth(dp(2));paint.setColor(Color.CYAN);c.drawRect(window,paint);if(dragging||!box.isEmpty()){paint.setColor(Color.GREEN);c.drawRect(box,paint);float cw=box.width()/cols,ch=box.height()/rows;paint.setColor(0xCCFFFFFF);paint.setStrokeWidth(dp(1));for(int i=1;i<cols;i++)c.drawLine(box.left+cw*i,box.top,box.left+cw*i,box.bottom,paint);for(int i=1;i<rows;i++)c.drawLine(box.left,box.top+ch*i,box.right,box.top+ch*i,paint);}paint.setStyle(Paint.Style.FILL);paint.setColor(0xEE202830);c.drawRect(0,0,getWidth(),dp(64),paint);paint.setColor(Color.WHITE);paint.setTextSize(dp(12));c.drawText(message,dp(8),dp(42),paint);paint.setTextSize(dp(28));c.drawText("×",getWidth()-dp(42),dp(30),paint);}
- @Override public boolean onTouchEvent(MotionEvent e){
+ GameAreaOverlay(Context c,Rect bounds,int rows,int cols,Listener listener){
+  super(c);if(bounds==null||listener==null)throw new IllegalArgumentException("region editor");
+  this.window=new GameViewport.Box(bounds.left,bounds.top,bounds.right,bounds.bottom);
+  candidate=RegionPickerGeometry.initial(window,rows,cols);
+  this.rows=rows;this.cols=cols;this.listener=listener;
+  setWillNotDraw(false);setContentDescription("Выделение области игры "+rows+" на "+cols);
+  LinearLayout header=new LinearLayout(c);header.setOrientation(LinearLayout.VERTICAL);header.setBackgroundColor(0xF0202830);
+  LinearLayout buttons=new LinearLayout(c);
+  Button cancel=new Button(c);cancel.setText("STOP · отмена");cancel.setTextSize(12);cancel.setOnClickListener(v->cancel());
+  buttons.addView(cancel,new LinearLayout.LayoutParams(0,dp(44),1));
+  confirm=new Button(c);confirm.setText("Готово");confirm.setTextSize(12);confirm.setOnClickListener(v->confirm());
+  buttons.addView(confirm,new LinearLayout.LayoutParams(0,dp(44),1));header.addView(buttons);
+  message=new TextView(c);message.setTextColor(Color.WHITE);message.setTextSize(12);message.setPadding(dp(8),0,dp(8),dp(4));
+  message.setText("Обведите клетки "+rows+"×"+cols+", затем нажмите «Готово»");header.addView(message);
+  addView(header,new FrameLayout.LayoutParams(-1,-2,Gravity.TOP));
+ }
+ private int dp(int n){return Math.max(1,(int)(n*getResources().getDisplayMetrics().density));}
+ private void cancel(){if(!finished){finished=true;listener.cancelled();}}
+ private void confirm(){
+  if(finished||dragging||candidate==null)return;
+  GameViewport.Box selected=GameViewport.selection(window,candidate.left(),candidate.top(),candidate.right(),candidate.bottom());
+  finished=true;listener.selected(new Rect(selected.left(),selected.top(),selected.right(),selected.bottom()));
+ }
+ private void drawBox(Canvas canvas,GameViewport.Box screen,int color){
+  GameViewport.Box local=RegionPickerGeometry.local(screen,origin[0],origin[1]);
+  box.set(local.left(),local.top(),local.right(),local.bottom());paint.setColor(color);canvas.drawRect(box,paint);
+ }
+ @Override protected void onDraw(Canvas canvas){
+  super.onDraw(canvas);canvas.drawColor(0x55303030);getLocationOnScreen(origin);
+  paint.setStyle(Paint.Style.STROKE);paint.setStrokeWidth(dp(2));drawBox(canvas,window,Color.CYAN);
+  if(candidate!=null){
+   drawBox(canvas,candidate,Color.GREEN);paint.setColor(0xEEFFFFFF);paint.setStrokeWidth(dp(1));
+   for(int i=1;i<cols;i++)canvas.drawLine(box.left+box.width()*i/cols,box.top,box.left+box.width()*i/cols,box.bottom,paint);
+   for(int i=1;i<rows;i++)canvas.drawLine(box.left,box.top+box.height()*i/rows,box.right,box.top+box.height()*i/rows,paint);
+  }
+ }
+ @Override public boolean dispatchTouchEvent(MotionEvent event){
   if(finished)return true;
-  if(e.getPointerCount()>1||e.getActionMasked()==MotionEvent.ACTION_CANCEL){finished=true;listener.cancelled();return true;}
-  float x=e.getX(),y=e.getY();
-  if(e.getActionMasked()==MotionEvent.ACTION_DOWN){if(y<dp(64)){finished=true;listener.cancelled();return true;}sx=x;sy=y;dragging=true;box.set(x,y,x,y);invalidate();return true;}
-  if(dragging&&(e.getActionMasked()==MotionEvent.ACTION_MOVE||e.getActionMasked()==MotionEvent.ACTION_UP)){
-   box.set(Math.min(sx,x),Math.min(sy,y),Math.max(sx,x),Math.max(sy,y));invalidate();
-   if(e.getActionMasked()==MotionEvent.ACTION_UP){dragging=false;try{
-    GameViewport.Box b=GameViewport.selection(new GameViewport.Box(window.left,window.top,window.right,window.bottom),Math.round(sx),Math.round(sy),Math.round(x),Math.round(y));
-    finished=true;listener.selected(new Rect(b.left(),b.top(),b.right(),b.bottom()));
-   }catch(IllegalArgumentException error){message="Выделите прямоугольник внутри голубого окна · × отмена";box.setEmpty();invalidate();}}
-  }return true;
+  if(event.getPointerCount()>1||event.getActionMasked()==MotionEvent.ACTION_CANCEL){cancel();return true;}
+  return super.dispatchTouchEvent(event);
+ }
+ @Override public boolean onTouchEvent(MotionEvent event){
+  if(finished)return true;
+  getLocationOnScreen(origin);
+  float x=event.getX(),y=event.getY();
+  if(event.getActionMasked()==MotionEvent.ACTION_DOWN){
+   if(x+origin[0]<window.left()||x+origin[0]>window.right()||y+origin[1]<window.top()||y+origin[1]>window.bottom())return true;
+   sx=x;sy=y;dragging=true;confirm.setEnabled(false);return true;
+  }
+  if(dragging&&(event.getActionMasked()==MotionEvent.ACTION_MOVE||event.getActionMasked()==MotionEvent.ACTION_UP)){
+   try{
+    candidate=RegionPickerGeometry.selection(window,origin[0],origin[1],sx,sy,x,y);
+    message.setText("Сетка "+rows+"×"+cols+" · "+candidate.width()+"×"+candidate.height()+" · «Готово» подтвердит область");
+   }catch(IllegalArgumentException error){candidate=null;message.setText("Выделите поле целиком внутри голубого окна");}
+   if(event.getActionMasked()==MotionEvent.ACTION_UP){dragging=false;confirm.setEnabled(candidate!=null);}
+   invalidate();return true;
+  }
+  return true;
  }
 }
