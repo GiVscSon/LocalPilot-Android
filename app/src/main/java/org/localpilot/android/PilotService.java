@@ -20,6 +20,7 @@ public class PilotService extends AccessibilityService {
  private java.util.concurrent.Future<?> visionTask;private long visionRequest;private boolean visionPending;
  private boolean busy=false;private int autoLeft=0;private long deadline;private int demoVerified;private String target="";private Rect armedBounds=new Rect();private int nx=50,ny=65;
  private long lastPanelRender;
+ private String lastGestureContext="none";
  private String note="STOP",uiStats="",lastStopReason="Нет остановок";private final InputPermit permit=new InputPermit();private RotatingJournal journal;private final GestureFlight gestureFlight=new GestureFlight();
  private boolean playingMini;private int miniKind,miniAction;private long miniMoves;private int[] miniBefore;private Rect boardRoi;private View picker;private boolean playing2048=false,colored2048=false,captureBusy=false;private long moves2048;private long captureCounter,pendingCapture,lastShotTimestamp=-1;private long mergeTotal;private Board2048 before2048;private int direction2048;private AlertDialog preview,overlayDialog;
  private final CaptureStartup captureStartup=new CaptureStartup();
@@ -91,7 +92,7 @@ public class PilotService extends AccessibilityService {
     .append("\nvisual_roi=").append(visualBounds().toShortString()).append(" manual_roi=").append(manualVisualRoi)
     .append("\nbounds=").append(armedBounds.toShortString()).append(" display=").append(jumperDisplayWidth).append('x').append(jumperDisplayHeight)
     .append("\nplaying=").append(playingJumper||playingGrid).append(" capture_ready=").append(playingGrid||jumperCaptureReady).append(" busy=").append(busy)
-    .append("\nstatus=").append(note).append("\nLAST_STOP=").append(lastStopReason).append('\n').append(captureCounters())
+    .append("\nstatus=").append(note).append("\nLAST_STOP=").append(lastStopReason).append("\nlast_gesture=").append(lastGestureContext).append('\n').append(captureCounters())
     .append("\nframe_age_ms=").append(diagnosticFrameAt<0?-1:Math.max(0,now-diagnosticFrameAt)).append('\n').append(diagnosticFrameGeometry)
     .append('\n').append(gestureFlight.report(now)).append('\n').append(sceneRecovery.report())
     .append('\n').append(arcadeFeedback.report()).append('\n').append(jumperFeedback.report()).append("\nMOTION MODEL: ").append(arcadeController.model())
@@ -941,7 +942,8 @@ public class PilotService extends AccessibilityService {
   if(frameAt>=0&&(SystemClock.elapsedRealtime()<frameAt||SystemClock.elapsedRealtime()-frameAt>300)){metrics.failure(StageMetrics.Stage.CAPTURE,"STALE_BEFORE_DISPATCH");note="Кадр устарел при подготовке жеста · жду свежий";update();return;}
   if(!valid(ticket)||!gate.consume(ticket,SystemClock.elapsedRealtime(),target,ticket.window,armedBounds.width(),armedBounds.height())||!permit.consume(gate.epoch(),SystemClock.elapsedRealtime())){failStage(StageMetrics.Stage.ANDROID_ACK,"PERMIT_EXPIRED","Разрешение истекло/уже использовано");return;}
   Path path=new Path();path.moveTo(x,y);if(x!=ex||y!=ey)path.lineTo(ex,ey);
-  int duration=frameAt<0&&(x!=ex||y!=ey)?120:Math.max(40,Math.min(240,holdMs));
+  int duration=frameAt<0&&(x!=ex||y!=ey||Build.VERSION.SDK_INT<=30)?120:Math.max(40,Math.min(240,holdMs));
+  lastGestureContext="epoch="+gate.epoch()+" from="+Math.round(x)+","+Math.round(y)+" to="+Math.round(ex)+","+Math.round(ey)+" hold_ms="+duration;
   GestureDescription gesture=new GestureDescription.Builder().addStroke(new GestureDescription.StrokeDescription(path,0,duration)).build();
   if(frameAt>=0)arcadeDispatchFrameAge=SystemClock.elapsedRealtime()-frameAt;
   final long dispatchedNs=SystemClock.elapsedRealtimeNanos();long epoch=gate.epoch();

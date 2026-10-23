@@ -97,7 +97,7 @@ public final class PilotUiInstrumentation extends Instrumentation {
                 evidence.put("failure", error.toString());
                 evidence.put("stack", stack.toString());
                 evidence.put("visible_ui", visibleUi());
-                if(service!=null)evidence.put("own_state",onMain(()->"connected="+(PilotService.instance==service)+" registered="+field("panelRegistered")+" panel="+(field("panel")!=null)+" note="+field("note")));
+                if(service!=null)evidence.put("own_state",onMain(()->"connected="+(PilotService.instance==service)+" registered="+field("panelRegistered")+" panel="+(field("panel")!=null)+" note="+field("note")+" demo_score="+(demo==null?-1:visibleScore(demo.getWindow().getDecorView()))+" demo_verified="+field("demoVerified")+" gesture="+field("lastGestureContext")));
                 if (service != null) evidence.put("metrics", onMain(() -> service.exportMetrics()));
             } catch (Throwable secondary) {
                 result.putString("cleanup_error", secondary.toString());
