@@ -1,5 +1,9 @@
 # Продолжение 0.7.21-dev — 23 октября 2026
 
+Инструменты сборки/упаковки обновлены после выпуска APK без изменения Android-кода.
+См. docs/BUILD_TOOLING.ru.md. build_debug.py теперь запускает Gradle;
+tools/package_release.py проверяет APK и получает версию из app/build.gradle.
+
 Текущий APK: 0.7.21-dev, versionCode 37. Изменения кода и ограничения описаны
 в docs/RELEASE_0.7.21.ru.md; итоги проверок — docs/VALIDATION_0.7.21.txt.
 APK SHA256: 86259485e42137465a0b3f41fe21731821c294053b989c12031f6b9030df165d.

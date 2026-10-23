@@ -103,7 +103,10 @@ Checkpoint включает optimizer, replay, RNG и физическое со�
 
 ## Установка
 
-APK имеет пакет **org.localpilot.android.dev**, имя **LocalPilot Android Dev**, version0.7.4-dev/code20. Обновляет прежнюю Gradle Dev-сборку с тем же ключом, сохраняет её данные и устанавливается рядом с оригинальным org.localpilot.android. Оригинал удалять не требуется; его signing key не предоставлен.
+Dev APK имеет пакет **org.localpilot.android.dev**. Текущая версия задаётся только
+в app/build.gradle; фактические версия и сертификат проверяются перед упаковкой.
+Обновление сохраняет данные при совпадении ключа и устанавливается рядом
+с оригинальным org.localpilot.android. Оригинал удалять не требуется.
 
 1. Установить Dev APK.
 2. Для обучения открыть «Аркады» — Accessibility не требуется.
@@ -121,7 +124,20 @@ java tests/RlVerify.java
 python3 tools/package_release.py
 ```
 
-В Windows использовать gradlew.bat. APK: app/build/outputs/apk/debug/app-debug.apk. Standalone build_debug.py использует отдельный локальный debug-ключ; для обновлений сохраняйте выбранный способ сборки.
+В Windows использовать gradlew.bat. APK: app/build/outputs/apk/debug/app-debug.apk.
+`python3 build_debug.py` запускает ту же Gradle-сборку и проверяет версию, пакет
+и подпись APK. Отдельная ручная сборка с другим ключом больше не используется.
+`python3 tools/package_release.py` берёт версию из app/build.gradle, проверяет
+готовый APK и создаёт новую папку release/LocalPilot_Android_<версия>_dev
+с APK, исходниками, MANIFEST.json, SHA256SUMS и ZIP-комплектом.
+Существующая папка выпуска не перезаписывается. Для контрольной упаковки используйте
+`--output /другая/папка`; для проверки ключа — `--expected-certificate SHA256`.
+Локальные ключи, записи экрана, журналы устройства и обучающие данные не включаются.
+Проверка известных шаблонов секретов не заменяет проверку исходников перед публикацией.
+Регрессии инструментов: `python3 -m unittest discover -s tests -p test_release_tools.py -v`.
+GitHub Actions не получает локальный ключ: сертификат CI APK может отличаться
+от установленного приложения. Для обновления на телефоне проверяйте совпадение
+сертификата; не удаляйте приложение ради обхода конфликта подписей.
 
 Gymnasium-обёртки используют тот же Java-движок через JPype. Их можно применять позже на ПК; они не нужны Android-приложению. Инструкции и проверенные Python-версии находятся в training/.
 
