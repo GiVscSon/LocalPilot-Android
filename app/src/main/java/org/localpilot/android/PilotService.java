@@ -411,6 +411,7 @@ public class PilotService extends AccessibilityService {
      if(!bounds.equals(armedBounds))return false;
      boolean allowed=automatic()||permit.allows(gate.epoch(),now);
      gate.arm(target,root.getWindowId(),bounds.width(),bounds.height());
+     visualOwner=target;visualWindow=root.getWindowId();visualWindowBounds.set(bounds);
      if(allowed)permit.grantSession(gate.epoch(),now);
      watchArcadeCapture(gate.epoch());
      note="Окно игры восстановлено · проверяю свежий кадр";update();return true;

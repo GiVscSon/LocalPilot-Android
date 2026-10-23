@@ -290,10 +290,13 @@ public final class PilotUiInstrumentation extends Instrumentation {
         getContext().startActivity(new Intent().setClassName(fixturePackage, CaptureFixtureActivity.class.getName())
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK));
         await(() -> markerBounds("LOCALPILOT_CAPTURE_FIXTURE") != null, 5_000, "Isolated projection fixture did not launch");
-        click("Игра");click(ArcadeProfile.ARI.label);
+        onMain(()->{service.selectInstalledTarget(fixturePackage,"Capture acceptance");return null;});
+        await(()->present(ArcadeProfile.ARI.label),6_000,"New external app reused the previous 2048 profile instead of requesting its mechanic");
+        click(ArcadeProfile.ARI.label);
         click("Окно");click("@contains:" + fixturePackage);
         long previous = -1;
         for(int cycle=0;cycle<2;cycle++) {
+            if(compact())click("Развернуть");
             click("Старт");
             await(this::acceptProjectionDialog, 8_000, "Android screen capture consent did not appear");
             await(() -> onMain(() -> booleanField("jumperCaptureReady") && ((Number)field("captureFrames")).longValue() >= 2),
