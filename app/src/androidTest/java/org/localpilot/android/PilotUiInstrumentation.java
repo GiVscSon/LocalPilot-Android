@@ -259,6 +259,8 @@ public final class PilotUiInstrumentation extends Instrumentation {
         addCheck("manual_2048_region_visible_and_cancelable", new JSONObject().put("bounds", grid.toShortString()));
 
         bindDemoWindow();click("Область");
+        await(()->present("Готово")&&present("STOP · отмена"),3_000,"Region editor did not finish its first layout before dragging");
+        automation.waitForIdle(120,3_000);
         Rect selected=markerBounds("LOCALPILOT_BOARD_2048");require(selected!=null,"Visible board geometry missing for manual drag");
         drag(selected.left,selected.top,selected.right,selected.bottom);
         require(present("Готово"),"Releasing a region drag confirmed it without explicit Done");
