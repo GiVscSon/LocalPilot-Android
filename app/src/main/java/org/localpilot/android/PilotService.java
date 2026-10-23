@@ -1116,7 +1116,7 @@ public class PilotService extends AccessibilityService {
   if(!discoveringBoard&&Rect.intersects(panelBounds(),roi)){failStage(StageMetrics.Stage.CAPTURE,"PANEL_COVERS_ROI","Панель закрывает поле: передвиньте её");return;}
   final long captureNs=SystemClock.elapsedRealtimeNanos();captureBusy=true;long request=SystemClock.elapsedRealtime();final long requestedUptime=SystemClock.uptimeMillis();final long requestId=++captureCounter;pendingCapture=requestId;
   TakeScreenshotCallback callback=new TakeScreenshotCallback(){
-   @Override public void onSuccess(ScreenshotResult shot){android.hardware.HardwareBuffer buffer=shot.getHardwareBuffer();if(pendingCapture!=requestId){buffer.close();return;}captureBusy=false;Bitmap hardware=null,bitmap=null;boolean captured=false;
+   @Override public void onSuccess(ScreenshotResult shot){android.hardware.HardwareBuffer buffer=shot.getHardwareBuffer();if(pendingCapture!=requestId){CaptureCleanup.run(buffer::close);return;}captureBusy=false;Bitmap hardware=null,bitmap=null;boolean captured=false;
     try{if(epoch!=gate.epoch()||!captureEnabled()){metrics.cancelled(StageMetrics.Stage.CAPTURE);return;}if(!valid(ticket)||boardRoi==null||!roi.equals(boardRoi)||!CaptureFreshness.valid(shot.getTimestamp(),requestedUptime,SystemClock.uptimeMillis(),lastShotTimestamp)){failStage(StageMetrics.Stage.CAPTURE,"STALE_FRAME","Снимок устарел/повторён");return;}lastShotTimestamp=shot.getTimestamp();
      hardware=Bitmap.wrapHardwareBuffer(buffer,shot.getColorSpace());if(hardware==null)throw new IllegalArgumentException("Нет пикселей");bitmap=hardware.copy(Bitmap.Config.ARGB_8888,false);
      Point size=new Point();wm.getDefaultDisplay().getRealSize(size);if(bitmap.getWidth()!=size.x||bitmap.getHeight()!=size.y)throw new IllegalArgumentException("Масштаб снимка не подтверждён");
@@ -1130,7 +1130,7 @@ public class PilotService extends AccessibilityService {
       catch(RuntimeException|OutOfMemoryError ignored){clearDiagnosticFrame();}
      }
      if(!valid(ticket)){failStage(StageMetrics.Stage.CAPTURE,"FRAME_TTL_EXPIRED","Обработка кадра превысила TTL");return;}metrics.record(StageMetrics.Stage.CAPTURE,SystemClock.elapsedRealtimeNanos()-captureNs);captured=true;result.ready(pixels,ticket,SystemClock.elapsedRealtime()-request);
-    }catch(RuntimeException error){if(epoch==gate.epoch()){if(!captured)failStage(StageMetrics.Stage.CAPTURE,"BITMAP_FAILED","Не удалось подготовить пиксели: "+error.getMessage());else stop("Обработка прочитанного кадра: "+error.getMessage());}}finally{if(bitmap!=null)bitmap.recycle();if(hardware!=null)hardware.recycle();buffer.close();}
+    }catch(RuntimeException|OutOfMemoryError error){if(epoch==gate.epoch()){if(!captured)failStage(StageMetrics.Stage.CAPTURE,"BITMAP_FAILED","Не удалось подготовить пиксели");else stop("Ошибка обработки прочитанного кадра · захват остановлен");}}finally{Bitmap oldBitmap=bitmap,oldHardware=hardware;boolean released=CaptureCleanup.run(()->{if(oldBitmap!=null)oldBitmap.recycle();},()->{if(oldHardware!=null)oldHardware.recycle();},buffer::close);if(!released&&epoch==gate.epoch())stop("Ошибка освобождения кадра · захват остановлен");}
    }
    @Override public void onFailure(int error){if(pendingCapture!=requestId)return;captureBusy=false;if(epoch==gate.epoch())failStage(StageMetrics.Stage.CAPTURE,"ANDROID_SCREENSHOT_ERROR","Захват Android: ошибка "+error+". Проверьте доступ службы");}
   };

@@ -37,7 +37,7 @@ import java.util.regex.Pattern;
  * 2048 progress is independently read from real screenshots, never Android ACK.
  */
 public final class PilotUiInstrumentation extends Instrumentation {
-    private static final long TEST_LIMIT_MS = 180_000;
+    private static final long TEST_LIMIT_MS = 240_000;
     private static final Pattern SCORE = Pattern.compile("^Счёт:\\s*(\\d+)");
 
     private final JSONObject evidence = new JSONObject();
@@ -78,10 +78,11 @@ public final class PilotUiInstrumentation extends Instrumentation {
             checkStopDuringDemo();
             checkRotationStopsInput();
             check2048ScreenshotProgress();
+            checkProjectionLifecycle();
             evidence.put("metrics", onMain(() -> service.exportMetrics()));
             passed = true;
             result.putString("result", "PASS");
-            result.putString("summary", "Launcher/picker, panel reopen, Demo x10 actual touches, STOP, rotation disarm, region cancel and screenshot-verified 2048 passed");
+            result.putString("summary", "Launcher/picker, panel reopen, Demo x10 real touches, STOP, rotation disarm, region cancel, screenshot-verified 2048 and two real projection consent/start/stop cycles passed");
         } catch (Throwable error) {
             result.putString("result", "FAIL");
             result.putString("summary", error.toString());
@@ -274,6 +275,60 @@ public final class PilotUiInstrumentation extends Instrumentation {
     }
 
     private static long total(Board2048 board) { long sum = 0; for (int tile : board.cells) sum += tile; return sum; }
+
+    private void checkProjectionLifecycle() throws Exception {
+        String fixturePackage = getContext().getPackageName();
+        onMain(() -> { service.hidePanel(); service.showPanel(); return null; });
+        getContext().startActivity(new Intent().setClassName(fixturePackage, CaptureFixtureActivity.class.getName())
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK));
+        await(() -> markerBounds("LOCALPILOT_CAPTURE_FIXTURE") != null, 5_000, "Isolated projection fixture did not launch");
+        click("Игра");click(ArcadeProfile.ARI.label);
+        click("Окно");click("@contains:" + fixturePackage);
+        long previous = -1;
+        for(int cycle=0;cycle<2;cycle++) {
+            click("Старт");
+            await(this::acceptProjectionDialog, 8_000, "Android screen capture consent did not appear");
+            await(() -> onMain(() -> booleanField("jumperCaptureReady") && ((Number)field("captureFrames")).longValue() >= 2),
+                    10_000, "Projection did not deliver two decoded frames after consent");
+            long session = onMain(() -> ((Number)field("captureSession")).longValue());
+            require(session > previous, "Projection restart reused the previous session token");previous=session;
+            require(present("STOP"), "STOP panel was not restored after screen-capture consent");
+            if(cycle==0)click("STOP");
+            else {
+                require(automation.setRotation(UiAutomation.ROTATION_FREEZE_90), "Cannot rotate active projection");
+            }
+            await(() -> !armed() && !onMain(() -> booleanField("playingJumper")), 5_000,
+                    "Projection STOP/rotation did not end the input session");
+            require(onMain(() -> PilotService.instance == service), "Projection teardown disconnected or crashed the Accessibility service");
+        }
+        require(automation.setRotation(UiAutomation.ROTATION_FREEZE_0), "Cannot restore portrait after projection");
+        addCheck("projection_consent_restart_frames_stop_rotation", new JSONObject().put("decoded_frames_per_session", 2)
+                .put("sessions", 2).put("isolated_test_apk", true).put("gameplay_claim", false));
+    }
+
+    private boolean acceptProjectionDialog() {
+        for(AccessibilityWindowInfo window:automation.getWindows()) {
+            AccessibilityNodeInfo root=window.getRoot();if(root==null)continue;
+            try {
+                String owner=String.valueOf(root.getPackageName());
+                if(!owner.equals("com.android.systemui")&&!owner.contains("permissioncontroller"))continue;
+                return acceptProjectionDialog(root,0,new int[]{500});
+            } finally { root.recycle(); }
+        }
+        return false;
+    }
+    private boolean acceptProjectionDialog(AccessibilityNodeInfo node,int depth,int[] remaining) {
+        if(depth>24||--remaining[0]<0)return false;
+        String text=String.valueOf(node.getText()),id=String.valueOf(node.getViewIdResourceName());
+        if(node.isVisibleToUser()&&node.isEnabled()&&node.isClickable()
+                &&(id.equals("android:id/button1")||text.equals("Start now")||text.equals("Start recording")||text.equals("Share screen")||text.equals("Start")))
+            return node.performAction(AccessibilityNodeInfo.ACTION_CLICK);
+        for(int i=0;i<node.getChildCount();i++) {
+            AccessibilityNodeInfo child=node.getChild(i);if(child==null)continue;
+            try{if(acceptProjectionDialog(child,depth+1,remaining))return true;}finally{child.recycle();}
+        }
+        return false;
+    }
 
     private Board2048 read2048Screenshot() throws Exception {
         Rect roi = markerBounds("LOCALPILOT_BOARD_2048");
