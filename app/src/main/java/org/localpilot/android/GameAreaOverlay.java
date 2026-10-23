@@ -40,6 +40,7 @@ final class GameAreaOverlay extends FrameLayout {
   addView(header,new FrameLayout.LayoutParams(-1,-2,Gravity.TOP));
  }
  private int dp(int n){return Math.max(1,(int)(n*getResources().getDisplayMetrics().density));}
+ @Override protected void onSizeChanged(int width,int height,int oldWidth,int oldHeight){super.onSizeChanged(width,height,oldWidth,oldHeight);setSystemGestureExclusionRects(java.util.Collections.singletonList(new Rect(0,0,width,height)));}
  private void cancel(){if(!finished){finished=true;listener.cancelled();}}
  private void confirm(){
   if(finished||dragging||candidate==null)return;
