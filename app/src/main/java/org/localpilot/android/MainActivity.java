@@ -10,7 +10,7 @@ public class MainActivity extends Activity {
   void close(){if(frame!=null&&!frame.isRecycled())frame.recycle();}
  }
  @Override public void onCreate(Bundle b){super.onCreate(b);Object retained=getLastNonConfigurationInstance();if(retained instanceof DiagnosticRequest)diagnosticRequest=(DiagnosticRequest)retained;LinearLayout box=new LinearLayout(this);box.setOrientation(LinearLayout.VERTICAL);box.setPadding(24,24,24,24);ScrollView scroll=new ScrollView(this);scroll.addView(box);setContentView(scroll);
-  TextView title=new TextView(this);title.setText("LocalPilot Android"+(getPackageName().endsWith(".dev")?" Dev":"")+" · 0.7.19\nАркады и обучение на телефоне");title.setTextSize(24);box.addView(title);
+  TextView title=new TextView(this);title.setText("LocalPilot Android"+(getPackageName().endsWith(".dev")?" Dev":"")+" · 0.7.20\nАркады и головоломки на телефоне");title.setTextSize(24);box.addView(title);
   TextView help=new TextView(this);help.setText("1. Откройте игру и выберите её профиль: «Игра».\n2. Нажмите «Окно» и выберите приложение с игрой.\n3. Нажмите «Старт» и разрешите показ экрана.\n\nSTOP останавливает игру агента. В первый раз включите управление кнопкой ниже.");box.addView(help);
   button(box,"Включить управление",()->startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)));
   TextView panelHelp=new TextView(this);panelHelp.setText("Панель можно свернуть. STOP всегда остаётся доступным.");box.addView(panelHelp);
@@ -19,7 +19,7 @@ public class MainActivity extends Activity {
   button(box,"Аркады · обучать нейросеть",()->startActivity(new Intent(this,TrainingActivity.class)));
   automatic=new Switch(this);automatic.setText("Автоуправление выбранной игрой");automatic.setChecked(getSharedPreferences(PREF,MODE_PRIVATE).getBoolean("auto_control",true));automatic.setOnCheckedChangeListener((v,on)->{getSharedPreferences(PREF,MODE_PRIVATE).edit().putBoolean("auto_control",on).apply();if(PilotService.instance!=null)PilotService.instance.setAutomatic(on);});box.addView(automatic);
   button(box,"Выбрать игру или браузер",()->startActivity(new Intent(this,GamePickerActivity.class)));
-  TextView autoHelp=new TextView(this);autoHelp.setText("Откройте игру → выберите окно, профиль и область → Старт. Для другого оформления: Ещё → Настроить распознавание; укажите 3 объекта на кадре. Для касаний или свайпов: Ещё → Способ управления. Для разных игр одного браузера: Игра → Имя игры. Настройки загружаются автоматически. Цветовая настройка подходит для различимых объектов в 2D; сложная графика может потребовать нового распознавателя.");box.addView(autoHelp);
+  TextView autoHelp=new TextView(this);autoHelp.setText("Для сетки фишек: Игра → Фишки · обмен соседей или удалить группу → выберите 6×6, 7×7 либо другой размер → обведите клетки → Старт. Настройки и типы фишек сохраняются. Поддерживаются различимые цветные фишки без специальных эффектов; цели уровня и усилители пока не распознаются. Для аркад другого оформления: Ещё → Настроить распознавание. Для разных игр одного браузера: Игра → Имя игры. STOP всегда останавливает ввод.");box.addView(autoHelp);
   button(box,"Открыть 2048",()->openGame(new Intent(this,Game2048Activity.class),"2048"));
   button(box,"Крестики-нолики",()->openGame(new Intent(this,MiniGamesActivity.class).putExtra("kind",0),"Крестики-нолики"));
   button(box,"Погаси свет",()->openGame(new Intent(this,MiniGamesActivity.class).putExtra("kind",1),"Погаси свет"));
