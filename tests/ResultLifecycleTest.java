@@ -23,6 +23,25 @@ public class ResultLifecycleTest {
   ArcadeLearningStore store=new ArcadeLearningStore(file);store.save(ArcadeProfile.FLAPPY,trained);store.recordResult(ArcadeProfile.FLAPPY,trained);
   ArcadeLearningStore loaded=new ArcadeLearningStore(file);check(loaded.get(ArcadeProfile.FLAPPY).equals(trained)&&loaded.losses(ArcadeProfile.FLAPPY)==1,"model and loss survive process restart");
   check(loaded.losses(ArcadeProfile.ARI)==0&&loaded.get(ArcadeProfile.ARI)==null,"game profiles do not share outcomes");
+  check(VisualGameTarget.allowed("org.example.arcade","org.localpilot.android.dev"),"external native game allowed");
+  check(VisualGameTarget.allowed("com.yandex.browser","org.localpilot.android.dev")&&VisualGameTarget.allowed("com.android.chrome","org.localpilot.android.dev"),"browser games allowed");
+  for(String pkg:new String[]{"org.localpilot.android.dev","com.android.settings","com.android.systemui","com.android.permissioncontroller","com.android.packageinstaller","com.mi.android.globallauncher"})
+   check(!VisualGameTarget.allowed(pkg,"org.localpilot.android.dev"),"system/own/launcher target rejected: "+pkg);
+  check(loaded.get("ru.beru.android","default",ArcadeProfile.FLAPPY).equals(trained),"legacy Market model remains available");
+  check(loaded.get("org.example.arcade","default",ArcadeProfile.FLAPPY)==null,"external game never inherits legacy Market physics");
+  loaded.save("com.android.chrome","Bird one",ArcadeProfile.FLAPPY,trained);
+  loaded.save("com.android.chrome","Bird two",ArcadeProfile.FLAPPY,original);
+  loaded.recordResult("com.android.chrome","Bird one",ArcadeProfile.FLAPPY,trained);
+  var restarted=new ArcadeLearningStore(file);
+  check(restarted.get("com.android.chrome","Bird one",ArcadeProfile.FLAPPY).equals(trained),"named browser model restored");
+  check(restarted.get("com.android.chrome","Bird two",ArcadeProfile.FLAPPY).equals(original),"other browser game unchanged");
+  check(restarted.get("org.example.arcade","Bird one",ArcadeProfile.FLAPPY)==null,"same slot in another app is isolated");
+  check(restarted.get("com.android.chrome","Bird one",ArcadeProfile.TRAFFIC)==null,"different controller profile isolated");
+  check(restarted.losses("com.android.chrome","Bird one",ArcadeProfile.FLAPPY)==1&&restarted.losses("com.android.chrome","Bird two",ArcadeProfile.FLAPPY)==0,"result counters separated by game identity");
+  check(restarted.get(ArcadeProfile.FLAPPY).equals(trained),"legacy file entries preserved after new scoped writes");
+  JumperPolicy.learn(true);JumperPolicy.reset();String jumperDefault=JumperPolicy.model();
+  JumperPolicy.restore("tolerance=22 vertical=NaN");check(jumperDefault.equals(JumperPolicy.model()),"invalid jumper model does not leak partial settings");
+  JumperPolicy.learn(true);JumperPolicy.reset();check(jumperDefault.equals(JumperPolicy.model()),"new game starts with default jumper parameters");
   for(int w:new int[]{240,320,480}){
    int h=w*2;
    GameOverScreen.Pixels result=(x,y)->y>h*.20&&y<h*.65&&x>w*.08&&x<w*.92?(y>h*.40&&y<h*.47&&x>w*.14&&x<w*.86?0xffffe800:0xfff5f5f5):0xff704030;

@@ -47,7 +47,8 @@ public final class JumperPolicy {
     public static float coordinateScale(JumperState state){
         return Math.min((state.roiRight-state.roiLeft)/854f,(state.roiBottom-state.roiTop)/1280f);
     }
-    public static void restore(String model){if(model==null)return;try{for(String p:model.split(" ")){String[] kv=p.split("=",2);if(kv.length!=2)continue;float v=Float.parseFloat(kv[1]);switch(kv[0]){case "tolerance":trackTolerance=Math.max(18,Math.min(70,v));break;case "vertical":maxVerticalReach=Math.max(260,Math.min(650,v));break;case "horizontal":maxHorizontalReach=Math.max(220,Math.min(560,v));break;}}}catch(RuntimeException ignored){}}
+    public static void reset(){trackTolerance=38f;maxVerticalReach=430f;maxHorizontalReach=390f;}
+    public static void restore(String model){if(model==null)return;float tolerance=trackTolerance,vertical=maxVerticalReach,horizontal=maxHorizontalReach;try{for(String p:model.split(" ")){String[] kv=p.split("=",2);if(kv.length!=2)continue;float v=Float.parseFloat(kv[1]);if(!Float.isFinite(v))return;switch(kv[0]){case "tolerance":tolerance=Math.max(18,Math.min(70,v));break;case "vertical":vertical=Math.max(260,Math.min(650,v));break;case "horizontal":horizontal=Math.max(220,Math.min(560,v));break;}}}catch(RuntimeException ignored){return;}trackTolerance=tolerance;maxVerticalReach=vertical;maxHorizontalReach=horizontal;}
     public static String model(){return "tolerance="+trackTolerance+" vertical="+maxVerticalReach+" horizontal="+maxHorizontalReach;}
     public static void learn(boolean successful){if(successful){trackTolerance=Math.max(18,trackTolerance*.995f);maxVerticalReach=Math.min(650,maxVerticalReach+1.5f);}else{trackTolerance=Math.min(70,trackTolerance+1.5f);maxVerticalReach=Math.max(260,maxVerticalReach-4f);}}
 
