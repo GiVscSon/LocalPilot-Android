@@ -265,9 +265,7 @@ public final class PilotUiInstrumentation extends Instrumentation {
         click("Область");
         await(() -> present("Готово") && present("STOP · отмена"), 3_000,
                 "Manual region picker has no initial confirmation/cancel controls");
-        Rect grid = markerBounds("Выделение области игры 4 на 4");
-        require(grid != null && grid.width() > 100 && grid.height() > 100,
-                "Initial 4x4 region selection is not visible");
+        Rect grid = awaitRegionMarker();
         click("STOP · отмена");
         await(()->onMain(()->field("picker")==null),3_000,"Region cancel did not close its window");
         require(!onMain(() -> booleanField("playing2048")), "Cancelled region picker started automatic input");
@@ -275,6 +273,7 @@ public final class PilotUiInstrumentation extends Instrumentation {
 
         bindDemoWindow();click("Область");
         await(()->present("Готово")&&present("STOP · отмена"),3_000,"Region editor did not finish its first layout before dragging");
+        awaitRegionMarker();
         automation.waitForIdle(120,3_000);
         Rect selected=markerBounds("LOCALPILOT_BOARD_2048");require(selected!=null,"Visible board geometry missing for manual drag");
         tapAt(selected.left,selected.top);tapAt(selected.right,selected.bottom);
@@ -309,6 +308,14 @@ public final class PilotUiInstrumentation extends Instrumentation {
     }
 
     private static long total(Board2048 board) { long sum = 0; for (int tile : board.cells) sum += tile; return sum; }
+
+    private Rect awaitRegionMarker()throws Exception{
+        AtomicReference<Rect> observed=new AtomicReference<>();
+        // Local button layout may precede publication of the new overlay window
+        // to UiAutomation. Require actual Android accessibility geometry too.
+        await(()->{Rect rect=markerBounds("Выделение области игры 4 на 4");if(rect==null||rect.width()<=100||rect.height()<=100)return false;observed.set(rect);return true;},4_000,"Initial 4x4 region selection is not visible");
+        return observed.get();
+    }
 
     private void checkProjectionLifecycle() throws Exception {
         String fixturePackage = getContext().getPackageName();
