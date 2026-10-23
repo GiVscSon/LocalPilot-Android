@@ -61,7 +61,8 @@ public final class PilotUiInstrumentation extends Instrumentation {
         try {
             automation = getUiAutomation(UiAutomation.FLAG_DONT_SUPPRESS_ACCESSIBILITY_SERVICES);
             android.accessibilityservice.AccessibilityServiceInfo info = automation.getServiceInfo();
-            info.flags |= android.accessibilityservice.AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS;
+            info.flags |= android.accessibilityservice.AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
+                    | android.accessibilityservice.AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS;
             automation.setServiceInfo(info);
             // am instrument restarts the target process. The isolated CI runner enables
             // our Accessibility service only after UiAutomation has attached here.
@@ -95,6 +96,7 @@ public final class PilotUiInstrumentation extends Instrumentation {
             try {
                 evidence.put("failure", error.toString());
                 evidence.put("stack", stack.toString());
+                evidence.put("visible_ui", visibleUi());
                 if (service != null) evidence.put("metrics", onMain(() -> service.exportMetrics()));
             } catch (Throwable secondary) {
                 result.putString("cleanup_error", secondary.toString());
@@ -324,9 +326,9 @@ public final class PilotUiInstrumentation extends Instrumentation {
     }
     private boolean acceptProjectionDialog(AccessibilityNodeInfo node,int depth,int[] remaining) {
         if(depth>24||--remaining[0]<0)return false;
-        String text=String.valueOf(node.getText()),id=String.valueOf(node.getViewIdResourceName());
+        String text=String.valueOf(node.getText()).toLowerCase(java.util.Locale.ROOT),id=String.valueOf(node.getViewIdResourceName());
         if(node.isVisibleToUser()&&node.isEnabled()&&node.isClickable()
-                &&(id.equals("android:id/button1")||text.equals("Start now")||text.equals("Start recording")||text.equals("Share screen")||text.equals("Start")))
+                &&(id.equals("android:id/button1")||text.equals("start now")||text.equals("start recording")||text.equals("share screen")||text.equals("start")))
             return node.performAction(AccessibilityNodeInfo.ACTION_CLICK);
         for(int i=0;i<node.getChildCount();i++) {
             AccessibilityNodeInfo child=node.getChild(i);if(child==null)continue;
@@ -459,13 +461,34 @@ public final class PilotUiInstrumentation extends Instrumentation {
                 if (found != null) return found;
             } finally { root.recycle(); }
         }
+        AccessibilityNodeInfo active=automation.getRootInActiveWindow();
+        if(active!=null)try{return findText(active,text,0,new int[]{2000});}finally{active.recycle();}
         return null;
+    }
+
+    private String visibleUi(){
+        StringBuilder text=new StringBuilder();int[] left={120};
+        for(AccessibilityWindowInfo window:automation.getWindows()){
+            AccessibilityNodeInfo root=window.getRoot();if(root==null)continue;
+            try{describe(root,text,0,left);}finally{root.recycle();}
+        }
+        return text.toString();
+    }
+    private void describe(AccessibilityNodeInfo node,StringBuilder text,int depth,int[] left){
+        if(depth>24||--left[0]<0||text.length()>3500)return;
+        if(node.isVisibleToUser())text.append(node.getPackageName()).append(' ').append(node.getClassName())
+                .append(" clickable=").append(node.isClickable()).append(" text=")
+                .append(String.valueOf(node.getText()).substring(0,Math.min(90,String.valueOf(node.getText()).length()))).append('\n');
+        for(int i=0;i<node.getChildCount();i++){
+            AccessibilityNodeInfo child=node.getChild(i);if(child==null)continue;
+            try{describe(child,text,depth+1,left);}finally{child.recycle();}
+        }
     }
 
     private AccessibilityNodeInfo findText(AccessibilityNodeInfo node, String text, int depth, int[] remaining) {
         if (depth > 40 || --remaining[0] < 0) return null;
         if (node.isVisibleToUser() && node.isEnabled() && node.isClickable()
-                && (text.startsWith("@contains:")?String.valueOf(node.getText()).contains(text.substring(10)):text.contentEquals(node.getText() == null ? "" : node.getText()))) {
+                && (text.startsWith("@contains:")?String.valueOf(node.getText()).toLowerCase(java.util.Locale.ROOT).contains(text.substring(10).toLowerCase(java.util.Locale.ROOT)):text.equalsIgnoreCase(String.valueOf(node.getText())))) {
             return AccessibilityNodeInfo.obtain(node);
         }
         for (int i = 0; i < node.getChildCount(); i++) {

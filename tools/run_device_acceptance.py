@@ -56,7 +56,8 @@ def main():
         print(json.dumps(report, indent=2), flush=True)
         if report.get('result') != 'PASS':
             raise RuntimeError(str(report.get('failure', report.get('evidence_error', 'No PASS result')))
-                               + '\n' + str(report.get('stack', ''))[:2500])
+                               + '\nUI: ' + str(report.get('visible_ui',''))[:2000]
+                               + '\n' + str(report.get('stack', ''))[:1000])
         annotation('notice', 'PASS: ' + str(len(report.get('checks', []))) + ' actual Android acceptance scenarios')
         return 0
     except (OSError, RuntimeError, ValueError, subprocess.TimeoutExpired) as error:
