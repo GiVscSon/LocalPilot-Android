@@ -97,6 +97,7 @@ public final class PilotUiInstrumentation extends Instrumentation {
                 evidence.put("failure", error.toString());
                 evidence.put("stack", stack.toString());
                 evidence.put("visible_ui", visibleUi());
+                if(service!=null)evidence.put("own_state",onMain(()->"connected="+(PilotService.instance==service)+" registered="+field("panelRegistered")+" panel="+(field("panel")!=null)+" note="+field("note")));
                 if (service != null) evidence.put("metrics", onMain(() -> service.exportMetrics()));
             } catch (Throwable secondary) {
                 result.putString("cleanup_error", secondary.toString());
@@ -416,7 +417,7 @@ public final class PilotUiInstrumentation extends Instrumentation {
     private void click(String text) throws Exception {
         await(() -> {
             AccessibilityNodeInfo node = findText(text);
-            if (node == null) { scrollForward();return false; }
+            if (node == null) { if(touchOwnControl(text))return true;scrollForward();return false; }
             try { return node.performAction(AccessibilityNodeInfo.ACTION_CLICK); }
             finally { node.recycle(); }
         }, 6_000, "Visible clickable UI control not found: " + text);
@@ -446,9 +447,42 @@ public final class PilotUiInstrumentation extends Instrumentation {
 
     private boolean present(String text) {
         AccessibilityNodeInfo node = findText(text);
-        if (node == null) return false;
+        if (node == null)try{return onMain(()->ownControlBounds(text)!=null);}catch(Exception error){return false;}
         node.recycle();
         return true;
+    }
+
+    /** Inspect only visible UI geometry; input still traverses Android's real dispatcher. */
+    private Rect ownControlBounds(String text) throws Exception {
+        if(service==null)return null;
+        for(String name:new String[]{"picker","overlayDialog","panel"}){
+            Object object=field(name);View root=object instanceof View?(View)object:object instanceof android.app.Dialog?((android.app.Dialog)object).getWindow().getDecorView():null;
+            Rect found=ownControlBounds(root,text);if(found!=null)return found;
+        }
+        return null;
+    }
+    private Rect ownControlBounds(View view,String text){
+        if(view==null||!view.isAttachedToWindow()||!view.isShown()||!view.isEnabled())return null;
+        if(view instanceof TextView){
+            String label=String.valueOf(((TextView)view).getText());
+            boolean match=text.startsWith("@contains:")?label.toLowerCase(java.util.Locale.ROOT).contains(text.substring(10).toLowerCase(java.util.Locale.ROOT)):text.equalsIgnoreCase(label);
+            if(match&&(view.isClickable()||view.getParent() instanceof android.widget.AbsListView)){
+                Rect visible=new Rect();if(view.getGlobalVisibleRect(visible)&&!visible.isEmpty()){int[] xy=new int[2];view.getLocationOnScreen(xy);return new Rect(xy[0],xy[1],xy[0]+view.getWidth(),xy[1]+view.getHeight());}
+            }
+        }
+        if(view instanceof ViewGroup){ViewGroup group=(ViewGroup)view;for(int i=0;i<group.getChildCount();i++){Rect found=ownControlBounds(group.getChildAt(i),text);if(found!=null)return found;}}
+        return null;
+    }
+    private boolean touchOwnControl(String text)throws Exception{
+        Rect rect=onMain(()->ownControlBounds(text));if(rect==null)return false;
+        long down=SystemClock.uptimeMillis();
+        android.view.MotionEvent start=android.view.MotionEvent.obtain(down,down,android.view.MotionEvent.ACTION_DOWN,rect.centerX(),rect.centerY(),0);
+        start.setSource(android.view.InputDevice.SOURCE_TOUCHSCREEN);
+        boolean accepted;try{accepted=automation.injectInputEvent(start,true);}finally{start.recycle();}
+        SystemClock.sleep(60);
+        android.view.MotionEvent end=android.view.MotionEvent.obtain(down,SystemClock.uptimeMillis(),android.view.MotionEvent.ACTION_UP,rect.centerX(),rect.centerY(),0);
+        end.setSource(android.view.InputDevice.SOURCE_TOUCHSCREEN);
+        try{return automation.injectInputEvent(end,true)&&accepted;}finally{end.recycle();}
     }
 
     private AccessibilityNodeInfo findText(String text) {
