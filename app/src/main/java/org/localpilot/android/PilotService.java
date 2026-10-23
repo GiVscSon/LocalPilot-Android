@@ -163,13 +163,22 @@ public class PilotService extends AccessibilityService {
  }
  private void chooseWindow(){
   stop("Выберите окно с игрой");if(busy){note="Дождитесь завершения касания";update();return;}
+  chooseWindow(gate.epoch(),SystemClock.elapsedRealtime()+2000);
+ }
+ private void chooseWindow(long epoch,long until){
+  if(epoch!=gate.epoch()||destroying)return;
   java.util.List<String> owners=new java.util.ArrayList<>(),labels=new java.util.ArrayList<>();java.util.List<Integer> ids=new java.util.ArrayList<>();java.util.List<Rect> bounds=new java.util.ArrayList<>();
   for(AccessibilityWindowInfo w:getWindows())if(w.getType()==AccessibilityWindowInfo.TYPE_APPLICATION){AccessibilityNodeInfo r=windowRoot(w);if(r==null)continue;try{
    String pkg=String.valueOf(r.getPackageName());Rect b=new Rect();w.getBoundsInScreen(b);if(b.isEmpty())continue;
    owners.add(pkg);ids.add(w.getId());bounds.add(b);labels.add(applicationLabel(pkg)+" · "+b.width()+"×"+b.height()+(w.isFocused()?" · активное":"")+"\n"+pkg);
   }finally{r.recycle();}}
-  if(labels.isEmpty()){note="Нет доступных окон. Откройте игру и повторите выбор";update();return;}
-  overlayMenu("Окно игры",labels.toArray(new String[0]),i->{explicitWindow=true;if(!owners.get(i).equals(visualOwner)||ids.get(i)!=visualWindow||!bounds.get(i).equals(visualWindowBounds)){visualRoi=null;manualVisualRoi=false;}visualOwner=owners.get(i);visualWindow=ids.get(i);visualWindowBounds=new Rect(bounds.get(i));long epoch=gate.epoch();awaitChosenWindow(owners.get(i),ids.get(i),bounds.get(i),epoch,SystemClock.elapsedRealtime()+12000);});
+  if(labels.isEmpty()){
+   // Window metadata may lag a newly opened Activity, especially on Android 11.
+   // Re-read only; a window still needs explicit selection and no input is armed.
+   if(SystemClock.elapsedRealtime()<until){note="Ожидаю список окон Android…";update();handler.postDelayed(()->chooseWindow(epoch,until),200);return;}
+   note="Нет доступных окон. Откройте игру и повторите выбор";update();return;
+  }
+  overlayMenu("Окно игры",labels.toArray(new String[0]),i->{explicitWindow=true;if(!owners.get(i).equals(visualOwner)||ids.get(i)!=visualWindow||!bounds.get(i).equals(visualWindowBounds)){visualRoi=null;manualVisualRoi=false;}visualOwner=owners.get(i);visualWindow=ids.get(i);visualWindowBounds=new Rect(bounds.get(i));awaitChosenWindow(owners.get(i),ids.get(i),bounds.get(i),epoch,SystemClock.elapsedRealtime()+12000);});
  }
  private void awaitChosenWindow(String pkg,int id,Rect expected,long epoch,long until){
   if(epoch!=gate.epoch())return;AccessibilityNodeInfo r=appRoot();boolean ready=false;
