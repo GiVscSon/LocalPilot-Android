@@ -246,7 +246,9 @@ public final class PilotUiInstrumentation extends Instrumentation {
         } finally { removeMonitor(game); }
         await(() -> markerBounds("LOCALPILOT_BOARD_2048") != null, 5_000, "2048 board geometry is unavailable");
         onMain(() -> { service.showPanel(); return null; });
-        click("Игра");click("2048");bindDemoWindow();allowInput();
+        click("Игра");click("2048");
+        await(()->onMain(()->intField("selectedProfile")==4&&field("overlayDialog")==null),3_000,"2048 mechanic selection did not commit before binding its window");
+        bindDemoWindow();allowInput();
 
         click("Область");
         await(() -> present("Готово") && present("STOP · отмена"), 3_000,
@@ -255,6 +257,7 @@ public final class PilotUiInstrumentation extends Instrumentation {
         require(grid != null && grid.width() > 100 && grid.height() > 100,
                 "Initial 4x4 region selection is not visible");
         click("STOP · отмена");
+        await(()->onMain(()->field("picker")==null),3_000,"Region cancel did not close its window");
         require(!onMain(() -> booleanField("playing2048")), "Cancelled region picker started automatic input");
         addCheck("manual_2048_region_visible_and_cancelable", new JSONObject().put("bounds", grid.toShortString()));
 
@@ -304,15 +307,17 @@ public final class PilotUiInstrumentation extends Instrumentation {
         onMain(()->{service.selectInstalledTarget(fixturePackage,"Capture acceptance");return null;});
         await(()->present(ArcadeProfile.ARI.label),6_000,"New external app reused the previous 2048 profile instead of requesting its mechanic");
         click(ArcadeProfile.ARI.label);
+        awaitBrowserMechanic();
         require(onMain(()->booleanField("targetIsBrowser")),"Isolated VIEW/HTTPS fixture was not classified as a browser context");
         onMain(()->{service.selectInstalledTarget(fixturePackage,"Capture acceptance");return null;});
         await(()->present(ArcadeProfile.ARI.label),6_000,"Reopening a browser before gameplay retained an old mechanic confirmation");
         click(ArcadeProfile.ARI.label);
+        awaitBrowserMechanic();
         click("Окно");click("@contains:" + fixturePackage);
         long previous = -1;
         for(int cycle=0;cycle<2;cycle++) {
             if(compact())click("Развернуть");
-            if(cycle>0){click("Старт");await(()->present(ArcadeProfile.ARI.label),5_000,"A new browser capture reused mechanic confirmation after STOP");click(ArcadeProfile.ARI.label);}
+            if(cycle>0){click("Старт");await(()->present(ArcadeProfile.ARI.label),5_000,"A new browser capture reused mechanic confirmation after STOP");click(ArcadeProfile.ARI.label);awaitBrowserMechanic();}
             click("Старт");
             await(this::acceptProjectionDialog, 8_000, "Android screen capture consent did not appear");
             await(() -> onMain(() -> booleanField("jumperCaptureReady") && ((Number)field("captureFrames")).longValue() >= 2),
@@ -405,7 +410,8 @@ public final class PilotUiInstrumentation extends Instrumentation {
         click("Ещё");click("Демо ×10");
     }
 
-    private void bindDemoWindow() throws Exception {click("Окно");click("@contains:"+getTargetContext().getPackageName());}
+    private void bindDemoWindow() throws Exception {click("Окно");click("@contains:"+getTargetContext().getPackageName());await(this::armed,3_000,"Window selection did not commit before the next control");}
+    private void awaitBrowserMechanic()throws Exception{await(()->onMain(()->booleanField("browserProfileConfirmed")&&field("overlayDialog")==null),3_000,"Browser mechanic selection did not finish before the next action");}
 
     private void allowInput() throws Exception {
         if(onMain(() -> permit().allows(gate().epoch(),SystemClock.elapsedRealtime())))return;
