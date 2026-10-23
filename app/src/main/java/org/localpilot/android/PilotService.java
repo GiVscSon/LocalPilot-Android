@@ -951,7 +951,10 @@ public class PilotService extends AccessibilityService {
   try{boolean accepted=dispatchGesture(gesture,new GestureResultCallback(){
    @Override public void onCompleted(GestureDescription g){if(!gestureFlight.complete(flight))return;metrics.record(StageMetrics.Stage.ANDROID_ACK,SystemClock.elapsedRealtimeNanos()-dispatchedNs);busy=false;if((playingJumper||playingGrid)&&epoch==gate.epoch())captureCompleted++;if(!auditAt(SafeJournal.Event.ANDROID_COMPLETED,gestureId,0,epoch)){stop("Ошибка записи ACK");return;}if(epoch!=gate.epoch()){update();return;}String completionRejection=invalidReason(ticket,true);if(completionRejection!=null){failStage(StageMetrics.Stage.ANDROID_ACK,completionRejection,"Контекст изменился после жеста");return;}note="Android завершил жест; игровой исход не проверен";update();if(done!=null)done.run();}
    @Override public void onCancelled(GestureDescription g){if(!gestureFlight.complete(flight))return;metrics.cancelled(StageMetrics.Stage.ANDROID_ACK);busy=false;auditAt(SafeJournal.Event.ANDROID_CANCELLED,gestureId,0,epoch);if(epoch==gate.epoch())stop("Android отменил жест");else update();}
-  },gestureHandler);
+  // The default callback runs directly on the service main thread. A second
+  // Handler hop could put an already delivered ACK behind its watchdog after
+  // a slow framework window query. The watchdog still has its own Handler.
+  },null);
   if(accepted){
    if((playingJumper||playingGrid)&&epoch==gate.epoch())captureSent++;
    // Separate handler survives STOP, so a missing callback cannot leave busy=true forever.
