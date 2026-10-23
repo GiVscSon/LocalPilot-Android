@@ -91,6 +91,8 @@ public final class JumperCaptureConsentActivity extends Activity {
 
     /** The consent UI owns a transient task, so closing it reveals the existing game task. */
     private void finishConsent() {
+        PilotService pilot=PilotService.instance;
+        if(pilot!=null)pilot.captureConsentUiClosed(session);
         if (isTaskRoot()) finishAndRemoveTask();
         else finish();
     }

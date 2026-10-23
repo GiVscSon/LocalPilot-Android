@@ -15,8 +15,8 @@ public final class ArcadeController {
  public void reset(){previous=null;trafficSpeed=.55f;scrollSpeed=.28f;gravity=1.5f;flapVelocity=-.44f;lastFlap=lastLane=-10000;intendedLane=-1;steeringSpeed=1.1f;lastHold=150;continuousSteering=false;}
  /** New episode in the same window: keep learned physics, discard old objects/actions. */
  public void nextRound(){previous=null;lastFlap=lastLane=-10000;intendedLane=-1;}
- /** Penalize the last policy after a terminal/game-over screen. */
- public void penalize(){steeringSpeed=Math.min(2.5f,steeringSpeed*1.04f);flapVelocity=Math.max(-1.2f,flapVelocity*.98f);previous=null;lastFlap=lastLane=-10000;intendedLane=-1;}
+ /** A loss is an outcome, not a measurement of gravity or flap impulse. */
+ public void penalize(){nextRound();}
  public ArcadePolicy.Decision decide(ArcadeObservation s,long now){
   if(s==null||!s.usable()||now<s.timestampMs||now-s.timestampMs>450)return waitFor("Ожидаю свежую игровую сцену");
   if(previous!=null&&(previous.profile!=s.profile||s.timestampMs<previous.timestampMs))reset();
@@ -44,7 +44,16 @@ public final class ArcadeController {
 
  }
  public String report(){return model();}
- public void restore(String saved){if(saved==null||saved.isEmpty())return;try{for(String p:saved.split(" ")){String[] kv=p.split("=",2);if(kv.length!=2)continue;float v=Float.parseFloat(kv[1]);switch(kv[0]){case "roadSpeed":trafficSpeed=v;break;case "scroll":scrollSpeed=v;break;case "gravity":gravity=v;break;case "flap":flapVelocity=v;break;case "steering":steeringSpeed=v;break;}}}catch(RuntimeException ignored){}}
+ public void restore(String saved){
+  if(saved==null||saved.isEmpty())return;
+  float road=trafficSpeed,scroll=scrollSpeed,g=gravity,flap=flapVelocity,steering=steeringSpeed;boolean continuous=continuousSteering;
+  try{for(String p:saved.split(" ")){String[] kv=p.split("=",2);if(kv.length!=2)continue;
+   if(kv[0].equals("continuous")){if(!kv[1].equals("true")&&!kv[1].equals("false"))return;continuous=Boolean.parseBoolean(kv[1]);continue;}
+   float v=Float.parseFloat(kv[1]);if(!Float.isFinite(v))return;
+   switch(kv[0]){case "roadSpeed":if(v<.025f||v>2.5f)return;road=v;break;case "scroll":if(v<.025f||v>2.5f)return;scroll=v;break;case "gravity":if(v<.25f||v>5)return;g=v;break;case "flap":if(v< -1.2f||v> -.15f)return;flap=v;break;case "steering":if(v<.3f||v>2.5f)return;steering=v;break;}
+  }}catch(RuntimeException ignored){return;}
+  trafficSpeed=road;scrollSpeed=scroll;gravity=g;flapVelocity=flap;steeringSpeed=steering;continuousSteering=continuous;
+ }
  public String model(){return "roadSpeed="+trafficSpeed+" scroll="+scrollSpeed+" gravity="+gravity+" flap="+flapVelocity+" steering="+steeringSpeed+" continuous="+continuousSteering;}
  private void learn(ArcadeObservation s,long now){
   if(previous==null)return;
