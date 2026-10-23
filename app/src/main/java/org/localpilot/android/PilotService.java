@@ -197,7 +197,7 @@ public class PilotService extends AccessibilityService {
  }
  private String profileLabel(){if(unsupportedGame)return "Тип игры не поддерживается";return selectedProfile<4?ArcadeProfile.values()[selectedProfile].label:switch(selectedProfile){case 4->"2048";case 5->"Цветной2048";case 6->"Фишки · обмен";default->"Фишки · группы";};}
  private boolean bindSelectedWindow(){
-  if(gate.armed()){String reason=invalidReason(gate.offer(SystemClock.elapsedRealtime()));if(reason==null)return true;stop("Выбранное окно недоступно ["+reason+"] · выберите Окно снова");return false;}
+  if(gate.armed()){String reason=windowRejection(null,false,true);if(reason==null)return true;stop("Выбранное окно недоступно ["+reason+"] · выберите Окно снова");return false;}
   if(explicitWindow){AccessibilityNodeInfo r=appRoot();boolean same=false;try{same=r!=null&&visualOwner.equals(String.valueOf(r.getPackageName()))&&visualWindow==r.getWindowId()&&visualWindowBounds.equals(windowBounds(r));}finally{if(r!=null)r.recycle();}
    if(!same){note="Выбранное окно изменилось. Нажмите Окно и выберите игру";update();return false;}}
   arm();return gate.armed();
@@ -346,7 +346,22 @@ public class PilotService extends AccessibilityService {
  }
  private void failStage(StageMetrics.Stage stage,String code,String message){metrics.failure(stage,code);stop(stage+" / "+code+": "+message);compact(false);}
  private String invalidReason(ActionGate.Ticket t){return invalidReason(t,false);}
- private String invalidReason(ActionGate.Ticket t,boolean completion){if(!gate.armed())return "NOT_BOUND";if(!unlocked())return "DEVICE_LOCKED";AccessibilityNodeInfo r=appRoot();if(r==null)return "TARGET_WINDOW_UNAVAILABLE";Rect b=windowBounds(r);String pkg=String.valueOf(r.getPackageName());int id=r.getWindowId();r.recycle();if(!b.equals(armedBounds))return "TARGET_BOUNDS_CHANGED";return completion?gate.completionRejection(t,SystemClock.elapsedRealtime(),pkg,id,b.width(),b.height()):gate.rejection(t,SystemClock.elapsedRealtime(),pkg,id,b.width(),b.height());}
+ private String invalidReason(ActionGate.Ticket t,boolean completion){return windowRejection(t,completion,false);}
+ /** Read-only notifications observe identity; real inputs always validate their original ticket. */
+ private String windowRejection(ActionGate.Ticket ticket,boolean completion,boolean observationOnly){
+  AccessibilityNodeInfo root=null;
+  try{
+   if(!gate.armed())return "NOT_BOUND";if(!unlocked())return "DEVICE_LOCKED";
+   root=appRoot();if(root==null)return "TARGET_WINDOW_UNAVAILABLE";
+   Rect bounds=windowBounds(root);String pkg=String.valueOf(root.getPackageName());int id=root.getWindowId();
+   if(!unlocked())return "DEVICE_LOCKED";if(!bounds.equals(armedBounds))return "TARGET_BOUNDS_CHANGED";
+   long now=SystemClock.elapsedRealtime();
+   // A slow Binder query is not an expired action in this read-only path.
+   if(observationOnly)ticket=gate.offer(now);
+   return completion?gate.completionRejection(ticket,now,pkg,id,bounds.width(),bounds.height()):gate.rejection(ticket,now,pkg,id,bounds.width(),bounds.height());
+  }catch(RuntimeException error){return "WINDOW_STATE_UNAVAILABLE";}
+  finally{if(root!=null)root.recycle();}
+ }
  private boolean valid(ActionGate.Ticket t){return invalidReason(t)==null;}
  private void manual(int dx,int dy){if(autoLeft>0||playing2048||playingMini||playingJumper||playingGrid){stop("Авторежим остановлен; нажмите ещё раз");return;}if(!gate.armed()){note="Сначала нажмите «Привязать»";update();return;}if(!permit.allows(gate.epoch(),SystemClock.elapsedRealtime())){note="Нажмите «Разрешить ввод» для запуска";update();return;}float x=armedBounds.left+Math.min(.99f,nx/100f)*armedBounds.width(),y=armedBounds.top+Math.min(.99f,ny/100f)*armedBounds.height();send(x,y,x+dx*armedBounds.width()*.18f,y+dy*armedBounds.height()*.18f,gate.offer(SystemClock.elapsedRealtime()),null);}
  private boolean audit(SafeJournal.Event event,long request,long metric){return auditAt(event,request,metric,gate.epoch());}
@@ -1127,10 +1142,16 @@ public class PilotService extends AccessibilityService {
   final long captureNs=SystemClock.elapsedRealtimeNanos();captureBusy=true;long request=SystemClock.elapsedRealtime();final long requestedUptime=SystemClock.uptimeMillis();final long requestId=++captureCounter;pendingCapture=requestId;
   TakeScreenshotCallback callback=new TakeScreenshotCallback(){
    @Override public void onSuccess(ScreenshotResult shot){android.hardware.HardwareBuffer buffer=shot.getHardwareBuffer();if(pendingCapture!=requestId){CaptureCleanup.run(buffer::close);return;}captureBusy=false;Bitmap hardware=null,bitmap=null;boolean captured=false;
-    try{if(epoch!=gate.epoch()||!captureEnabled()){metrics.cancelled(StageMetrics.Stage.CAPTURE);return;}if(!valid(ticket)||boardRoi==null||!roi.equals(boardRoi)||!CaptureFreshness.valid(shot.getTimestamp(),requestedUptime,SystemClock.uptimeMillis(),lastShotTimestamp)){failStage(StageMetrics.Stage.CAPTURE,"STALE_FRAME","Снимок устарел/повторён");return;}lastShotTimestamp=shot.getTimestamp();
+    try{if(epoch!=gate.epoch()||!captureEnabled()){metrics.cancelled(StageMetrics.Stage.CAPTURE);return;}if(boardRoi==null||!roi.equals(boardRoi)||!CaptureFreshness.valid(shot.getTimestamp(),requestedUptime,SystemClock.uptimeMillis(),lastShotTimestamp)){failStage(StageMetrics.Stage.CAPTURE,"STALE_FRAME","Снимок устарел/повторён");return;}long previousTimestamp=lastShotTimestamp;lastShotTimestamp=shot.getTimestamp();
      hardware=Bitmap.wrapHardwareBuffer(buffer,shot.getColorSpace());if(hardware==null)throw new IllegalArgumentException("Нет пикселей");bitmap=hardware.copy(Bitmap.Config.ARGB_8888,false);
      Point size=new Point();wm.getDefaultDisplay().getRealSize(size);if(bitmap.getWidth()!=size.x||bitmap.getHeight()!=size.y)throw new IllegalArgumentException("Масштаб снимка не подтверждён");
      final Bitmap pixels=bitmap;
+     // One final window query after pixel conversion is sufficient; querying the
+     // same Binder tree twice per callback can consume the entire frame budget.
+     String rejection=invalidReason(ticket);
+     if(rejection!=null){failStage(StageMetrics.Stage.CAPTURE,rejection,"Контекст/срок снимка изменился");return;}
+     if(!CaptureFreshness.valid(shot.getTimestamp(),requestedUptime,SystemClock.uptimeMillis(),previousTimestamp)){failStage(StageMetrics.Stage.CAPTURE,"FRAME_TTL_EXPIRED","Обработка кадра превысила TTL");return;}
+     metrics.record(StageMetrics.Stage.CAPTURE,SystemClock.elapsedRealtimeNanos()-captureNs);captured=true;result.ready(pixels,ticket,SystemClock.elapsedRealtime()-request);
      // Board games use Accessibility screenshots rather than MediaProjection.
      // Refresh their preview too, so it cannot keep showing the last arcade.
      long previewAt=SystemClock.elapsedRealtime();
@@ -1139,7 +1160,6 @@ public class PilotService extends AccessibilityService {
       try{diagnosticFrame=Bitmap.createBitmap(roi.width(),roi.height(),Bitmap.Config.ARGB_8888);new Canvas(diagnosticFrame).drawBitmap(pixels,roi,new Rect(0,0,roi.width(),roi.height()),null);diagnosticFrameAt=previewAt;diagnosticFrameGeometry="profile="+profileLabel()+" roi="+roi.toShortString()+" frame_elapsed_ms="+previewAt;}
       catch(RuntimeException|OutOfMemoryError ignored){clearDiagnosticFrame();}
      }
-     if(!valid(ticket)){failStage(StageMetrics.Stage.CAPTURE,"FRAME_TTL_EXPIRED","Обработка кадра превысила TTL");return;}metrics.record(StageMetrics.Stage.CAPTURE,SystemClock.elapsedRealtimeNanos()-captureNs);captured=true;result.ready(pixels,ticket,SystemClock.elapsedRealtime()-request);
     }catch(RuntimeException|OutOfMemoryError error){if(epoch==gate.epoch()){if(!captured)failStage(StageMetrics.Stage.CAPTURE,"BITMAP_FAILED","Не удалось подготовить пиксели");else stop("Ошибка обработки прочитанного кадра · захват остановлен");}}finally{Bitmap oldBitmap=bitmap,oldHardware=hardware;boolean released=CaptureCleanup.run(()->{if(oldBitmap!=null)oldBitmap.recycle();},()->{if(oldHardware!=null)oldHardware.recycle();},buffer::close);if(!released&&epoch==gate.epoch())stop("Ошибка освобождения кадра · захват остановлен");}
    }
    @Override public void onFailure(int error){if(pendingCapture!=requestId)return;captureBusy=false;if(epoch==gate.epoch())failStage(StageMetrics.Stage.CAPTURE,"ANDROID_SCREENSHOT_ERROR","Захват Android: ошибка "+error+". Проверьте доступ службы");}
@@ -1214,7 +1234,7 @@ public class PilotService extends AccessibilityService {
   if(!gate.armed())return;if(playingJumper&&jumperConsentPending)return;
   if(targetIsBrowser&&(playingJumper&&arcadeRoundSeen||playingGrid||playing2048||playingMini)
     &&e.getEventType()==AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED&&target.equals(String.valueOf(e.getPackageName()))){stop("Состояние браузера изменилось · выберите игру и нажмите Старт заново");return;}
-  ActionGate.Ticket t=gate.offer(SystemClock.elapsedRealtime());String reason=invalidReason(t);if(reason!=null)stop("Смена окна/блокировка — STOP ["+reason+"]");
+  String reason=windowRejection(null,false,true);if(reason!=null)stop("Смена окна/блокировка — STOP ["+reason+"]");
  }
  @Override public void onInterrupt(){CrashDiagnostics.phase("SERVICE_INTERRUPTED");stop("Служба прервана");}
  @Override public void onConfigurationChanged(android.content.res.Configuration c){super.onConfigurationChanged(c);stop("Поворот/конфигурация — STOP. Выберите окно игры заново");explicitWindow=false;browserProfileConfirmed=false;visualRoi=null;manualVisualRoi=false;visualOwner="";visualWindow=-1;visualWindowBounds.setEmpty();if(layout!=null){layout.x=0;layout.y=dp(48);updatePanelLayout();}}

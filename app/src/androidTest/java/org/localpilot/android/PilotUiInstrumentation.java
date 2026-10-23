@@ -301,7 +301,11 @@ public final class PilotUiInstrumentation extends Instrumentation {
     private void checkProjectionLifecycle() throws Exception {
         String fixturePackage = getContext().getPackageName();
         onMain(() -> { service.hidePanel(); service.showPanel(); return null; });
-        getContext().startActivity(new Intent().setClassName(fixturePackage, CaptureFixtureActivity.class.getName())
+        // The instrumentation runs with the target app's UID. Its launch caller
+        // must use that app's attribution, while the explicit component remains
+        // in the separate test APK. Android 11 rejects the test context's package
+        // as a caller because it belongs to a different installed UID.
+        getTargetContext().startActivity(new Intent().setClassName(fixturePackage, CaptureFixtureActivity.class.getName())
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK));
         await(() -> markerBounds("LOCALPILOT_CAPTURE_FIXTURE") != null, 5_000, "Isolated projection fixture did not launch");
         onMain(()->{service.selectInstalledTarget(fixturePackage,"Capture acceptance");return null;});

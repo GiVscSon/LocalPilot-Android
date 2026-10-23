@@ -10,6 +10,7 @@ public class GateTest {
   issuerAndSession();
   consumptionContract();
   diagnosticsDoNotChangeAuthority();
+  delayedObservationDoesNotRenewActions();
   System.out.println("PASS "+checks+" gate checks");
  }
 
@@ -117,6 +118,18 @@ public class GateTest {
   check(gate.consume(ticket,102,"game",3,1080,2400));
   check(gate.epoch()==epoch);
   check(gate.matches("game",3,1080,2400));
+ }
+
+ private static void delayedObservationDoesNotRenewActions(){
+  ActionGate gate=armed();ActionGate.Ticket action=gate.offer(100);
+  // Read-only window identity is observed after a slow framework query.
+  ActionGate.Ticket observation=gate.offer(2000);
+  accepted(gate,observation,2000,"game",3,1080,2400);
+  rejected(gate,observation,2000,"other",3,1080,2400,"TARGET_APP_CHANGED");
+  rejected(gate,observation,2000,"game",4,1080,2400,"TARGET_WINDOW_CHANGED");
+  rejected(gate,observation,2000,"game",3,720,1280,"TARGET_BOUNDS_CHANGED");
+  rejected(gate,action,2000,"game",3,1080,2400,"TICKET_EXPIRED");
+  check(!gate.consume(action,2000,"game",3,1080,2400));
  }
 
  private static void accepted(ActionGate gate,ActionGate.Ticket ticket,long now,String app,int window,int width,int height){
