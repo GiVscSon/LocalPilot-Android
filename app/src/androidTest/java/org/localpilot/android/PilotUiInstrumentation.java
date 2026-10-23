@@ -367,7 +367,10 @@ public final class PilotUiInstrumentation extends Instrumentation {
             try {
                 String owner=String.valueOf(root.getPackageName());
                 if(!owner.equals("com.android.systemui")&&!owner.contains("permissioncontroller"))continue;
-                return acceptProjectionDialog(root,0,new int[]{500});
+                // Android 11 may publish the status bar before the separate
+                // SystemUI consent window. A root without a consent button is
+                // not proof that the other system windows have none.
+                if(acceptProjectionDialog(root,0,new int[]{500}))return true;
             } finally { root.recycle(); }
         }
         return false;
