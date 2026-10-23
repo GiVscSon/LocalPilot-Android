@@ -26,6 +26,10 @@ def main():
     try:
         command(['adb', 'install', '-r', 'app/build/outputs/apk/debug/app-debug.apk'])
         command(['adb', 'install', '-r', 'app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk'])
+        command(['adb','shell','settings','put','system','screen_off_timeout','600000'])
+        command(['adb','shell','svc','power','stayon','true'])
+        command(['adb','shell','input','keyevent','KEYCODE_WAKEUP'])
+        command(['adb','shell','wm','dismiss-keyguard'])
         command(['adb', 'shell', 'settings', 'delete', 'secure', 'enabled_accessibility_services'])
         command(['adb', 'shell', 'settings', 'put', 'secure', 'accessibility_enabled', '0'])
         with (OUT / 'instrumentation.txt').open('w', encoding='utf-8') as log:
