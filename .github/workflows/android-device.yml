@@ -1,5 +1,10 @@
 name: Android device acceptance
-on: [workflow_dispatch, push, pull_request]
+on:
+ workflow_dispatch:
+ push:
+  paths: ['app/**', '.github/workflows/android-device.yml', 'tools/run_device_acceptance.py']
+ pull_request:
+  paths: ['app/**', '.github/workflows/android-device.yml', 'tools/run_device_acceptance.py']
 permissions:
  contents: read
 jobs:
@@ -9,7 +14,13 @@ jobs:
   strategy:
    fail-fast: false
    matrix:
-    api: [30, 35]
+    include:
+     - api: 30
+       target: default
+     - api: 35
+       target: default
+     - api: 36
+       target: google_apis
   steps:
    - uses: actions/checkout@v4
    - uses: actions/setup-java@v4
@@ -33,7 +44,7 @@ jobs:
      with:
       api-level: ${{ matrix.api }}
       arch: x86_64
-      target: default
+      target: ${{ matrix.target }}
       profile: pixel_2
       disable-animations: true
       emulator-boot-timeout: 300
