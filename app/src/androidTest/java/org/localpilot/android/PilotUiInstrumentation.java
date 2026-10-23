@@ -196,7 +196,7 @@ public final class PilotUiInstrumentation extends Instrumentation {
         // Score changes at touch delivery, before Android's completion callback.
         // Allow the existing 3s gesture watchdog plus the 2s visual verification
         // window; still require both authority and consent to be revoked.
-        await(() -> onMain(() -> !gate().armed() && intField("autoLeft") == 0
+        await(() -> onMain(() -> !gate().armed() && intField("autoLeft") == 0 && intField("demoVerified")==10
                         && !permit().allows(gate().epoch(),SystemClock.elapsedRealtime())),
                 GestureFlight.TIMEOUT_MS + 2_500,
                 "Completed demo left input armed");
@@ -329,7 +329,7 @@ public final class PilotUiInstrumentation extends Instrumentation {
         await(()->present(ArcadeProfile.ARI.label),6_000,"Reopening a browser before gameplay retained an old mechanic confirmation");
         click(ArcadeProfile.ARI.label);
         awaitBrowserMechanic();
-        click("Окно");click("@contains:" + fixturePackage);
+        bindWindow(fixturePackage);
         long previous = -1;
         for(int cycle=0;cycle<2;cycle++) {
             if(compact())click("Развернуть");
@@ -426,12 +426,15 @@ public final class PilotUiInstrumentation extends Instrumentation {
         click("Ещё");click("Демо ×10");
     }
 
-    private void bindDemoWindow() throws Exception {click("Окно");click("@contains:"+getTargetContext().getPackageName());await(this::armed,3_000,"Window selection did not commit before the next control");}
+    private void bindDemoWindow() throws Exception {bindWindow(getTargetContext().getPackageName());}
+    private void bindWindow(String pkg)throws Exception{click("Окно");click("@contains:"+pkg);await(()->onMain(()->gate().armed()&&pkg.equals(field("target"))&&field("overlayDialog")==null),3_000,"Window selection did not commit before the next control");}
     private void awaitBrowserMechanic()throws Exception{await(()->onMain(()->booleanField("browserProfileConfirmed")&&field("overlayDialog")==null),3_000,"Browser mechanic selection did not finish before the next action");}
 
     private void allowInput() throws Exception {
         if(onMain(() -> permit().allows(gate().epoch(),SystemClock.elapsedRealtime())))return;
-        click("Ещё");click("Включить автоуправление");bindDemoWindow();
+        click("Ещё");click("Включить автоуправление");
+        await(()->onMain(()->getTargetContext().getSharedPreferences(MainActivity.PREF,Context.MODE_PRIVATE).getBoolean("auto_control",false)&&field("overlayDialog")==null),3_000,"Automatic input consent did not commit before rebinding");
+        bindDemoWindow();
         await(() -> onMain(() -> permit().allows(gate().epoch(), SystemClock.elapsedRealtime())),
                 2_000, "Input permission dialog did not grant bounded consent");
     }
