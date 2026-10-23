@@ -18,7 +18,8 @@ final class GameAreaOverlay extends FrameLayout {
  private final Button confirm;
  private GameViewport.Box candidate;
  private float sx,sy;
- private boolean dragging,finished;
+ private float cornerX,cornerY;
+ private boolean dragging,finished,cornerPending;
 
  GameAreaOverlay(Context c,Rect window,Listener listener){this(c,window,4,4,listener);}
  GameAreaOverlay(Context c,Rect bounds,int rows,int cols,Listener listener){
@@ -36,7 +37,7 @@ final class GameAreaOverlay extends FrameLayout {
   confirm=new Button(c);confirm.setText("Готово");confirm.setTextSize(12);confirm.setOnClickListener(v->confirm());
   buttons.addView(confirm,new LinearLayout.LayoutParams(0,dp(44),1));header.addView(buttons);
   message=new TextView(c);message.setTextColor(Color.WHITE);message.setTextSize(12);message.setPadding(dp(8),0,dp(8),dp(4));
-  message.setText("Обведите клетки "+rows+"×"+cols+", затем нажмите «Готово»");header.addView(message);
+  message.setText("Коснитесь двух противоположных углов поля "+rows+"×"+cols+", затем «Готово»");header.addView(message);
   addView(header,new FrameLayout.LayoutParams(-1,-2,Gravity.TOP));
  }
  private int dp(int n){return Math.max(1,(int)(n*getResources().getDisplayMetrics().density));}
@@ -59,6 +60,7 @@ final class GameAreaOverlay extends FrameLayout {
    for(int i=1;i<cols;i++)canvas.drawLine(box.left+box.width()*i/cols,box.top,box.left+box.width()*i/cols,box.bottom,paint);
    for(int i=1;i<rows;i++)canvas.drawLine(box.left,box.top+box.height()*i/rows,box.right,box.top+box.height()*i/rows,paint);
   }
+  if(cornerPending){paint.setColor(Color.YELLOW);paint.setStrokeWidth(dp(2));canvas.drawCircle(cornerX-origin[0],cornerY-origin[1],dp(8),paint);}
  }
  @Override public boolean dispatchTouchEvent(MotionEvent event){
   if(finished)return true;
@@ -74,6 +76,17 @@ final class GameAreaOverlay extends FrameLayout {
    sx=x;sy=y;dragging=true;confirm.setEnabled(false);return true;
   }
   if(dragging&&(event.getActionMasked()==MotionEvent.ACTION_MOVE||event.getActionMasked()==MotionEvent.ACTION_UP)){
+   boolean tap=Math.max(Math.abs(x-sx),Math.abs(y-sy))<dp(8);
+   if(tap){
+    if(event.getActionMasked()==MotionEvent.ACTION_UP){
+     dragging=false;
+     if(!cornerPending){cornerX=x+origin[0];cornerY=y+origin[1];cornerPending=true;candidate=null;message.setText("Первый угол отмечен · коснитесь противоположного угла поля");}
+     else{try{candidate=RegionPickerGeometry.selection(window,0,0,cornerX,cornerY,x+origin[0],y+origin[1]);cornerPending=false;message.setText("Сетка "+rows+"×"+cols+" · нажмите «Готово» или задайте углы заново");}catch(IllegalArgumentException error){candidate=null;message.setText("Второй угол слишком близко · коснитесь противоположного угла");}}
+     confirm.setEnabled(candidate!=null);invalidate();
+    }
+    return true;
+   }
+   cornerPending=false;
    try{
     candidate=RegionPickerGeometry.selection(window,origin[0],origin[1],sx,sy,x,y);
     message.setText("Сетка "+rows+"×"+cols+" · "+candidate.width()+"×"+candidate.height()+" · «Готово» подтвердит область");

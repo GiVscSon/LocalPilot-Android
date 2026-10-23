@@ -262,12 +262,12 @@ public final class PilotUiInstrumentation extends Instrumentation {
         await(()->present("Готово")&&present("STOP · отмена"),3_000,"Region editor did not finish its first layout before dragging");
         automation.waitForIdle(120,3_000);
         Rect selected=markerBounds("LOCALPILOT_BOARD_2048");require(selected!=null,"Visible board geometry missing for manual drag");
-        drag(selected.left,selected.top,selected.right,selected.bottom);
-        require(present("Готово"),"Releasing a region drag confirmed it without explicit Done");
+        tapAt(selected.left,selected.top);tapAt(selected.right,selected.bottom);
+        require(present("Готово"),"Selecting two region corners confirmed it without explicit Done");
         require(touchOwnControl("Готово"),"Done could not be tapped below system bars");
         await(()->onMain(()->booleanField("manualVisualRoi")&&selected.equals(field("visualRoi"))),3_000,"Manual grid confirmation did not preserve the actual screen coordinates");
         require(!onMain(()->booleanField("playing2048")),"Confirming a region silently started gameplay");
-        addCheck("manual_2048_drag_and_explicit_done",new JSONObject().put("bounds",selected.toShortString()).put("input","real touch events"));
+        addCheck("manual_2048_two_corners_and_explicit_done",new JSONObject().put("bounds",selected.toShortString()).put("input","real touch events"));
 
         onMain(() -> { service.hidePanel(); return null; });
         Board2048 before = read2048Screenshot();
@@ -494,12 +494,15 @@ public final class PilotUiInstrumentation extends Instrumentation {
     }
     private boolean touchOwnControl(String text)throws Exception{
         Rect rect=onMain(()->ownControlBounds(text));if(rect==null)return false;
+        return tapAt(rect.centerX(),rect.centerY());
+    }
+    private boolean tapAt(float x,float y)throws Exception{
         long down=SystemClock.uptimeMillis();
-        android.view.MotionEvent start=android.view.MotionEvent.obtain(down,down,android.view.MotionEvent.ACTION_DOWN,rect.centerX(),rect.centerY(),0);
+        android.view.MotionEvent start=android.view.MotionEvent.obtain(down,down,android.view.MotionEvent.ACTION_DOWN,x,y,0);
         start.setSource(android.view.InputDevice.SOURCE_TOUCHSCREEN);
         boolean accepted;try{accepted=automation.injectInputEvent(start,true);}finally{start.recycle();}
         SystemClock.sleep(60);
-        android.view.MotionEvent end=android.view.MotionEvent.obtain(down,SystemClock.uptimeMillis(),android.view.MotionEvent.ACTION_UP,rect.centerX(),rect.centerY(),0);
+        android.view.MotionEvent end=android.view.MotionEvent.obtain(down,SystemClock.uptimeMillis(),android.view.MotionEvent.ACTION_UP,x,y,0);
         end.setSource(android.view.InputDevice.SOURCE_TOUCHSCREEN);
         try{return automation.injectInputEvent(end,true)&&accepted;}finally{end.recycle();}
     }
