@@ -65,9 +65,7 @@ public final class PilotUiInstrumentation extends Instrumentation {
             automation.setServiceInfo(info);
             // am instrument restarts the target process. The isolated CI runner enables
             // our Accessibility service only after UiAutomation has attached here.
-            File readyDirectory=getTargetContext().getExternalFilesDir("instrumentation");
-            if(readyDirectory==null||!readyDirectory.isDirectory()&&!readyDirectory.mkdirs())throw new IllegalStateException("Cannot create test readiness directory");
-            Files.write(new File(readyDirectory,"pilot-ui-ready.txt").toPath(),new byte[]{'1'});
+            Bundle ready=new Bundle();ready.putString("localpilot_ready","1");sendStatus(1,ready);
             evidence.put("package", getTargetContext().getPackageName());
             evidence.put("scope", "native launcher/picker/overlay, DemoActivity real touches, rotation STOP, and screenshot-verified built-in 2048; not arbitrary external-game acceptance");
             evidence.put("setup", "showPanel/hidePanel use public service API; gameplay starts only through visible UI");
@@ -120,6 +118,8 @@ public final class PilotUiInstrumentation extends Instrumentation {
                 result.putString("evidence_error", error.toString());
                 passed = false;
             }
+            try{evidence.put("result",passed?"PASS":"FAIL");result.putString("evidence_json",evidence.toString());}
+            catch(org.json.JSONException error){result.putString("result","FAIL");passed=false;}
             finish(passed ? Activity.RESULT_OK : Activity.RESULT_CANCELED, result);
         }
     }

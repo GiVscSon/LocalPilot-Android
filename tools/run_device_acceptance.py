@@ -28,8 +28,6 @@ def main():
         command(['adb', 'install', '-r', 'app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk'])
         command(['adb', 'shell', 'settings', 'delete', 'secure', 'enabled_accessibility_services'])
         command(['adb', 'shell', 'settings', 'put', 'secure', 'accessibility_enabled', '0'])
-        ready='/sdcard/Android/data/org.localpilot.android.dev/files/instrumentation/pilot-ui-ready.txt'
-        command(['adb', 'shell', 'rm', '-f', ready])
         with (OUT / 'instrumentation.txt').open('w', encoding='utf-8') as log:
             with subprocess.Popen(['adb', 'shell', 'am', 'instrument', '-w',
                                    'org.localpilot.android.dev.test/org.localpilot.android.PilotUiInstrumentation'],
@@ -37,8 +35,8 @@ def main():
                 try:
                     deadline=time.monotonic()+20
                     while True:
-                        exists=subprocess.run(['adb','shell','test','-f',ready],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,timeout=5).returncode==0
-                        if exists:break
+                        status=(OUT/'instrumentation.txt').read_text(encoding='utf-8',errors='replace')
+                        if 'INSTRUMENTATION_STATUS: localpilot_ready=1' in status:break
                         if process.poll() is not None or time.monotonic()>=deadline:
                             raise RuntimeError('Instrumentation did not attach UiAutomation\n'+(OUT/'instrumentation.txt').read_text()[-2500:])
                         time.sleep(.2)
@@ -49,9 +47,12 @@ def main():
                     if process.returncode:raise RuntimeError('Instrumentation process failed\n'+(OUT/'instrumentation.txt').read_text()[-2500:])
                 finally:
                     if process.poll() is None:process.kill();process.wait(timeout=5)
-        command(['adb', 'pull', '/sdcard/Android/data/org.localpilot.android.dev/files/instrumentation/pilot-ui-evidence.json',
-                 str(OUT / 'pilot-ui-evidence.json')])
-        report = json.loads((OUT / 'pilot-ui-evidence.json').read_text(encoding='utf-8'))
+        output=(OUT/'instrumentation.txt').read_text(encoding='utf-8',errors='replace')
+        prefix='INSTRUMENTATION_RESULT: evidence_json='
+        payload=next((line[len(prefix):] for line in output.splitlines() if line.startswith(prefix)),None)
+        if payload is None:raise RuntimeError('No final instrumentation report\n'+output[-3500:])
+        report=json.loads(payload)
+        (OUT/'pilot-ui-evidence.json').write_text(json.dumps(report,indent=2),encoding='utf-8')
         print(json.dumps(report, indent=2), flush=True)
         if report.get('result') != 'PASS':
             raise RuntimeError(str(report.get('failure', report.get('evidence_error', 'No PASS result')))
