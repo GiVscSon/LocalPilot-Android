@@ -15,7 +15,6 @@ public class MainActivity extends Activity {
   button(box,"Включить управление",()->startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)));
   button(box,"Показать панель",()->{PilotService pilot=PilotService.instance;if(pilot==null){toast(CrashDiagnostics.connectionHint(this));return;}pilot.recoverPanel();status.setText(CrashDiagnostics.connectionHint(this));});
   TextView panelHelp=new TextView(this);panelHelp.setText("Панель можно свернуть. STOP всегда остаётся доступным.");box.addView(panelHelp);
-  button(box,"Показать панель",()->{if(PilotService.instance!=null)PilotService.instance.showPanel();else toast("Сначала включите службу");});
   button(box,"Web · варианты обучения",()->startActivity(new Intent(this,WebLearningActivity.class)));
   button(box,"Аркады · обучать нейросеть",()->startActivity(new Intent(this,TrainingActivity.class)));
   automatic=new Switch(this);automatic.setText("Автоуправление выбранной игрой");automatic.setChecked(getSharedPreferences(PREF,MODE_PRIVATE).getBoolean("auto_control",true));automatic.setOnCheckedChangeListener((v,on)->{getSharedPreferences(PREF,MODE_PRIVATE).edit().putBoolean("auto_control",on).apply();if(PilotService.instance!=null)PilotService.instance.setAutomatic(on);});box.addView(automatic);

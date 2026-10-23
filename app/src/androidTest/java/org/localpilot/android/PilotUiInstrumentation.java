@@ -244,6 +244,12 @@ public final class PilotUiInstrumentation extends Instrumentation {
     private void check2048ScreenshotProgress() throws Exception {
         onMain(() -> { service.hidePanel(); return null; });
         launch(MainActivity.class);
+        // The real launcher intentionally starts a selected built-in game when
+        // automatic control is enabled. Configure observation through its visible
+        // switch first so this manual-region scenario starts from a stopped game.
+        if(onMain(()->getTargetContext().getSharedPreferences(MainActivity.PREF,Context.MODE_PRIVATE).getBoolean("auto_control",true)))
+            click("Автоуправление выбранной игрой");
+        await(()->onMain(()->!getTargetContext().getSharedPreferences(MainActivity.PREF,Context.MODE_PRIVATE).getBoolean("auto_control",true)),3_000,"Launcher observation mode did not commit");
         ActivityMonitor game = addMonitor(Game2048Activity.class.getName(), null, false);
         try {
             click("Открыть 2048");
