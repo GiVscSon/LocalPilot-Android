@@ -256,7 +256,7 @@ public class PilotService extends AccessibilityService {
  }
 
 
- @Override protected void onServiceConnected(){instance=this;try{experience=new ExperienceStore(new java.io.File(getFilesDir(),"experience-v1.log"));}catch(java.io.IOException e){experience=null;}try{arcadeLearning=new ArcadeLearningStore(new java.io.File(getFilesDir(),"arcade-learning-v1.log"));}catch(java.io.IOException e){arcadeLearning=null;}try{journal=new RotatingJournal(new java.io.File(getFilesDir(),"audit-segments"),new java.io.File(getFilesDir(),"audit-v1.log"));}catch(java.io.IOException e){journal=null;}wm=(WindowManager)getSystemService(WINDOW_SERVICE);gate.stop();showPanel();}
+ @Override protected void onServiceConnected(){CrashDiagnostics.phase("SERVICE_CONNECTED");instance=this;try{experience=new ExperienceStore(new java.io.File(getFilesDir(),"experience-v1.log"));}catch(java.io.IOException e){experience=null;}try{arcadeLearning=new ArcadeLearningStore(new java.io.File(getFilesDir(),"arcade-learning-v1.log"));}catch(java.io.IOException e){arcadeLearning=null;}try{journal=new RotatingJournal(new java.io.File(getFilesDir(),"audit-segments"),new java.io.File(getFilesDir(),"audit-v1.log"));}catch(java.io.IOException e){journal=null;}wm=(WindowManager)getSystemService(WINDOW_SERVICE);gate.stop();showPanel();}
  public void showPanel(){selectedProfile=Math.max(0,Math.min(7,getSharedPreferences("panel",MODE_PRIVATE).getInt("profile",0)));if(panel!=null){compact(false);return;}gate.stop();panelCompact=false;controls=null;manualControls.clear();panel=new LinearLayout(this);panel.setOrientation(LinearLayout.VERTICAL);panel.setPadding(8,4,8,4);panel.setBackgroundColor(0xEE202830);
   TextView header=new TextView(this);header.setText("LocalPilot · тянуть здесь");header.setTextColor(Color.WHITE);panel.addView(header);
   header.setOnTouchListener(new View.OnTouchListener(){float x,y;int ox,oy;public boolean onTouch(View v,android.view.MotionEvent e){if(e.getAction()==MotionEvent.ACTION_DOWN){x=e.getRawX();y=e.getRawY();ox=layout.x;oy=layout.y;return true;}if(e.getAction()==MotionEvent.ACTION_MOVE){layout.x=Math.max(0,ox+(int)(e.getRawX()-x));layout.y=Math.max(0,oy+(int)(e.getRawY()-y));wm.updateViewLayout(panel,layout);return true;}return true;}});
@@ -297,6 +297,7 @@ public class PilotService extends AccessibilityService {
   if(!reason.startsWith("Экспорт"))lastStopReason=reason;
   if(playingJumper||playingGrid||gate.armed()||autoLeft>0)lastSessionReport=diagnosticState();
   permit.revoke();gate.stop();
+  if(playingJumper)CrashDiagnostics.captureStopped();
   // Save measured physics before reset, including measurements made while no
   // gesture was needed. Stopping a session is not a new round loss.
   if(playingJumper&&jumperCaptureReady)persistArcadeModel(false);
@@ -624,6 +625,7 @@ public class PilotService extends AccessibilityService {
  public void onJumperCaptureReady(long id,int width,int height){Runnable ready=()->{
   if(!captureStartup.move(id,CaptureStartup.Stage.SERVICE,CaptureStartup.Stage.FIRST_FRAME,SystemClock.elapsedRealtime()))return;
   if(!playingJumper){stopService(new Intent(this,JumperCaptureService.class));return;}
+  CrashDiagnostics.phase("CAPTURE_READY");
   jumperDisplayWidth=width;jumperDisplayHeight=height;
   jumperConsentPending=true;jumperCaptureReady=true;jumperLastFrameMs=SystemClock.elapsedRealtime();
   arcadeCaptureReadyAt=jumperLastFrameMs;
@@ -680,7 +682,7 @@ public class PilotService extends AccessibilityService {
     JumperState result=detected;RuntimeException error=failure;
     handler.post(()->{if(scene==arcadeSceneGeneration)finishJumperFrame(epoch,timestampMs,started,result,error);});
    });}catch(RuntimeException error){jumperVisionPending=false;if(!frame.isRecycled())frame.recycle();failStage(StageMetrics.Stage.READ,"VISION_WORKER_UNAVAILABLE","Не удалось запустить распознавание");}
-   }catch(RuntimeException|OutOfMemoryError error){if(!frame.isRecycled())frame.recycle();CrashDiagnostics.phase("FRAME_UI_"+error.getClass().getSimpleName());stop("Ошибка обработки кадра · захват остановлен. Откройте диагностику для проверки");}
+   }catch(RuntimeException|OutOfMemoryError error){if(!frame.isRecycled())frame.recycle();CrashDiagnostics.phase(ProcessExitMetadata.frameFailurePhase(error));stop("Ошибка обработки кадра · захват остановлен. Откройте диагностику для проверки");}
   });
   if(!posted){boolean removed;synchronized(jumperFrameLock){removed=jumperQueuedFrames.remove(frame);}if(removed&&!frame.isRecycled())frame.recycle();}
  }
@@ -1157,7 +1159,7 @@ public class PilotService extends AccessibilityService {
     &&e.getEventType()==AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED&&target.equals(String.valueOf(e.getPackageName()))){stop("Состояние браузера изменилось · выберите игру и нажмите Старт заново");return;}
   ActionGate.Ticket t=gate.offer(SystemClock.elapsedRealtime());String reason=invalidReason(t);if(reason!=null)stop("Смена окна/блокировка — STOP ["+reason+"]");
  }
- @Override public void onInterrupt(){stop("Служба прервана");}
+ @Override public void onInterrupt(){CrashDiagnostics.phase("SERVICE_INTERRUPTED");stop("Служба прервана");}
  @Override public void onConfigurationChanged(android.content.res.Configuration c){super.onConfigurationChanged(c);stop("Поворот/конфигурация — STOP");}
- @Override public void onDestroy(){hidePanel();clearDiagnosticFrame();gestureFlight.clear();gestureHandler.removeCallbacksAndMessages(null);visionWorker.shutdownNow();instance=null;super.onDestroy();}
+ @Override public void onDestroy(){CrashDiagnostics.phase("SERVICE_DESTROYED");hidePanel();clearDiagnosticFrame();gestureFlight.clear();gestureHandler.removeCallbacksAndMessages(null);visionWorker.shutdownNow();instance=null;super.onDestroy();}
 }

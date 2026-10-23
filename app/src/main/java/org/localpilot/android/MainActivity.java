@@ -10,7 +10,7 @@ public class MainActivity extends Activity {
   void close(){if(frame!=null&&!frame.isRecycled())frame.recycle();}
  }
  @Override public void onCreate(Bundle b){super.onCreate(b);Object retained=getLastNonConfigurationInstance();if(retained instanceof DiagnosticRequest)diagnosticRequest=(DiagnosticRequest)retained;LinearLayout box=new LinearLayout(this);box.setOrientation(LinearLayout.VERTICAL);box.setPadding(24,24,24,24);ScrollView scroll=new ScrollView(this);scroll.addView(box);setContentView(scroll);
-  TextView title=new TextView(this);title.setText("LocalPilot Android"+(getPackageName().endsWith(".dev")?" Dev":"")+" · 0.7.20\nАркады и головоломки на телефоне");title.setTextSize(24);box.addView(title);
+  TextView title=new TextView(this);title.setText("LocalPilot Android"+(getPackageName().endsWith(".dev")?" Dev":"")+" · "+CrashDiagnostics.buildLabel(this)+"\nАркады и головоломки на телефоне");title.setTextSize(24);box.addView(title);
   TextView help=new TextView(this);help.setText("1. Откройте игру и выберите её профиль: «Игра».\n2. Нажмите «Окно» и выберите приложение с игрой.\n3. Нажмите «Старт» и разрешите показ экрана.\n\nSTOP останавливает игру агента. В первый раз включите управление кнопкой ниже.");box.addView(help);
   button(box,"Включить управление",()->startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)));
   TextView panelHelp=new TextView(this);panelHelp.setText("Панель можно свернуть. STOP всегда остаётся доступным.");box.addView(panelHelp);
@@ -31,12 +31,12 @@ public class MainActivity extends Activity {
   button(box,"Отчёт с кадром игры",this::beginDiagnosticReport);
   button(box,"Экспорт задержек",()->{if(PilotService.instance==null){toast("Сначала включите службу");return;}PilotService.instance.exportMetrics();startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT).setType("text/plain").addCategory(Intent.CATEGORY_OPENABLE).putExtra(Intent.EXTRA_TITLE,"localpilot-latency.txt"),10);});
   button(box,"Экспорт диагностики сбоя",()->startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT).setType("text/plain").addCategory(Intent.CATEGORY_OPENABLE).putExtra(Intent.EXTRA_TITLE,"localpilot-crash.txt"),13));
-  button(box,"Экспорт журнала",()->startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT).setType("application/zip").addCategory(Intent.CATEGORY_OPENABLE).putExtra(Intent.EXTRA_TITLE,"localpilot-audit.zip"),9));
+  button(box,"Экспорт журнала",this::beginAuditExport);
   button(box,"STOP и убрать панель",()->{if(PilotService.instance!=null)PilotService.instance.hidePanel();});
   status=new TextView(this);box.addView(status);
  }
  private void openGame(Intent intent,String label){startActivity(intent);if(PilotService.instance!=null)PilotService.instance.selectInstalledTarget(getPackageName(),label);}
- @Override public void onResume(){super.onResume();if(automatic!=null)automatic.setChecked(getSharedPreferences(PREF,MODE_PRIVATE).getBoolean("auto_control",true));if(status!=null)status.setText(PilotService.instance==null?"Служба не подключена; обучение в симуляторах доступно":"Служба подключена · выберите игру или обучение");}
+ @Override public void onResume(){super.onResume();if(automatic!=null)automatic.setChecked(getSharedPreferences(PREF,MODE_PRIVATE).getBoolean("auto_control",true));if(status!=null)status.setText(CrashDiagnostics.connectionHint(this));}
  private void beginDiagnosticReport(){
   if(diagnosticRequest!=null)diagnosticRequest.close();
   PilotService pilot=PilotService.instance;android.graphics.Bitmap frame=pilot==null?null:pilot.copyDiagnosticFrame();
@@ -80,8 +80,59 @@ public class MainActivity extends Activity {
  @Override protected void onDestroy(){if(!isChangingConfigurations()&&diagnosticRequest!=null){diagnosticRequest.close();diagnosticRequest=null;}super.onDestroy();}
  @Override protected void onActivityResult(int request,int result,Intent data){super.onActivityResult(request,result,data);
   if(request==REPORT){finishDiagnosticReport(result,data);return;}
-  if(request==13){if(result==RESULT_OK&&data!=null&&data.getData()!=null){final android.net.Uri uri=data.getData();new Thread(()->{try{byte[] report=CrashDiagnostics.report(getApplicationContext()).getBytes(java.nio.charset.StandardCharsets.UTF_8);try(java.io.OutputStream out=getContentResolver().openOutputStream(uri)){if(out==null)throw new java.io.IOException();out.write(report);}runOnUiThread(()->toast("Диагностика сбоя сохранена"));}catch(java.io.IOException|RuntimeException e){runOnUiThread(()->toast("Не удалось сохранить диагностику сбоя"));}},"LocalPilot-Crash-Export").start();}return;}
-  if((request!=9&&request!=10&&request!=11&&request!=12)||result!=RESULT_OK||data==null)return;try{if(request==11||request==12){if(PilotService.instance==null){toast("Сначала включите службу");return;}if(request==11){byte[] samples=PilotService.instance.exportExamples();try(java.io.OutputStream out=getContentResolver().openOutputStream(data.getData())){if(out==null)throw new java.io.IOException();out.write(samples);}toast("Примеры экспортированы, ввод остановлен");}else{try(java.io.InputStream in=getContentResolver().openInputStream(data.getData())){if(in==null)throw new java.io.IOException();int count=PilotService.instance.restoreExamples(ExperienceStore.bounded(in));toast("Восстановлено примеров: "+count+". Сбор и ввод выключены");}}return;}if(request==10){if(PilotService.instance==null){toast("Служба отключена: замеры RAM недоступны");return;}byte[] metrics=PilotService.instance.exportMetrics().getBytes(java.nio.charset.StandardCharsets.UTF_8);try(java.io.OutputStream out=getContentResolver().openOutputStream(data.getData())){if(out==null)throw new java.io.IOException("Нет файла");out.write(metrics);}toast("Замеры экспортированы, ввод остановлен");return;}byte[] bytes=PilotService.instance!=null?PilotService.instance.exportAudit():new SafeJournal(new java.io.File(getFilesDir(),"audit-v1.log")).snapshot();try(java.io.OutputStream out=getContentResolver().openOutputStream(data.getData())){if(out==null)throw new java.io.IOException("Нет файла");out.write(bytes);}toast("Экспортирован журнал метаданных без снимков");}catch(java.io.IOException e){toast("Операция не выполнена; существующие данные сохранены");}}
+  if(request==9){finishAuditExport(result,data);return;}
+  if(request==13){
+   if(result==RESULT_OK&&data!=null&&data.getData()!=null){
+    final android.net.Uri uri=data.getData();
+    new Thread(()->{
+     try{
+      byte[] report=CrashDiagnostics.report(getApplicationContext()).getBytes(java.nio.charset.StandardCharsets.UTF_8);
+      try(java.io.OutputStream out=getContentResolver().openOutputStream(uri)){if(out==null)throw new java.io.IOException();out.write(report);}
+      runOnUiThread(()->toast("Диагностика сбоя сохранена"));
+     }catch(java.io.IOException|RuntimeException e){runOnUiThread(()->toast("Не удалось сохранить диагностику сбоя"));}
+    },"LocalPilot-Crash-Export").start();
+   }return;
+  }
+  if((request!=10&&request!=11&&request!=12)||result!=RESULT_OK||data==null||data.getData()==null)return;
+  try{
+   PilotService pilot=PilotService.instance;
+   if(pilot==null){toast("Служба отключена: данные RAM недоступны");return;}
+   if(request==11){
+    byte[] samples=pilot.exportExamples();
+    try(java.io.OutputStream out=getContentResolver().openOutputStream(data.getData())){if(out==null)throw new java.io.IOException();out.write(samples);}
+    toast("Примеры экспортированы, ввод остановлен");return;
+   }
+   if(request==12){
+    try(java.io.InputStream in=getContentResolver().openInputStream(data.getData())){
+     if(in==null)throw new java.io.IOException();int count=pilot.restoreExamples(ExperienceStore.bounded(in));
+     toast("Восстановлено примеров: "+count+". Сбор и ввод выключены");
+    }return;
+   }
+   byte[] metrics=pilot.exportMetrics().getBytes(java.nio.charset.StandardCharsets.UTF_8);
+   try(java.io.OutputStream out=getContentResolver().openOutputStream(data.getData())){if(out==null)throw new java.io.IOException("Нет файла");out.write(metrics);}
+   toast("Замеры экспортированы, ввод остановлен");
+  }catch(java.io.IOException|RuntimeException e){toast("Операция не выполнена; исходные данные сохранены");}
+ }
+ private void beginAuditExport(){
+  PilotService pilot=PilotService.instance;if(pilot!=null)pilot.exportDiagnosticState();
+  try{startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT).setType("application/zip").addCategory(Intent.CATEGORY_OPENABLE).putExtra(Intent.EXTRA_TITLE,"localpilot-audit.zip"),9);}
+  catch(RuntimeException e){toast("Не удалось открыть сохранение журнала");}
+ }
+ private void finishAuditExport(int result,Intent data){
+  if(result!=RESULT_OK||data==null||data.getData()==null)return;
+  final android.net.Uri uri=data.getData();
+  // The picker may return after process/service restart. Read existing disk logs,
+  // without requiring a live service, creating a writer or truncating the source.
+  new Thread(()->{
+   try{
+    byte[] bytes=AuditExport.snapshot(getFilesDir());
+    try(java.io.OutputStream out=getContentResolver().openOutputStream(uri)){if(out==null)throw new java.io.IOException("Нет файла");out.write(bytes);}
+    runOnUiThread(()->toast("ZIP журнала сохранён. При отсутствии событий это явно указано внутри"));
+   }catch(java.io.IOException|RuntimeException|OutOfMemoryError error){
+    runOnUiThread(()->toast("Экспорт не завершён; файл назначения может быть неполным. Исходные журналы сохранены"));
+   }
+  },"LocalPilot-Audit-Export").start();
+ }
  private void button(LinearLayout b,String t,Runnable r){Button x=new Button(this);x.setText(t);x.setOnClickListener(v->r.run());b.addView(x);}
  private void toast(String s){Toast.makeText(this,s,Toast.LENGTH_LONG).show();}
 }
