@@ -8,10 +8,12 @@ public final class SceneRecovery {
   Pass(int percent,String label){this.percent=percent;this.label=label;}
  }
  private Pass pass=Pass.ORIGINAL;
- private long lastFrame=-1,totalMissing;
+ private long lastFrame=-1,totalMissing,missingSince=-1;
  private int modeMisses,goodFrames;
  private boolean searching=true;
- public void reset(){pass=Pass.ORIGINAL;lastFrame=-1;totalMissing=0;modeMisses=goodFrames=0;searching=true;}
+ public void reset(){pass=Pass.ORIGINAL;lastFrame=-1;totalMissing=0;missingSince=-1;modeMisses=goodFrames=0;searching=true;}
+ /** Long unknown scenes require explicit profile/region selection, not endless full-speed capture. */
+ public boolean selectionRequired(){return searching&&goodFrames==0&&missingSince>=0&&lastFrame-missingSince>=6000;}
  public Pass pass(){return pass;}
  public boolean searching(){return searching;}
  /** Two distinct usable frames are required initially and after any scene loss. */
@@ -19,13 +21,14 @@ public final class SceneRecovery {
   if(timestamp<0||timestamp<=lastFrame)return false;
   lastFrame=timestamp;
   if(!usable){
+   if(missingSince<0)missingSince=timestamp;
    searching=true;goodFrames=0;totalMissing=Math.min(999999,totalMissing+1);
    if(++modeMisses>=4){pass=Pass.values()[(pass.ordinal()+1)%Pass.values().length];modeMisses=0;}
    return false;
   }
   goodFrames=Math.min(2,goodFrames+1);
   if(goodFrames<2)return false;
-  modeMisses=0;searching=false;return true;
+  modeMisses=0;searching=false;missingSince=-1;return true;
  }
  public String status(){return searching?(goodFrames==1?"Сцена найдена · подтверждаю следующим кадром":"Ищу сцену · попытка "+totalMissing+" · "+pass.label):"Сцена подтверждена";}
  public String report(){return "SCENE RECOVERY: mode="+pass+" missing="+totalMissing+" consecutive="+goodFrames+" searching="+searching;}

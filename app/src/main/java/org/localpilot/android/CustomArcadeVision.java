@@ -4,16 +4,21 @@ import java.util.*;
 /** Bounded colour segmentation for calibrated, visually distinct 2-D objects. */
 public final class CustomArcadeVision {
  public interface Pixels {int get(int x,int y);}
+ private static final class Scratch {
+  final int[] rgb=new int[160*240],queue=new int[160*240];
+  final boolean[] excluded=new boolean[160*240],seen=new boolean[160*240];
+ }
+ private static final ThreadLocal<Scratch> WORK=ThreadLocal.withInitial(Scratch::new);
  private CustomArcadeVision(){}
  public static ArcadeObservation detect(ArcadeProfile profile,Pixels pixels,int left,int top,int right,int bottom,
     int el,int et,int er,int eb,long time,ArcadeObservation previous,CustomVisionConfig config){
   if(profile==null||profile==ArcadeProfile.ARI||pixels==null||config==null||left<0||top<0||right-left<40||bottom-top<40||time<0)throw new IllegalArgumentException("custom vision context");
-  int w=Math.min(160,right-left),h=Math.min(240,bottom-top),n=w*h;int[] rgb=new int[n];boolean[] excluded=new boolean[n];
+  int w=Math.min(160,right-left),h=Math.min(240,bottom-top),n=w*h;Scratch work=WORK.get();int[] rgb=work.rgb;boolean[] excluded=work.excluded;
   for(int yy=0;yy<h;yy++)for(int xx=0;xx<w;xx++){int x=left+xx*(right-left)/w,y=top+yy*(bottom-top)/h,i=yy*w+xx;excluded[i]=x>=el&&x<er&&y>=et&&y<eb;rgb[i]=pixels.get(x,y);}
-  List<ArcadeObservation.Box> own=blobs(rgb,excluded,w,h,config.colors[0]);
+  List<ArcadeObservation.Box> own=blobs(rgb,excluded,w,h,config.colors[0],work);
   ArcadeObservation.Box player=choose(own,previous==null?null:previous.player,config.x[0],config.y[0],false);
-  List<ArcadeObservation.Box> second=blobs(rgb,excluded,w,h,config.colors[1]);
-  List<ArcadeObservation.Box> third=blobs(rgb,excluded,w,h,config.colors[2]);
+  List<ArcadeObservation.Box> second=blobs(rgb,excluded,w,h,config.colors[1],work);
+  List<ArcadeObservation.Box> third=blobs(rgb,excluded,w,h,config.colors[2],work);
   ArcadeObservation.Box control=profile==ArcadeProfile.PADDLE?choose(second,previous==null?null:previous.control,config.x[1],config.y[1],true):player;
   List<ArcadeObservation.Box> obstacles=new ArrayList<>();
   if(profile!=ArcadeProfile.PADDLE){for(var b:second)add(obstacles,b,player);for(var b:third)add(obstacles,b,player);}
@@ -36,8 +41,8 @@ public final class CustomArcadeVision {
   return new ArcadeObservation(profile,time,player,control,obstacles,0,0,1,1,gapTop,gapBottom,vx,vy,usable?.85f:0,tracked,false);
  }
  private static boolean matches(int a,int b){int dr=(a>>16&255)-(b>>16&255),dg=(a>>8&255)-(b>>8&255),db=(a&255)-(b&255);return dr*dr+dg*dg+db*db<=48*48;}
- private static List<ArcadeObservation.Box> blobs(int[] rgb,boolean[] excluded,int w,int h,int color){
-  int n=w*h;boolean[] seen=new boolean[n];int[] q=new int[n];List<ArcadeObservation.Box> out=new ArrayList<>();
+ private static List<ArcadeObservation.Box> blobs(int[] rgb,boolean[] excluded,int w,int h,int color,Scratch work){
+  int n=w*h;boolean[] seen=work.seen;Arrays.fill(seen,0,n,false);int[] q=work.queue;List<ArcadeObservation.Box> out=new ArrayList<>();
   for(int start=0;start<n;start++){
    if(seen[start]||excluded[start]||!matches(rgb[start],color))continue;
    int head=0,tail=1,l=start%w,r=l,t=start/w,b=t;q[0]=start;seen[start]=true;

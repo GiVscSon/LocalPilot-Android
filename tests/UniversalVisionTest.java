@@ -13,6 +13,11 @@ public final class UniversalVisionTest {
  }
  private static CustomVisionConfig config(ArcadeProfile p,int[] c){return switch(p){case PADDLE->new CustomVisionConfig(c,new float[]{.675f,.375f,.7f},new float[]{.325f,.875f,.12f});case TRAFFIC->new CustomVisionConfig(c,new float[]{.5f,.5f,.8f},new float[]{.82f,.43f,.16f});default->new CustomVisionConfig(c,new float[]{.15f,.66f,.66f},new float[]{.48f,.2f,.8f});};}
  public static void main(String[]args)throws Exception{
+  check(VisualGameTarget.requiresProfileChoice(-1,false,false),"new application cannot inherit global Market profile");
+  check(VisualGameTarget.requiresProfileChoice(2,true,false),"browser start requires explicit mechanic confirmation");
+  check(!VisualGameTarget.requiresProfileChoice(2,true,true),"confirmed browser mechanic can start");
+  check(!VisualGameTarget.requiresProfileChoice(7,false,false),"saved native game mechanic can restore");
+  check(!VisualGameTarget.selectionKey("com.browser.app","one").equals(VisualGameTarget.selectionKey("com.browser.app","two")),"named browser games keep independent choices");
   int[][] palettes={{0xff20c0,0x20e0e0,0xff9020},{0xf0e020,0x20d030,0x3060f0},{0xffb0e0,0x305020,0xb030f0}};
   for(var p:new ArcadeProfile[]{ArcadeProfile.PADDLE,ArcadeProfile.TRAFFIC,ArcadeProfile.FLAPPY})for(int[] colors:palettes)for(int w:new int[]{160,320,480}){
    int h=w*2,l=30,t=20;CustomVisionConfig conf=config(p,colors);
@@ -35,6 +40,13 @@ public final class UniversalVisionTest {
    check(conf.encode().equals(CustomVisionConfig.decode(conf.encode()).encode()),"visual config roundtrip");
   }
   int[] c=palettes[0];var conf=new CustomVisionConfig(c,new float[]{.5f,.7f,.7f},new float[]{.5f,.2f,.8f});
+  for(int width:new int[]{160,80,40,160}){
+   final int size=width;
+   var read=CustomArcadeVision.detect(ArcadeProfile.TRAFFIC,(x,y)->scene(ArcadeProfile.TRAFFIC,x/(float)size,y/(float)(size*2),c,0),0,0,size,size*2,0,0,0,0,1000,null,config(ArcadeProfile.TRAFFIC,c));
+   check(read.usable(),"scratch buffer reset across changing dimensions "+size);
+   var blank=CustomArcadeVision.detect(ArcadeProfile.TRAFFIC,(x,y)->0xff202020,0,0,size,size*2,0,0,0,0,1100,read,config(ArcadeProfile.TRAFFIC,c));
+   check(!blank.usable(),"previous scratch pixels never become new objects "+size);
+  }
   var ambiguous=CustomArcadeVision.detect(ArcadeProfile.FLAPPY,(x,y)->box(x/320f,y/640f,.17f,.47f,.23f,.53f)||box(x/320f,y/640f,.77f,.47f,.83f,.53f)?c[0]:0xff202020,0,0,320,640,0,0,0,0,1000,null,conf);
   check(!ambiguous.usable(),"two equally likely players require new evidence");
   var masked=CustomArcadeVision.detect(ArcadeProfile.FLAPPY,(x,y)->scene(ArcadeProfile.FLAPPY,x/320f,y/640f,c,0),0,0,320,640,0,200,100,400,1000,null,config(ArcadeProfile.FLAPPY,c));

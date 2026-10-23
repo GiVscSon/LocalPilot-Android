@@ -1,0 +1,33 @@
+LocalPilot Android 0.7.22-dev / versionCode38
+Date: 2026-10-23
+Package: org.localpilot.android.dev
+
+Final build through updated build_debug.py:
+Gradle8.9 / JDK21 / SDK35 / offline
+assembleDebug, lintDebug, compileDebugAndroidTestJavaWithJavac
+BUILD SUCCESSFUL in 2m19s; 59 actionable tasks
+Lint: 0 errors, 0 fatal issues, 42 warnings.
+APK CRC, aapt package/version/SDK levels, apksigner: PASS.
+Certificate SHA256:
+55626377256dda3a6b5824b7278eb12db75b8a7d1c80baa9d2af4402ccac2684
+APK SHA256:
+59f813109339b942d17a499955dd5d92b4e7e035ef3a1515d5dde82608aa73d7
+APK bytes: 497402
+
+Verify: all suites PASS; SceneRecovery157, board4531, hardening2634.
+UniversalVerify: 185 assertions PASS; 27 palette/resolution/profile scenes,
+additional shrinking/growing scratch dimensions and empty-frame regression checks.
+Vision allocation budget: PASS; 584 bytes/frame after warmup on canonical JVM
+frame; 500 usable frames. This measures CustomArcadeVision only, not total
+Android allocation or device frame time. Results continue to allocate objects.
+ResultVerify: 1046 assertions PASS; real frames=0.
+LearningVerify: 34 assertions PASS.
+GridVerify: 3860 assertions PASS.
+Python release tooling: 10 tests PASS.
+
+No physical Android test, reproduced browser crash, UI picker acceptance test,
+or real-game performance result claimed. Exact original process exit cause
+requires the user's explicitly exported local diagnostic/crash report.
+Capture backpressure and main-thread exception handling were compiled/reviewed;
+their Android lifecycle is not executed by standalone JVM tests.
+No claim of automatic recognition or support for the pictured bubble game.

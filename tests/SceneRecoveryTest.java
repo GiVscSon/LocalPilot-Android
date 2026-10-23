@@ -22,9 +22,12 @@ public final class SceneRecoveryTest {
   check(r.pass()==SceneRecovery.Pass.ORIGINAL,"cycles repeat without stopping");
   for(int i=0;i<100;i++)check(!r.observe(false,time+=120),"long scene loss keeps searching");
   check(r.searching()&&r.report().contains("missing=112"),"bounded metadata after long loss");
-  check(!r.observe(true,time+=120)&&r.observe(true,time+=120),"automatic recovery after long loss");
+  check(r.selectionRequired(),"six-second unknown scene requests a different mechanic/region");
+  check(!r.observe(true,time+=120)&&!r.selectionRequired(),"first usable frame is allowed its confirmation opportunity");
+  check(r.observe(true,time+=120),"second usable frame confirms recovery after long loss");
   check(!r.observe(true,time-1)&&!r.searching(),"out-of-order frame is not accepted");
   r.reset();check(r.pass()==SceneRecovery.Pass.ORIGINAL&&r.report().contains("missing=0"),"new session reset");
+  check(!r.selectionRequired(),"new scene search has a grace period");
   for(SceneRecovery.Pass pass:SceneRecovery.Pass.values()){
    check(SceneRecovery.adjust(0xff000000,pass)==0xff000000,"exposure does not invent objects in black frame");
    check((SceneRecovery.adjust(0x128001ff,pass)>>>24)==0x12,"alpha preserved");

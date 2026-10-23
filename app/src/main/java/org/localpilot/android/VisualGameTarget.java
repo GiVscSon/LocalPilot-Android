@@ -13,9 +13,14 @@ public final class VisualGameTarget {
  public static boolean legacyMarket(String pkg){return "ru.beru.android".equals(pkg)||"ru.yandex.market".equals(pkg)||"com.yandex.market".equals(pkg);}
  /** Package + named slot + profile. A browser can host several independent games. */
  public static String key(String pkg,String slot,ArcadeProfile profile){
-  if(pkg==null||!pkg.matches("[A-Za-z0-9_]+(\\.[A-Za-z0-9_]+)+")||slot==null||slot.length()>80||slot.trim().isEmpty()||profile==null)throw new IllegalArgumentException("game identity");
+  if(profile==null)throw new IllegalArgumentException("profile");return identity(pkg,slot)+"#"+profile.name();
+ }
+ public static String selectionKey(String pkg,String slot){return identity(pkg,slot)+"#mechanic";}
+ public static boolean requiresProfileChoice(int saved,boolean browser,boolean contextConfirmed){return saved<0||saved>7||browser&&!contextConfirmed;}
+ private static String identity(String pkg,String slot){
+  if(pkg==null||!pkg.matches("[A-Za-z0-9_]+(\\.[A-Za-z0-9_]+)+")||slot==null||slot.length()>80||slot.trim().isEmpty())throw new IllegalArgumentException("game identity");
   String encoded=java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(slot.trim().getBytes(java.nio.charset.StandardCharsets.UTF_8));
-  return pkg+"#"+encoded+"#"+profile.name();
+  return pkg+"#"+encoded;
  }
  public static String modelSlot(String slot,int controls,String vision){
   if(controls==0&&vision==null)return slot;

@@ -131,7 +131,8 @@ public final class JumperCaptureService extends Service {
             image = source.acquireLatestImage();
             if (image == null) return;
             long now = SystemClock.elapsedRealtime();
-            if (now - lastFrameMs < 60) return;
+            PilotService pilot = PilotService.instance;
+            if (now - lastFrameMs < 80 || pilot==null || !pilot.wantsJumperFrame(session)) return;
             if (image.getWidth() != width || image.getHeight() != height) throw new IllegalStateException("display changed");
             Image.Plane plane = image.getPlanes()[0];
             ByteBuffer bytes = plane.getBuffer();
@@ -140,8 +141,6 @@ public final class JumperCaptureService extends Service {
             frame = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
             frame.setPixels(argb, 0, width, 0, 0, width, height);
             lastFrameMs = now;
-            PilotService pilot = PilotService.instance;
-            if (pilot == null) { frame.recycle(); frame = null; return; }
             Bitmap owned = frame;
             frame = null;
             pilot.onJumperFrame(session,owned, now);
