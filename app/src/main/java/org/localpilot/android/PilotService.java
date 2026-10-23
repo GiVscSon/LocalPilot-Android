@@ -283,6 +283,10 @@ public class PilotService extends AccessibilityService {
  private void stop(String reason){
   if(!reason.startsWith("Экспорт"))lastStopReason=reason;
   if(playingJumper||playingGrid||gate.armed()||autoLeft>0)lastSessionReport=diagnosticState();
+  permit.revoke();gate.stop();
+  // Save measured physics before reset, including measurements made while no
+  // gesture was needed. Stopping a session is not a new round loss.
+  if(playingJumper&&jumperCaptureReady)persistArcadeModel(false);
   captureStartup.stop(SystemClock.elapsedRealtime());clearDiagnosticFrame();arcadeSceneGeneration++;
   playingGrid=false;gridSession.reset();gridPalette=null;
   arcadeLastUsable=null;arcadeController.reset();arcadeFeedback.reset();arcadeState=null;arcadeBefore=null;arcadePending=null;arcadeAck=false;
@@ -292,7 +296,7 @@ public class PilotService extends AccessibilityService {
   synchronized(jumperFrameLock){Bitmap queued;while((queued=jumperQueuedFrames.poll())!=null)if(!queued.isRecycled())queued.recycle();}
   if(jumperCalibrationOverlay!=null){try{wm.removeView(jumperCalibrationOverlay);}catch(RuntimeException ignored){}jumperCalibrationOverlay=null;}
   if(stopJumper)stopService(new Intent(this,JumperCaptureService.class));
-  permit.revoke();gate.stop();audit(SafeJournal.Event.STOP,0,0);autoLeft=0;playing2048=false;colored2048=false;playingMini=false;discoveringBoard=false;boardRoi=null;
+  audit(SafeJournal.Event.STOP,0,0);autoLeft=0;playing2048=false;colored2048=false;playingMini=false;discoveringBoard=false;boardRoi=null;
   if(visionPending){visionPending=false;visionRequest++;if(visionTask!=null)visionTask.cancel(true);visionTask=null;metrics.cancelled(StageMetrics.Stage.READ);}
   if(captureBusy){metrics.cancelled(StageMetrics.Stage.CAPTURE);captureBusy=false;pendingCapture=++captureCounter;}
   if(overlayDialog!=null){AlertDialog old=overlayDialog;overlayDialog=null;old.dismiss();}

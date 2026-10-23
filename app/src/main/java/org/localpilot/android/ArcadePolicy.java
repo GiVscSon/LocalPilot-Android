@@ -85,8 +85,15 @@ public final class ArcadePolicy {
       &&dx*(action.x-before.control.x())>0;
    case LEFT:return dx<-.012f;
    case RIGHT:return dx>.012f;
-   case FLAP:return after.tracked&&(after.vy<-.035f&&after.vy<before.vy-.05f
-       ||after.player.y()<before.player.y()-.008f);
+   case FLAP:
+    float dt=(after.timestampMs-before.timestampMs)/1000f;
+    // Passive ascent can continue after a tap that the game ignored. Require
+    // an extra upward velocity/position response, rather than ascent alone.
+    return before.tracked&&after.tracked&&dt>0&&dt<=.7f
+      &&Float.isFinite(before.vy)&&Float.isFinite(after.vy)
+      &&(after.vy<-.035f&&after.vy<before.vy-.05f
+        ||after.player.y()<before.player.y()-.008f
+          &&after.player.y()<before.player.y()+before.vy*dt-.008f);
    default:return false;
   }
  }

@@ -6,21 +6,24 @@ import java.util.List;
 
 /** Temporal model-predictive control in normalized game coordinates. No Android dependency. */
 public final class ArcadeController {
- private ArcadeObservation previous;
+ private ArcadeObservation previous,earlier;
  private float trafficSpeed=.55f, scrollSpeed=.28f, gravity=1.5f, flapVelocity=-.44f;
  private long lastFlap=-10000,lastLane=-10000;
  private int intendedLane=-1,lastHold=150;
  private float steeringSpeed=1.1f,laneStartX;
  private boolean continuousSteering;
- public void reset(){previous=null;trafficSpeed=.55f;scrollSpeed=.28f;gravity=1.5f;flapVelocity=-.44f;lastFlap=lastLane=-10000;intendedLane=-1;steeringSpeed=1.1f;lastHold=150;continuousSteering=false;}
+ public void reset(){previous=earlier=null;trafficSpeed=.55f;scrollSpeed=.28f;gravity=1.5f;flapVelocity=-.44f;lastFlap=lastLane=-10000;intendedLane=-1;steeringSpeed=1.1f;lastHold=150;continuousSteering=false;}
  /** New episode in the same window: keep learned physics, discard old objects/actions. */
- public void nextRound(){previous=null;lastFlap=lastLane=-10000;intendedLane=-1;}
+ public void nextRound(){previous=earlier=null;lastFlap=lastLane=-10000;intendedLane=-1;}
  /** A loss is an outcome, not a measurement of gravity or flap impulse. */
  public void penalize(){nextRound();}
  public ArcadePolicy.Decision decide(ArcadeObservation s,long now){
   if(s==null||!s.usable()||now<s.timestampMs||now-s.timestampMs>450)return waitFor("Ожидаю свежую игровую сцену");
-  if(previous!=null&&(previous.profile!=s.profile||s.timestampMs<previous.timestampMs))reset();
-  learn(s,now);previous=s;
+  if(!Float.isFinite(s.vx)||!Float.isFinite(s.vy))return waitFor("Скорость не подтверждена");
+  if(previous!=null&&previous.profile!=s.profile)reset();
+  // Replayed/out-of-order pixels cannot erase the saved physics or renew input.
+  if(previous!=null&&s.timestampMs<=previous.timestampMs)return waitFor("Ожидаю следующий кадр");
+  learn(s,now);earlier=previous;previous=s;
   return switch(s.profile){case TRAFFIC->drive(s,now);case FLAPPY->fly(s,now);default->ArcadePolicy.next(s);};
  }
  /** Call only after dispatch was accepted, not merely when a recommendation was produced. */
@@ -84,10 +87,25 @@ public final class ArcadeController {
     flapVelocity=blend(flapVelocity,clamp(measured,-1.2f,-.15f),.18f);
    }
   }
-  if(s.profile==ArcadeProfile.FLAPPY&&previous.tracked&&s.tracked&&now-lastFlap>220){
-   float measured=(s.vy-previous.vy)/dt;
-   if(measured>.25f&&measured<5f)gravity=blend(gravity,measured,.3f);
+  if(s.profile==ArcadeProfile.FLAPPY&&earlier!=null&&earlier.tracked&&previous.tracked&&s.tracked){
+   // Vision velocities are interval averages, not instantaneous velocities.
+   // Three positions correctly handle unequal capture intervals; do not fit
+   // a parabola through an input impulse, a long dropout or a changed viewport.
+   float priorDt=(previous.timestampMs-earlier.timestampMs)/1000f;
+   if(priorDt>=.03f&&priorDt<=.30f&&dt<=.30f&&earlier.timestampMs>=lastFlap+160
+     &&sameFlightGeometry(earlier,previous)&&sameFlightGeometry(previous,s)){
+    float oldV=(previous.player.y()-earlier.player.y())/priorDt;
+    float newV=(s.player.y()-previous.player.y())/dt;
+    float measured=2*(newV-oldV)/(priorDt+dt);
+    if(measured>.25f&&measured<5f)gravity=blend(gravity,measured,.15f);
+   }
   }
+ }
+ private static boolean sameFlightGeometry(ArcadeObservation a,ArcadeObservation b){
+  return Math.abs(a.left-b.left)<.001f&&Math.abs(a.right-b.right)<.001f
+   &&Math.abs(a.top-b.top)<.001f&&Math.abs(a.bottom-b.bottom)<.001f
+   &&Math.abs(a.player.width()-b.player.width())<.008f
+   &&Math.abs(a.player.height()-b.player.height())<.008f;
  }
  private ArcadePolicy.Decision drive(ArcadeObservation s,long now){
   int current=lane(s.player.x(),s);

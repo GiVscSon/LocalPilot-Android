@@ -65,7 +65,8 @@ public final class ArcadeProfilesTest {
   check(!ArcadePolicy.next(state(ArcadeProfile.FLAPPY,bird,bird,List.of(),0,-.3f,true,.1f,.32f)).sendsInput(),"rising bird waits");
   check(!ArcadePolicy.next(state(ArcadeProfile.FLAPPY,bird,bird,List.of(),0,.3f,false,.1f,.32f)).sendsInput(),"one frame cannot estimate lift");
   check(!ArcadePolicy.next(state(ArcadeProfile.FLAPPY,bird,bird,List.of(),0,.3f,true,.2f,.25f)).sendsInput(),"narrow unconfirmed gap rejected");
-  check(ArcadePolicy.response(flap,falling,state(ArcadeProfile.FLAPPY,box(.1f,.29f,.08f,.05f),box(.1f,.29f,.08f,.05f),List.of(),0,-.3f,true,.1f,.32f)),"lift response confirmed");
+  var lifted=box(.1f,.29f,.08f,.05f);
+  check(ArcadePolicy.response(flap,falling,new ArcadeObservation(ArcadeProfile.FLAPPY,1200,lifted,lifted,List.of(),0,.045f,1,.49f,.1f,.32f,0,-.3f,.9f,true,false)),"later lift response confirmed");
   check(!ArcadePolicy.response(flap,falling,falling),"unchanged falling state rejected");
   check(!ArcadePolicy.next(null).sendsInput(),"missing scene never sends input");
  }
