@@ -298,7 +298,7 @@ public class PilotService extends AccessibilityService {
    return false;
   }
  }
- public void recoverPanel(){stop("Панель восстановлена · выберите окно игры");showPanel();if(layout!=null){layout.x=0;layout.y=dp(48);updatePanelLayout();}update();}
+ public void recoverPanel(){stop("Панель восстановлена · выберите окно игры");browserProfileConfirmed=false;confirmedProfileScope="";showPanel();if(layout!=null){layout.x=0;layout.y=dp(48);updatePanelLayout();}update();}
  private int dp(int n){return (int)(n*getResources().getDisplayMetrics().density);}
  private void row(String a,Runnable ar,String b,Runnable br){row(a,ar,b,br,false);}
  private void manualRow(String a,Runnable ar,String b,Runnable br){row(a,ar,b,br,true);}
@@ -1028,6 +1028,7 @@ public class PilotService extends AccessibilityService {
  /** Choosing an installed game prepares observation only; it never grants input. */
  public void selectInstalledTarget(String packageName,String label){
   stop("Открываю выбранную игру; ввод выключен");showPanel();
+  browserProfileConfirmed=false;confirmedProfileScope="";
   if(packageName==null||packageName.isEmpty()){note="Выберите стороннюю игру";update();return;}
   targetLabel=label==null?applicationLabel(packageName):label;
   long epoch=gate.epoch();awaitInstalledTarget(packageName,label,epoch,SystemClock.elapsedRealtime()+10000,-1,null);

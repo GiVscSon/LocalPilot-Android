@@ -304,10 +304,15 @@ public final class PilotUiInstrumentation extends Instrumentation {
         onMain(()->{service.selectInstalledTarget(fixturePackage,"Capture acceptance");return null;});
         await(()->present(ArcadeProfile.ARI.label),6_000,"New external app reused the previous 2048 profile instead of requesting its mechanic");
         click(ArcadeProfile.ARI.label);
+        require(onMain(()->booleanField("targetIsBrowser")),"Isolated VIEW/HTTPS fixture was not classified as a browser context");
+        onMain(()->{service.selectInstalledTarget(fixturePackage,"Capture acceptance");return null;});
+        await(()->present(ArcadeProfile.ARI.label),6_000,"Reopening a browser before gameplay retained an old mechanic confirmation");
+        click(ArcadeProfile.ARI.label);
         click("Окно");click("@contains:" + fixturePackage);
         long previous = -1;
         for(int cycle=0;cycle<2;cycle++) {
             if(compact())click("Развернуть");
+            if(cycle>0){click("Старт");await(()->present(ArcadeProfile.ARI.label),5_000,"A new browser capture reused mechanic confirmation after STOP");click(ArcadeProfile.ARI.label);}
             click("Старт");
             await(this::acceptProjectionDialog, 8_000, "Android screen capture consent did not appear");
             await(() -> onMain(() -> booleanField("jumperCaptureReady") && ((Number)field("captureFrames")).longValue() >= 2),

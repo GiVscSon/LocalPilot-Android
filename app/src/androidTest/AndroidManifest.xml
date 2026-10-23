@@ -1,5 +1,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
  <application>
-  <activity android:name="org.localpilot.android.CaptureFixtureActivity" android:exported="true" android:label="LocalPilot capture fixture"/>
+  <activity android:name="org.localpilot.android.CaptureFixtureActivity" android:exported="true" android:label="LocalPilot capture fixture">
+   <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
+   <intent-filter><action android:name="android.intent.action.VIEW"/><category android:name="android.intent.category.DEFAULT"/><category android:name="android.intent.category.BROWSABLE"/><data android:scheme="https" android:host="localpilot.invalid"/></intent-filter>
+  </activity>
  </application>
 </manifest>
