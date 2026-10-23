@@ -192,7 +192,12 @@ public final class PilotUiInstrumentation extends Instrumentation {
         require(compact(), "Demo did not compact panel before starting");
         require(present("STOP") && present("Развернуть"), "Running demo lost compact STOP controls");
         await(() -> score() == 10, 65_000, "Demo did not reach exactly ten real target clicks");
-        await(() -> !armed() && onMain(() -> intField("autoLeft")) == 0, 2_000,
+        // Score changes at touch delivery, before Android's completion callback.
+        // Allow the existing 3s gesture watchdog plus the 2s visual verification
+        // window; still require both authority and consent to be revoked.
+        await(() -> onMain(() -> !gate().armed() && intField("autoLeft") == 0
+                        && !permit().allows(gate().epoch(),SystemClock.elapsedRealtime())),
+                GestureFlight.TIMEOUT_MS + 2_500,
                 "Completed demo left input armed");
         addCheck("demo_ten_real_target_clicks", new JSONObject().put("start", "single visible test button").put("score", score()).put("stop_visible_during_run", true));
     }
