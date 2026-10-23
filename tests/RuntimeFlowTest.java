@@ -26,9 +26,14 @@ public final class RuntimeFlowTest {
    if(i!=1)f.acknowledge(token);
    JumperState invalid=i==0?state(now+100,450):i==1?state(now+650,450):null;
    check(f.observe(invalid,now+650)==(i==2?JumperFeedback.State.PAUSED:JumperFeedback.State.RETRY),"stale/missing ACK/missing frames have finite deadline");
-   check(f.failedWithAck()==(i!=1),"missing ACK never trains negative physical response");
+   check(!f.failedWithAck(),"missing ACK or usable response never trains negative physical response");
    check(!f.acknowledge(token),"expired token rejects late callback");
   }
+  f.reset();token=f.dispatched(JumperPolicy.Action.TAP_RIGHT,400,5000);f.acknowledge(token);
+  check(f.observe(state(5200,400),5200)==JumperFeedback.State.WAITING,"usable unchanged response observed before deadline");
+  check(f.observe(null,5650)==JumperFeedback.State.RETRY&&f.failedWithAck(),"only a seen usable response can be a negative training signal");
+  f.reset();token=f.dispatched(JumperPolicy.Action.TAP_RIGHT,400,5700);f.acknowledge(token);
+  check(f.observe(state(6400,450),6400)==JumperFeedback.State.RETRY&&!f.failedWithAck(),"late movement is outside action response window");
   f.reset();token=f.dispatched(JumperPolicy.Action.TAP_RIGHT,400,6000);f.cancel(token);
   check(!f.acknowledge(token)&&f.observe(state(6200,430),6200)==JumperFeedback.State.READY,"dropped dispatch never verifies");
   token=f.dispatched(JumperPolicy.Action.TAP_LEFT,400,7000);f.acknowledge(token);f.reset();

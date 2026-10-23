@@ -38,6 +38,8 @@ public final class ArcadeFeedbackTest {
   other=new ArcadeObservation(ArcadeProfile.TRAFFIC,other.timestampMs,other.player,other.control,List.of(),0,.04f,1,.9f,0,1,0,0,.9f,true,false);
   check(f.observe(other,2350)==ArcadeFeedback.State.RETRY,"different profile cannot suspend deadline");
   f.reset();id=f.dispatched(action,before,1000);f.acknowledge(id);
+  check(f.observe(state(1400,.25f),1400)==ArcadeFeedback.State.RETRY&&f.verified()==0,"movement outside response window is not delayed success");
+  f.reset();id=f.dispatched(action,before,1000);f.acknowledge(id);
   f.cancel(id);check(f.observe(state(1700,.3f),1700)==ArcadeFeedback.State.READY&&!f.acknowledge(id),"dropped stale dispatch invalidates ACK");
   id=f.dispatched(action,state(2000,.3f),2000);f.started(id,2100);f.acknowledge(id);
   check(f.observe(state(2050,.25f),2200)==ArcadeFeedback.State.WAITING,"frame captured during journal preparation is not a response");

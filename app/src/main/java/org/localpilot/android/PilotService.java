@@ -35,7 +35,7 @@ public class PilotService extends AccessibilityService {
  private final JumperFeedback jumperFeedback=new JumperFeedback();
  private final RoundOutcome roundOutcome=new RoundOutcome();
  private long arcadeSceneGeneration;
- private boolean consentPanelDetached,destroying;
+ private boolean consentPanelDetached,panelRegistered,destroying;
  private String learningStatus="Нет сохранённых изменений в этом сеансе";
  private String learningSlot="default";
  private String modelSlot="default";
@@ -259,7 +259,7 @@ public class PilotService extends AccessibilityService {
 
 
  @Override protected void onServiceConnected(){CrashDiagnostics.phase("SERVICE_CONNECTED");instance=this;try{experience=new ExperienceStore(new java.io.File(getFilesDir(),"experience-v1.log"));}catch(java.io.IOException e){experience=null;}try{arcadeLearning=new ArcadeLearningStore(new java.io.File(getFilesDir(),"arcade-learning-v1.log"));}catch(java.io.IOException e){arcadeLearning=null;}try{journal=new RotatingJournal(new java.io.File(getFilesDir(),"audit-segments"),new java.io.File(getFilesDir(),"audit-v1.log"));}catch(java.io.IOException e){journal=null;}wm=(WindowManager)getSystemService(WINDOW_SERVICE);gate.stop();showPanel();}
- public void showPanel(){if(destroying)return;if(panel!=null){restoreConsentPanel();compact(false);return;}selectedProfile=Math.max(0,Math.min(7,getSharedPreferences("panel",MODE_PRIVATE).getInt("profile",0)));gate.stop();consentPanelDetached=false;panelCompact=false;controls=null;manualControls.clear();panel=new LinearLayout(this);panel.setOrientation(LinearLayout.VERTICAL);panel.setPadding(8,4,8,4);panel.setBackgroundColor(0xEE202830);
+ public void showPanel(){if(destroying)return;if(panel!=null){restoreConsentPanel();compact(false);return;}selectedProfile=Math.max(0,Math.min(7,getSharedPreferences("panel",MODE_PRIVATE).getInt("profile",0)));gate.stop();consentPanelDetached=false;panelRegistered=false;panelCompact=false;controls=null;manualControls.clear();panel=new LinearLayout(this);panel.setOrientation(LinearLayout.VERTICAL);panel.setPadding(8,4,8,4);panel.setBackgroundColor(0xEE202830);
   TextView header=new TextView(this);header.setText("LocalPilot · тянуть здесь");header.setTextColor(Color.WHITE);panel.addView(header);
   header.setOnTouchListener(new View.OnTouchListener(){float x,y;int ox,oy;public boolean onTouch(View v,android.view.MotionEvent e){if(layout==null)return true;if(e.getAction()==MotionEvent.ACTION_DOWN){x=e.getRawX();y=e.getRawY();ox=layout.x;oy=layout.y;return true;}if(e.getAction()==MotionEvent.ACTION_MOVE){layout.x=ox+(int)(e.getRawX()-x);layout.y=oy+(int)(e.getRawY()-y);updatePanelLayout();return true;}return true;}});
   state=new TextView(this);state.setTextColor(Color.WHITE);state.setTextSize(11);state.setMaxLines(8);panel.addView(state);
@@ -279,7 +279,7 @@ public class PilotService extends AccessibilityService {
   updatePanelLayout();update();
  }
  private void removeOverlay(View view){if(view!=null&&wm!=null)CaptureCleanup.run(()->wm.removeViewImmediate(view));}
- private void clearPanel(){View old=panel;panel=null;controls=null;state=null;miniBar=null;miniState=null;collapseButton=null;layout=null;consentPanelDetached=false;panelCompact=false;manualControls.clear();removeOverlay(old);}
+ private void clearPanel(){View old=panel;panel=null;controls=null;state=null;miniBar=null;miniState=null;collapseButton=null;layout=null;consentPanelDetached=false;panelRegistered=false;panelCompact=false;manualControls.clear();removeOverlay(old);}
  /** A missing/stale WindowManager attachment never leaves input authority live. */
  private boolean updatePanelLayout(){
   if(panel==null||layout==null||wm==null||consentPanelDetached||destroying)return false;
@@ -288,7 +288,9 @@ public class PilotService extends AccessibilityService {
    int width=layout.width>0?layout.width:panel.getWidth(),height=Math.max(dp(48),panel.getHeight());
    layout.x=Math.max(0,Math.min(layout.x,Math.max(0,size.x-width)));
    layout.y=Math.max(0,Math.min(layout.y,Math.max(0,size.y-height-dp(24))));
-   if(panel.isAttachedToWindow())wm.updateViewLayout(panel,layout);else wm.addView(panel,layout);
+   // addView registers synchronously, while isAttachedToWindow becomes true at
+   // the first traversal. Repeated show/resize before that traversal must update.
+   if(panelRegistered)wm.updateViewLayout(panel,layout);else{wm.addView(panel,layout);panelRegistered=true;}
    return true;
   }catch(RuntimeException|OutOfMemoryError error){
    permit.revoke();gate.stop();clearPanel();
@@ -387,7 +389,7 @@ public class PilotService extends AccessibilityService {
   catch(RuntimeException error){stop("Не удалось открыть разрешение захвата экрана");}
  }
 
- private void detachPanelForConsent(){if(panel!=null&&!consentPanelDetached){View old=panel;consentPanelDetached=true;if(!CaptureCleanup.run(()->wm.removeViewImmediate(old))){consentPanelDetached=false;stop("Не удалось убрать панель перед разрешением захвата");}}}
+ private void detachPanelForConsent(){if(panel!=null&&!consentPanelDetached){View old=panel;consentPanelDetached=true;if(CaptureCleanup.run(()->wm.removeViewImmediate(old)))panelRegistered=false;else{clearPanel();stop("Не удалось убрать панель перед разрешением захвата");}}}
  private void restoreConsentPanel(){if(panel!=null&&consentPanelDetached&&!destroying){consentPanelDetached=false;updatePanelLayout();update();}}
  public void captureConsentUiClosed(long id){if(id==captureSession)restoreConsentPanel();}
  private void persistArcadeModel(boolean result){
