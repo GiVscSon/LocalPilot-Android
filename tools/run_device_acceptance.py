@@ -23,7 +23,13 @@ def annotation(level, message):
 
 def main():
     OUT.mkdir(exist_ok=True)
+    isolated_emulator=False
     try:
+        qemu=command(['adb','shell','getprop','ro.kernel.qemu']).strip()
+        boot_qemu=command(['adb','shell','getprop','ro.boot.qemu']).strip()
+        if qemu!='1' and boot_qemu!='1':
+            raise RuntimeError('Isolated emulator required; refusing to change Accessibility settings on a physical device')
+        isolated_emulator=True
         command(['adb', 'install', '-r', 'app/build/outputs/apk/debug/app-debug.apk'])
         command(['adb', 'install', '-r', 'app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk'])
         command(['adb','shell','settings','put','system','screen_off_timeout','600000'])
@@ -69,6 +75,7 @@ def main():
         text = str(error)
         (OUT / 'runner-error.txt').write_text(text[:8000], encoding='utf-8')
         annotation('error', text)
+        if not isolated_emulator:return 1
         try:
             crash=command(['adb','logcat','-d','-b','crash'],10)
             (OUT/'crash-logcat.txt').write_text(crash[-16000:],encoding='utf-8')

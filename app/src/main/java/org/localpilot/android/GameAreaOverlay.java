@@ -28,6 +28,8 @@ final class GameAreaOverlay extends FrameLayout {
   this.rows=rows;this.cols=cols;this.listener=listener;
   setWillNotDraw(false);setContentDescription("Выделение области игры "+rows+" на "+cols);
   LinearLayout header=new LinearLayout(c);header.setOrientation(LinearLayout.VERTICAL);header.setBackgroundColor(0xF0202830);
+  header.setPadding(0,dp(24),0,0);
+  setOnApplyWindowInsetsListener((view,insets)->{getLocationOnScreen(origin);Insets safe=insets.getInsetsIgnoringVisibility(WindowInsets.Type.systemBars()|WindowInsets.Type.displayCutout());header.setPadding(Math.max(0,safe.left-origin[0]),Math.max(dp(24),safe.top-origin[1]),Math.max(0,safe.right),0);return insets;});
   LinearLayout buttons=new LinearLayout(c);
   Button cancel=new Button(c);cancel.setText("STOP · отмена");cancel.setTextSize(12);cancel.setOnClickListener(v->cancel());
   buttons.addView(cancel,new LinearLayout.LayoutParams(0,dp(44),1));

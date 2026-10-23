@@ -258,6 +258,15 @@ public final class PilotUiInstrumentation extends Instrumentation {
         require(!onMain(() -> booleanField("playing2048")), "Cancelled region picker started automatic input");
         addCheck("manual_2048_region_visible_and_cancelable", new JSONObject().put("bounds", grid.toShortString()));
 
+        bindDemoWindow();click("Область");
+        Rect selected=markerBounds("LOCALPILOT_BOARD_2048");require(selected!=null,"Visible board geometry missing for manual drag");
+        drag(selected.left,selected.top,selected.right,selected.bottom);
+        require(present("Готово"),"Releasing a region drag confirmed it without explicit Done");
+        require(touchOwnControl("Готово"),"Done could not be tapped below system bars");
+        await(()->onMain(()->booleanField("manualVisualRoi")&&selected.equals(field("visualRoi"))),3_000,"Manual grid confirmation did not preserve the actual screen coordinates");
+        require(!onMain(()->booleanField("playing2048")),"Confirming a region silently started gameplay");
+        addCheck("manual_2048_drag_and_explicit_done",new JSONObject().put("bounds",selected.toShortString()).put("input","real touch events"));
+
         onMain(() -> { service.hidePanel(); return null; });
         Board2048 before = read2048Screenshot();
         onMain(() -> { service.showPanel(); return null; });
@@ -486,6 +495,17 @@ public final class PilotUiInstrumentation extends Instrumentation {
         android.view.MotionEvent end=android.view.MotionEvent.obtain(down,SystemClock.uptimeMillis(),android.view.MotionEvent.ACTION_UP,rect.centerX(),rect.centerY(),0);
         end.setSource(android.view.InputDevice.SOURCE_TOUCHSCREEN);
         try{return automation.injectInputEvent(end,true)&&accepted;}finally{end.recycle();}
+    }
+    private void drag(float x,float y,float endX,float endY)throws Exception{
+        long down=SystemClock.uptimeMillis();
+        for(int step=0;step<=6;step++){
+            int action=step==0?android.view.MotionEvent.ACTION_DOWN:step==6?android.view.MotionEvent.ACTION_UP:android.view.MotionEvent.ACTION_MOVE;
+            float part=step/6f;
+            android.view.MotionEvent event=android.view.MotionEvent.obtain(down,SystemClock.uptimeMillis(),action,x+(endX-x)*part,y+(endY-y)*part,0);
+            event.setSource(android.view.InputDevice.SOURCE_TOUCHSCREEN);
+            try{require(automation.injectInputEvent(event,true),"Android rejected region drag input");}finally{event.recycle();}
+            SystemClock.sleep(50);
+        }
     }
 
     private AccessibilityNodeInfo findText(String text) {

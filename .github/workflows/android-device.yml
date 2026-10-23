@@ -2,6 +2,7 @@ name: Android device acceptance
 on:
  workflow_dispatch:
  push:
+  branches: ['**']
   paths: ['app/**', '.github/workflows/android-device.yml', 'tools/run_device_acceptance.py']
  pull_request:
   paths: ['app/**', '.github/workflows/android-device.yml', 'tools/run_device_acceptance.py']
