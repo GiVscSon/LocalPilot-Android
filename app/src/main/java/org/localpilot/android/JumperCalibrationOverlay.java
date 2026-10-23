@@ -14,10 +14,12 @@ import android.view.View;
 @SuppressLint("ViewConstructor")
 final class JumperCalibrationOverlay extends View {
     interface Listener { void completed(int player, int platform, int hazard); void cancelled(); }
+    interface Samples { void completed(int[] colors,float[] x,float[] y); void cancelled(); }
     private static final String[] PROMPTS={"1/3 · нажмите на Ари", "2/3 · нажмите на оранжевую платформу",
             "3/3 · нажмите на красный шип · STOP: верхний правый угол"};
     private final Bitmap frame;
-    private final Listener listener;
+    private final Samples listener;
+    private final String[] prompts;
     private final Paint paint=new Paint(Paint.ANTI_ALIAS_FLAG|Paint.FILTER_BITMAP_FLAG);
     private final int[] colors=new int[3];
     private final float[] sampleX=new float[3],sampleY=new float[3];
@@ -25,7 +27,10 @@ final class JumperCalibrationOverlay extends View {
     private RectF imageBounds=new RectF();
 
     JumperCalibrationOverlay(Context context,Bitmap frame,Listener listener){
-        super(context);this.frame=frame;this.listener=listener;setLayerType(View.LAYER_TYPE_HARDWARE,null);
+        this(context,frame,PROMPTS,new Samples(){public void completed(int[] c,float[] x,float[] y){listener.completed(c[0],c[1],c[2]);}public void cancelled(){listener.cancelled();}});
+    }
+    JumperCalibrationOverlay(Context context,Bitmap frame,String[] prompts,Samples listener){
+        super(context);if(prompts.length!=3)throw new IllegalArgumentException("three prompts required");this.frame=frame;this.listener=listener;this.prompts=prompts.clone();setLayerType(View.LAYER_TYPE_HARDWARE,null);
     }
 
     @Override protected void onDraw(Canvas canvas){
@@ -37,7 +42,7 @@ final class JumperCalibrationOverlay extends View {
         canvas.drawBitmap(frame,null,imageBounds,paint);
         paint.setColor(0x99000000);canvas.drawRect(0,0,getWidth(),Math.max(92,getHeight()*.09f),paint);
         paint.setColor(Color.WHITE);paint.setTextSize(Math.max(18,getWidth()*.034f));
-        canvas.drawText(PROMPTS[Math.min(step,2)],16,Math.max(36,getHeight()*.047f),paint);
+        canvas.drawText(prompts[Math.min(step,2)],16,Math.max(36,getHeight()*.047f),paint);
         paint.setColor(0xffff4444);paint.setStyle(Paint.Style.FILL);
         float bx=getWidth()-64,by=46;canvas.drawCircle(bx,by,26,paint);
         paint.setColor(Color.WHITE);paint.setTextSize(15);canvas.drawText("STOP",bx-20,by+5,paint);
@@ -56,8 +61,8 @@ final class JumperCalibrationOverlay extends View {
         float nx=(x-imageBounds.left)/imageBounds.width(),ny=(y-imageBounds.top)/imageBounds.height();
         int px=Math.max(0,Math.min(frame.getWidth()-1,Math.round(nx*frame.getWidth())));
         int py=Math.max(0,Math.min(frame.getHeight()-1,Math.round(ny*frame.getHeight())));
-        colors[step]=sampleMedian(px,py);sampleX[step]=nx;sampleY[step]=ny;step++;
-        if(step==3)listener.completed(colors[0]&0x00ffffff,colors[1]&0x00ffffff,colors[2]&0x00ffffff);else invalidate();
+        colors[step]=sampleMedian(px,py)&0x00ffffff;sampleX[step]=nx;sampleY[step]=ny;step++;
+        if(step==3)listener.completed(colors.clone(),sampleX.clone(),sampleY.clone());else invalidate();
         return true;
     }
 

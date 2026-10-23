@@ -34,6 +34,11 @@ public class PilotService extends AccessibilityService {
  private boolean consentPanelDetached;
  private String learningStatus="Нет сохранённых изменений в этом сеансе";
  private String learningSlot="default";
+ private String modelSlot="default";
+ private CustomVisionConfig customVision;
+ private boolean customCalibrationPending;
+ private View customCalibrationOverlay;
+ private int controlMode;
  private ArcadePolicy.Decision arcadePending;
  private long arcadeLastAction,arcadePendingAt,arcadeVerified,arcadeDispatchFrameAge=-1;
  private boolean arcadeAck,arcadeRoundSeen;
@@ -82,8 +87,10 @@ public class PilotService extends AccessibilityService {
     .append('\n').append(arcadeFeedback.report()).append("\nMOTION MODEL: ").append(arcadeController.model())
     .append('\n').append(roundOutcome.report()).append("\nLEARNING: ").append(learningStatus)
     .append(" scope=").append(target).append('/').append(learningSlot)
-    .append(" losses=").append(arcadeLearning==null||target.isEmpty()?-1:arcadeLearning.losses(target,learningSlot,captureProfile))
-    .append("\nSAVED_MODEL: ").append(arcadeLearning==null||target.isEmpty()?"unavailable":arcadeLearning.get(target,learningSlot,captureProfile));
+    .append(" model_context=").append(modelSlot)
+    .append(" losses=").append(arcadeLearning==null||target.isEmpty()?-1:arcadeLearning.losses(target,modelSlot,captureProfile))
+    .append("\nSAVED_MODEL: ").append(arcadeLearning==null||target.isEmpty()?"unavailable":arcadeLearning.get(target,modelSlot,captureProfile))
+    .append("\nCUSTOM_VISION: ").append(customVision!=null).append(" control_mode=").append(controlMode);
   if(arcadeState!=null)out.append("\narcade_usable=").append(arcadeState.usable()).append(" confidence=").append(arcadeState.confidence)
     .append(" terminal=").append(arcadeState.terminal).append(" tracked=").append(arcadeState.tracked)
     .append("\nplayer=").append(diagnosticBox(arcadeState.player)).append(" control=").append(diagnosticBox(arcadeState.control))
@@ -183,7 +190,7 @@ public class PilotService extends AccessibilityService {
   if(!bindSelectedWindow())return;
   if(playingJumper&&(arcadeFeedback.paused()||jumperResponsePaused)&&selectedProfile<4&&ArcadeProfile.values()[selectedProfile]==captureProfile){
    if(busy){note="Дождитесь завершения касания";update();return;}
-   arcadeController.reset();if(arcadeLearning!=null)arcadeController.restore(arcadeLearning.get(target,learningSlot,captureProfile));arcadeFeedback.reset();arcadePending=null;arcadeBefore=null;arcadeAck=false;arcadeLastUsable=null;sceneRecovery.reset();jumperResponsePaused=false;jumperResponseFailures=0;jumperAwaitingVerification=false;
+   arcadeController.reset();if(arcadeLearning!=null)arcadeController.restore(arcadeLearning.get(target,modelSlot,captureProfile));arcadeFeedback.reset();arcadePending=null;arcadeBefore=null;arcadeAck=false;arcadeLastUsable=null;sceneRecovery.reset();jumperResponsePaused=false;jumperResponseFailures=0;jumperAwaitingVerification=false;
    note="Продолжаю текущий захват · проверяю свежую сцену";update();return;
   }
   if(selectedProfile>=4&&manualVisualRoi&&visualRoi!=null)boardRoi=new Rect(visualRoi);
@@ -217,10 +224,11 @@ public class PilotService extends AccessibilityService {
   try{wm.addView(overlay,lp);picker=overlay;handler.postDelayed(()->{if(picker==overlay){stop("Время выбора области истекло");compact(false);}},30000);}catch(RuntimeException error){stop("Не удалось открыть выбор области");compact(false);}
  }
  private void moreOptions(){
-  stop("Дополнительные действия · STOP");overlayMenu("Ещё",new String[]{"Диагностика сеанса","Калибровка Ари","Автополе2048","Выбрать установленную игру","Только чтение","Включить автоуправление","Демо ×10","Скрыть панель","Отключить службу"},i->{switch(i){
+  stop("Дополнительные действия · STOP");overlayMenu("Ещё",new String[]{"Диагностика сеанса","Калибровка Ари","Автополе2048","Выбрать установленную игру","Только чтение","Включить автоуправление","Демо ×10","Скрыть панель","Отключить службу","Настроить распознавание","Способ управления","Вернуть стандартное распознавание"},i->{switch(i){
    case 0->showServiceDialog(new AlertDialog.Builder(this).setTitle("Последний сеанс").setMessage(lastSessionReport+"\n"+captureStartup.report()).setPositiveButton("Закрыть",null).create());
    case 1->{selectedProfile=0;startVisualArcade(ArcadeProfile.ARI);if(playingJumper)jumperCalibrationPending=true;}
    case 2->startAutomaticGame();case 3->startActivity(new Intent(this,GamePickerActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));case 4->setAutomatic(false);case 5->setAutomatic(true);case 6->{arm();if(gate.armed())startDemo();}case 7->hidePanel();case 8->disableSelf();
+   case 9->startCustomCalibration();case 10->chooseControlMode();case 11->resetCustomVision();
   }});
  }
 
@@ -268,6 +276,7 @@ public class PilotService extends AccessibilityService {
   arcadeLastUsable=null;arcadeController.reset();arcadeFeedback.reset();arcadeState=null;arcadeBefore=null;arcadePending=null;arcadeAck=false;
   boolean stopJumper=playingJumper||jumperCaptureReady||jumperConsentPending;
   playingJumper=false;jumperCaptureReady=false;jumperConsentPending=false;jumperVisionPending=false;jumperAwaitingVerification=false;jumperCalibrationPending=false;jumperState=null;
+  customCalibrationPending=false;if(customCalibrationOverlay!=null){wm.removeView(customCalibrationOverlay);customCalibrationOverlay=null;}
   synchronized(jumperFrameLock){Bitmap queued;while((queued=jumperQueuedFrames.poll())!=null)if(!queued.isRecycled())queued.recycle();}
   if(jumperCalibrationOverlay!=null){try{wm.removeView(jumperCalibrationOverlay);}catch(RuntimeException ignored){}jumperCalibrationOverlay=null;}
   if(stopJumper)stopService(new Intent(this,JumperCaptureService.class));
@@ -300,7 +309,12 @@ public class PilotService extends AccessibilityService {
   if(!automatic()&&!permit.allows(gate.epoch(),SystemClock.elapsedRealtime())){note="Сначала разрешите ввод для этой сессии";update();return;}
   if(automatic())permit.grantSession(gate.epoch(),SystemClock.elapsedRealtime());
   learningSlot=getSharedPreferences("panel",MODE_PRIVATE).getString("game_slot."+target,"default");JumperPolicy.reset();
-  captureProfile=profile;jumperResponseFailures=0;jumperResponsePaused=false;arcadeLastUsable=null;arcadeController.reset();if(arcadeLearning!=null){arcadeController.restore(arcadeLearning.get(target,learningSlot,profile));JumperPolicy.restore(arcadeLearning.get(target,learningSlot,ArcadeProfile.ARI));}arcadeFeedback.reset();clearDiagnosticFrame();sceneRecovery.reset();arcadeRoundSeen=false;arcadeState=null;arcadeBefore=null;arcadePending=null;arcadeAck=false;
+  String scope=VisualGameTarget.key(target,learningSlot,profile);
+  controlMode=Math.max(0,Math.min(2,getSharedPreferences("controls",MODE_PRIVATE).getInt(scope,0)));
+  customVision=null;String savedVision=getSharedPreferences("custom-vision",MODE_PRIVATE).getString(scope,null);
+  if(savedVision!=null)try{customVision=CustomVisionConfig.decode(savedVision);}catch(IllegalArgumentException ignored){note="Калибровка повреждена · восстановите стандартное распознавание через Ещё";update();return;}
+  modelSlot=VisualGameTarget.modelSlot(learningSlot,controlMode,customVision==null?null:customVision.encode());
+  captureProfile=profile;jumperResponseFailures=0;jumperResponsePaused=false;arcadeLastUsable=null;arcadeController.reset();if(arcadeLearning!=null){arcadeController.restore(arcadeLearning.get(target,modelSlot,profile));JumperPolicy.restore(arcadeLearning.get(target,modelSlot,ArcadeProfile.ARI));}arcadeFeedback.reset();clearDiagnosticFrame();sceneRecovery.reset();arcadeRoundSeen=false;arcadeState=null;arcadeBefore=null;arcadePending=null;arcadeAck=false;
   arcadeVerified=0;arcadeLastAction=0;
   roundOutcome.reset();
   jumperColorProfile=profile==ArcadeProfile.ARI?loadJumperColors(target):null;
@@ -324,7 +338,7 @@ public class PilotService extends AccessibilityService {
  private void persistArcadeModel(boolean result){
   if(arcadeLearning==null){learningStatus="Хранилище обучения недоступно";return;}
   String model=captureProfile==ArcadeProfile.ARI?JumperPolicy.model():arcadeController.model();
-  try{if(result)arcadeLearning.recordResult(target,learningSlot,captureProfile,model);else arcadeLearning.save(target,learningSlot,captureProfile,model);learningStatus=result?"Проигрыш записан один раз, измеренная физика сохранена":"Модель сохранена";}
+  try{if(result)arcadeLearning.recordResult(target,modelSlot,captureProfile,model);else arcadeLearning.save(target,modelSlot,captureProfile,model);learningStatus=result?"Проигрыш записан один раз, измеренная физика сохранена":"Модель сохранена";}
   catch(java.io.IOException error){learningStatus="Ошибка сохранения: "+error.getClass().getSimpleName();}
  }
 
@@ -374,6 +388,54 @@ public class PilotService extends AccessibilityService {
     +"\nКасание подтверждено: "+(jumperAwaitingVerification?"ожидание движения":"да/ещё не выполнялось");
   showServiceDialog(new AlertDialog.Builder(this).setTitle("Прыгун Ари · диагностика").setMessage(message)
     .setPositiveButton("Понятно",null).create());
+ }
+
+ private void chooseControlMode(){
+  if(selectedProfile>=4){note="Управление 2048: свайпы по выбранному полю";update();return;}
+  if(!bindSelectedWindow())return;
+  String slot=getSharedPreferences("panel",MODE_PRIVATE).getString("game_slot."+target,"default");
+  String key=VisualGameTarget.key(target,slot,ArcadeProfile.values()[selectedProfile]);
+  overlayMenu("Способ управления",new String[]{"Касания слева / справа; платформа — перетаскивание","Свайпы влево / вправо","Платформа следует за касанием"},i->{getSharedPreferences("controls",MODE_PRIVATE).edit().putInt(key,i).apply();controlMode=i;note="Управление сохранено для этой игры · нажмите Старт";update();});
+ }
+ private void resetCustomVision(){
+  if(selectedProfile>=4){note="Для 2048 настройте область поля";update();return;}
+  if(!bindSelectedWindow())return;
+  String slot=getSharedPreferences("panel",MODE_PRIVATE).getString("game_slot."+target,"default"),key=VisualGameTarget.key(target,slot,ArcadeProfile.values()[selectedProfile]);
+  getSharedPreferences("custom-vision",MODE_PRIVATE).edit().remove(key).apply();customVision=null;
+  if(selectedProfile==0){android.content.SharedPreferences.Editor prefs=getSharedPreferences("jumper-vision",MODE_PRIVATE).edit();for(String role:new String[]{"player","platform","hazard"}){prefs.remove(key+"."+role);if(VisualGameTarget.legacyMarket(target)&&slot.equals("default"))prefs.remove(target+"."+role);}prefs.apply();jumperColorProfile=null;}
+  note="Стандартное распознавание восстановлено · нажмите Старт";update();
+ }
+ private void startCustomCalibration(){
+  if(selectedProfile>=4){note="Для 2048 используйте Область и выберите сетку 4×4";update();return;}
+  if(selectedProfile==0){startVisualArcade(ArcadeProfile.ARI);if(playingJumper)jumperCalibrationPending=true;return;}
+  if(!bindSelectedWindow())return;
+  if(!manualVisualRoi){note="Сначала Область → Выделить прямоугольник: только активное игровое поле";update();return;}
+  startVisualArcade(ArcadeProfile.values()[selectedProfile]);if(playingJumper)customCalibrationPending=true;
+ }
+ private void showCustomCalibration(Bitmap frame){
+  final JumperFrameGeometry geometry=visualGeometry(frame);final int fw=frame.getWidth(),fh=frame.getHeight();
+  String[] prompts=switch(captureProfile){
+   case PADDLE->new String[]{"1/3 · нажмите в центре шара","2/3 · нажмите на платформу","3/3 · нажмите на разрушаемый блок"};
+   case TRAFFIC->new String[]{"1/3 · нажмите на свою машину","2/3 · нажмите на препятствие","3/3 · другое препятствие (или то же)"};
+   default->new String[]{"1/3 · нажмите на птенца","2/3 · верхнее препятствие","3/3 · нижнее препятствие (или то же)"};
+  };
+  JumperCalibrationOverlay overlay=new JumperCalibrationOverlay(this,frame,prompts,new JumperCalibrationOverlay.Samples(){
+   public void completed(int[] colors,float[] x,float[] y){
+    try{
+     for(int i=0;i<3;i++){x[i]=(x[i]*fw-geometry.left)/(geometry.right-geometry.left);y[i]=(y[i]*fh-geometry.top)/(geometry.bottom-geometry.top);}
+     CustomVisionConfig selected=new CustomVisionConfig(colors,x,y);
+     getSharedPreferences("custom-vision",MODE_PRIVATE).edit().putString(VisualGameTarget.key(target,learningSlot,captureProfile),selected.encode()).apply();customVision=selected;
+     modelSlot=VisualGameTarget.modelSlot(learningSlot,controlMode,selected.encode());
+     arcadeSceneGeneration++;jumperVisionPending=false;arcadeState=null;arcadeLastUsable=null;arcadeBefore=null;arcadePending=null;arcadeAck=false;arcadeController.reset();arcadeFeedback.reset();sceneRecovery.reset();roundOutcome.reset();persistArcadeModel(false);
+     note="Настройка объектов сохранена · проверяю новые кадры";
+    }catch(IllegalArgumentException error){stop("Точки должны быть внутри выбранного игрового поля · повторите настройку");}
+    if(customCalibrationOverlay!=null){wm.removeView(customCalibrationOverlay);customCalibrationOverlay=null;}update();
+   }
+   public void cancelled(){stop("Настройка распознавания отменена");compact(false);}
+  });
+  WindowManager.LayoutParams lp=new WindowManager.LayoutParams(-1,-1,WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE|WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN|WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,PixelFormat.TRANSLUCENT);lp.gravity=Gravity.TOP|Gravity.LEFT;
+  try{wm.addView(overlay,lp);customCalibrationOverlay=overlay;compact(true);note="Выберите 3 объекта на замороженном кадре";update();}
+  catch(RuntimeException error){if(!frame.isRecycled())frame.recycle();stop("Не удалось открыть настройку объектов");}
  }
 
  private void showServiceDialog(AlertDialog dialog){
@@ -467,9 +529,11 @@ public class PilotService extends AccessibilityService {
    if(!captureSessionActive(id)){if(!frame.isRecycled())frame.recycle();return;}
    if(captureStartup.move(id,CaptureStartup.Stage.FIRST_FRAME,CaptureStartup.Stage.RUNNING,SystemClock.elapsedRealtime())){note="4/5 · Кадр получен, запускаю распознавание";update();}
    captureFrames++;
+   if(customCalibrationOverlay!=null){frame.recycle();return;}
    try{resolveVisualRegion(frame);}catch(RuntimeException error){/* Preserve full window when optional crop is unavailable. */}
    rememberDiagnosticFrame(frame,timestampMs);
    jumperLastFrameMs=Math.max(jumperLastFrameMs,timestampMs);
+   if(customCalibrationPending){if(!valid(gate.offer(SystemClock.elapsedRealtime()))){if(!waitForCaptureTarget(SystemClock.elapsedRealtime()))stop("Вернитесь в выбранное окно для настройки");frame.recycle();return;}customCalibrationPending=false;showCustomCalibration(frame);return;}
    if(holdResultScreen(frame,timestampMs)){frame.recycle();return;}
    if(captureProfile!=ArcadeProfile.ARI){analyzeArcadeFrame(frame,timestampMs);return;}
    if(jumperCalibrationOverlay!=null){frame.recycle();return;}
@@ -502,7 +566,8 @@ public class PilotService extends AccessibilityService {
  private boolean holdResultScreen(Bitmap frame,long timestamp){
   long now=SystemClock.elapsedRealtime();
   if(timestamp>now||now-timestamp>300||!valid(gate.offer(now)))return false;
-  JumperFrameGeometry g=visualGeometry(frame);Rect p=panelBounds();
+  // Result dialogs can extend beyond a manually selected playfield.
+  JumperFrameGeometry g=new JumperFrameGeometry(frame.getWidth(),frame.getHeight(),jumperDisplayWidth,jumperDisplayHeight,armedBounds.left,armedBounds.top,armedBounds.right,armedBounds.bottom,true);Rect p=panelBounds();
   if(!GameOverScreen.detect(frame::getPixel,g.left,g.top,g.right,g.bottom,g.toFrameX(p.left),g.toFrameY(p.top),g.toFrameX(p.right),g.toFrameY(p.bottom)))return false;
   jumperConsentPending=false;
   if(roundOutcome.result(timestamp))persistArcadeModel(true);
@@ -541,7 +606,7 @@ public class PilotService extends AccessibilityService {
 
  private void analyzeArcadeFrame(Bitmap frame,long timestampMs){
   if(!playingJumper||!jumperCaptureReady||jumperVisionPending){frame.recycle();return;}
-  long epoch=gate.epoch(),scene=arcadeSceneGeneration;ArcadeProfile profile=captureProfile;
+  long epoch=gate.epoch(),scene=arcadeSceneGeneration;ArcadeProfile profile=captureProfile;CustomVisionConfig calibration=customVision;
   final JumperFrameGeometry geometry;
   try{geometry=visualGeometry(frame);}
   catch(IllegalArgumentException error){frame.recycle();stop("Размер кадра не соответствует окну игры");return;}
@@ -552,8 +617,9 @@ public class PilotService extends AccessibilityService {
   try{visionTask=visionWorker.submit(()->{
    ArcadeObservation detected=null;RuntimeException failure=null;
    try{int width=frame.getWidth();int[] pixels=new int[width*frame.getHeight()];frame.getPixels(pixels,0,width,0,0,width,frame.getHeight());
-    detected=ArcadeVision.detectRecovering(profile,(x,y)->pixels[y*width+x],width,frame.getHeight(),
-     geometry.left,geometry.top,geometry.right,geometry.bottom,el,et,er,eb,timestampMs,previous,recoveryPass);}
+    detected=calibration==null?ArcadeVision.detectRecovering(profile,(x,y)->pixels[y*width+x],width,frame.getHeight(),
+     geometry.left,geometry.top,geometry.right,geometry.bottom,el,et,er,eb,timestampMs,previous,recoveryPass)
+     :CustomArcadeVision.detect(profile,(x,y)->pixels[y*width+x],geometry.left,geometry.top,geometry.right,geometry.bottom,el,et,er,eb,timestampMs,previous,calibration);}
    catch(RuntimeException|OutOfMemoryError error){failure=error instanceof RuntimeException?(RuntimeException)error:new IllegalStateException("VISION_OUT_OF_MEMORY");}
    finally{if(!frame.isRecycled())frame.recycle();}
    ArcadeObservation result=detected;RuntimeException error=failure;
@@ -619,17 +685,18 @@ public class PilotService extends AccessibilityService {
   uiStats=captureProfile.label+" · объекты "+observation.obstacles.size()+" · ответов "+arcadeVerified;
   note="5/5 · "+action.reason;update();if(!action.sendsInput())return;
   if(now-timestampMs>ActionGate.TTL_MS){failStage(StageMetrics.Stage.CAPTURE,"ARCADE_FRAME_STALE","Кадр устарел до касания");return;}
-  float x=geometry.toScreenX(geometry.left+(geometry.right-geometry.left)*action.x);
-  float y=geometry.toScreenY(geometry.top+(geometry.bottom-geometry.top)*action.y);
+  ArcadeControls.Gesture gesture=ArcadeControls.map(action,observation,controlMode);
+  float x=geometry.toScreenX(geometry.left+(geometry.right-geometry.left)*gesture.toX());
+  float y=geometry.toScreenY(geometry.top+(geometry.bottom-geometry.top)*gesture.toY());
   arcadeBefore=observation;arcadePending=action;arcadePendingAt=now;arcadeLastAction=now;arcadeAck=false;
-  float fromX=action.action==ArcadePolicy.Action.MOVE_PADDLE?
-    geometry.toScreenX(geometry.left+(geometry.right-geometry.left)*observation.control.x()):x;
+  float fromX=geometry.toScreenX(geometry.left+(geometry.right-geometry.left)*gesture.fromX());
+  float fromY=geometry.toScreenY(geometry.top+(geometry.bottom-geometry.top)*gesture.fromY());
   final long feedbackToken=temporal?arcadeFeedback.dispatched(action,observation,now):0;
   long sentBefore=captureSent;
-  sendObserved(fromX,y,x,y,ticket,()->{
+  sendObserved(fromX,fromY,x,y,ticket,()->{
    if(temporal&&!arcadeFeedback.acknowledge(feedbackToken))return;
    arcadeAck=true;note="Android завершил касание · проверяю игру";update();
-  },timestampMs,action.durationMs);
+  },timestampMs,gesture.durationMs());
   if(captureSent==sentBefore&&playingJumper){if(temporal)arcadeFeedback.cancel(feedbackToken);arcadePending=null;arcadeBefore=null;arcadeAck=false;}
   if(captureSent>sentBefore){long actual=SystemClock.elapsedRealtime();arcadePendingAt=actual;if(temporal)arcadeFeedback.started(feedbackToken,actual);arcadeController.actionDispatched(action,actual);}
  }
@@ -671,8 +738,10 @@ public class PilotService extends AccessibilityService {
   if(action==JumperPolicy.Action.WAIT){note="Наблюдаю за прыжком";update();return;}
   JumperFrameGeometry geometry=jumperFrameGeometry;
   if(geometry==null){failStage(StageMetrics.Stage.POLICY,"FRAME_GEOMETRY_MISSING","Нет соответствия координат кадра");return;}
-  float x=geometry.toScreenX(geometry.left+(geometry.right-geometry.left)*(action==JumperPolicy.Action.TAP_LEFT?.25f:.75f));
+  ArcadeControls.Gesture gesture=ArcadeControls.map(new ArcadePolicy.Decision(action==JumperPolicy.Action.TAP_LEFT?ArcadePolicy.Action.LEFT:ArcadePolicy.Action.RIGHT,action==JumperPolicy.Action.TAP_LEFT?.25f:.75f,.56f,"Прыгун",120),null,controlMode);
+  float x=geometry.toScreenX(geometry.left+(geometry.right-geometry.left)*gesture.toX());
   float y=geometry.toScreenY(geometry.top+(geometry.bottom-geometry.top)*.56f);
+  float fromX=geometry.toScreenX(geometry.left+(geometry.right-geometry.left)*gesture.fromX());
   if(panelBounds().contains((int)x,(int)y)){failStage(StageMetrics.Stage.POLICY,"JUMPER_TAP_OVERLAY","Переместите панель STOP от зоны управления");return;}
   if(timestampMs>now||now-timestampMs>ActionGate.TTL_MS){failStage(StageMetrics.Stage.CAPTURE,"JUMPER_FRAME_STALE","Кадр устарел до касания");return;}
   jumperPendingAction=action;jumperPendingStartX=state.player.centerX();jumperPendingActionMs=now;
@@ -680,7 +749,9 @@ public class PilotService extends AccessibilityService {
   long policyStart=SystemClock.elapsedRealtimeNanos();metrics.attempt(StageMetrics.Stage.POLICY);
   metrics.record(StageMetrics.Stage.POLICY,SystemClock.elapsedRealtimeNanos()-policyStart);
   note="Касание "+action+" · проверю движение Ари";update();
-  sendObserved(x,y,x,y,ticket,()->{note="Android завершил касание · ожидаю новый кадр";update();},timestampMs,120);
+  long sentBefore=captureSent;
+  sendObserved(fromX,y,x,y,ticket,()->{note="Android завершил касание · ожидаю новый кадр";update();},timestampMs,gesture.durationMs());
+  if(captureSent==sentBefore)jumperAwaitingVerification=false;
  }
  private void send(float x,float y,float ex,float ey,ActionGate.Ticket ticket,Runnable done){sendObserved(x,y,ex,ey,ticket,done,-1);}
  private void sendObserved(float x,float y,float ex,float ey,ActionGate.Ticket ticket,Runnable done,long frameAt){sendObserved(x,y,ex,ey,ticket,done,frameAt,50);}
@@ -696,7 +767,8 @@ public class PilotService extends AccessibilityService {
   if(frameAt>=0&&(SystemClock.elapsedRealtime()<frameAt||SystemClock.elapsedRealtime()-frameAt>300)){metrics.failure(StageMetrics.Stage.CAPTURE,"STALE_BEFORE_DISPATCH");note="Кадр устарел при подготовке жеста · жду свежий";update();return;}
   if(!valid(ticket)||!gate.consume(ticket,SystemClock.elapsedRealtime(),target,ticket.window,armedBounds.width(),armedBounds.height())||!permit.consume(gate.epoch(),SystemClock.elapsedRealtime())){failStage(StageMetrics.Stage.ANDROID_ACK,"PERMIT_EXPIRED","Разрешение истекло/уже использовано");return;}
   Path path=new Path();path.moveTo(x,y);if(x!=ex||y!=ey)path.lineTo(ex,ey);
-  GestureDescription gesture=new GestureDescription.Builder().addStroke(new GestureDescription.StrokeDescription(path,0,x==ex&&y==ey?Math.max(40,Math.min(240,holdMs)):120)).build();
+  int duration=frameAt<0&&(x!=ex||y!=ey)?120:Math.max(40,Math.min(240,holdMs));
+  GestureDescription gesture=new GestureDescription.Builder().addStroke(new GestureDescription.StrokeDescription(path,0,duration)).build();
   if(frameAt>=0)arcadeDispatchFrameAge=SystemClock.elapsedRealtime()-frameAt;
   final long dispatchedNs=SystemClock.elapsedRealtimeNanos();long epoch=gate.epoch();
   final long flight=gestureFlight.begin(SystemClock.elapsedRealtime());busy=true;note="Отправка";update();

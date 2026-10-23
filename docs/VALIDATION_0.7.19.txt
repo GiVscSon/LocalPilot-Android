@@ -1,0 +1,26 @@
+LocalPilot Android 0.7.19-dev, versionCode 35
+Date: 2026-10-23
+Package: org.localpilot.android.dev
+Activity: org.localpilot.android.MainActivity
+
+Final build: Gradle 8.9 / JDK 21 / Android SDK 35, offline
+:app:assembleDebug :app:lintDebug :app:compileDebugAndroidTestJavaWithJavac
+BUILD SUCCESSFUL in 1m 12s; 59 actionable tasks
+Lint XML: 0 errors; 42 warnings. Instrumentation compiled, not executed.
+
+java tests/UniversalVerify.java: 172 assertions PASS, 27 synthetic scenes
+java tests/Verify.java: all suites PASS
+java tests/ResultVerify.java: 1046 assertions PASS; real frames=0
+java tests/SystemVerify.java: 9 assertions PASS; synthetic physics/images only
+APK ZIP CRC: PASS (all entries)
+APK signing verification: PASS, v2 signature
+Signer certificate SHA256:
+55626377256dda3a6b5824b7278eb12db75b8a7d1c80baa9d2af4402ccac2684
+APK bytes: 460250
+APK SHA256:
+1db17bd43faa7b20c7f7898b514efaec02779ed2ec5310875709783105a8f708
+APK path: release/LocalPilot_Android_0.7.19_dev.apk
+
+No physical Android gameplay or calibration UI acceptance test was performed.
+No claim that all catalogued games are supported or that each round improves.
+No user recordings, experience logs or signing keys included in tracked changes.

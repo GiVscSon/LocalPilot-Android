@@ -17,4 +17,9 @@ public final class VisualGameTarget {
   String encoded=java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(slot.trim().getBytes(java.nio.charset.StandardCharsets.UTF_8));
   return pkg+"#"+encoded+"#"+profile.name();
  }
+ public static String modelSlot(String slot,int controls,String vision){
+  if(controls==0&&vision==null)return slot;
+  try{byte[] bytes=java.security.MessageDigest.getInstance("SHA-256").digest((slot+"|"+controls+"|"+vision).getBytes(java.nio.charset.StandardCharsets.UTF_8));StringBuilder key=new StringBuilder("model-");for(byte b:bytes)key.append(String.format(java.util.Locale.ROOT,"%02x",b&255));return key.toString();}
+  catch(java.security.NoSuchAlgorithmException impossible){throw new IllegalStateException(impossible);}
+ }
 }
