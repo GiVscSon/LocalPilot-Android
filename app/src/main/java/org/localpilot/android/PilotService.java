@@ -1199,6 +1199,11 @@ public class PilotService extends AccessibilityService {
   int n=MiniPolicy.size(miniKind);Rect r=new Rect(boardRoi);float x=r.left+(action%n+.5f)*r.width()/n,y=r.top+(action/n+.5f)*r.height()/n;miniBefore=board.clone();miniAction=action;miniMoves++;uiStats="Проверено касаний: "+(miniMoves-1);send(x,y,x,y,ticket,()->handler.postDelayed(()->miniRound(epoch),captureDelay()));
  });}
  @Override public void onAccessibilityEvent(AccessibilityEvent e){
+  // Canvas/content and our own status-label updates do not change the binding.
+  // Re-querying the window tree for each such event floods the main thread and
+  // can block gesture callbacks on older Android. Every dispatch and completion
+  // still validates the current app, window, bounds, lock state and ticket.
+  if(e==null||e.getEventType()!=AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED&&e.getEventType()!=AccessibilityEvent.TYPE_WINDOWS_CHANGED)return;
   if(!gate.armed())return;if(playingJumper&&jumperConsentPending)return;
   if(targetIsBrowser&&(playingJumper&&arcadeRoundSeen||playingGrid||playing2048||playingMini)
     &&e.getEventType()==AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED&&target.equals(String.valueOf(e.getPackageName()))){stop("Состояние браузера изменилось · выберите игру и нажмите Старт заново");return;}
