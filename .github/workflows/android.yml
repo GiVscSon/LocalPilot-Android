@@ -35,6 +35,7 @@ jobs:
       java tests/CaptureCleanupVerify.java
       java tests/RuntimeVerify.java
       java tests/Upgrade726Verify.java
+      java tests/Upgrade727Verify.java
       java tests/ResultVerify.java
       java tests/UniversalVerify.java
       java tests/ControllerVerify.java

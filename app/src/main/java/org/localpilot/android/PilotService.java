@@ -11,6 +11,7 @@ public class PilotService extends AccessibilityService {
  private final StageMetrics metrics=new StageMetrics();
  public String exportMetrics(){stop("Экспорт замеров: STOP");return metrics.report()+"\n"+captureCounters()+"\nLAST_STOP: "+lastStopReason+"\nCAPTURE STARTUP\n"+captureStartup.report()+"\n"+sceneRecovery.report();}
  private final Handler handler=new Handler(Looper.getMainLooper());private final Handler gestureHandler=new Handler(Looper.getMainLooper());private final ActionGate gate=new ActionGate();
+ private DisplayGeometry displayGeometry;
  private WindowManager wm;private LinearLayout panel,controls,miniBar;private TextView miniState;private TextView state;private Button collapseButton;private boolean panelCompact,discoveringBoard;private WindowManager.LayoutParams layout;
  private final java.util.List<Button> manualControls=new java.util.ArrayList<>();
  private final java.util.concurrent.ExecutorService visionWorker=java.util.concurrent.Executors.newSingleThreadExecutor();
@@ -280,7 +281,7 @@ public class PilotService extends AccessibilityService {
  }
 
 
- @Override protected void onServiceConnected(){CrashDiagnostics.phase("SERVICE_CONNECTED");instance=this;try{experience=new ExperienceStore(new java.io.File(getFilesDir(),"experience-v1.log"));}catch(java.io.IOException e){experience=null;}try{arcadeLearning=new ArcadeLearningStore(new java.io.File(getFilesDir(),"arcade-learning-v1.log"));}catch(java.io.IOException e){arcadeLearning=null;}try{journal=new RotatingJournal(new java.io.File(getFilesDir(),"audit-segments"),new java.io.File(getFilesDir(),"audit-v1.log"));}catch(java.io.IOException e){journal=null;}wm=(WindowManager)getSystemService(WINDOW_SERVICE);gate.stop();showPanel();}
+ @Override protected void onServiceConnected(){CrashDiagnostics.phase("SERVICE_CONNECTED");instance=this;try{experience=new ExperienceStore(new java.io.File(getFilesDir(),"experience-v1.log"));}catch(java.io.IOException e){experience=null;}try{arcadeLearning=new ArcadeLearningStore(new java.io.File(getFilesDir(),"arcade-learning-v1.log"));}catch(java.io.IOException e){arcadeLearning=null;}try{journal=new RotatingJournal(new java.io.File(getFilesDir(),"audit-segments"),new java.io.File(getFilesDir(),"audit-v1.log"));}catch(java.io.IOException e){journal=null;}wm=(WindowManager)getSystemService(WINDOW_SERVICE);gate.stop();displayGeometry=readDisplayGeometry();showPanel();}
  public void showPanel(){if(destroying)return;if(panel!=null){restoreConsentPanel();compact(false);return;}selectedProfile=Math.max(0,Math.min(7,getSharedPreferences("panel",MODE_PRIVATE).getInt("profile",0)));gate.stop();consentPanelDetached=false;panelRegistered=false;panelCompact=false;controls=null;manualControls.clear();panel=new LinearLayout(this);panel.setOrientation(LinearLayout.VERTICAL);panel.setPadding(8,4,8,4);panel.setBackgroundColor(0xEE202830);
   TextView header=new TextView(this);header.setText("LocalPilot · тянуть здесь");header.setTextColor(Color.WHITE);panel.addView(header);
   header.setOnTouchListener(new View.OnTouchListener(){float x,y;int ox,oy;public boolean onTouch(View v,android.view.MotionEvent e){if(layout==null)return true;if(e.getAction()==MotionEvent.ACTION_DOWN){x=e.getRawX();y=e.getRawY();ox=layout.x;oy=layout.y;return true;}if(e.getAction()==MotionEvent.ACTION_MOVE){layout.x=ox+(int)(e.getRawX()-x);layout.y=oy+(int)(e.getRawY()-y);updatePanelLayout();return true;}return true;}});
@@ -1343,6 +1344,18 @@ public class PilotService extends AccessibilityService {
 
  }
  @Override public void onInterrupt(){CrashDiagnostics.phase("SERVICE_INTERRUPTED");stop("Служба прервана");}
- @Override public void onConfigurationChanged(android.content.res.Configuration c){super.onConfigurationChanged(c);stop("Поворот/конфигурация — STOP. Выберите окно игры заново");explicitWindow=false;browserProfileConfirmed=false;visualRoi=null;manualVisualRoi=false;visualOwner="";visualWindow=-1;visualWindowBounds.setEmpty();if(layout!=null){layout.x=0;layout.y=dp(48);updatePanelLayout();}}
+ private DisplayGeometry readDisplayGeometry(){
+  if(wm==null)return null;
+  try{Display display=wm.getDefaultDisplay();Point size=new Point();display.getRealSize(size);
+   android.util.DisplayMetrics metrics=new android.util.DisplayMetrics();display.getRealMetrics(metrics);
+   return new DisplayGeometry(size.x,size.y,display.getRotation(),metrics.densityDpi);
+  }catch(RuntimeException error){return null;}
+ }
+ @Override public void onConfigurationChanged(android.content.res.Configuration c){super.onConfigurationChanged(c);
+  DisplayGeometry next=readDisplayGeometry();boolean changed=displayGeometry==null||displayGeometry.requiresRebind(next);displayGeometry=next;
+  // Insets, locale or font metadata may change while the physical display and
+  // target window remain the same. The normal per-frame window gate still applies.
+  if(!changed){update();return;}
+  stop("Поворот/конфигурация — STOP. Выберите окно игры заново");explicitWindow=false;browserProfileConfirmed=false;visualRoi=null;manualVisualRoi=false;visualOwner="";visualWindow=-1;visualWindowBounds.setEmpty();if(layout!=null){layout.x=0;layout.y=dp(48);updatePanelLayout();}}
  @Override public void onDestroy(){destroying=true;CrashDiagnostics.phase("SERVICE_DESTROYED");permit.revoke();gate.stop();if(instance==this)instance=null;try{CaptureCleanup.run(this::hidePanel,this::clearDiagnosticFrame,gestureFlight::clear,()->gestureHandler.removeCallbacksAndMessages(null),()->handler.removeCallbacksAndMessages(null),()->visionWorker.shutdownNow());}finally{busy=false;super.onDestroy();}}
 }

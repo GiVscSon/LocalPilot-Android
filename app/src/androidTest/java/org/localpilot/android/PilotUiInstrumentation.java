@@ -189,6 +189,17 @@ public final class PilotUiInstrumentation extends Instrumentation {
         launchDemo();
         click("Начать проверку ×10");
         await(() -> score() > 0, 6_000, "Demo made no first move");
+        long configEpoch=onMain(()->gate().epoch());
+        onMain(()->{
+            Configuration metadata=new Configuration(service.getResources().getConfiguration());
+            metadata.screenHeightDp=Math.max(1,metadata.screenHeightDp-1);
+            metadata.fontScale+=0.05f;
+            service.onConfigurationChanged(metadata);
+            return null;
+        });
+        require(onMain(()->gate().armed()&&gate().epoch()==configEpoch&&permit().allows(configEpoch,SystemClock.elapsedRealtime())),
+                "Metadata-only configuration revoked an unchanged physical input space");
+        addCheck("metadata_configuration_preserves_session",new JSONObject().put("injected_callback",true).put("physical_rotation_test_separate",true));
         require(compact(), "Demo did not compact panel before starting");
         require(present("STOP") && present("Развернуть"), "Running demo lost compact STOP controls");
         await(() -> score() == 10, 65_000, "Demo did not reach exactly ten real target clicks");
