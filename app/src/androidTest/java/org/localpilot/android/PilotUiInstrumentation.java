@@ -96,6 +96,8 @@ public final class PilotUiInstrumentation extends Instrumentation {
             result.putString("stack", stack.toString());
             try {
                 evidence.put("failure", error.toString());
+                evidence.put("failed_at_ms", SystemClock.uptimeMillis()-started);
+                evidence.put("windows", windowSummary());
                 evidence.put("stack", stack.toString());
                 evidence.put("visible_ui", visibleUi());
                 if(service!=null)evidence.put("own_state",onMain(()->"connected="+(PilotService.instance==service)+" registered="+field("panelRegistered")+" panel="+(field("panel")!=null)+" note="+field("note")+" demo_score="+(demo==null?-1:visibleScore(demo.getWindow().getDecorView()))+" demo_verified="+field("demoVerified")+" gesture="+field("lastGestureContext")));
@@ -571,6 +573,24 @@ public final class PilotUiInstrumentation extends Instrumentation {
         AccessibilityNodeInfo active=automation.getRootInActiveWindow();
         if(active!=null)try{return findText(active,text,0,new int[]{2000});}finally{active.recycle();}
         return null;
+    }
+
+    private String windowSummary() throws Exception {
+        StringBuilder out=new StringBuilder("automation: ");
+        describeWindows(automation.getWindows(),out);
+        out.append(" service: ");
+        out.append(onMain(()->{StringBuilder own=new StringBuilder();describeWindows(service.getWindows(),own);return own.toString();}));
+        return out.toString();
+    }
+    private static void describeWindows(java.util.List<AccessibilityWindowInfo> windows,StringBuilder out){
+        for(AccessibilityWindowInfo window:windows){
+            Rect bounds=new Rect();window.getBoundsInScreen(bounds);
+            out.append("id=").append(window.getId()).append(" type=").append(window.getType())
+                .append(" focused=").append(window.isFocused()).append(" bounds=").append(bounds.toShortString());
+            AccessibilityNodeInfo root=window.getRoot();
+            try{out.append(" root=").append(root==null?"null":root.getPackageName()).append(';');}
+            finally{if(root!=null)root.recycle();}
+        }
     }
 
     private String visibleUi(){

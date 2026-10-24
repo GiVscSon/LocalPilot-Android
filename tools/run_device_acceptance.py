@@ -65,6 +65,7 @@ def main():
         (OUT/'pilot-ui-evidence.json').write_text(json.dumps(report,indent=2),encoding='utf-8')
         print(json.dumps(report, indent=2), flush=True)
         if report.get('result') != 'PASS':
+            annotation('notice', 'Failure at ms=' + str(report.get('failed_at_ms')) + '\nWindows: ' + str(report.get('windows','')))
             raise RuntimeError(str(report.get('failure', report.get('evidence_error', 'No PASS result')))
                                + '\n' + str(report.get('own_state',''))
                                + '\nUI: ' + str(report.get('visible_ui',''))[:2000]
@@ -80,6 +81,10 @@ def main():
             crash=command(['adb','logcat','-d','-b','crash'],10)
             (OUT/'crash-logcat.txt').write_text(crash[-16000:],encoding='utf-8')
             if crash.strip():annotation('error','Isolated test device crash buffer:\n'+crash[-3000:])
+            activity=command(['adb','shell','dumpsys','activity','activities'],10)
+            (OUT/'activities.txt').write_text(activity,encoding='utf-8')
+            summary=[line for line in activity.splitlines() if any(key in line for key in ['mResumedActivity','topResumedActivity','mFocusedApp','localpilot'])]
+            annotation('notice','Activity state:\n'+'\n'.join(summary)[:3000])
             state=command(['adb','shell','dumpsys','accessibility'],10)
             (OUT/'accessibility.txt').write_text(state[:32000],encoding='utf-8')
             own=[line for line in state.splitlines() if 'localpilot' in line.lower() or 'UiAutomation' in line or 'mIsAccessibilityEnabled' in line]
