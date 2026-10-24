@@ -246,12 +246,18 @@ public class PilotService extends AccessibilityService {
   overlayDialog=d;d.setOnDismissListener(dialog->{if(overlayDialog==d)overlayDialog=null;image.setImageDrawable(null);if(!copy.isRecycled())copy.recycle();});d.getWindow().setType(WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY);d.getWindow().addFlags(WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE);d.show();
  }
  private void selectVisualRegion(){
-  if(!gate.armed()||!valid(gate.offer(SystemClock.elapsedRealtime()))){note="Сначала выберите активное окно игры";update();return;}
-  long epoch=gate.epoch();Rect window=new Rect(armedBounds);compact(true);
+  long epoch=gate.epoch();
+  String initialRejection=windowRejection(null,false,true);if(epoch!=gate.epoch())return;
+  if(initialRejection!=null){note="Сначала выберите активное окно игры";update();return;}
+  Rect window=new Rect(armedBounds);compact(true);
   GameAreaOverlay overlay=new GameAreaOverlay(this,window,selectedProfile>=6?gridConfig.rows:4,selectedProfile>=6?gridConfig.cols:4,new GameAreaOverlay.Listener(){
-   public void selected(Rect b){View old=picker;picker=null;removeOverlay(old);compact(false);if(epoch!=gate.epoch()||!valid(gate.offer(SystemClock.elapsedRealtime())))return;
+   public void selected(Rect b){if(epoch!=gate.epoch())return;View old=picker;picker=null;removeOverlay(old);compact(false);
+    // Choosing geometry observes the binding; it does not authorize an action.
+    // Slow window metadata must not silently discard the user's confirmed area.
+    String reason=windowRejection(null,false,true);if(epoch!=gate.epoch())return;if(reason!=null){stop("Область не сохранена: окно изменилось ["+reason+"] · выберите его заново");return;}
+    if(b==null||b.isEmpty()||!window.contains(b)||!armedBounds.contains(b)){stop("Область не сохранена: прямоугольник вне выбранного окна");return;}
     visualRoi=new Rect(b);manualVisualRoi=true;boardRoi=selectedProfile>=4?new Rect(b):null;if(selectedProfile>=6)saveGridRegion(b);sceneRecovery.reset();clearDiagnosticFrame();note="Область выбрана: "+b.width()+"×"+b.height()+" · нажмите Старт";update();}
-   public void cancelled(){stop("Выбор области отменён");compact(false);}
+   public void cancelled(){if(epoch!=gate.epoch())return;stop("Выбор области отменён");compact(false);}
   });
   WindowManager.LayoutParams lp=new WindowManager.LayoutParams(-1,-1,WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE|WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN|WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,PixelFormat.TRANSLUCENT);lp.gravity=Gravity.TOP|Gravity.LEFT;
   try{wm.addView(overlay,lp);picker=overlay;handler.postDelayed(()->{if(picker==overlay){stop("Время выбора области истекло");compact(false);}},30000);}catch(RuntimeException error){stop("Не удалось открыть выбор области");compact(false);}
