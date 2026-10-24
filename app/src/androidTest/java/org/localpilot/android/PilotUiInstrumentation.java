@@ -295,15 +295,25 @@ public final class PilotUiInstrumentation extends Instrumentation {
         click("STOP");
         await(() -> !armed() && !onMain(() -> booleanField("busy")), 4_000,
                 "2048 STOP did not settle and revoke input");
+        int[] stoppedInput=onMain(()->new int[]{intField("moves2048"),intField("direction2048")});
         Board2048 after = read2048Screenshot();
         require(total(after) > total(before), "2048 screen did not gain spawned tile value after real swipes");
-        int[] settled = after.cells.clone();
         SystemClock.sleep(600);
-        require(java.util.Arrays.equals(settled, read2048Screenshot().cells), "2048 kept changing after STOP settled");
+        Board2048 settled=read2048Screenshot();boolean lastMoveAppeared=!after.same(settled);
+        // Android ACK can precede delivery/composition of the final UP. STOP
+        // revokes future actions; at most one previously sent, legal move may
+        // become visible. It must then stay still, with no new proposals.
+        require(!lastMoveAppeared||after.verifies(settled,stoppedInput[1]),"2048 showed more than its final legal dispatched move after STOP");
+        require(onMain(()->!gate().armed()&&!permit().allows(gate().epoch(),SystemClock.elapsedRealtime())&&intField("moves2048")==stoppedInput[0]),"2048 restored input while its final frame settled");
+        SystemClock.sleep(1_100);
+        require(settled.same(read2048Screenshot()), "2048 kept changing after the final dispatched move settled");
+        require(onMain(()->!gate().armed()&&!permit().allows(gate().epoch(),SystemClock.elapsedRealtime())&&intField("moves2048")==stoppedInput[0]),"2048 proposed another action or restored input after STOP");
         addCheck("2048_real_screenshot_progress_and_stop", new JSONObject()
                 .put("input_start", "visible profile/window/start controls")
                 .put("minimum_visual_verifications", 3)
-                .put("tile_total_before", total(before)).put("tile_total_after", total(after))
+                .put("tile_total_before", total(before)).put("tile_total_after", total(settled))
+                .put("last_dispatched_move_appeared_after_ack",lastMoveAppeared)
+                .put("stable_after_final_move_ms",1_100)
                 .put("android_ack_is_not_success", true));
     }
 
