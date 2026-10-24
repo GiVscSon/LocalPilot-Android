@@ -11,6 +11,7 @@ public class PilotService extends AccessibilityService {
  private final StageMetrics metrics=new StageMetrics();
  public String exportMetrics(){stop("Экспорт замеров: STOP");return metrics.report()+"\n"+captureCounters()+"\nLAST_STOP: "+lastStopReason+"\nCAPTURE STARTUP\n"+captureStartup.report()+"\n"+sceneRecovery.report();}
  private final Handler handler=new Handler(Looper.getMainLooper());private final Handler gestureHandler=new Handler(Looper.getMainLooper());private final ActionGate gate=new ActionGate();
+ private final CaptureRetry captureRetry=new CaptureRetry();
  private DisplayGeometry displayGeometry;
  private WindowManager wm;private LinearLayout panel,controls,miniBar;private TextView miniState;private TextView state;private Button collapseButton;private boolean panelCompact,discoveringBoard;private WindowManager.LayoutParams layout;
  private final java.util.List<Button> manualControls=new java.util.ArrayList<>();
@@ -165,8 +166,9 @@ public class PilotService extends AccessibilityService {
   }
  }
  private void overlayMenu(String title,String[] labels,java.util.function.IntConsumer select){
-  long menuEpoch=gate.epoch();AlertDialog d=new AlertDialog.Builder(this).setTitle(title).setItems(labels,(dialog,index)->{if(menuEpoch==gate.epoch())select.accept(index);}).setNegativeButton("Отмена",null).create();
-  overlayDialog=d;d.setOnDismissListener(dialog->{if(overlayDialog==d)overlayDialog=null;});d.getWindow().setType(WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY);d.getWindow().addFlags(WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE);d.show();
+  long menuEpoch=gate.epoch();AlertDialog d=new AlertDialog.Builder(this).setTitle(title).setItems(labels,(dialog,index)->{dialog.dismiss();if(overlayDialog==dialog)overlayDialog=null;handler.post(()->{if(menuEpoch==gate.epoch())select.accept(index);});}).setNegativeButton("Отмена",null).create();
+  // Remove the menu input window before a selection can start gestures.
+  overlayDialog=d;d.setOnDismissListener(dialog->{if(overlayDialog==d)overlayDialog=null;});d.getWindow().setType(WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY);d.getWindow().addFlags(WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE);d.getWindow().setWindowAnimations(0);d.show();
  }
  private void chooseWindow(){
   stop("Выберите окно с игрой");if(busy){note="Дождитесь завершения касания";update();return;}
@@ -1218,6 +1220,14 @@ public class PilotService extends AccessibilityService {
   catch(PipelineRead.Failure error){retryBoardRead(epoch,result,"ожидаю распознаваемое поле");return;}
   boardReadMisses=0;result.ready(board,t,ms);
  });}
+ private boolean retryCapture(long epoch,ImageResult result,String reason){
+  if(epoch!=gate.epoch()||!captureEnabled()||focusPaused||!captureRetry.allow(epoch,reason))return false;
+  metrics.failure(StageMetrics.Stage.CAPTURE,reason);
+  note="Снимок задержался · запрашиваю новый кадр без ввода";update();
+  long generation=boardReadGeneration;
+  handler.postDelayed(()->{if(epoch==gate.epoch()&&generation==boardReadGeneration&&captureEnabled()&&!focusPaused&&!captureBusy)captureImage(epoch,result);},captureDelay());
+  return true;
+ }
  private void captureImage(long epoch,ImageResult result){
   if(epoch!=gate.epoch()||!captureEnabled())return;
   metrics.attempt(StageMetrics.Stage.CAPTURE);
@@ -1227,16 +1237,16 @@ public class PilotService extends AccessibilityService {
   final long captureNs=SystemClock.elapsedRealtimeNanos();captureBusy=true;long request=SystemClock.elapsedRealtime();final long requestedUptime=SystemClock.uptimeMillis();final long requestId=++captureCounter;pendingCapture=requestId;
   TakeScreenshotCallback callback=new TakeScreenshotCallback(){
    @Override public void onSuccess(ScreenshotResult shot){android.hardware.HardwareBuffer buffer=shot.getHardwareBuffer();if(pendingCapture!=requestId){CaptureCleanup.run(buffer::close);return;}captureBusy=false;Bitmap hardware=null,bitmap=null;boolean captured=false;
-    try{if(epoch!=gate.epoch()||!captureEnabled()){metrics.cancelled(StageMetrics.Stage.CAPTURE);return;}if(boardRoi==null||!roi.equals(boardRoi)||!CaptureFreshness.valid(shot.getTimestamp(),requestedUptime,SystemClock.uptimeMillis(),lastShotTimestamp)){failStage(StageMetrics.Stage.CAPTURE,"STALE_FRAME","Снимок устарел/повторён");return;}long previousTimestamp=lastShotTimestamp;lastShotTimestamp=shot.getTimestamp();
+    try{if(epoch!=gate.epoch()||!captureEnabled()){metrics.cancelled(StageMetrics.Stage.CAPTURE);return;}if(boardRoi==null||!roi.equals(boardRoi)){failStage(StageMetrics.Stage.CAPTURE,"ROI_CHANGED","Область снимка изменилась");return;}if(!CaptureFreshness.valid(shot.getTimestamp(),requestedUptime,SystemClock.uptimeMillis(),lastShotTimestamp)){if(!retryCapture(epoch,result,"STALE_FRAME"))failStage(StageMetrics.Stage.CAPTURE,"STALE_FRAME","Снимок устарел/повторён после повторов");return;}long previousTimestamp=lastShotTimestamp;lastShotTimestamp=shot.getTimestamp();
      hardware=Bitmap.wrapHardwareBuffer(buffer,shot.getColorSpace());if(hardware==null)throw new IllegalArgumentException("Нет пикселей");bitmap=hardware.copy(Bitmap.Config.ARGB_8888,false);
      Point size=new Point();wm.getDefaultDisplay().getRealSize(size);if(bitmap.getWidth()!=size.x||bitmap.getHeight()!=size.y)throw new IllegalArgumentException("Масштаб снимка не подтверждён");
      final Bitmap pixels=bitmap;
      // One final window query after pixel conversion is sufficient; querying the
      // same Binder tree twice per callback can consume the entire frame budget.
      String rejection=invalidReason(ticket);
-     if(rejection!=null){if(deferFocus(rejection))return;failStage(StageMetrics.Stage.CAPTURE,rejection,"Контекст/срок снимка изменился");return;}
-     if(!CaptureFreshness.valid(shot.getTimestamp(),requestedUptime,SystemClock.uptimeMillis(),previousTimestamp)){failStage(StageMetrics.Stage.CAPTURE,"FRAME_TTL_EXPIRED","Обработка кадра превысила TTL");return;}
-     metrics.record(StageMetrics.Stage.CAPTURE,SystemClock.elapsedRealtimeNanos()-captureNs);captured=true;result.ready(pixels,ticket,SystemClock.elapsedRealtime()-request);
+     if(rejection!=null){if(deferFocus(rejection)||retryCapture(epoch,result,rejection))return;failStage(StageMetrics.Stage.CAPTURE,rejection,"Контекст/срок снимка изменился");return;}
+     if(!CaptureFreshness.valid(shot.getTimestamp(),requestedUptime,SystemClock.uptimeMillis(),previousTimestamp)){if(!retryCapture(epoch,result,"FRAME_TTL_EXPIRED"))failStage(StageMetrics.Stage.CAPTURE,"FRAME_TTL_EXPIRED","Обработка кадра превысила TTL после повторов");return;}
+     metrics.record(StageMetrics.Stage.CAPTURE,SystemClock.elapsedRealtimeNanos()-captureNs);captured=true;captureRetry.fresh(epoch);result.ready(pixels,ticket,SystemClock.elapsedRealtime()-request);
      // Board games use Accessibility screenshots rather than MediaProjection.
      // Refresh their preview too, so it cannot keep showing the last arcade.
      long previewAt=SystemClock.elapsedRealtime();
@@ -1247,7 +1257,7 @@ public class PilotService extends AccessibilityService {
      }
     }catch(RuntimeException|OutOfMemoryError error){if(epoch==gate.epoch()){if(!captured)failStage(StageMetrics.Stage.CAPTURE,"BITMAP_FAILED","Не удалось подготовить пиксели");else stop("Ошибка обработки прочитанного кадра · захват остановлен");}}finally{Bitmap oldBitmap=bitmap,oldHardware=hardware;boolean released=CaptureCleanup.run(()->{if(oldBitmap!=null)oldBitmap.recycle();},()->{if(oldHardware!=null)oldHardware.recycle();},buffer::close);if(!released&&epoch==gate.epoch())stop("Ошибка освобождения кадра · захват остановлен");}
    }
-   @Override public void onFailure(int error){if(pendingCapture!=requestId)return;captureBusy=false;if(epoch==gate.epoch())failStage(StageMetrics.Stage.CAPTURE,"ANDROID_SCREENSHOT_ERROR","Захват Android: ошибка "+error+". Проверьте доступ службы");}
+   @Override public void onFailure(int error){if(pendingCapture!=requestId)return;captureBusy=false;if(epoch==gate.epoch()&&error==ERROR_TAKE_SCREENSHOT_INTERVAL_TIME_SHORT&&retryCapture(epoch,result,"SCREENSHOT_INTERVAL"))return;if(epoch==gate.epoch())failStage(StageMetrics.Stage.CAPTURE,"ANDROID_SCREENSHOT_ERROR","Захват Android: ошибка "+error+". Проверьте доступ службы");}
   };
   try{takeScreenshot(Display.DEFAULT_DISPLAY,getMainExecutor(),callback);}catch(RuntimeException e){captureBusy=false;failStage(StageMetrics.Stage.CAPTURE,"SCREENSHOT_UNAVAILABLE","Захват недоступен");return;}
   handler.postDelayed(()->{if(captureBusy&&pendingCapture==requestId&&epoch==gate.epoch()){captureBusy=false;pendingCapture=++captureCounter;failStage(StageMetrics.Stage.CAPTURE,"SCREENSHOT_TIMEOUT","Захват: таймаут без ввода");}},4000);
