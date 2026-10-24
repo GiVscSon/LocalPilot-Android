@@ -1,7 +1,6 @@
 package org.localpilot.android;
 
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 
 /** Temporal model-predictive control in normalized game coordinates. No Android dependency. */
@@ -192,17 +191,20 @@ public final class ArcadeController {
   if(flap+.0004f<wait)return new ArcadePolicy.Decision(ArcadePolicy.Action.FLAP,.62f,(s.top+s.bottom)*.5f,"Прыжок по прогнозу высоты и прохода");
   return waitFor("Полёт по безопасной траектории");
  }
+ // Controller instances belong to one session/worker; scratch must not be shared across threads.
  private static final class Flight {
-  final float y,v,cost;final int since;
-  Flight(float y,float v,float cost,int since){this.y=y;this.v=v;this.cost=cost;this.since=since;}
+  float y,v,cost;int since;
+  void set(float y,float v,float cost,int since){this.y=y;this.v=v;this.cost=cost;this.since=since;}
  }
+ private static Flight[] flights(int size){Flight[] result=new Flight[size];for(int i=0;i<size;i++)result[i]=new Flight();return result;}
+ private final Flight[] flightBeam=flights(10),flightCandidates=flights(20);
  private float rollout(ArcadeObservation s,float startY,float startV,boolean flap,long now,float ceiling,float floor,float lo,float hi,float target,float arrival,float horizon){
-  float dt=.065f;int minimumFlapSteps=(int)Math.ceil((.16f+Math.max(0,now-s.timestampMs)/1000f)/dt);List<Flight> beam=new ArrayList<>();
-  beam.add(new Flight(startY,flap?flapVelocity:startV,flap?.001f:0,flap?0:(int)Math.min(50,(now-lastFlap)/65)));
+  float dt=.065f;int minimumFlapSteps=(int)Math.ceil((.16f+Math.max(0,now-s.timestampMs)/1000f)/dt);
+  int beamSize=1;flightBeam[0].set(startY,flap?flapVelocity:startV,flap?.001f:0,flap?0:(int)Math.min(50,(now-lastFlap)/65));
   int steps=(int)Math.ceil(horizon/dt);
   for(int step=0;step<steps;step++){
-   List<Flight> next=new ArrayList<>();float time=(step+1)*dt;
-   for(Flight f:beam)for(int action=0;action<2;action++){
+   int count=0;float time=(step+1)*dt;
+   for(int i=0;i<beamSize;i++){Flight f=flightBeam[i];for(int action=0;action<2;action++){
     if(action==1&&(step<2||f.since<minimumFlapSteps))continue;
     float v=action==1?flapVelocity:f.v;
     float y=f.y+v*dt+.5f*gravity*dt*dt;v+=gravity*dt;
@@ -213,13 +215,20 @@ public final class ArcadeController {
      if(y<lo)cost+=20+(lo-y)*400;
      if(y>hi)cost+=20+(y-hi)*400;
     }
-    next.add(new Flight(y,v,cost,action==1?0:f.since+1));
+    flightCandidates[count++].set(y,v,cost,action==1?0:f.since+1);
+   }}
+   // Stable insertion sort on at most 20 references preserves old tie ordering.
+   for(int i=1;i<count;i++){Flight candidate=flightCandidates[i];int j=i;
+    while(j>0&&Float.compare(flightCandidates[j-1].cost,candidate.cost)>0){flightCandidates[j]=flightCandidates[j-1];j--;}
+    flightCandidates[j]=candidate;
    }
-   next.sort(Comparator.comparingDouble(f->f.cost));
-   // Keep several distinct velocities/heights, not many copies of one trajectory.
-   beam=new ArrayList<>();for(Flight candidate:next){boolean duplicate=false;for(Flight kept:beam)if(Math.abs(candidate.y-kept.y)<.008f&&Math.abs(candidate.v-kept.v)<.08f){duplicate=true;break;}if(!duplicate)beam.add(candidate);if(beam.size()>=10)break;}
+   beamSize=0;
+   for(int i=0;i<count;i++){Flight candidate=flightCandidates[i];boolean duplicate=false;
+    for(int j=0;j<beamSize;j++){Flight kept=flightBeam[j];if(Math.abs(candidate.y-kept.y)<.008f&&Math.abs(candidate.v-kept.v)<.08f){duplicate=true;break;}}
+    if(!duplicate){flightBeam[beamSize++].set(candidate.y,candidate.v,candidate.cost,candidate.since);if(beamSize==10)break;}
+   }
   }
-  return beam.get(0).cost;
+  return flightBeam[0].cost;
  }
  private static ArcadePolicy.Decision waitFor(String reason){return new ArcadePolicy.Decision(ArcadePolicy.Action.WAIT,0,0,reason);}
  private static int lane(float x,ArcadeObservation s){return Math.max(0,Math.min(2,(int)((x-s.left)/((s.right-s.left)/3))));}

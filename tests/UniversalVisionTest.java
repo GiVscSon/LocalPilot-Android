@@ -12,6 +12,28 @@ public final class UniversalVisionTest {
   return 0xff202020;
  }
  private static CustomVisionConfig config(ArcadeProfile p,int[] c){return switch(p){case PADDLE->new CustomVisionConfig(c,new float[]{.675f,.375f,.7f},new float[]{.325f,.875f,.12f});case TRAFFIC->new CustomVisionConfig(c,new float[]{.5f,.5f,.8f},new float[]{.82f,.43f,.16f});default->new CustomVisionConfig(c,new float[]{.15f,.66f,.66f},new float[]{.48f,.2f,.8f});};}
+ private static void trackingRegression(){
+  int[] colors={0xff20c0,0x20e0e0,0xff9020};var conf=config(ArcadeProfile.TRAFFIC,colors);
+  var first=CustomArcadeVision.detect(ArcadeProfile.TRAFFIC,(x,y)->scene(ArcadeProfile.TRAFFIC,x/160f,y/240f,colors,0),0,0,160,240,0,0,0,0,1000,null,conf);
+  for(float[] candidate:new float[][]{{.02f,.04f,.10f,.17f},{.43f,.73f,.47f,.77f}}){
+   var missing=CustomArcadeVision.detect(ArcadeProfile.TRAFFIC,(x,y)->box(x/160f,y/240f,candidate[0],candidate[1],candidate[2],candidate[3])?colors[0]:0x202020,0,0,160,240,0,0,0,0,1100,first,conf);
+   check(!missing.usable(),"distant or implausibly resized colour object cannot replace player");
+   check(!new ArcadeController().decide(missing,1100).sendsInput(),"false tracking cannot cause input");
+  }
+  var far=new ArcadeObservation.Box(.02f,.02f,.12f,.15f);
+  for(ArcadeProfile profile:new ArcadeProfile[]{ArcadeProfile.TRAFFIC,ArcadeProfile.FLAPPY}){
+   var old=new ArcadeObservation(profile,1000,far,far,java.util.List.of(),0,0,1,1,0,1,0,0,.9f,true,false);
+   long now=profile==ArcadeProfile.TRAFFIC?1600:1100;
+   var reacquired=CustomArcadeVision.detect(ArcadeProfile.TRAFFIC,(x,y)->box(x/160f,y/240f,.02f,.02f,.12f,.15f)?colors[0]:scene(ArcadeProfile.TRAFFIC,x/160f,y/240f,colors,0),0,0,160,240,0,0,0,0,now,old,conf);
+   check(reacquired.usable()&&!reacquired.tracked&&reacquired.player.x()>.4f,"stale/other profile reacquires at calibration without inherited velocity");
+  }
+  var moved=new ArcadeObservation.Box(.75f,.76f,.86f,.89f);
+  var recent=new ArcadeObservation(ArcadeProfile.TRAFFIC,1100,moved,moved,java.util.List.of(),0,0,1,1,0,1,0,0,.9f,true,false);
+  var quick=CustomArcadeVision.detect(ArcadeProfile.TRAFFIC,(x,y)->box(x/160f,y/240f,.76f,.76f,.87f,.89f)?colors[0]:0x202020,0,0,160,240,0,0,0,0,1110,recent,conf);
+  check(quick.usable()&&!quick.tracked,"short capture interval retains identity without inventing velocity");
+  var recovered=CustomArcadeVision.detect(ArcadeProfile.TRAFFIC,(x,y)->scene(ArcadeProfile.TRAFFIC,x/160f,y/240f,colors,.03f),0,0,160,240,0,0,0,0,1100,first,conf);
+  check(recovered.usable()&&recovered.tracked&&recovered.vx>0,"real bounded movement remains tracked");
+ }
  public static void main(String[]args)throws Exception{
   check(VisualGameTarget.requiresProfileChoice(-1,false,false),"new application cannot inherit global Market profile");
   check(VisualGameTarget.requiresProfileChoice(2,true,false),"browser start requires explicit mechanic confirmation");
@@ -39,6 +61,7 @@ public final class UniversalVisionTest {
    check(!missing.usable()&&!new ArcadeController().decide(missing,1200).sendsInput(),"empty scene cannot issue input");
    check(conf.encode().equals(CustomVisionConfig.decode(conf.encode()).encode()),"visual config roundtrip");
   }
+  trackingRegression();
   int[] c=palettes[0];var conf=new CustomVisionConfig(c,new float[]{.5f,.7f,.7f},new float[]{.5f,.2f,.8f});
   for(int width:new int[]{160,80,40,160}){
    final int size=width;

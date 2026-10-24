@@ -1,0 +1,41 @@
+LocalPilot Android 0.7.25-dev / code41 — 2026-10-24
+Base commit: d3fa2087d1dd62dce3a1e5858e5934fba46a7272
+Final sourceCommit: see packaged MANIFEST.json
+
+APK SHA256: a0f8e5bd49cdaba4187ae9bbb71ca4845248c365ad6f60aac7a14544d949f110
+APK bytes: 536418
+Dev certificate SHA256: 55626377256dda3a6b5824b7278eb12db75b8a7d1c80baa9d2af4402ccac2684
+Gradle assembleDebug / lintDebug / compileDebugAndroidTestJavaWithJavac: PASS
+Final build: 1m31s, JDK21 / Gradle8.9 / SDK35, offline.
+Lint: 0 errors/fatal, 46 warnings.
+Package: org.localpilot.android.dev; minSDK30, targetSDK35.
+
+JVM evidence:
+- Verify.java tests/legacy_parity.txt: PASS (full core runner).
+- UniversalVerify.java: PASS 193 assertions; 27 palette/resolution/profile scenes.
+  Scratch allocation: 584 bytes/frame (canonical scene, JVM).
+  Old HEAD detector fails new distant/size replacement regression; corrected detector passes.
+- ControllerVerify.java: PASS 2400 bit-exact trajectory costs against frozen 0.7.24 oracle.
+  Search allocation 16 vs 17408 bytes/search, warm JVM including reflection boxing.
+  Controller 16 assertions; bird integrated 541 / road 1004 / continuous 911.
+  Simulated results preserved, not evidence of improved physical gameplay score.
+- LearningVerify.java: PASS 41.
+- SystemVerify.java: PASS 9, synthetic pixels+physics.
+  road discrete/continuous predictive 34 vs baseline 7; bird 19 vs 6.
+- Release tools unittest: PASS 10 tests (test_release_tools.py).
+
+Not verified in this iteration: native instrumentation runtime, physical phone,
+HyperOS crash reproduction, actual game score/temperature/battery.
+Previous API30/35/36 native acceptance belongs to 0.7.24 only.
+No new supported game mechanics or colour-2048 values were added.
+Strict frame age, ActionGate, ACK-versus-visual semantics unchanged.
+Full source archive includes tests and improvement prompt; excludes private keys and user captures.
+
+Reproduction with JDK21:
+java tests/UniversalVerify.java
+java tests/ControllerVerify.java
+java tests/Verify.java tests/legacy_parity.txt
+java tests/LearningVerify.java
+java tests/SystemVerify.java
+python3 -m unittest discover -s tests -p 'test_release_tools.py' -v
+python3 build_debug.py --gradle /path/to/gradle --offline

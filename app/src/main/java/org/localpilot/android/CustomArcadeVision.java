@@ -15,11 +15,16 @@ public final class CustomArcadeVision {
   if(profile==null||profile==ArcadeProfile.ARI||pixels==null||config==null||left<0||top<0||right-left<40||bottom-top<40||time<0)throw new IllegalArgumentException("custom vision context");
   int w=Math.min(160,right-left),h=Math.min(240,bottom-top),n=w*h;Scratch work=WORK.get();int[] rgb=work.rgb;boolean[] excluded=work.excluded;
   for(int yy=0;yy<h;yy++)for(int xx=0;xx<w;xx++){int x=left+xx*(right-left)/w,y=top+yy*(bottom-top)/h,i=yy*w+xx;excluded[i]=x>=el&&x<er&&y>=et&&y<eb;rgb[i]=pixels.get(x,y);}
+  // Old scenes and other mechanics cannot attract the tracker to unrelated colours.
+  boolean freshPrevious=previous!=null&&previous.profile==profile&&previous.usable()
+    &&time>previous.timestampMs&&time-previous.timestampMs<=500;
+  ArcadeObservation.Box oldPlayer=freshPrevious?previous.player:null;
+  ArcadeObservation.Box oldControl=freshPrevious?previous.control:null;
   List<ArcadeObservation.Box> own=blobs(rgb,excluded,w,h,config.colors[0],work);
-  ArcadeObservation.Box player=choose(own,previous==null?null:previous.player,config.x[0],config.y[0],false);
+  ArcadeObservation.Box player=choose(own,oldPlayer,config.x[0],config.y[0],false);
   List<ArcadeObservation.Box> second=blobs(rgb,excluded,w,h,config.colors[1],work);
   List<ArcadeObservation.Box> third=blobs(rgb,excluded,w,h,config.colors[2],work);
-  ArcadeObservation.Box control=profile==ArcadeProfile.PADDLE?choose(second,previous==null?null:previous.control,config.x[1],config.y[1],true):player;
+  ArcadeObservation.Box control=profile==ArcadeProfile.PADDLE?choose(second,oldControl,config.x[1],config.y[1],true):player;
   List<ArcadeObservation.Box> obstacles=new ArrayList<>();
   if(profile!=ArcadeProfile.PADDLE){for(var b:second)add(obstacles,b,player);for(var b:third)add(obstacles,b,player);}
   float gapTop=0,gapBottom=1;
@@ -36,7 +41,7 @@ public final class CustomArcadeVision {
    }
   }
   float vx=0,vy=0;boolean tracked=false;
-  if(previous!=null&&previous.profile==profile&&previous.player!=null&&player!=null){float dt=(time-previous.timestampMs)/1000f;if(dt>=.03f&&dt<=.5f&&Math.abs(player.x()-previous.player.x())<.3f&&Math.abs(player.y()-previous.player.y())<.4f){vx=(player.x()-previous.player.x())/dt;vy=(player.y()-previous.player.y())/dt;tracked=true;}}
+  if(freshPrevious&&player!=null){float dt=(time-previous.timestampMs)/1000f;if(dt>=.03f&&dt<=.5f&&Math.abs(player.x()-previous.player.x())<.3f&&Math.abs(player.y()-previous.player.y())<.4f){vx=(player.x()-previous.player.x())/dt;vy=(player.y()-previous.player.y())/dt;tracked=true;}}
   boolean usable=player!=null&&control!=null&&(profile!=ArcadeProfile.FLAPPY||gapBottom-gapTop>player.height()*1.5f);
   return new ArcadeObservation(profile,time,player,control,obstacles,0,0,1,1,gapTop,gapBottom,vx,vy,usable?.85f:0,tracked,false);
  }
@@ -57,6 +62,11 @@ public final class CustomArcadeVision {
   ArcadeObservation.Box best=null;float score=Float.POSITIVE_INFINITY,runner=Float.POSITIVE_INFINITY;
   for(var b:boxes){if(b.width()<(paddle?.06f:.01f)||b.width()>(paddle?.85f:.28f)||b.height()<.008f||b.height()>(paddle?.25f:.25f))continue;
    float dx=b.x()-(previous==null?ax:previous.x()),dy=b.y()-(previous==null?ay:previous.y()),d=dx*dx+dy*dy;
+   // A sole same-colour blob elsewhere is not evidence that the player teleported.
+   // Initial acquisition stays near the user's sample; continuation allows bounded motion.
+   if(Math.abs(dx)>(previous==null?.25f:.30f)||Math.abs(dy)>(previous==null?.30f:.40f))continue;
+   if(previous!=null&&(b.width()<previous.width()*.5f||b.width()>previous.width()*2
+     ||b.height()<previous.height()*.5f||b.height()>previous.height()*2))continue;
    if(d<score){runner=score;score=d;best=b;}else runner=Math.min(runner,d);
   }
   // Quantized pixels must not break ties between two equally plausible objects.
