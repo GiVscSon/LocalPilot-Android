@@ -1,3 +1,38 @@
+# Текущий этап: 0.7.26-dev / code42 — 24 октября 2026
+
+Цель: устойчивое восстановление при краткой потере фокуса/меню и расширение
+проверенного распознавания. Реализованы оба задания пользователя для 0.7.26:
+600 мс WindowFocus; ожидание согласия/первого кадра; Searching автополя;
+сессионные 32..2048; pacing 33 мс; отдельный SCENE_PROGRESS Ари; маска спец-клеток.
+Описание: docs/RELEASE_0.7.26.ru.md. Тесты/сборка/CI: docs/VALIDATION_0.7.26.txt.
+Видео разобраны в docs/VIDEO_REVIEW_0.7.26.ru.md; исходные записи не публикуются.
+
+Ключевые файлы: ActionGate, WindowFocus, CaptureStartup, JumperCaptureConsentActivity,
+JumperCaptureService, CapturePacer, PixelBoardLocator.Stability, Color2048Reader.Session,
+Verified2048, JumperFeedback, GridPuzzleVision/Policy/Session, PilotService.
+Новые проверки: tests/Upgrade726Verify.java и Upgrade726Test.java; дополнены
+GateTest, CaptureStartupTest и PixelBoardLocatorTest. Полный набор JVM пройден.
+
+Не выдавать движение камеры за успешное руление: SCENE_PROGRESS не даёт награды.
+Не называть pacing аппаратным ограничением или доказанным исправлением reason13.
+Старая граница 80 мс заменена на запрошенные 33 мс: измерить нагрузку на телефоне.
+Рекламные/чужие окна не получают ввод; после паузы нужны прежнее окно и новый кадр.
+Поворот/смена ID/геометрии и внутренняя смена браузерной страницы остаются строгими.
+
+Следующие шаги:
+1. Установить Dev APK поверх прежнего, без удаления данных. Повторить записи:
+   результат → Играть снова; задержка согласия 20–45 с; возврат после баннера.
+2. Проверить цветную 2048, начиная с известных 2/4/8/16: наблюдать появление 32,
+   затем 64. Уже существующая неизвестная 32 без истории слияния не обучается.
+3. Сравнить кадры/decode/skippedFrames, нагрев и счёт на том же телефоне;
+   отдельно экспортировать новую диагностику при проблеме. ADB не нужен.
+4. JVM: JDK21 `java tests/Upgrade726Verify.java`, `java tests/Verify.java tests/legacy_parity.txt`,
+   `java tests/RuntimeVerify.java`, `java tests/SystemVerify.java`; остальные команды
+   в workflow android.yml. Android CI: `gh workflow run android-device.yml --ref sync/localpilot-android-0711`.
+
+Ниже — история. Сохранять package org.localpilot.android.dev, прежний Dev-ключ,
+модели, журналы и отрицательные тесты. Финальный commit содержится в MANIFEST.json.
+
 # Текущий этап: 0.7.25-dev / code41 — 24 октября 2026
 
 Цель: улучшить LocalPilot Android на существующей базе; рабочий промпт и
@@ -549,3 +584,5 @@ Git read/push по github.com работает; main не менялась. Пр
 Если доступ к API изменится, сначала проверить существующий PR, затем создать draft с body file. Не извлекать прокси-ключи и не просить секреты в чате.
 
 Пользователь попросил реальные игровые скриншоты для телефона и планшета. Запросы itunes.apple.com и play.google.com блокируются прокси: домены отсутствуют в allowlist. Изображения не получены, размеры не подтверждены. В сохранённый черновик среды добавлены itunes.apple.com,apps.apple.com,play.google.com,play-lh.googleusercontent.com,*.mzstatic.com с сохранением прежних правил (включая api.github.com). Черновик не применяет сеть: нужны review/save/publish в настройках среды. После применения возобновить загрузку; фиксировать источник, версию, исходные размеры и phone/tablet-категорию. iOS-референс не считать кадром пользовательской Android-версии.
+
+Статус Android-приёмки 0.7.26: API 35 PASS; API 30 и 36 FAIL при открытии/выборе тестового окна. Причина не установлена. Поставка экспериментальная; подробности в docs/VALIDATION_0.7.26.txt.
