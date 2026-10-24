@@ -389,11 +389,12 @@ public class PilotService extends AccessibilityService {
   if(!(playingJumper||playing2048||playingGrid||discoveringBoard)||!WindowFocus.transientLoss(reason))return false;
   if(windowFocus.observe(gate.epoch(),reason,SystemClock.elapsedRealtime())!=WindowFocus.State.WAITING)return false;
   if(!focusPaused){
-   focusPaused=true;gate.pause();boardReadGeneration++;arcadeSceneGeneration++;jumperVisionPending=false;
+   focusPaused=true;gate.pause();boardReadGeneration++;arcadeSceneGeneration++;
    arcadeFeedback.reset();jumperFeedback.reset();arcadeController.nextRound();
    jumperAwaitingVerification=false;jumperResponsePaused=false;jumperResponseFailures=0;
    arcadePending=null;arcadeBefore=null;arcadeLastUsable=null;arcadeState=null;jumperState=null;
-   captureBusy=false;pendingCapture=++captureCounter;visionPending=false;visionRequest++;
+   captureBusy=false;pendingCapture=++captureCounter;
+   if(visionPending&&visionTask!=null){visionTask.cancel(true);visionTask=null;}visionPending=false;visionRequest++;
    gridSession.reset();
    note="Фокус временно потерян · ввод приостановлен, захват сохранён";update();
   }
@@ -776,7 +777,7 @@ public class PilotService extends AccessibilityService {
     catch(RuntimeException|OutOfMemoryError error){failure=error instanceof RuntimeException?(RuntimeException)error:new IllegalStateException("VISION_OUT_OF_MEMORY");}
     finally{if(!frame.isRecycled())frame.recycle();}
     JumperState result=detected;RuntimeException error=failure;
-    handler.post(()->{if(scene==arcadeSceneGeneration)finishJumperFrame(epoch,timestampMs,started,result,error);});
+    handler.post(()->{if(scene==arcadeSceneGeneration)finishJumperFrame(epoch,timestampMs,started,result,error);else if(epoch==gate.epoch())jumperVisionPending=false;});
    });}catch(RuntimeException error){jumperVisionPending=false;if(!frame.isRecycled())frame.recycle();failStage(StageMetrics.Stage.READ,"VISION_WORKER_UNAVAILABLE","Не удалось запустить распознавание");}
    }catch(RuntimeException|OutOfMemoryError error){if(!frame.isRecycled())frame.recycle();CrashDiagnostics.phase(ProcessExitMetadata.frameFailurePhase(error));stop("Ошибка обработки кадра · захват остановлен. Откройте диагностику для проверки");}
   });
@@ -847,7 +848,7 @@ public class PilotService extends AccessibilityService {
    catch(RuntimeException|OutOfMemoryError error){failure=error instanceof RuntimeException?(RuntimeException)error:new IllegalStateException("VISION_OUT_OF_MEMORY");}
    finally{if(!frame.isRecycled())frame.recycle();}
    ArcadeObservation result=detected;RuntimeException error=failure;
-   handler.post(()->{if(scene==arcadeSceneGeneration)finishArcadeFrame(epoch,timestampMs,started,geometry,result,error);});
+   handler.post(()->{if(scene==arcadeSceneGeneration)finishArcadeFrame(epoch,timestampMs,started,geometry,result,error);else if(epoch==gate.epoch())jumperVisionPending=false;});
   });}catch(RuntimeException error){jumperVisionPending=false;frame.recycle();failStage(StageMetrics.Stage.READ,"ARCADE_WORKER_UNAVAILABLE","Распознавание не запущено");}
  }
 
