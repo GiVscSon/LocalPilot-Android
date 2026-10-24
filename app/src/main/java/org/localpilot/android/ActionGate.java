@@ -1,15 +1,25 @@
 package org.localpilot.android;
 /** Main-thread-only authority. No queued intent survives stop, rearm or process restart. */
 public final class ActionGate {
- private long epoch; private boolean armed; private String owner=""; private int window=-1, width, height;
+ private long epoch,focusGeneration; private boolean armed,paused; private String owner=""; private int window=-1, width, height;
  public static final long TTL_MS=700;
  public static final class Ticket {
-  private boolean consumed;final ActionGate issuer;final long epoch, created; final String owner; final int window,width,height;
-  private Ticket(ActionGate issuer,long e,long t,String p,int w,int x,int y){this.issuer=issuer;epoch=e;created=t;owner=p;window=w;width=x;height=y;}
+  private boolean consumed;final ActionGate issuer;final long epoch, created,focusGeneration; final String owner; final int window,width,height;
+  private Ticket(ActionGate issuer,long e,long t,String p,int w,int x,int y){this.issuer=issuer;focusGeneration=issuer.focusGeneration;epoch=e;created=t;owner=p;window=w;width=x;height=y;}
  }
- public void stop(){epoch++;armed=false;owner="";window=-1;}
+ public void stop(){epoch++;paused=false;armed=false;owner="";window=-1;}
  public void arm(String p,int w,int x,int y){stop();if(p==null||p.isEmpty()||w<0||x<1||y<1)throw new IllegalArgumentException();owner=p;window=w;width=x;height=y;armed=true;}
  public boolean matches(String p,int w,int x,int y){return armed&&owner.equals(p)&&window==w&&width==x&&height==y;}
+ public void pause(){if(armed&&!paused){paused=true;focusGeneration++;}}
+ public void resume(){if(paused)focusGeneration++;paused=false;}
+ public boolean paused(){return paused;}
+ public String identityRejection(String p,int w,int x,int y){
+  if(!armed)return "NOT_BOUND";
+  if(!owner.equals(p))return "TARGET_APP_CHANGED";
+  if(window!=w)return "TARGET_WINDOW_CHANGED";
+  if(width!=x||height!=y)return "TARGET_BOUNDS_CHANGED";
+  return null;
+ }
  public Ticket offer(long now){return armed?new Ticket(this,epoch,now,owner,window,width,height):null;}
  /**
   * Stable diagnostic precedence: binding, missing ticket, issuer, ticket session,
@@ -24,6 +34,8 @@ public final class ActionGate {
   if(!owner.equals(p))return "TARGET_APP_CHANGED";
   if(window!=w)return "TARGET_WINDOW_CHANGED";
   if(width!=x||height!=y)return "TARGET_BOUNDS_CHANGED";
+  if(paused)return "FOCUS_PAUSED";
+  if(t.focusGeneration!=focusGeneration)return "FOCUS_CHANGED";
   if(now<t.created)return "CLOCK_REVERSED";
   if(now-t.created>TTL_MS)return "TICKET_EXPIRED";
   return null;

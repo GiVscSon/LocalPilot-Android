@@ -41,6 +41,83 @@ public final class Color2048Reader {
   return board;
  }
 
+ /** Session-only palette. Candidates commit only after two distinct stable frames and full move validation. */
+ public static final class Session {
+  private final int[] learned=new int[12];
+  private int[] pending;private Board2048 pendingBoard,pendingBefore;private int pendingAction,stableReads;
+  private long pendingAt=-1;
+  public Session(){reset();}
+  public void reset(){java.util.Arrays.fill(learned,-1);discard();}
+  private void discard(){pending=null;pendingBoard=pendingBefore=null;pendingAt=-1;stableReads=0;}
+  public int learnedCount(){int n=0;for(int i=5;i<=11;i++)if(learned[i]>=0)n++;return n;}
+  public Board2048 read(PixelBoardReader.Pixels pixels,int width,int height,int left,int top,int right,int bottom,
+    Board2048 before,int action,long frameAt){
+   try{return candidate(pixels,width,height,left,top,right,bottom,before,action,frameAt);}
+   catch(RuntimeException error){discard();throw error;}
+  }
+  private Board2048 candidate(PixelBoardReader.Pixels pixels,int width,int height,int left,int top,int right,int bottom,
+    Board2048 before,int action,long frameAt){
+   if(pixels==null||left<0||top<0||right>width||bottom>height||right-left<160||bottom-top<160
+     ||Math.abs((right-left)-(bottom-top))>Math.min(right-left,bottom-top)*.08||frameAt<0)
+    throw new IllegalArgumentException("invalid colour board geometry/time");
+   Board2048 expected=before==null?null:Verified2048.beforeSpawn(before,action);
+   int[] colors=learned.clone(),values=new int[16];boolean added=false;
+   for(int i=0;i<16;i++){
+    int[] sample=sample(pixels,left,top,right,bottom,i);int rgb=sample[0],value=known(rgb,colors);
+    if(value<0){
+     int target=expected==null?0:expected.cells[i];
+     if(target<32||target>2048||sample[1]>24)throw new IllegalArgumentException("unknown or animated colour tile");
+     int rank=Integer.numberOfTrailingZeros(target);
+     // Existing values cannot acquire a new identity from an arbitrary later colour.
+     for(int old:before.cells)if(old==target)throw new IllegalArgumentException("unknown pre-existing tile");
+     if(colors[rank]>=0)throw new IllegalArgumentException("inconsistent merged tile colour");
+     for(int[] base:COLORS)if(distance(rgb,(base[0]<<16)|(base[1]<<8)|base[2])<110*110)
+      throw new IllegalArgumentException("merged colour conflicts with known palette");
+     for(int j=5;j<=11;j++)if(colors[j]>=0&&distance(rgb,colors[j])<110*110)
+      throw new IllegalArgumentException("merged colour conflicts with learned palette");
+     int low=Math.min(rgb>>16&255,Math.min(rgb>>8&255,rgb&255)),high=Math.max(rgb>>16&255,Math.max(rgb>>8&255,rgb&255));
+     if(high-low<60||high<70)throw new IllegalArgumentException("background cannot teach a tile");
+     colors[rank]=rgb;value=target;added=true;
+    }
+    // Newly inferred tiles must be homogeneous at every occurrence in this frame.
+    if(value>=32&&learned[Integer.numberOfTrailingZeros(value)]<0&&sample[1]>24)
+     throw new IllegalArgumentException("animated merged tile");
+    values[i]=value;
+   }
+   Board2048 board=new Board2048(values);
+   if(board.max()==0||before!=null&&!before.verifies(board,action))throw new IllegalArgumentException("colour board transition not verified");
+   if(added){
+    boolean same=pending!=null&&board.same(pendingBoard)&&before.same(pendingBefore)&&action==pendingAction;
+    if(same)for(int i=5;i<=11;i++)if((colors[i]<0)!=(pending[i]<0)||colors[i]>=0&&distance(colors[i],pending[i])>12*12)same=false;
+    if(same&&frameAt>pendingAt&&frameAt-pendingAt>=80){stableReads++;}
+    else if(!same){stableReads=1;pendingAt=frameAt;}
+    pending=colors;pendingBoard=board;pendingBefore=new Board2048(before.cells);pendingAction=action;
+   }else discard();
+   return board;
+  }
+  public void confirm(Board2048 stable){
+   if(pending==null)return;
+   if(stableReads<2||!pendingBoard.same(stable))throw new IllegalStateException("palette requires two stable frames");
+   System.arraycopy(pending,0,learned,0,learned.length);discard();
+  }
+  private static int known(int rgb,int[] palette){
+   int r=rgb>>16&255,g=rgb>>8&255,b=rgb&255;
+   int result=-1;try{result=classify(r,g,b,0,0);}catch(IllegalArgumentException ignored){}
+   for(int i=5;i<=11;i++)if(palette[i]>=0&&distance(rgb,palette[i])<=24*24){if(result>=0)return -1;result=1<<i;}
+   return result;
+  }
+  private static int distance(int a,int b){int r=(a>>16&255)-(b>>16&255),g=(a>>8&255)-(b>>8&255),v=(a&255)-(b&255);return r*r+g*g+v*v;}
+  private static int[] sample(PixelBoardReader.Pixels pixels,int l,int t,int r,int b,int cell){
+   int sr=0,sg=0,sb=0;int[] min={255,255,255},max={0,0,0};
+   for(int y=0;y<3;y++)for(int x=0;x<3;x++){
+    int rgb=pixels.rgb(l+(int)((cell%4+.20+x*.05)*(r-l)/4),t+(int)((cell/4+.18+y*.05)*(b-t)/4));
+    int red=rgb>>16&255,green=rgb>>8&255,blue=rgb&255;sr+=red;sg+=green;sb+=blue;
+    min[0]=Math.min(min[0],red);max[0]=Math.max(max[0],red);min[1]=Math.min(min[1],green);max[1]=Math.max(max[1],green);min[2]=Math.min(min[2],blue);max[2]=Math.max(max[2],blue);
+   }
+   return new int[]{(sr/9<<16)|(sg/9<<8)|sb/9,Math.max(max[0]-min[0],Math.max(max[1]-min[1],max[2]-min[2]))};
+  }
+ }
+
  private static int classify(int r,int g,int b,int row,int col){
   int low=Math.min(r,Math.min(g,b)),high=Math.max(r,Math.max(g,b));
   // Empty cells in this skin are pale, low-saturation glass over the scene.

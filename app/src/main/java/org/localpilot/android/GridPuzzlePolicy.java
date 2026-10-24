@@ -10,8 +10,10 @@ public final class GridPuzzlePolicy {
   public final Mode mode;
   public final int fromRow,fromCol,toRow,toCol,expectedCleared,targetCleared;
   public final double score;
+  public final int specialInvolved;
   private final int[] clearedCells,clearedTypes;
-  private Decision(Mode mode,int from,int to,int cols,int[] cells,int[] types,int targetCleared,double score){
+  private Decision(Mode mode,int from,int to,int cols,int[] cells,int[] types,int targetCleared,double score,int specialInvolved){
+   this.specialInvolved=specialInvolved;
    this.mode=mode;fromRow=from/cols;fromCol=from%cols;toRow=to/cols;toCol=to%cols;
    this.expectedCleared=cells.length;this.targetCleared=targetCleared;this.score=score;
    clearedCells=cells.clone();clearedTypes=types.clone();
@@ -26,8 +28,11 @@ public final class GridPuzzlePolicy {
  public static Decision choose(GridPuzzle board,Mode mode){return choose(board,mode,2,0,0);}
 
  /** targetType=0 or targetRemaining=0 disables goal weighting; minGroup applies to TAP_GROUP. */
- public static Decision choose(GridPuzzle board,Mode mode,int minGroup,int targetType,int targetRemaining){
+ public static Decision choose(GridPuzzle board,Mode mode,int minGroup,int targetType,int targetRemaining){return choose(board,mode,minGroup,targetType,targetRemaining,new java.util.BitSet());}
+ public static Decision choose(GridPuzzle board,Mode mode,int minGroup,int targetType,int targetRemaining,java.util.BitSet special){
   if(board==null||mode==null||minGroup<2||minGroup>100||targetType<0||targetRemaining<0)throw new IllegalArgumentException("puzzle policy context");
+  if(special==null||special.length()>board.rows*board.cols)throw new IllegalArgumentException("special mask outside board");
+  special=(java.util.BitSet)special.clone();
   // A partially identified grid may hide an obstacle or special item: abstain.
   if(!board.known())return null;
   int[] cells=board.cells();Decision best=null;
@@ -47,7 +52,8 @@ public final class GridPuzzlePolicy {
     }
     if(tail<minGroup)continue;
     int[] group=Arrays.copyOf(queue,tail);Arrays.sort(group);
-    Decision candidate=decision(mode,start,start,board.cols,cells,group,0,targetType,targetRemaining);
+    int tap=start;for(int index:group)if(special.get(index)){tap=index;break;}
+    Decision candidate=decision(mode,tap,tap,board.cols,cells,group,0,targetType,targetRemaining,special);
     if(better(candidate,best))best=candidate;
    }
   }else{
@@ -64,7 +70,7 @@ public final class GridPuzzlePolicy {
      Decision candidate=null;
      if(count>=3){
       int[] cleared=new int[count];int cursor=0;for(int i=0;i<matched.length;i++)if(matched[i])cleared[cursor++]=i;
-      candidate=decision(mode,from,to,board.cols,cells,cleared,bonus,targetType,targetRemaining);
+      candidate=decision(mode,from,to,board.cols,cells,cleared,bonus,targetType,targetRemaining,special);
      }
      swap(cells,from,to);
      if(candidate!=null&&better(candidate,best))best=candidate;
@@ -73,16 +79,17 @@ public final class GridPuzzlePolicy {
   }
   return best;
  }
- private static boolean better(Decision candidate,Decision previous){return previous==null||candidate.score>previous.score;}
+ private static boolean better(Decision candidate,Decision previous){return previous==null||candidate.score>previous.score||candidate.score==previous.score&&candidate.specialInvolved>previous.specialInvolved;}
  private static void swap(int[] cells,int a,int b){int value=cells[a];cells[a]=cells[b];cells[b]=value;}
- private static Decision decision(Mode mode,int from,int to,int cols,int[] cells,int[] cleared,int bonus,int targetType,int targetRemaining){
+ private static Decision decision(Mode mode,int from,int to,int cols,int[] cells,int[] cleared,int bonus,int targetType,int targetRemaining,java.util.BitSet special){
   int target=0;for(int index:cleared)if(targetType>0&&cells[index]==targetType)target++;
   if(targetRemaining==0)target=0;else target=Math.min(target,targetRemaining);
   int[] types=Arrays.stream(cleared).map(index->cells[index]).distinct().sorted().toArray();
   // Goal progress dominates raw clears. Bonuses value long/crossed matches,
   // without pretending any particular game's special item will be generated.
   double score=cleared.length*10.0+target*100.0+bonus;
-  return new Decision(mode,from,to,cols,cleared,types,target,score);
+  java.util.BitSet involved=new java.util.BitSet();involved.set(from);involved.set(to);for(int i:cleared)involved.set(i);involved.and(special);
+  return new Decision(mode,from,to,cols,cleared,types,target,score,involved.cardinality());
  }
  /** Only lines THROUGH a changed cell may authorize a swap. Unrelated existing
   * matches elsewhere on the board cannot turn a useless swap into a legal one. */

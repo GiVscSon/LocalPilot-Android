@@ -50,14 +50,10 @@ public final class JumperCaptureConsentActivity extends Activity {
     @Override protected void onResume(){
         super.onResume();resumed=true;
         if(resultHandled){awaitService();return;}
-        if(leftForPicker&&!resultHandled)callbacks.postDelayed(()->{
-            PilotService pilot=PilotService.instance;
-            if(!resultHandled&&!isFinishing()&&!isDestroyed()&&pilot!=null&&pilot.captureSessionActive(session)){
-                resultHandled=true;
-                pilot.onCaptureStartupError(session,"Android закрыл выбор экрана без результата. Запустите профиль повторно","RESULT_MISSING");
-                finishConsent();
-            }
-        },3000);
+        // Some OEM pickers leave this Activity resumed behind the consent dialog.
+        // Only the session's CONSENT deadline (120s) or an explicit result may end it;
+        // a resumed Activity is not evidence that the user dismissed the picker.
+
     }
 
     @Override protected void onDestroy(){callbacks.removeCallbacksAndMessages(null);super.onDestroy();}

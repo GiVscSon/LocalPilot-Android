@@ -1,6 +1,7 @@
 package org.localpilot.android;
 
-/** Bounded, visual-response feedback. Android ACK alone never confirms a game action. */
+/** Vertical ARI platform/scroll evidence is handled by JumperFeedback, not obstacle motion here.
+ * Bounded, visual-response feedback. Android ACK alone never confirms a game action. */
 public final class ArcadeFeedback {
  public enum State { READY, WAITING, RETRY, PAUSED }
  private ArcadePolicy.Decision pending;

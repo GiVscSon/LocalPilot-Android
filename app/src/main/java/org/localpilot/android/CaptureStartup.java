@@ -17,7 +17,7 @@ final class CaptureStartup {
  synchronized boolean waiting(long id){return active(id)&&stage!=Stage.RUNNING;}
  synchronized String timeout(long id,long now){
   if(!active(id))return null;
-  long limit=stage==Stage.CONSENT?120000:stage==Stage.SERVICE?10000:stage==Stage.FIRST_FRAME?3000:Long.MAX_VALUE;
+  long limit=stage==Stage.CONSENT?120000:stage==Stage.SERVICE?15000:stage==Stage.FIRST_FRAME?15000:Long.MAX_VALUE;
   return now-since>=limit?stage.name()+"_TIMEOUT":null;
  }
  synchronized boolean recognized(long id,long now){
@@ -31,7 +31,7 @@ final class CaptureStartup {
  synchronized void error(long id,String type){if(active(id))record("ERROR "+stage+" "+type);}
  synchronized void stop(long now){if(stage!=Stage.STOPPED)set(Stage.STOPPED,now,"stop");}
  synchronized String label(){return switch(stage){
-  case CONSENT -> "1/5 экран"; case SERVICE -> "2/5 служба";
+  case CONSENT -> "Ожидание разрешения захвата…"; case SERVICE -> "2/5 служба";
   case FIRST_FRAME -> "3/5 кадр"; case RUNNING -> recognized?"5/5 игра":"4/5 кадры";
   case STOPPED -> "STOP";
  };}

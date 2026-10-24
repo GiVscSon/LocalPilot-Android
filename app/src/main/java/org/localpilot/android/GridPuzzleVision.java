@@ -34,24 +34,29 @@ public final class GridPuzzleVision {
   private final int[] values;
   private final Palette palette;
   private final boolean usable;
-  private Observation(int rows,int cols,long time,int[] cells,Palette palette,float confidence,boolean usable){this.rows=rows;this.cols=cols;timestampMs=time;values=cells.clone();this.palette=palette;this.confidence=confidence;this.usable=usable;}
+  private final java.util.BitSet specialCellsMask;
+  private Observation(int rows,int cols,long time,int[] cells,Palette palette,float confidence,boolean usable,java.util.BitSet special){specialCellsMask=(java.util.BitSet)special.clone();this.rows=rows;this.cols=cols;timestampMs=time;values=cells.clone();this.palette=palette;this.confidence=confidence;this.usable=usable;}
+  public java.util.BitSet specialCellsMask(){return (java.util.BitSet)specialCellsMask.clone();}
   public int[] cells(){return values.clone();}
   public int type(int row,int col){if(row<0||row>=rows||col<0||col>=cols)throw new IllegalArgumentException("cell");return values[row*cols+col];}
   public Palette palette(){return palette;}
   public boolean complete(){for(int value:values)if(value<1)return false;return true;}
   public boolean usable(){return usable;}
   /** Depends on dimensions and symbolic cells, never the timestamp or palette serialization. */
-  public long signature(){long h=0xcbf29ce484222325L;h=(h^rows)*0x100000001b3L;h=(h^cols)*0x100000001b3L;for(int value:values)h=(h^value)*0x100000001b3L;return h;}
+  public long signature(){long h=0xcbf29ce484222325L;h=(h^rows)*0x100000001b3L;h=(h^cols)*0x100000001b3L;for(int i=0;i<values.length;i++){h=(h^values[i])*0x100000001b3L;h=(h^(specialCellsMask.get(i)?1:0))*0x100000001b3L;}return h;}
  }
 
  public static Observation detect(Pixels pixels,int left,int top,int right,int bottom,int rows,int cols,
    int excludedLeft,int excludedTop,int excludedRight,int excludedBottom,long timestampMs,Palette previous){
   if(pixels==null||rows<3||rows>10||cols<3||cols>10||left<0||top<0||right-left<cols*12||bottom-top<rows*12||timestampMs<0)throw new IllegalArgumentException("grid geometry");
+  float[][] rings=new float[rows*cols][];java.util.BitSet special=new java.util.BitSet(rows*cols);
   float[][] samples=new float[rows*cols][];int[] cells=new int[samples.length];java.util.Arrays.fill(cells,-1);
   for(int row=0;row<rows;row++)for(int col=0;col<cols;col++){
    float l=left+col*(right-left)/(float)cols,t=top+row*(bottom-top)/(float)rows;
    float r=left+(col+1)*(right-left)/(float)cols,b=top+(row+1)*(bottom-top)/(float)rows;
    if(excludedRight>excludedLeft&&excludedBottom>excludedTop&&Math.max(l,excludedLeft)<Math.min(r,excludedRight)&&Math.max(t,excludedTop)<Math.min(b,excludedBottom))continue;
+   float[] ring=ring(pixels,l,t,r,b);
+   if(ring!=null){rings[row*cols+col]=ring;continue;}
    samples[row*cols+col]=describe(pixels,l,t,r,b);
   }
   List<float[]> prototypes=new ArrayList<>();if(previous!=null)for(float[] d:previous.descriptors)prototypes.add(d.clone());
@@ -63,7 +68,18 @@ public final class GridPuzzleVision {
   }
   Set<Integer> distinct=new HashSet<>();float quality=0;boolean complete=true;
   for(int index=0;index<samples.length;index++){
-   float[] sample=samples[index];if(sample==null){complete=false;continue;}
+   float[] sample=samples[index];
+   if(rings[index]!=null){
+    int nearest=-1;float first=Float.POSITIVE_INFINITY,second=Float.POSITIVE_INFINITY;
+    for(int n=0;n<prototypes.size();n++){
+     if(n>=fixed&&counts[n]<2)continue;
+     float d=ringDistance(rings[index],prototypes.get(n));
+     if(d<first){second=first;first=d;nearest=n;}else second=Math.min(second,d);
+    }
+    if(nearest<0||first>.09f||second-first<.03f){complete=false;continue;}
+    cells[index]=nearest+1;special.set(index);distinct.add(nearest);quality+=1-first/.09f;continue;
+   }
+   if(sample==null){complete=false;continue;}
    int nearest=-1;float first=Float.POSITIVE_INFINITY,second=Float.POSITIVE_INFINITY;
    for(int n=0;n<prototypes.size();n++){float d=distance(sample,prototypes.get(n));if(d<first){second=first;first=d;nearest=n;}else second=Math.min(second,d);}
    if(nearest<0||first>MATCH||second-first<AMBIGUITY){complete=false;continue;}
@@ -72,7 +88,37 @@ public final class GridPuzzleVision {
   // A previously learned palette is not evidence that the current picture is a
   // puzzle board. Monochrome textures/menus must abstain even if their colour is known.
   boolean usable=complete&&distinct.size()>=2&&distinct.size()<=6;
-  return new Observation(rows,cols,timestampMs,cells,new Palette(prototypes),usable?.72f+.23f*quality/samples.length:0,usable);
+  return new Observation(rows,cols,timestampMs,cells,new Palette(prototypes),usable?.72f+.23f*quality/samples.length:0,usable,special);
+ }
+
+ /** Returns a chromatic ring descriptor for a contrasting centre; invalid rings carry NaN. */
+ private static float[] ring(Pixels pixels,float l,float t,float r,float b){
+  float[] mean=new float[3],sq=new float[3],center=new float[3];int count=0;
+  for(int yy=0;yy<7;yy++)for(int xx=0;xx<7;xx++){
+   float x=.2f+xx*.1f,y=.2f+yy*.1f;if(x>=.35f&&x<=.65f&&y>=.35f&&y<=.65f)continue;
+   int rgb=pixels.get((int)(l+x*(r-l)),(int)(t+y*(b-t)));
+   for(int c=0;c<3;c++){float v=(rgb>>(16-8*c)&255)/255f;mean[c]+=v;sq[c]+=v*v;}count++;
+  }
+  for(int c=0;c<3;c++)mean[c]/=count;
+  for(int yy=0;yy<3;yy++)for(int xx=0;xx<3;xx++){
+   int rgb=pixels.get((int)(l+(.35f+xx*.15f)*(r-l)),(int)(t+(.35f+yy*.15f)*(b-t)));
+   for(int c=0;c<3;c++)center[c]+=(rgb>>(16-8*c)&255)/(255f*9);
+  }
+  float contrast=0,spread=0;for(int c=0;c<3;c++){contrast+=(mean[c]-center[c])*(mean[c]-center[c]);spread+=Math.max(0,sq[c]/count-mean[c]*mean[c]);}
+  if(Math.sqrt(contrast/3)<.18)return null;
+  float hi=Math.max(mean[0],Math.max(mean[1],mean[2])),lo=Math.min(mean[0],Math.min(mean[1],mean[2]));
+  if(Math.sqrt(spread/3)>.07||hi<.2||hi-lo<.18)return new float[]{Float.NaN,0,0};
+  return mean;
+ }
+ private static float ringDistance(float[] ring,float[] descriptor){
+  if(!Float.isFinite(ring[0]))return Float.POSITIVE_INFINITY;
+  float distance=0;
+  for(int c=0;c<3;c++){float average=0;for(int block:new int[]{0,2,6,8})average+=descriptor[block*3+c]*.25f;
+   float delta=average-ring[c];distance+=delta*delta;
+   // Do not label a patterned reference object solely by its average colour.
+   for(int block:new int[]{0,2,6,8})if(Math.abs(descriptor[block*3+c]-average)>.12f)return Float.POSITIVE_INFINITY;
+  }
+  return (float)Math.sqrt(distance/3);
  }
 
  private static float[] describe(Pixels pixels,float l,float t,float r,float b){

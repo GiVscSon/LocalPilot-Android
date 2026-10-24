@@ -45,7 +45,7 @@ public final class JumperCaptureService extends Service {
     private DisplayManager.DisplayListener displayListener;
     private ImageReader reader;
     private volatile boolean closing;
-    private long lastFrameMs;
+    private final CapturePacer framePacer=new CapturePacer();
     private int width,height,density,screenWidth,screenHeight,screenDisplayId;
     private int[] argbBuffer;
 
@@ -165,7 +165,9 @@ public final class JumperCaptureService extends Service {
             if (image == null) return;
             long now = SystemClock.elapsedRealtime();
             PilotService pilot = PilotService.instance;
-            if (now - lastFrameMs < 80 || pilot==null || !pilot.wantsJumperFrame(session)) return;
+            boolean accepted=framePacer.accept(SystemClock.elapsedRealtimeNanos(),pilot!=null&&pilot.wantsJumperFrame(session));
+            if(pilot!=null)pilot.onCapturePacing(session,framePacer.acceptedFrames(),framePacer.skippedFrames());
+            if(!accepted)return;
             if (image.getWidth() != width || image.getHeight() != height) throw new IllegalStateException("display changed");
             Image.Plane plane = image.getPlanes()[0];
             ByteBuffer bytes = plane.getBuffer();
@@ -173,7 +175,6 @@ public final class JumperCaptureService extends Service {
             RgbaFrameDecoder.decode(bytes, width, height, plane.getPixelStride(), plane.getRowStride(), argb);
             frame = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
             frame.setPixels(argb, 0, width, 0, 0, width, height);
-            lastFrameMs = now;
             Bitmap owned = frame;
             frame = null;
             pilot.onJumperFrame(session,owned, now);

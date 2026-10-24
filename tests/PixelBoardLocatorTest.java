@@ -13,6 +13,7 @@ public class PixelBoardLocatorTest {
  private static int checks;
 
  public static void main(String[] args){
+  searchStability();
   exactGridAndHeader();
   roundedGeometryAndLargeImage();
   separatedNearbyFrame();
@@ -23,6 +24,22 @@ public class PixelBoardLocatorTest {
   malformedAndLimits();
   cancellationAndProviderErrors();
   System.out.println("PASS "+checks+" pixel-board-locator assertions");
+ }
+
+ private static void searchStability(){
+  PixelBoardLocator.Stability s=new PixelBoardLocator.Stability();
+  Scene scene=new Scene();scene.board(53,281,400,6,CELLS);
+  // Same known marker geometry as a real locator result; pixel identity remains independent.
+  BoardSelection.Candidate candidate=new BoardSelection.Candidate(BoardSelection.MARKER_2048,53,281,453,681);
+  check(!s.observe(null,1000,1),"missing first");check(s.missingFrames()==1,"one missing frame");
+  check(!s.observe(null,1000,2)&&s.missingFrames()==1,"duplicate missing frame not counted");
+  check(!s.observe(null,1100,2)&&s.missingFrames()==2,"two frames do not report persistent missing");
+  check(!s.observe(null,1200,3)&&s.missingFrames()==3,"three occluded/animated frames enter search");
+  check(!s.observe(candidate,1300,4),"first recovered candidate never arms");
+  check(!s.observe(candidate,1400,5),"changing candidate pixels never stable");
+  check(s.observe(candidate,1500,5),"two fresh consistent candidates recover");
+  check(s.missingFrames()==0,"successful recovery clears missing count");
+  s.reset();check(!s.observe(candidate,1600,5),"old session cannot confirm new candidate");
  }
 
  private static void exactGridAndHeader(){
@@ -141,6 +158,7 @@ public class PixelBoardLocatorTest {
   catch(BoardSelection.SelectionFailure expected){check(code.equals(expected.code));}
  }
 
+ private static void check(boolean condition,String why){checks++;if(!condition)throw new AssertionError(why);}
  private static void check(boolean condition){checks++;if(!condition)throw new AssertionError("check "+checks);}
 
  private interface Layer {Integer color(int x,int y);}

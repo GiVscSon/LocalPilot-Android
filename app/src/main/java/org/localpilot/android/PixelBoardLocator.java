@@ -18,6 +18,29 @@ public final class PixelBoardLocator {
  private static final int MAX_PIXEL_READS=4_000_000;
  private static final int MAX_CANDIDATES=64;
 
+ /** Multi-frame search state; unknown/menu frames retain calibration and never authorize input. */
+ public static final class Stability {
+  private long lastAt=-1,signature;private BoardSelection.Candidate prior;private int missing,good;
+  public void reset(){lastAt=-1;prior=null;missing=good=0;}
+  public int missingFrames(){return missing;}
+  public boolean observe(BoardSelection.Candidate found,long at,long pixels){
+   if(at<0||at<=lastAt)return false;lastAt=at;
+   if(found!=null&&(found.profile==null||found.left<0||found.top<0||found.right<=found.left||found.bottom<=found.top))found=null;
+   if(found==null){missing=Math.min(1000000,missing+1);good=0;prior=null;signature=pixels;return false;}
+   boolean same=prior!=null&&prior.profile==found.profile&&prior.left==found.left&&prior.top==found.top&&prior.right==found.right&&prior.bottom==found.bottom&&signature==pixels;
+   missing=0;good=same?Math.min(2,good+1):1;prior=found;signature=pixels;return good==2;
+  }
+ }
+ public static long sceneSignature(PixelBoardReader.Pixels pixels,int l,int t,int r,int b,int el,int et,int er,int eb){
+  if(pixels==null||l<0||t<0||r<=l||b<=t)throw new IllegalArgumentException("signature geometry");
+  long hash=0xcbf29ce484222325L;
+  for(int y=0;y<16;y++)for(int x=0;x<16;x++){
+   int px=l+(int)((x+.5)*(r-l)/16),py=t+(int)((y+.5)*(b-t)/16);if(px>=el&&px<er&&py>=et&&py<eb)continue;
+   int rgb=pixels.rgb(px,py)&0xf0f0f0;hash=(hash^rgb)*0x100000001b3L;
+  }
+  return hash;
+ }
+
  private PixelBoardLocator(){}
 
  public static BoardSelection.Candidate find(PixelBoardReader.Pixels pixels,

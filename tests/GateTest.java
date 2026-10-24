@@ -4,6 +4,7 @@ public class GateTest {
  private static int checks;
 
  public static void main(String[] args){
+  transientFocus();
   completedGestureFreshness();
   initialBindingAndFreshness();
   incomingTargetAndPrecedence();
@@ -12,6 +13,32 @@ public class GateTest {
   diagnosticsDoNotChangeAuthority();
   delayedObservationDoesNotRenewActions();
   System.out.println("PASS "+checks+" gate checks");
+ }
+
+ private static void transientFocus(){
+  ActionGate g=armed();WindowFocus focus=new WindowFocus();ActionGate.Ticket old=g.offer(1000);
+  check(g.consume(old,1000,"game",3,1080,2400));
+  check(focus.observe(g.epoch(),"TARGET_WINDOW_UNAVAILABLE",1100)==WindowFocus.State.WAITING);g.pause();
+  check(g.armed()&&g.paused());check(!g.consume(g.offer(1101),1101,"game",3,1080,2400));
+  ActionGate.Ticket duringPause=g.offer(1102);
+  check(g.identityRejection("game",3,1080,2400)==null);
+  check(focus.observe(g.epoch(),null,1699)==WindowFocus.State.ACTIVE);g.resume();
+  check("FOCUS_CHANGED".equals(g.rejection(old,1699,"game",3,1080,2400)));
+  check("FOCUS_CHANGED".equals(g.completionRejection(old,1699,"game",3,1080,2400)));
+  check("FOCUS_CHANGED".equals(g.rejection(duringPause,1699,"game",3,1080,2400)));
+  check(g.consume(g.offer(1699),1699,"game",3,1080,2400));
+  for(String reason:new String[]{"TARGET_APP_CHANGED","TARGET_WINDOW_UNAVAILABLE","WINDOW_STATE_UNAVAILABLE"}){
+   focus.reset();check(focus.observe(g.epoch(),reason,2000)==WindowFocus.State.WAITING);
+   check(focus.observe(g.epoch(),reason,2599)==WindowFocus.State.WAITING);
+   check(focus.observe(g.epoch(),null,2600)==WindowFocus.State.STOP);
+  }
+  for(String reason:new String[]{"DEVICE_LOCKED","TARGET_WINDOW_CHANGED","TARGET_BOUNDS_CHANGED","TICKET_EXPIRED"}){
+   focus.reset();check(focus.observe(g.epoch(),reason,3000)==WindowFocus.State.STOP);
+  }
+  focus.reset();focus.observe(g.epoch(),"TARGET_WINDOW_UNAVAILABLE",4000);
+  check(focus.observe(g.epoch(),null,3999)==WindowFocus.State.STOP);
+  g.pause();ActionGate.Ticket paused=g.offer(4001);g.stop();g.resume();check(!g.armed()&&!g.valid(paused,4002,"game",3,1080,2400));
+  check(focus.observe(g.epoch(),null,5000)==WindowFocus.State.ACTIVE);
  }
 
  private static void completedGestureFreshness(){
