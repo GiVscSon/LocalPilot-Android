@@ -136,14 +136,11 @@ public final class PilotUiInstrumentation extends Instrumentation {
                 "Main screen did not recover visible overlay controls");
         require(!armed(), "Showing the panel must not authorize input");
         onMain(() -> { service.hidePanel(); return null; });
-        ActivityMonitor picker = addMonitor(GamePickerActivity.class.getName(), null, false);
-        try {
-            click("Выбрать игру или браузер");
-            require(waitForMonitorWithTimeout(picker, 5_000) != null, "Installed-app picker did not launch");
-            click("Все приложения");
-            await(() -> present("Только игры"), 5_000, "Picker cannot switch to browser/all-app mode");
-            require(!armed(), "Opening the picker must not authorize input");
-        } finally { removeMonitor(picker); }
+        click("Выбрать игру или браузер");
+        await(() -> present("Все приложения"), 10_000, "Installed-app picker did not become visible");
+        click("Все приложения");
+        await(() -> present("Только игры"), 5_000, "Picker cannot switch to browser/all-app mode");
+        require(!armed(), "Opening the picker must not authorize input");
         sendKeyDownUpSync(KeyEvent.KEYCODE_BACK);
         waitForIdleSync();
         click("Показать панель");
@@ -251,12 +248,10 @@ public final class PilotUiInstrumentation extends Instrumentation {
         if(onMain(()->getTargetContext().getSharedPreferences(MainActivity.PREF,Context.MODE_PRIVATE).getBoolean("auto_control",true)))
             click("Автоуправление выбранной игрой");
         await(()->onMain(()->!getTargetContext().getSharedPreferences(MainActivity.PREF,Context.MODE_PRIVATE).getBoolean("auto_control",true)),3_000,"Launcher observation mode did not commit");
-        ActivityMonitor game = addMonitor(Game2048Activity.class.getName(), null, false);
-        try {
-            click("Открыть 2048");
-            require(waitForMonitorWithTimeout(game, 5_000) != null, "Main screen did not open built-in 2048");
-        } finally { removeMonitor(game); }
-        await(() -> markerBounds("LOCALPILOT_BOARD_2048") != null, 5_000, "2048 board geometry is unavailable");
+        click("Открыть 2048");
+        // Observe the real rendered destination. Older Android can publish an
+        // Activity to the screen without notifying this process's class monitor.
+        await(() -> markerBounds("LOCALPILOT_BOARD_2048") != null, 10_000, "Main screen did not show the actual 2048 board");
         onMain(() -> { service.showPanel(); return null; });
         click("Игра");click("2048");
         await(()->onMain(()->intField("selectedProfile")==4&&field("overlayDialog")==null),3_000,"2048 mechanic selection did not commit before binding its window");
