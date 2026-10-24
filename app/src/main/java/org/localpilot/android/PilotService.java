@@ -338,7 +338,7 @@ public class PilotService extends AccessibilityService {
   if(state!=null)state.setText(profileLabel()+" · "+(manualVisualRoi?"область вручную":visualRoi!=null?"боковые поля убраны":"область авто")+"\n"+note+"\n"+(gate.armed()?targetLabel+" · "+(inputReady?"ввод включён":"наблюдение"):"Нажмите Старт или выберите Окно")+(captureSession>0||playingGrid?"\n"+captureCounters():"")+(collecting?"\nСбор примеров включён":""));
  }
  private AccessibilityNodeInfo windowRoot(AccessibilityWindowInfo window){return Build.VERSION.SDK_INT>=33?window.getRoot(0):window.getRoot();}
- private AccessibilityNodeInfo appRoot(){for(AccessibilityWindowInfo w:getWindows())if(w.getType()==AccessibilityWindowInfo.TYPE_APPLICATION&&w.isFocused()){AccessibilityNodeInfo r=windowRoot(w);if(r!=null)return r;}return null;}
+ private AccessibilityNodeInfo appRoot(){for(AccessibilityWindowInfo w:getWindows())if(w.getType()==AccessibilityWindowInfo.TYPE_APPLICATION&&w.isFocused()){AccessibilityNodeInfo r=windowRoot(w);if(r!=null){if(r.getWindowId()==w.getId())return r;r.recycle();}}return null;}
  private boolean unlocked(){return ((PowerManager)getSystemService(POWER_SERVICE)).isInteractive()&&!((KeyguardManager)getSystemService(KEYGUARD_SERVICE)).isKeyguardLocked();}
  private void arm(){stop("Привязка");if(busy){note="Дождитесь завершения жеста";update();return;}AccessibilityNodeInfo r=appRoot();try{if(r==null||!unlocked()){note="Нет активного приложения";update();return;}target=String.valueOf(r.getPackageName());targetLabel=applicationLabel(target);targetIsBrowser=browserTarget();armedBounds=windowBounds(r);if(armedBounds.isEmpty()){note="Нет границ окна";update();return;}retainVisualScope(r);gate.arm(target,r.getWindowId(),armedBounds.width(),armedBounds.height());if(automatic())permit.grantSession(gate.epoch(),SystemClock.elapsedRealtime());note=automatic()?"Окно выбрано · нажмите Старт":"Только наблюдение";update();}finally{if(r!=null)r.recycle();}}
  private String applicationLabel(String packageName){try{return String.valueOf(getPackageManager().getApplicationLabel(getPackageManager().getApplicationInfo(packageName,0)));}catch(Exception e){return packageName;}}
@@ -1041,14 +1041,32 @@ public class PilotService extends AccessibilityService {
  /** Explicit test button authorizes only the marked target in our own DemoActivity. */
  public void startTouchCheck(){
   if(busy){note="Дождитесь завершения текущего жеста";update();return;}
-  AccessibilityNodeInfo root=appRoot();
-  try{if(root==null||!getPackageName().equals(String.valueOf(root.getPackageName()))||demoScore(root)<0){note="Откройте тест касаний LocalPilot";update();return;}}
-  finally{if(root!=null)root.recycle();}
-  showPanel();arm();
-  if(!gate.armed()||!getPackageName().equals(target))return;
-  permit.grantSession(gate.epoch(),SystemClock.elapsedRealtime());
-  if(layout!=null){layout.x=Math.max(0,armedBounds.right-dp(160));layout.y=armedBounds.top+dp(4);}
-  startDemo();
+  stop("Ожидаю окно теста касаний");showPanel();
+  awaitTouchCheck(gate.epoch(),SystemClock.uptimeMillis()+2000);
+ }
+ private void awaitTouchCheck(long epoch,long until){
+  if(epoch!=gate.epoch()||destroying)return;
+  AccessibilityNodeInfo root=appRoot();int window=-1;Rect bounds=null;
+  try{
+   if(root!=null){
+    if(!getPackageName().equals(String.valueOf(root.getPackageName()))){note="Откройте тест касаний LocalPilot";update();return;}
+    if(demoScore(root)>=0){window=root.getWindowId();bounds=windowBounds(root);}
+   }
+  }finally{if(root!=null)root.recycle();}
+  if(window>=0&&bounds!=null&&!bounds.isEmpty()){
+   arm();
+   if(gate.matches(getPackageName(),window,bounds.width(),bounds.height())&&bounds.equals(armedBounds)){
+    permit.grantSession(gate.epoch(),SystemClock.elapsedRealtime());
+    if(layout!=null){layout.x=Math.max(0,armedBounds.right-dp(160));layout.y=armedBounds.top+dp(4);}
+    startDemo();return;
+   }
+   // A second Binder observation may already belong to a replacement window.
+   stop("Ожидаю устойчивое окно теста касаний");epoch=gate.epoch();
+  }
+  if(SystemClock.uptimeMillis()>=until){note="Не дождался окна теста касаний · откройте его и повторите";update();return;}
+  note="Ожидаю границы окна теста касаний · ввод выключен";update();
+  final long waitingEpoch=epoch;
+  handler.postDelayed(()->awaitTouchCheck(waitingEpoch,until),100);
  }
  private void startDemo(){if(busy||autoLeft>0||playing2048||playingMini||playingJumper||playingGrid||captureBusy)return;if(!permit.allows(gate.epoch(),SystemClock.elapsedRealtime())){note="Для демо сначала разрешите ввод";update();return;}if(!gate.armed()||!getPackageName().equals(target)){note="Сначала привяжите нашу тестовую игру";update();return;}autoLeft=10;demoVerified=0;deadline=SystemClock.elapsedRealtime()+60000;long epoch=gate.epoch();compact(true);handler.postDelayed(()->{if(epoch==gate.epoch()&&(autoLeft>0||busy)){stop("Демо: лимит 60 секунд; нет завершения серии");compact(false);}},60000);afterPanelLayout(()->demoStep(epoch));}
  private void afterPanelLayout(Runnable action){if(panel==null)return;View view=panel;view.getViewTreeObserver().addOnPreDrawListener(new ViewTreeObserver.OnPreDrawListener(){public boolean onPreDraw(){if(view.getViewTreeObserver().isAlive())view.getViewTreeObserver().removeOnPreDrawListener(this);view.postOnAnimation(()->view.postOnAnimation(()->handler.postDelayed(action,80)));return true;}});view.requestLayout();view.invalidate();}
