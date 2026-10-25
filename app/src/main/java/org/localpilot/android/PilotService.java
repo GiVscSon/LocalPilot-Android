@@ -413,8 +413,8 @@ public class PilotService extends AccessibilityService {
   gate.resume();focusPaused=false;focusWatch=false;focusWatchId++;focusRecoveredAt=SystemClock.elapsedRealtime();
   note="Прежнее окно восстановлено · ожидаю свежий кадр";update();
   if(playingGrid)scheduleGrid(epoch);
-  else if(playing2048)handler.postDelayed(()->round2048(epoch),captureDelay());
-  else if(discoveringBoard)handler.postDelayed(()->findAutomaticBoard(epoch,SystemClock.elapsedRealtime()),captureDelay());
+  else if(playing2048)postBoardTask(epoch,captureDelay(),()->round2048(epoch));
+  else if(discoveringBoard)postBoardTask(epoch,captureDelay(),()->findAutomaticBoard(epoch,SystemClock.elapsedRealtime()));
  }
  private boolean valid(ActionGate.Ticket t){return invalidReason(t)==null;}
  private void manual(int dx,int dy){if(autoLeft>0||playing2048||playingMini||playingJumper||playingGrid){stop("Авторежим остановлен; нажмите ещё раз");return;}if(!gate.armed()){note="Сначала нажмите «Привязать»";update();return;}if(!permit.allows(gate.epoch(),SystemClock.elapsedRealtime())){note="Нажмите «Разрешить ввод» для запуска";update();return;}float x=armedBounds.left+Math.min(.99f,nx/100f)*armedBounds.width(),y=armedBounds.top+Math.min(.99f,ny/100f)*armedBounds.height();send(x,y,x+dx*armedBounds.width()*.18f,y+dy*armedBounds.height()*.18f,gate.offer(SystemClock.elapsedRealtime()),null);}
@@ -594,12 +594,17 @@ public class PilotService extends AccessibilityService {
   try{gridGoal=GridPuzzleGoal.Color.valueOf(getSharedPreferences("grid-puzzle",MODE_PRIVATE).getString(gridKey()+".goal","ANY"));}catch(IllegalArgumentException error){gridGoal=GridPuzzleGoal.Color.ANY;}
   gridSession.reset();gridMoves=gridVerified=0;gridResultVisible=gridSawAction=false;playingGrid=true;clearDiagnosticFrame();captureFrames=captureReads=captureDecisions=captureSent=captureCompleted=0;
   if(automatic())permit.grantSession(gate.epoch(),SystemClock.elapsedRealtime());
-  compact(true);note="Проверяю устойчивую сетку "+gridConfig.rows+"×"+gridConfig.cols;update();long epoch=gate.epoch();
-  afterPanelLayout(()->{if(epoch!=gate.epoch()||!playingGrid)return;if(!movePanelAway(boardRoi)){stop("Панель STOP закрывает сетку: передвиньте её");return;}afterPanelLayout(()->scheduleGrid(epoch));});
+  compact(true);note="Проверяю устойчивую сетку "+gridConfig.rows+"×"+gridConfig.cols;update();long epoch=gate.epoch(),generation=boardReadGeneration;
+  afterPanelLayout(()->{if(epoch!=gate.epoch()||generation!=boardReadGeneration||!playingGrid||focusPaused)return;if(!movePanelAway(boardRoi)){stop("Панель STOP закрывает сетку: передвиньте её");return;}afterPanelLayout(()->{if(generation==boardReadGeneration)scheduleGrid(epoch);});});
  }
- private void scheduleGrid(long epoch){if(playingGrid&&epoch==gate.epoch()&&!gridSession.paused())handler.postDelayed(()->gridStep(epoch),captureDelay());}
+ /** A focus pause invalidates pending reads even when the bound session survives. */
+ private void postBoardTask(long epoch,long delay,Runnable task){
+  long generation=boardReadGeneration;
+  handler.postDelayed(()->{if(epoch==gate.epoch()&&generation==boardReadGeneration&&!focusPaused)task.run();},delay);
+ }
+ private void scheduleGrid(long epoch){if(playingGrid&&epoch==gate.epoch()&&!gridSession.paused()&&!focusPaused)postBoardTask(epoch,captureDelay(),()->gridStep(epoch));}
  private void gridStep(long epoch){
-  if(epoch!=gate.epoch()||!playingGrid||gridSession.paused())return;
+  if(epoch!=gate.epoch()||!playingGrid||gridSession.paused()||focusPaused)return;
   captureImage(epoch,(pixels,ticket,captureMs)->{
    if(epoch!=gate.epoch()||!playingGrid)return;captureFrames++;Rect r=new Rect(boardRoi),panel=panelBounds();long now=SystemClock.elapsedRealtime();
    if(GameOverScreen.detect(pixels::getPixel,armedBounds.left,armedBounds.top,armedBounds.right,armedBounds.bottom,panel.left,panel.top,panel.right,panel.bottom)){
@@ -1147,9 +1152,9 @@ public class PilotService extends AccessibilityService {
   arm();if(!gate.armed())return;selectedProfile=4;startBoundDiscovery(gate.epoch());
  }
  private void startPickedProfile(){if(!getPackageName().equals(target))startSelected();else startBoundDiscovery(gate.epoch());}
- private void startBoundDiscovery(long epoch){permit.revoke();boardSearch.reset();discoveringBoard=true;compact(true);afterPanelLayout(()->findAutomaticBoard(epoch,SystemClock.elapsedRealtime()+1500));}
+ private void startBoundDiscovery(long epoch){permit.revoke();boardSearch.reset();discoveringBoard=true;compact(true);long generation=boardReadGeneration;afterPanelLayout(()->{if(generation==boardReadGeneration&&!focusPaused)findAutomaticBoard(epoch,SystemClock.elapsedRealtime()+1500);});}
  private void findAutomaticBoard(long epoch,long until){
-  if(epoch!=gate.epoch())return;if(!valid(gate.offer(SystemClock.elapsedRealtime()))){if(deferFocus(invalidReason(gate.offer(SystemClock.elapsedRealtime()))))return;stop("Автопоиск: активное окно изменилось");return;}
+  if(epoch!=gate.epoch()||!discoveringBoard||focusPaused)return;if(!valid(gate.offer(SystemClock.elapsedRealtime()))){if(deferFocus(invalidReason(gate.offer(SystemClock.elapsedRealtime()))))return;stop("Автопоиск: активное окно изменилось");return;}
   java.util.List<BoardSelection.Candidate> candidates=new java.util.ArrayList<>();AccessibilityNodeInfo root=appRoot();
   try{if(root!=null&&getPackageName().equals(target))collectBoardNodes(root,candidates,0,new int[]{512});}
   catch(RuntimeException error){stop("Автопоиск: разметка окна недоступна");return;}
@@ -1158,7 +1163,7 @@ public class PilotService extends AccessibilityService {
    try{prepareAutomaticBoard(BoardSelection.choose(candidates,armedBounds.left,armedBounds.top,armedBounds.right,armedBounds.bottom),epoch);}
    catch(BoardSelection.SelectionFailure error){stop(error.code+": "+error.getMessage());}return;
   }
-  if(getPackageName().equals(target)&&SystemClock.elapsedRealtime()<until){handler.postDelayed(()->findAutomaticBoard(epoch,until),150);return;}
+  if(getPackageName().equals(target)&&SystemClock.elapsedRealtime()<until){postBoardTask(epoch,150,()->findAutomaticBoard(epoch,until));return;}
   // External games have no trusted virtual-board marker. Only the strict 2048 palette
   // is supported here; unsupported or ambiguous images must not start a controller.
   discoveringBoard=true;boardRoi=new Rect(armedBounds);note="Ищу поле стандартной 2048 по изображению…";update();
@@ -1189,7 +1194,7 @@ public class PilotService extends AccessibilityService {
   handler.postDelayed(()->{if(visionPending&&request==visionRequest&&epoch==gate.epoch()){visionPending=false;visionRequest++;if(visionTask!=null)visionTask.cancel(true);visionTask=null;failStage(StageMetrics.Stage.READ,"AUTO_BOARD_TIMEOUT","Автопоиск превысил 3 секунды; выберите поле вручную");}},3000);
  }
  private void retryAutomaticBoard(long epoch){
-  handler.postDelayed(()->{if(epoch==gate.epoch()&&discoveringBoard&&!focusPaused&&!captureBusy&&!visionPending)captureImage(epoch,(pixels,t,ms)->locatePixelBoard(pixels,epoch));},Math.max(captureDelay(),boardSearch.missingFrames()>=3?1000:0));
+  postBoardTask(epoch,Math.max(captureDelay(),boardSearch.missingFrames()>=3?1000:0),()->{if(discoveringBoard&&!captureBusy&&!visionPending)captureImage(epoch,(pixels,t,ms)->locatePixelBoard(pixels,epoch));});
  }
  private void collectBoardNodes(AccessibilityNodeInfo node,java.util.List<BoardSelection.Candidate> out,int depth,int[] remaining){
   if(depth>32||--remaining[0]<0)throw new IllegalStateException("tree limit");
@@ -1198,10 +1203,11 @@ public class PilotService extends AccessibilityService {
   for(int i=0;i<node.getChildCount();i++){AccessibilityNodeInfo child=node.getChild(i);if(child==null)continue;try{collectBoardNodes(child,out,depth+1,remaining);}finally{child.recycle();}}
  }
  private void prepareAutomaticBoard(BoardSelection.Candidate selected,long epoch){
-  if(epoch!=gate.epoch())return;discoveringBoard=true;boardRoi=new Rect(selected.left,selected.top,selected.right,selected.bottom);compact(true);
+  final long generation=boardReadGeneration;
+  if(epoch!=gate.epoch()||focusPaused)return;discoveringBoard=true;boardRoi=new Rect(selected.left,selected.top,selected.right,selected.bottom);compact(true);
   afterPanelLayout(()->{
-   if(epoch!=gate.epoch())return;if(!movePanelAway(boardRoi)){stop("Панель не помещается вне поля: поверните телефон или передвиньте её");return;}
-   afterPanelLayout(()->{if(epoch!=gate.epoch())return;discoveringBoard=false;uiStats="Автополе: "+selected.profile+" · "+boardRoi.width()+"×"+boardRoi.height();if(selected.profile==BoardSelection.Profile.GAME_2048)start2048();else startMini(selected.profile==BoardSelection.Profile.TTT?0:1);});
+   if(epoch!=gate.epoch()||generation!=boardReadGeneration||focusPaused)return;if(!movePanelAway(boardRoi)){stop("Панель не помещается вне поля: поверните телефон или передвиньте её");return;}
+   afterPanelLayout(()->{if(epoch!=gate.epoch()||generation!=boardReadGeneration||focusPaused)return;discoveringBoard=false;uiStats="Автополе: "+selected.profile+" · "+boardRoi.width()+"×"+boardRoi.height();if(selected.profile==BoardSelection.Profile.GAME_2048)start2048();else startMini(selected.profile==BoardSelection.Profile.TTT?0:1);});
   });
  }
  private boolean movePanelAway(Rect roi){
@@ -1300,16 +1306,16 @@ public class PilotService extends AccessibilityService {
  private void start2048(boolean colored){
   if(busy||captureBusy||discoveringBoard||autoLeft>0||playing2048||playingMini||playingJumper||playingGrid||!gate.armed()||boardRoi==null){note=colored?"Цветной 2048: привяжите игру и выберите поле 4×4":"Привязать → Поле 4×4 → Авто2048";update();return;}
   boardReadGeneration++;boardReadMisses=0;colorSession.reset();before2048=null;colored2048=colored;
-  long epoch=gate.epoch();playing2048=true;compact(true);note=colored2048?"Читаю цветное поле 2048 в памяти…":"Читаю поле в памяти…";update();
+  long epoch=gate.epoch(),generation=boardReadGeneration;playing2048=true;compact(true);note=colored2048?"Читаю цветное поле 2048 в памяти…":"Читаю поле в памяти…";update();
   afterPanelLayout(()->{
-   if(epoch!=gate.epoch()||!playing2048)return;
+   if(epoch!=gate.epoch()||generation!=boardReadGeneration||!playing2048||focusPaused)return;
    if(!movePanelAway(boardRoi)){stop("Панель STOP закрывает поле: передвиньте её и повторите");return;}
-   afterPanelLayout(()->{if(epoch==gate.epoch()&&playing2048)handler.postDelayed(()->stable(epoch,(board,t,ms)->{
+   afterPanelLayout(()->{if(epoch==gate.epoch()&&generation==boardReadGeneration&&playing2048&&!focusPaused)postBoardTask(epoch,captureDelay(),()->stable(epoch,(board,t,ms)->{
    StringBuilder text=new StringBuilder("Сверьте все 16 клеток с игрой:\n");for(int i=0;i<16;i++){text.append(board.cells[i]==0?"·":board.cells[i]).append(i%4==3?"\n":"  ");}
    text.append("До STOP или конца партии. Кадры только в RAM. Это CPU-алгоритм, не обучение.");
-   if(automatic()){permit.grantSession(epoch,SystemClock.elapsedRealtime());moves2048=0;mergeTotal=0;before2048=null;uiStats=text.toString();handler.postDelayed(()->round2048(epoch),captureDelay());return;}
-   preview=new AlertDialog.Builder(this).setTitle("2048 — начать игру?").setMessage(text.toString()).setPositiveButton("Поле верное, начать",(dialog,which)->{preview=null;if(epoch!=gate.epoch()||!playing2048)return;permit.grantSession(epoch,SystemClock.elapsedRealtime());moves2048=0;mergeTotal=0;before2048=null;handler.postDelayed(()->round2048(epoch),captureDelay());}).setNegativeButton("Отмена",(d,w)->stop("2048 отменён")).setCancelable(false).create();preview.getWindow().setType(WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY);preview.getWindow().addFlags(WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE);preview.show();
-   }),captureDelay());});
+   if(automatic()){permit.grantSession(epoch,SystemClock.elapsedRealtime());moves2048=0;mergeTotal=0;before2048=null;uiStats=text.toString();postBoardTask(epoch,captureDelay(),()->round2048(epoch));return;}
+   preview=new AlertDialog.Builder(this).setTitle("2048 — начать игру?").setMessage(text.toString()).setPositiveButton("Поле верное, начать",(dialog,which)->{preview=null;if(epoch!=gate.epoch()||generation!=boardReadGeneration||!playing2048||focusPaused)return;permit.grantSession(epoch,SystemClock.elapsedRealtime());moves2048=0;mergeTotal=0;before2048=null;postBoardTask(epoch,captureDelay(),()->round2048(epoch));}).setNegativeButton("Отмена",(d,w)->stop("2048 отменён")).setCancelable(false).create();preview.getWindow().setType(WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY);preview.getWindow().addFlags(WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE);preview.show();
+   }));});
   });
  }
  private void startColored2048(){
