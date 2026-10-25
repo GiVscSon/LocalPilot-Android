@@ -1,3 +1,8 @@
+Актуальная поставка: 0.7.28-dev / code44.
+Отчёт: docs/VALIDATION_0.7.28.txt.
+Предыдущий проверенный выпуск: docs/VALIDATION_0.7.27.txt.
+Ниже — исторический отчёт 0.7.11, не результаты текущего APK.
+
 0.7.11-dev/code27 FINAL predictive controller
 Controller source SHA256876dedcb3f8c47df7446d24ddf10a4c55eed7ef5304007f9d2abf1766710935c
 assembleDebug/lintDebug/compileDebugAndroidTestJavaWithJavac PASS.
