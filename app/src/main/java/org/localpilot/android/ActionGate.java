@@ -17,6 +17,7 @@ public final class ActionGate {
   if(!armed)return "NOT_BOUND";
   if(!owner.equals(p))return "TARGET_APP_CHANGED";
   if(window!=w)return "TARGET_WINDOW_CHANGED";
+  if(x<=0||y<=0)return "WINDOW_STATE_UNAVAILABLE";
   if(width!=x||height!=y)return "TARGET_BOUNDS_CHANGED";
   return null;
  }

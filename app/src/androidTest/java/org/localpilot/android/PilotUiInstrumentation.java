@@ -366,7 +366,12 @@ public final class PilotUiInstrumentation extends Instrumentation {
             long session = onMain(() -> ((Number)field("captureSession")).longValue());
             require(session > previous, "Projection restart reused the previous session token");previous=session;
             require(present("STOP"), "STOP panel was not restored after screen-capture consent");
-            if(cycle==0)click("STOP");
+            if(cycle==0){
+                checkFocusRecovery(session);
+                // Revoke via the real STOP control after a second injected loss.
+                onMain(()->{injectFocusLoss();return null;});
+                click("STOP");
+            }
             else {
                 require(automation.setRotation(UiAutomation.ROTATION_FREEZE_90), "Cannot rotate active projection");
             }
@@ -374,9 +379,39 @@ public final class PilotUiInstrumentation extends Instrumentation {
                     "Projection STOP/rotation did not end the input session");
             require(onMain(() -> PilotService.instance == service), "Projection teardown disconnected or crashed the Accessibility service");
         }
+        SystemClock.sleep(WindowFocus.GRACE_MS+200);
+        require(onMain(()->!gate().armed()&&!booleanField("playingJumper")&&!booleanField("jumperCaptureReady")),"Delayed focus watch restarted a stopped capture");
         require(automation.setRotation(UiAutomation.ROTATION_FREEZE_0), "Cannot restore portrait after projection");
         addCheck("projection_consent_restart_frames_stop_rotation", new JSONObject().put("decoded_frames_per_session", 2)
                 .put("sessions", 2).put("isolated_test_apk", true).put("gameplay_claim", false));
+    }
+
+    /** Inject the loss notification, but use real window queries, timer, gate and projection. */
+    private void injectFocusLoss()throws Exception{
+        java.lang.reflect.Method method=PilotService.class.getDeclaredMethod("deferFocus",String.class);
+        method.setAccessible(true);
+        require(Boolean.TRUE.equals(method.invoke(service,"WINDOW_STATE_UNAVAILABLE")),"Focus loss was not deferred");
+        require(gate().armed()&&gate().paused()&&booleanField("focusPaused"),"Focus loss did not pause the gate");
+        require(!service.wantsJumperFrame(((Number)field("captureSession")).longValue()),"Paused capture still accepted work");
+    }
+    private void checkFocusRecovery(long session)throws Exception{
+        await(()->onMain(()->!booleanField("jumperConsentPending")),3_000,"Consent target handoff did not settle before focus check");
+        long epoch=onMain(()->gate().epoch());
+        ActionGate.Ticket old=onMain(()->gate().offer(SystemClock.elapsedRealtime()));
+        long frames=onMain(()->((Number)field("captureFrames")).longValue());
+        long inputs=onMain(()->((Number)field("dispatchedInputs")).longValue());
+        onMain(()->{injectFocusLoss();return null;});
+        await(()->onMain(()->!booleanField("focusPaused")),2_000,"Focus did not recover or stop");
+        require(onMain(()->gate().armed()&&gate().epoch()==epoch&&booleanField("playingJumper")&&booleanField("jumperCaptureReady")&&((Number)field("captureSession")).longValue()==session),
+                "Transient focus recovery discarded the capture session");
+        require(onMain(()->{
+            Rect bounds=(Rect)field("armedBounds");
+            return "FOCUS_CHANGED".equals(gate().rejection(old,SystemClock.elapsedRealtime(),(String)field("target"),old.window,bounds.width(),bounds.height()));
+        }),"Pre-pause input ticket survived recovery");
+        require(onMain(()->((Number)field("dispatchedInputs")).longValue()==inputs),"Unrecognized fixture received input while recovering");
+        await(()->onMain(()->((Number)field("captureFrames")).longValue()>frames&&((Number)field("jumperLastFrameMs")).longValue()>=((Number)field("focusRecoveredAt")).longValue()),4_000,
+                "Projection did not deliver a fresh frame after focus recovery");
+        addCheck("transient_focus_preserves_capture_and_rejects_old_ticket",new JSONObject().put("loss_notification_injected",true).put("real_projection_and_window_query",true).put("same_capture_session",true));
     }
 
     private boolean acceptProjectionDialog() {

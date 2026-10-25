@@ -5,6 +5,7 @@ public class GateTest {
 
  public static void main(String[] args){
   transientFocus();
+  unavailableBounds();
   completedGestureFreshness();
   initialBindingAndFreshness();
   incomingTargetAndPrecedence();
@@ -39,6 +40,21 @@ public class GateTest {
   check(focus.observe(g.epoch(),null,3999)==WindowFocus.State.STOP);
   g.pause();ActionGate.Ticket paused=g.offer(4001);g.stop();g.resume();check(!g.armed()&&!g.valid(paused,4002,"game",3,1080,2400));
   check(focus.observe(g.epoch(),null,5000)==WindowFocus.State.ACTIVE);
+ }
+
+ private static void unavailableBounds(){
+  ActionGate g=armed();WindowFocus focus=new WindowFocus();ActionGate.Ticket t=g.offer(1000);
+  for(int[] size:new int[][]{{0,2400},{1080,0},{0,0},{-1,2400}}){
+   String reason=g.identityRejection("game",3,size[0],size[1]);
+   check("WINDOW_STATE_UNAVAILABLE".equals(reason));
+   check(!g.consume(t,1000,"game",3,size[0],size[1]));
+   focus.reset();check(focus.observe(g.epoch(),reason,1000)==WindowFocus.State.WAITING);
+   check(focus.observe(g.epoch(),null,1599)==WindowFocus.State.ACTIVE);
+  }
+  check("TARGET_WINDOW_CHANGED".equals(g.identityRejection("game",4,0,0)));
+  check("TARGET_APP_CHANGED".equals(g.identityRejection("other",3,0,0)));
+  check("TARGET_BOUNDS_CHANGED".equals(g.identityRejection("game",3,1079,2400)));
+  g.stop();check("NOT_BOUND".equals(g.identityRejection("game",3,0,0)));
  }
 
  private static void completedGestureFreshness(){

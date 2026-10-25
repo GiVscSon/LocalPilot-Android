@@ -378,7 +378,7 @@ public class PilotService extends AccessibilityService {
    if(!gate.armed())return "NOT_BOUND";if(!unlocked())return "DEVICE_LOCKED";
    root=appRoot();if(root==null)return "TARGET_WINDOW_UNAVAILABLE";
    Rect bounds=windowBounds(root);String pkg=String.valueOf(root.getPackageName());int id=root.getWindowId();
-   if(!unlocked())return "DEVICE_LOCKED";if(!target.equals(pkg))return "TARGET_APP_CHANGED";if(!bounds.equals(armedBounds))return "TARGET_BOUNDS_CHANGED";
+   if(!unlocked())return "DEVICE_LOCKED";if(!target.equals(pkg))return "TARGET_APP_CHANGED";if(bounds.isEmpty())return gate.identityRejection(pkg,id,0,0);if(!bounds.equals(armedBounds))return "TARGET_BOUNDS_CHANGED";
    long now=SystemClock.elapsedRealtime();
    // A slow Binder query is not an expired action in this read-only path.
    if(observationOnly)return gate.identityRejection(pkg,id,bounds.width(),bounds.height());
