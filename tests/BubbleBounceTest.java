@@ -83,19 +83,22 @@ public final class BubbleBounceTest {
    session.observe(result,2100,2100);check(session.observe(result,2300,2300)==BubbleSession.Status.VERIFIED,"Two fresh predicted frames verify a reflected shot");
   }
  }
- private static void renderedFixture(){
+ private static java.awt.image.BufferedImage fixtureImage(int width,int height){
   int[][] rows={{3,3,4,3,3,2},{2,3,3,1,2},{0,0,1,3,4,4},{0,2,2,1,2}};
   int[] rgb={0x87ceeb,0xe52c32,0xf08016,0xf0cf20,0x4ab63b};
+  float step=width/6.4f,x0=step*.7f;
+  java.awt.image.BufferedImage image=new java.awt.image.BufferedImage(width,height,java.awt.image.BufferedImage.TYPE_INT_RGB);
+  var brush=image.createGraphics();brush.setRenderingHint(java.awt.RenderingHints.KEY_ANTIALIASING,java.awt.RenderingHints.VALUE_ANTIALIAS_ON);
+  brush.setColor(new java.awt.Color(rgb[0]));brush.fillRect(0,0,width,height);
+  for(int row=0;row<rows.length;row++)for(int col=0;col<rows[row].length;col++)if(rows[row][col]>0){
+   brush.setColor(new java.awt.Color(rgb[rows[row][col]]));float cx=x0+(col+row%2*.5f)*step,cy=(1.5f+row*.8660254f)*step;
+   brush.fill(new java.awt.geom.Ellipse2D.Float(cx-step*.46f,cy-step*.46f,step*.92f,step*.92f));
+  }
+  brush.setColor(new java.awt.Color(rgb[2]));brush.fill(new java.awt.geom.Ellipse2D.Float(width*.5f-step*.46f,height*.88f-step*.46f,step*.92f,step*.92f));brush.dispose();return image;
+ }
+ private static void renderedFixture(){
   for(int width:new int[]{320,480,672,1036})for(float aspect:new float[]{1.2f,1.3f,1.7f,2f}){
-   int height=Math.round(width*aspect);float step=width/6.4f,x0=step*.7f;
-   java.awt.image.BufferedImage image=new java.awt.image.BufferedImage(width,height,java.awt.image.BufferedImage.TYPE_INT_RGB);
-   var brush=image.createGraphics();brush.setRenderingHint(java.awt.RenderingHints.KEY_ANTIALIASING,java.awt.RenderingHints.VALUE_ANTIALIAS_ON);
-   brush.setColor(new java.awt.Color(rgb[0]));brush.fillRect(0,0,width,height);
-   for(int row=0;row<rows.length;row++)for(int col=0;col<rows[row].length;col++)if(rows[row][col]>0){
-    brush.setColor(new java.awt.Color(rgb[rows[row][col]]));float cx=x0+(col+row%2*.5f)*step,cy=(1.5f+row*.8660254f)*step;
-    brush.fill(new java.awt.geom.Ellipse2D.Float(cx-step*.46f,cy-step*.46f,step*.92f,step*.92f));
-   }
-   brush.setColor(new java.awt.Color(rgb[2]));brush.fill(new java.awt.geom.Ellipse2D.Float(width*.5f-step*.46f,height*.88f-step*.46f,step*.92f,step*.92f));brush.dispose();
+   int height=Math.round(width*aspect);var image=fixtureImage(width,height);
    var observed=BubbleVision.read(image::getRGB,width,height,0,0,width,height,0,0,0,0,null);
    check(observed.usable(),"Native fixture geometry is recognizable width="+width+" aspect="+aspect+": "+observed.reason());
    BubbleBoard b=observed.board();BubblePolicy.Shot shot=BubblePolicy.choose(b);
@@ -104,6 +107,15 @@ public final class BubbleBounceTest {
    int[] expected=b.cells();expected[6]=expected[19]=expected[20]=0;
    check(Arrays.equals(expected,shot.expectedCells()),"Rendered fixture removes only manually annotated source cells");
   }
+ }
+ private static void shortArena(){
+  int width=1032,height=1130;var image=fixtureImage(width,height);
+  var read=BubbleVision.read(image::getRGB,width,height,0,0,width,height,0,0,0,0,null);
+  check(read.usable(),"Short Android arena is still a recognizable ordinary field");
+  BubbleBoard b=read.board();BubblePolicy.Shot shot=BubblePolicy.choose(b);
+  check(shot!=null&&shot.bounces==1&&shot.landing==18&&shot.removed==3&&shot.dropped==0,"Short arena has a legal alternate triple, not the taller arena's four-bubble match");
+  route(b,shot);int[] expected=b.cells();expected[19]=expected[20]=0;
+  check(expected[6]==2&&Arrays.equals(expected,shot.expectedCells()),"Alternate triple preserves the upper orange cell and removes only the lower pair");
  }
  private static void uncertainWalls(){
   int[] cells=new int[72];System.arraycopy(new int[]{1,2,1,3,4,4},0,cells,0,6);
@@ -116,5 +128,5 @@ public final class BubbleBounceTest {
   BubbleBoard blocked=board(cells,1);int[] packed=blocked.cells();for(int row=1;row<12;row++)for(int col=0;col<6-row%2;col++)packed[row*6+col]=2;
   check(BubblePolicy.choose(board(packed,1))==null,"A launcher overlapping the board cannot escape by reflection");
  }
- public static void main(String[] args){seededScenes();profitableRicochets();renderedFixture();uncertainWalls();System.out.println("Bubble ricochet oracle: "+checks+" assertions PASS; physical Market walls unverified");}
+ public static void main(String[] args){seededScenes();profitableRicochets();renderedFixture();shortArena();uncertainWalls();System.out.println("Bubble ricochet oracle: "+checks+" assertions PASS; physical Market walls unverified");}
 }

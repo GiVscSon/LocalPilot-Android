@@ -46,6 +46,7 @@ public final class PilotUiInstrumentation extends Instrumentation {
     private UiAutomation automation;
     private PilotService service;
     private DemoActivity demo;
+    private Activity launchedActivity;
     private long started;
     private long limit;
     private String bubblePixelSample="not sampled";
@@ -103,7 +104,8 @@ public final class PilotUiInstrumentation extends Instrumentation {
                 evidence.put("windows", windowSummary());
                 evidence.put("stack", stack.toString());
                 evidence.put("visible_ui", visibleUi());
-                if(service!=null)evidence.put("own_state",onMain(()->"connected="+(PilotService.instance==service)+" registered="+field("panelRegistered")+" panel="+(field("panel")!=null)+" note="+field("note")+" demo_score="+(demo==null?-1:visibleScore(demo.getWindow().getDecorView()))+" demo_verified="+field("demoVerified")+" gesture="+field("lastGestureContext")));
+                String fixtureState=bubbleFixtureState();
+                if(service!=null)evidence.put("own_state",onMain(()->"connected="+(PilotService.instance==service)+" registered="+field("panelRegistered")+" panel="+(field("panel")!=null)+" note="+field("note")+" demo_score="+(demo==null?-1:visibleScore(demo.getWindow().getDecorView()))+" demo_verified="+field("demoVerified")+" gesture="+field("lastGestureContext")+bubbleControllerState())+" fixture="+fixtureState);
                 if (service != null) evidence.put("metrics", onMain(() -> service.exportMetrics()));
             } catch (Throwable secondary) {
                 result.putString("cleanup_error", secondary.toString());
@@ -157,6 +159,7 @@ public final class PilotUiInstrumentation extends Instrumentation {
         Intent intent = new Intent(getTargetContext(), type)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
         Activity activity = startActivitySync(intent);
+        launchedActivity=activity;
         waitForIdleSync();
         return activity;
     }
@@ -389,6 +392,15 @@ public final class PilotUiInstrumentation extends Instrumentation {
         await(()->markerBounds("LOCALPILOT_BUBBLE_SHOTS_1")!=null,20_000,"No real aim/release reached the independent bubble fixture");
         await(()->onMain(()->((BubbleSession)field("bubbleSession")).verified()>=1),12_000,"Delivered bubble gesture did not yield the predicted visually verified board");
         int verified=onMain(()->((BubbleSession)field("bubbleSession")).verified());
+        AtomicReference<String> observedFixture=new AtomicReference<>();
+        await(()->{
+            String state=bubbleFixtureState();
+            if(!state.contains("accepted=1")||ricochet&&!Pattern.compile("\\bcells=(16|17)\\b").matcher(state).find())return false;
+            observedFixture.set(state);return true;
+        },3_000,"Independent fixture did not publish its accepted ordinary match");
+        String fixtureState=observedFixture.get();
+        Matcher remainingMatcher=Pattern.compile("\\bcells=(\\d+)\\b").matcher(fixtureState);
+        int remaining=ricochet&&remainingMatcher.find()?Integer.parseInt(remainingMatcher.group(1)):7;
         awaitBubblePairPixels(arena,false,ricochet,5_000,"Predicted removal is not visible in the real Android screenshot");
         click("STOP");
         await(()->!armed()&&!onMain(()->booleanField("busy")),4_000,"Bubble STOP did not revoke the gesture session");
@@ -402,10 +414,33 @@ public final class PilotUiInstrumentation extends Instrumentation {
                 &&((Number)field("dispatchedInputs")).longValue()==sent),"Bubble input resumed while the final screenshot settled");
         addCheck(ricochet?"bubble_ricochet_real_screenshot_aim_release_verification_stop":"bubble_real_screenshot_aim_release_verification_stop",new JSONObject()
                 .put("fixture","independent synthetic test-APK view")
-                .put("visible_target_cells_before",ricochet?19:9).put("visible_target_cells_after",ricochet?16:7)
+                .put("visible_target_cells_before",ricochet?19:9).put("visible_target_cells_after",remaining)
+                .put("independent_fixture_state",fixtureState)
                 .put("independent_wall_reflections",ricochet?1:0)
                 .put("verified_shots",verified).put("android_ack_is_not_success",true)
                 .put("source_color_pixel_removal",true).put("stable_after_stop_ms",1_100));
+    }
+
+    private String bubbleControllerState()throws Exception{
+        BubbleBoard board=(BubbleBoard)field("bubbleGeometry");
+        String geometry=board==null?"none":board.width+"x"+board.height+" grid="+board.cols+"x"+board.rows
+                +" x0="+board.x0+" y0="+board.y0+" step="+board.step+" gun="+board.launcherX+","+board.launcherY;
+        return " bubble_roi="+field("boardRoi")+" geometry="+geometry+" "+((BubbleSession)field("bubbleSession")).report();
+    }
+    private String bubbleFixtureState(){
+        AccessibilityNodeInfo root=automation.getRootInActiveWindow();
+        if(root==null)return "no active root";
+        try{return bubbleFixtureState(root,0,new int[]{2_000});}finally{root.recycle();}
+    }
+    private String bubbleFixtureState(AccessibilityNodeInfo node,int depth,int[] remaining){
+        if(depth>40||--remaining[0]<0)return "";
+        String text=String.valueOf(node.getText());
+        if(node.isVisibleToUser()&&text.startsWith("Bubble acceptance"))return text.substring(0,Math.min(360,text.length()));
+        for(int i=0;i<node.getChildCount();i++){
+            AccessibilityNodeInfo child=node.getChild(i);if(child==null)continue;
+            try{String found=bubbleFixtureState(child,depth+1,remaining);if(!found.isEmpty())return found;}finally{child.recycle();}
+        }
+        return "";
     }
 
     private void awaitBubblePairPixels(Rect arena,boolean before,boolean ricochet,long timeout,String failure)throws Exception{
@@ -429,7 +464,7 @@ public final class PilotUiInstrumentation extends Instrumentation {
             boolean matches=true;StringBuilder sample=new StringBuilder("arena=").append(arena.toShortString())
                     .append(" screenshot=").append(screenshot.getWidth()).append('x').append(screenshot.getHeight())
                     .append(" expected=").append(Integer.toHexString(expected)).append(" probes=");
-            int[] probes=ricochet?new int[]{6,19,20}:new int[]{0,1};
+            int[] probes=ricochet?(before?new int[]{6,19,20}:new int[]{19,20}):new int[]{0,1};
             for(int cell:probes){
                 int row=cell/6,col=cell%6;
                 int x=Math.round(arena.left+((ricochet?.7f:.8f)+col+(row%2)*.5f)*d),y=Math.round(arena.top+(1.5f+row*.8660254f)*d);
@@ -604,23 +639,44 @@ public final class PilotUiInstrumentation extends Instrumentation {
     }
 
     private void bindDemoWindow() throws Exception {bindWindow(getTargetContext().getPackageName());}
+    private static final class WindowRow {
+        final android.app.Dialog dialog;final Rect row,window;
+        WindowRow(android.app.Dialog dialog,Rect row,Rect window){this.dialog=dialog;this.row=row;this.window=window;}
+    }
+    private boolean publishedWindowRow(WindowRow choice){
+        for(AccessibilityWindowInfo window:automation.getWindows()){
+            if(window.getType()!=AccessibilityWindowInfo.TYPE_ACCESSIBILITY_OVERLAY)continue;
+            Rect bounds=new Rect();window.getBoundsInScreen(bounds);
+            if(!bounds.equals(choice.window)||!bounds.contains(choice.row.centerX(),choice.row.centerY()))continue;
+            AccessibilityNodeInfo root=window.getRoot();
+            try{if(root!=null&&getTargetContext().getPackageName().equals(String.valueOf(root.getPackageName())))return true;}
+            finally{if(root!=null)root.recycle();}
+        }
+        return false;
+    }
     private void bindWindow(String pkg)throws Exception{
         click("Окно");
         String query="@contains:"+pkg;
-        // ACTION_CLICK may acknowledge an accessibility item from the previous
-        // dialog while its replacement is still being published. Select the
-        // visible row in the current dialog with one actual Android touch.
-        AtomicReference<Rect> choice=new AtomicReference<>();
+        // View attachment precedes both final layout and Android window
+        // publication. Require a stable current dialog in both before one touch.
+        AtomicReference<WindowRow> choice=new AtomicReference<>(),previous=new AtomicReference<>();
         await(()->{
-            Rect row=onMain(()->{
+            WindowRow current=onMain(()->{
                 Object object=field("overlayDialog");
                 if(!(object instanceof android.app.Dialog dialog)||!dialog.isShowing())return null;
-                return ownControlBounds(dialog.getWindow().getDecorView(),query);
+                View decor=dialog.getWindow().getDecorView();
+                if(!decor.isLaidOut())return null;
+                Rect row=ownControlBounds(decor,query);
+                if(row==null||row.isEmpty())return null;
+                int[] xy=new int[2];decor.getLocationOnScreen(xy);
+                return new WindowRow(dialog,row,new Rect(xy[0],xy[1],xy[0]+decor.getWidth(),xy[1]+decor.getHeight()));
             });
-            if(row==null||row.isEmpty())return false;
-            choice.set(row);return true;
-        },3_000,"The current window dialog has no visible target row");
-        Rect row=choice.get();
+            if(current==null||!publishedWindowRow(current)){previous.set(null);return false;}
+            WindowRow last=previous.getAndSet(current);
+            if(last==null||last.dialog!=current.dialog||!last.row.equals(current.row)||!last.window.equals(current.window))return false;
+            choice.set(current);return true;
+        },3_000,"The current window dialog has no stable published target row");
+        Rect row=choice.get().row;
         require(tapAt(row.centerX(),row.centerY()),"Android rejected the visible target-window row touch");
         await(()->onMain(()->gate().armed()&&pkg.equals(field("target"))&&field("overlayDialog")==null),3_000,"Window selection did not commit before the next control");
     }
@@ -666,8 +722,15 @@ public final class PilotUiInstrumentation extends Instrumentation {
     private boolean scrollForward() {
         int[] remaining = {2_000};
         for (AccessibilityWindowInfo window : automation.getWindows()) {
+            if(window.getType()!=AccessibilityWindowInfo.TYPE_APPLICATION||!window.isFocused())continue;
             AccessibilityNodeInfo root = window.getRoot();if (root == null) continue;
-            try { if (scrollForward(root, 0, remaining)) return true; }
+            try {
+                String pkg=String.valueOf(root.getPackageName());
+                // A late app tree must never turn a test scroll into a system
+                // notification/quick-settings gesture or affect another app.
+                if(!pkg.equals(getTargetContext().getPackageName())&&!pkg.equals(getContext().getPackageName()))continue;
+                if (scrollForward(root, 0, remaining)) return true;
+            }
             finally { root.recycle(); }
         }
         return false;
@@ -699,6 +762,14 @@ public final class PilotUiInstrumentation extends Instrumentation {
             Object object=field(name);View root=object instanceof View?(View)object:object instanceof android.app.Dialog?((android.app.Dialog)object).getWindow().getDecorView():null;
             Rect found=ownControlBounds(root,text);if(found!=null)return found;
         }
+        // The actual launched Activity can be laid out before its accessibility
+        // tree is published. Use only its focused live decor as a geometry
+        // fallback, so a stopped Main behind the picker cannot receive input.
+        Activity activity=launchedActivity;
+        if(activity!=null&&!activity.isFinishing()&&!activity.isDestroyed()){
+            View decor=activity.getWindow().getDecorView();
+            if(decor.isAttachedToWindow()&&decor.getWindowVisibility()==View.VISIBLE&&decor.hasWindowFocus())return ownControlBounds(decor,text);
+        }
         return null;
     }
     private Rect ownControlBounds(View view,String text){
@@ -707,7 +778,7 @@ public final class PilotUiInstrumentation extends Instrumentation {
             String label=String.valueOf(((TextView)view).getText());
             boolean match=text.startsWith("@contains:")?label.toLowerCase(java.util.Locale.ROOT).contains(text.substring(10).toLowerCase(java.util.Locale.ROOT)):text.equalsIgnoreCase(label);
             if(match&&(view.isClickable()||view.getParent() instanceof android.widget.AbsListView)){
-                Rect visible=new Rect();if(view.getGlobalVisibleRect(visible)&&!visible.isEmpty()){int[] xy=new int[2];view.getLocationOnScreen(xy);return new Rect(xy[0],xy[1],xy[0]+view.getWidth(),xy[1]+view.getHeight());}
+                Rect visible=new Rect();if(view.getLocalVisibleRect(visible)&&!visible.isEmpty()){int[] xy=new int[2];view.getLocationOnScreen(xy);visible.offset(xy[0],xy[1]);return visible;}
             }
         }
         if(view instanceof ViewGroup){ViewGroup group=(ViewGroup)view;for(int i=0;i<group.getChildCount();i++){Rect found=ownControlBounds(group.getChildAt(i),text);if(found!=null)return found;}}
