@@ -83,10 +83,12 @@ public final class PilotUiInstrumentation extends Instrumentation {
             checkCollapseAndReopen();
             checkFullDemo();
             checkStopDuringDemo();
-            checkRotationStopsInput();
             check2048ScreenshotProgress();
             checkBubbleScreenshotProgress(false);
             checkBubbleScreenshotProgress(true);
+            // Keep ordinary app launches before the destructive Demo rotation:
+            // service configuration can arrive before Activity recreation ends.
+            checkRotationStopsInput();
             checkProjectionLifecycle();
             evidence.put("metrics", onMain(() -> service.exportMetrics()));
             passed = true;
@@ -640,46 +642,21 @@ public final class PilotUiInstrumentation extends Instrumentation {
     }
 
     private void bindDemoWindow() throws Exception {bindWindow(getTargetContext().getPackageName());}
-    private static final class WindowRow {
-        final android.app.Dialog dialog;final Rect row,window;
-        WindowRow(android.app.Dialog dialog,Rect row,Rect window){this.dialog=dialog;this.row=row;this.window=window;}
-    }
-    private boolean publishedWindowRow(WindowRow choice){
-        refreshAutomationCache();
-        for(AccessibilityWindowInfo window:automation.getWindows()){
-            if(window.getType()!=AccessibilityWindowInfo.TYPE_ACCESSIBILITY_OVERLAY)continue;
-            Rect bounds=new Rect();window.getBoundsInScreen(bounds);
-            if(!bounds.equals(choice.window)||!bounds.contains(choice.row.centerX(),choice.row.centerY()))continue;
-            AccessibilityNodeInfo root=window.getRoot();
-            try{if(root!=null&&getTargetContext().getPackageName().equals(String.valueOf(root.getPackageName())))return true;}
-            finally{if(root!=null)root.recycle();}
-        }
-        return false;
-    }
     private void bindWindow(String pkg)throws Exception{
         click("Окно");
         String query="@contains:"+pkg;
-        // View attachment precedes both final layout and Android window
-        // publication. Require a stable current dialog in both before one touch.
-        AtomicReference<WindowRow> choice=new AtomicReference<>(),previous=new AtomicReference<>();
-        await(()->{
-            WindowRow current=onMain(()->{
+        // Require the current live dialog, but do not equate decor bounds with
+        // accessibility window frames: shadows/insets differ across Android.
+        await(()->onMain(()->{
                 Object object=field("overlayDialog");
-                if(!(object instanceof android.app.Dialog dialog)||!dialog.isShowing())return null;
+                if(!(object instanceof android.app.Dialog dialog)||!dialog.isShowing())return false;
                 View decor=dialog.getWindow().getDecorView();
-                if(!decor.isLaidOut())return null;
+                if(!decor.isLaidOut())return false;
                 Rect row=ownControlBounds(decor,query);
-                if(row==null||row.isEmpty())return null;
-                int[] xy=new int[2];decor.getLocationOnScreen(xy);
-                return new WindowRow(dialog,row,new Rect(xy[0],xy[1],xy[0]+decor.getWidth(),xy[1]+decor.getHeight()));
-            });
-            if(current==null||!publishedWindowRow(current)){previous.set(null);return false;}
-            WindowRow last=previous.getAndSet(current);
-            if(last==null||last.dialog!=current.dialog||!last.row.equals(current.row)||!last.window.equals(current.window))return false;
-            choice.set(current);return true;
-        },3_000,"The current window dialog has no stable published target row");
-        Rect row=choice.get().row;
-        require(tapAt(row.centerX(),row.centerY()),"Android rejected the visible target-window row touch");
+                return row!=null&&!row.isEmpty();
+            }),3_000,"The current window dialog has no visible target row");
+        // click() performs a fresh lookup and refreshes the actionable node.
+        click(query);
         await(()->onMain(()->gate().armed()&&pkg.equals(field("target"))&&field("overlayDialog")==null),3_000,"Window selection did not commit before the next control");
     }
     private void awaitBrowserMechanic()throws Exception{await(()->onMain(()->booleanField("browserProfileConfirmed")&&field("overlayDialog")==null),3_000,"Browser mechanic selection did not finish before the next action");}
