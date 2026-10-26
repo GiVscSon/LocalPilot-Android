@@ -84,12 +84,13 @@ public final class PilotUiInstrumentation extends Instrumentation {
             checkStopDuringDemo();
             checkRotationStopsInput();
             check2048ScreenshotProgress();
-            checkBubbleScreenshotProgress();
+            checkBubbleScreenshotProgress(false);
+            checkBubbleScreenshotProgress(true);
             checkProjectionLifecycle();
             evidence.put("metrics", onMain(() -> service.exportMetrics()));
             passed = true;
             result.putString("result", "PASS");
-            result.putString("summary", "Launcher/picker, panel reopen, Demo x10 real touches, STOP, rotation disarm, region cancel, screenshot-verified 2048/bubble fixture and two real projection consent/start/stop cycles passed");
+            result.putString("summary", "Launcher/picker, panel reopen, Demo x10 real touches, STOP, rotation disarm, region cancel, screenshot-verified 2048/direct and single-reflection bubble fixtures and two real projection consent/start/stop cycles passed");
         } catch (Throwable error) {
             result.putString("result", "FAIL");
             result.putString("summary", error.toString());
@@ -344,13 +345,13 @@ public final class PilotUiInstrumentation extends Instrumentation {
         return observed.get();
     }
 
-    private void checkBubbleScreenshotProgress() throws Exception {
+    private void checkBubbleScreenshotProgress(boolean ricochet) throws Exception {
         String fixturePackage=getContext().getPackageName();
         onMain(()->{service.hidePanel();service.showPanel();return null;});
-        getTargetContext().startActivity(new Intent().setClassName(fixturePackage,BubbleFixtureActivity.class.getName())
+        getTargetContext().startActivity(new Intent().setClassName(fixturePackage,BubbleFixtureActivity.class.getName()).putExtra("ricochet",ricochet)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_CLEAR_TASK));
         await(()->markerBounds("LOCALPILOT_BUBBLE_ARENA")!=null,5_000,"Independent bubble fixture did not launch");
-        onMain(()->{service.selectInstalledTarget(fixturePackage,"Bubble acceptance");return null;});
+        onMain(()->{service.selectInstalledTarget(fixturePackage,ricochet?"Bubble ricochet acceptance":"Bubble acceptance");return null;});
         String profile="Шипучка · обычные шары (эксперимент)";
         await(()->present(profile),6_000,"External bubble app did not request an explicit mechanic");
         click(profile);
@@ -371,15 +372,24 @@ public final class PilotUiInstrumentation extends Instrumentation {
         // ACTION_CLICK/layout flags can finish before SurfaceFlinger has
         // removed the expanded overlay from the actual screenshot. Wait for
         // the original, unmodified target colors to become visible.
-        awaitBubblePairPixels(arena,true,5_000,"Fixture screenshot did not show both red target circles before dispatch");
-        addCheck("bubble_explicit_profile_and_manual_area",new JSONObject().put("bounds",arena.toShortString()).put("real_region_touches",true));
+        awaitBubblePairPixels(arena,true,ricochet,5_000,"Fixture screenshot did not show all target-colored source circles before dispatch");
+        addCheck(ricochet?"bubble_ricochet_explicit_profile_and_manual_area":"bubble_explicit_profile_and_manual_area",new JSONObject().put("bounds",arena.toShortString()).put("real_region_touches",true));
+        if(ricochet){
+            float gunX=arena.exactCenterX(),gunY=arena.top+arena.height()*.88f;
+            require(tapAt(gunX,gunY),"Ricochet fixture plain tap was rejected by Android");
+            drag(gunX,gunY,gunX,arena.top+arena.height()*.4f);
+            require(markerBounds("LOCALPILOT_BUBBLE_SHOTS_0")!=null&&markerBounds("LOCALPILOT_BUBBLE_SHOTS_1")==null,
+                    "A plain tap or non-reflecting direction falsely completed the ricochet fixture");
+            awaitBubblePairPixels(arena,true,true,3_000,"Negative ricochet controls changed source cells");
+            addCheck("bubble_ricochet_rejects_tap_and_direct_gesture",new JSONObject().put("real_gestures",2).put("visible_board_unchanged",true));
+        }
         if(compact())click("Развернуть");
         click("Старт");
         await(()->onMain(()->booleanField("playingGrid")&&intField("selectedProfile")==9),8_000,"Bubble loop did not start through the visible Start control");
         await(()->markerBounds("LOCALPILOT_BUBBLE_SHOTS_1")!=null,20_000,"No real aim/release reached the independent bubble fixture");
         await(()->onMain(()->((BubbleSession)field("bubbleSession")).verified()>=1),12_000,"Delivered bubble gesture did not yield the predicted visually verified board");
         int verified=onMain(()->((BubbleSession)field("bubbleSession")).verified());
-        awaitBubblePairPixels(arena,false,5_000,"Predicted removal is not visible in the real Android screenshot");
+        awaitBubblePairPixels(arena,false,ricochet,5_000,"Predicted removal is not visible in the real Android screenshot");
         click("STOP");
         await(()->!armed()&&!onMain(()->booleanField("busy")),4_000,"Bubble STOP did not revoke the gesture session");
         long sent=onMain(()->((Number)field("dispatchedInputs")).longValue());
@@ -387,20 +397,21 @@ public final class PilotUiInstrumentation extends Instrumentation {
         require(onMain(()->!gate().armed()&&!permit().allows(gate().epoch(),SystemClock.elapsedRealtime())
                 &&!booleanField("playingGrid")&&((Number)field("dispatchedInputs")).longValue()==sent),"Bubble input resumed after STOP");
         require(markerBounds("LOCALPILOT_BUBBLE_SHOTS_1")!=null,"Stopped fixture no longer reports its first accepted ordinary shot");
-        awaitBubblePairPixels(arena,false,3_000,"Stopped fixture changed after its first accepted ordinary shot");
+        awaitBubblePairPixels(arena,false,ricochet,3_000,"Stopped fixture changed after its first accepted ordinary shot");
         require(onMain(()->!gate().armed()&&!permit().allows(gate().epoch(),SystemClock.elapsedRealtime())
                 &&((Number)field("dispatchedInputs")).longValue()==sent),"Bubble input resumed while the final screenshot settled");
-        addCheck("bubble_real_screenshot_aim_release_verification_stop",new JSONObject()
+        addCheck(ricochet?"bubble_ricochet_real_screenshot_aim_release_verification_stop":"bubble_real_screenshot_aim_release_verification_stop",new JSONObject()
                 .put("fixture","independent synthetic test-APK view")
-                .put("visible_target_cells_before",9).put("visible_target_cells_after",7)
+                .put("visible_target_cells_before",ricochet?19:9).put("visible_target_cells_after",ricochet?16:7)
+                .put("independent_wall_reflections",ricochet?1:0)
                 .put("verified_shots",verified).put("android_ack_is_not_success",true)
-                .put("red_pair_pixel_removal",true).put("stable_after_stop_ms",1_100));
+                .put("source_color_pixel_removal",true).put("stable_after_stop_ms",1_100));
     }
 
-    private void awaitBubblePairPixels(Rect arena,boolean before,long timeout,String failure)throws Exception{
+    private void awaitBubblePairPixels(Rect arena,boolean before,boolean ricochet,long timeout,String failure)throws Exception{
         long end=Math.min(limit,SystemClock.uptimeMillis()+timeout);
         do{
-            if(bubblePairPixels(arena,before))return;
+            if(bubblePairPixels(arena,before,ricochet))return;
             SystemClock.sleep(100);
         }while(SystemClock.uptimeMillis()<end);
         String overlay=onMain(()->{
@@ -411,15 +422,17 @@ public final class PilotUiInstrumentation extends Instrumentation {
         throw new AssertionError(failure+"; "+bubblePixelSample+overlay);
     }
 
-    private boolean bubblePairPixels(Rect arena,boolean before){
+    private boolean bubblePairPixels(Rect arena,boolean before,boolean ricochet){
         Bitmap screenshot=automation.takeScreenshot();if(screenshot==null){bubblePixelSample="null screenshot";return false;}
         try{
-            float d=arena.width()/7f;int expected=before?0xe52c32:0x87ceeb;
+            float d=arena.width()/(ricochet?6.4f:7f);int expected=before?(ricochet?0xf08016:0xe52c32):0x87ceeb;
             boolean matches=true;StringBuilder sample=new StringBuilder("arena=").append(arena.toShortString())
                     .append(" screenshot=").append(screenshot.getWidth()).append('x').append(screenshot.getHeight())
                     .append(" expected=").append(Integer.toHexString(expected)).append(" probes=");
-            for(int col=0;col<2;col++){
-                int x=Math.round(arena.left+(.8f+col)*d),y=Math.round(arena.top+1.5f*d);
+            int[] probes=ricochet?new int[]{6,19,20}:new int[]{0,1};
+            for(int cell:probes){
+                int row=cell/6,col=cell%6;
+                int x=Math.round(arena.left+((ricochet?.7f:.8f)+col+(row%2)*.5f)*d),y=Math.round(arena.top+(1.5f+row*.8660254f)*d);
                 sample.append('(').append(x).append(',').append(y).append(")=");
                 if(x<0||x>=screenshot.getWidth()||y<0||y>=screenshot.getHeight()){sample.append("outside ");matches=false;continue;}
                 int rgb=screenshot.getPixel(x,y),r=(rgb>>16&255)-(expected>>16&255),g=(rgb>>8&255)-(expected>>8&255),b=(rgb&255)-(expected&255);

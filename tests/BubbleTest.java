@@ -65,7 +65,7 @@ public final class BubbleTest {
    int[] cells=new int[72];int depth=2+scene%3;
    for(int row=0;row<depth;row++)for(int col=0;col<6-row%2;col++)cells[row*6+col]=1+random.nextInt(4);
    BubbleBoard b=new BubbleBoard(320,640,6,12,32,80,50,160,600,1+random.nextInt(4),cells);
-   BubblePolicy.Shot shot=BubblePolicy.choose(b);check(shot!=null,"direct shot available in normal seeded scene");
+   BubblePolicy.Shot shot=BubblePolicy.chooseDirect(b);check(shot!=null,"direct shot available in normal seeded scene");
    check(b.slot(shot.landing)&&b.color(shot.landing)==0,"ray only attaches to a visible empty slot");
    double travel=Math.hypot(shot.aimX-b.launcherX,shot.aimY-b.launcherY),dx=(shot.aimX-b.launcherX)/travel,dy=(shot.aimY-b.launcherY)/travel;
    boolean clear=true;

@@ -1,6 +1,6 @@
-Актуальная поставка: 0.7.30-dev / code46.
-Отчёт: docs/VALIDATION_0.7.30.txt.
-Предыдущий проверенный выпуск: docs/VALIDATION_0.7.29.txt.
+Актуальная поставка: 0.7.31-dev / code47.
+Отчёт: docs/VALIDATION_0.7.31.txt.
+Предыдущий проверенный выпуск: docs/VALIDATION_0.7.30.txt.
 Ниже — исторический отчёт 0.7.11, не результаты текущего APK.
 
 0.7.11-dev/code27 FINAL predictive controller

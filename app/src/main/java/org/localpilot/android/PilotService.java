@@ -646,14 +646,14 @@ public class PilotService extends AccessibilityService {
    metrics.attempt(StageMetrics.Stage.POLICY);started=SystemClock.elapsedRealtimeNanos();BubblePolicy.Shot shot=BubblePolicy.choose(bubbleGeometry);
    captureDecisions++;metrics.record(StageMetrics.Stage.POLICY,SystemClock.elapsedRealtimeNanos()-started);
    uiStats="Шипучка · шаров "+bubbleGeometry.count()+" · выстрелов "+gridMoves+" · подтверждено "+gridVerified;
-   if(shot==null||!automatic()){note=shot==null?"Прямой выстрел не подтверждён · ожидаю поле":"Наблюдение: найден прямой выстрел";update();scheduleGrid(epoch);return;}
+   if(shot==null||!automatic()){note=shot==null?"Безопасная траектория не найдена · ожидаю поле":(shot.bounces==0?"Наблюдение: найден прямой выстрел":"Наблюдение: найден один рикошет");update();scheduleGrid(epoch);return;}
    if(busy||!valid(ticket)||SystemClock.elapsedRealtime()-frameAt>300){note="Шипучка: жду свежий кадр для выстрела";update();scheduleGrid(epoch);return;}
    long sentBefore=captureSent;bubbleSession.sent(bubbleGeometry,shot,SystemClock.elapsedRealtime());
    sendObserved(r.left+bubbleGeometry.launcherX,r.top+bubbleGeometry.launcherY,r.left+shot.aimX,r.top+shot.aimY,ticket,()->{
     if(epoch!=gate.epoch()||!playingGrid||selectedProfile!=9)return;
     bubbleSession.acknowledge(SystemClock.elapsedRealtime());note="Выстрел доставлен · ожидаю рассчитанное поле";update();scheduleGrid(epoch);
    },frameAt,220);
-   if(captureSent>sentBefore){gridMoves++;gridSawAction=true;note="Обычный выстрел "+gridMoves+" · ожидается удалений "+shot.removed+", падений "+shot.dropped;update();}
+   if(captureSent>sentBefore){gridMoves++;gridSawAction=true;note=(shot.bounces==0?"Прямой выстрел ":"Один рикошет ")+gridMoves+" · ожидается удалений "+shot.removed+", падений "+shot.dropped;update();}
    else if(playingGrid){bubbleSession.reset();scheduleGrid(epoch);}
   });
  }

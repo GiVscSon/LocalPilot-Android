@@ -1,0 +1,50 @@
+LocalPilot Android 0.7.31-dev / code47 — 2026-10-26
+
+Source base: 4444c8382ee3aaf3fbcd2325b1fa68db372a71fc.
+Backup: /workspace/localpilot-backups/android-before-bounce-0731.bundle.
+Package: org.localpilot.android.dev. Certificate must match previous Dev signer:
+55626377256dda3a6b5824b7278eb12db75b8a7d1c80baa9d2af4402ccac2684.
+
+LOCAL JVM RESULTS (JDK21)
+Verify PASS: existing safety/decoder/board/vision/policy suites unchanged;
+Gate240, board/reader/parity6131, hardening2634, traffic82,
+JumperVision51/JumperPolicy20/framegeometry124.
+RuntimeVerify166 PASS; SystemVerify9 PASS (synthetic image/action simulations).
+GridVerify: config185, loop810, goals75 PASS.
+UniversalVerify201 PASS; JVM allocation616bytes/frame, not zero allocation.
+ControllerVerify19 PASS; LearningVerify41 PASS; Upgrade726118 PASS.
+Python release tooling: 10 PASS.
+
+BubbleVerify: existing164 synthetic assertions + private image replay
+(48 annotated cells at .75/1/1.5 scales) =776 PASS.
+BubbleBounceTest1305 PASS: 96 independent route/graph checks on connected scenes;
+profitable left/right single ricochets in three scales, sampled flight legs,
+cluster and ceiling connectivity independent of production resolver;
+ACK alone and post-shot frames before ACK cannot verify;
+only two fresh expected states release pending action.
+Sixteen rendered fixture sizes/aspect ratios are also recognized and choose
+the independently annotated landing13, with source19→16 and no imaginary drops.
+Cropped/inset wall geometry, launcher outside center walls and overlapping
+launcher do not authorize reflected shots. No guessing of bombs/rainbow/refill.
+Original private images are not packaged or published.
+
+ANDROID BUILD / CI
+Local build_debug.py assembleDebug/lintDebug/compileDebugAndroidTestJavaWithJavac
+PASS, 1m35s. Lint0 errors/45 warnings. APK604046bytes.
+SHA256668e9ce8b21e166bca4e25b5317553dd6ab33608f9fee791494ed29b00982482.
+Original Dev signer verified. Native API30/35/36 results pending CI at this commit.
+Earlier 0.7.30 CI results are historical, not evidence for this iteration.
+
+SCOPE AND LIMITS
+No physical Android device is connected. Native fixture is an independent
+synthetic target in the test APK, not Yandex Market. It validates Android
+capture/gesture/verification/STOP; it does not establish real wall position,
+score improvement, quest completion, rewards or compatibility of all ten games.
+Main APK does not include the synthetic target game.
+
+Bubble geometry is bounded to four ordinary colors and at most one inferred
+side-wall reflection. Aim ends at first wall, impact coordinates are separate.
+Exact expected field remains mandatory after ACK; unsupported changes pause input.
+Guide source: user material, checked against code; external reviews and reward
+amounts not independently verified. Six-by-six octopus swap preserved, not
+silently converted to a line-path game. Hexa Sort/Kototower remain unsupported.
