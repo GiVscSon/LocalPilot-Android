@@ -28,8 +28,10 @@ public final class JumperFeedback {
     &&after.timestampMs-dispatchedAt<=650&&after.timestampMs<=now&&now-after.timestampMs<=300;
   if(fresh){
    observedResponse=true;
-   float dx=after.player.centerX()-startX,minimum=Math.max(2,7*JumperPolicy.coordinateScale(after));
-   boolean moved=action==JumperPolicy.Action.TAP_LEFT?dx<=-minimum:dx>=minimum;
+   float dx=before==null?after.player.centerX()-startX:JumperState.observedDeltaX(before,after);
+   float minimum=Math.max(2,7*JumperPolicy.coordinateScale(after));
+   boolean plausible=Float.isFinite(dx)&&Math.abs(dx)<=(after.roiRight-after.roiLeft)*.35f;
+   boolean moved=plausible&&(action==JumperPolicy.Action.TAP_LEFT?dx<=-minimum:dx>=minimum);
    if(moved){verified++;failures=0;clear();return State.VERIFIED;}
    float shift=worldShift(after);
    if(Math.abs(dx)<minimum&&Float.isFinite(shift)){
@@ -53,7 +55,10 @@ public final class JumperFeedback {
   float scale=JumperPolicy.coordinateScale(after),tolerance=Math.max(2,4*scale);
   float edge=Math.max(before.player.width(),12*scale);
   if(action==JumperPolicy.Action.TAP_LEFT?before.player.left-before.roiLeft>edge:before.roiRight-before.player.right>edge)return Float.NaN;
-  if(Math.abs(before.player.width()-after.player.width())>tolerance||Math.abs(before.player.height()-after.player.height())>tolerance)return Float.NaN;
+  boolean sameClippedEdge=Math.abs(before.player.left-before.roiLeft)<=tolerance&&Math.abs(after.player.left-after.roiLeft)<=tolerance
+    ||Math.abs(before.roiRight-before.player.right)<=tolerance&&Math.abs(after.roiRight-after.player.right)<=tolerance;
+  if(!sameClippedEdge&&Math.abs(before.player.width()-after.player.width())>tolerance
+    ||Math.abs(before.player.height()-after.player.height())>tolerance)return Float.NaN;
   float[] shifts=new float[before.platforms.size()];boolean[] used=new boolean[after.platforms.size()];int count=0;
   for(JumperState.ObjectBox a:before.platforms){
    if(a.confidence<.7f)continue;int found=-1;float delta=0;

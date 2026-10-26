@@ -54,8 +54,8 @@ public final class UniversalVisionTest {
   check(VisualGameTarget.requiresProfileChoice(2,true,false),"browser start requires explicit mechanic confirmation");
   check(!VisualGameTarget.requiresProfileChoice(2,true,true),"confirmed browser mechanic can start");
   check(!VisualGameTarget.requiresProfileChoice(7,false,false),"saved native game mechanic can restore");
-  check(VisualGameTarget.requiresProfileChoice(8,false,true)&&VisualGameTarget.requiresProfileChoice(9,false,true),"menu commands and unsupported games are not executable profiles");
-  check(!VisualGameTarget.requiresProfileChoice(10,false,false)&&!VisualGameTarget.requiresProfileChoice(11,false,false),"new explicit grid profiles restore");
+  check(VisualGameTarget.requiresProfileChoice(8,false,true),"menu commands are not executable profiles");
+  check(!VisualGameTarget.requiresProfileChoice(9,false,false)&&!VisualGameTarget.requiresProfileChoice(10,false,false)&&!VisualGameTarget.requiresProfileChoice(11,false,false),"new explicit grid profiles restore");
   check(!VisualGameTarget.selectionKey("com.browser.app","one").equals(VisualGameTarget.selectionKey("com.browser.app","two")),"named browser games keep independent choices");
   int[][] palettes={{0xff20c0,0x20e0e0,0xff9020},{0xf0e020,0x20d030,0x3060f0},{0xffb0e0,0x305020,0xb030f0}};
   for(var p:new ArcadeProfile[]{ArcadeProfile.PADDLE,ArcadeProfile.TRAFFIC,ArcadeProfile.FLAPPY})for(int[] colors:palettes)for(int w:new int[]{160,320,480}){

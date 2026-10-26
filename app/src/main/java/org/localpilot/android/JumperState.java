@@ -63,8 +63,43 @@ public final class JumperState {
         for(ObjectBox platform:platforms){
             min=Math.min(min,platform.centerY());max=Math.max(max,platform.centerY());
             if(Math.abs(platform.centerY()-player.centerY())<=frameHeight*.34f
-                    &&Math.abs(platform.centerX()-player.centerX())<=frameWidth*.42f)nearby=true;
+                    &&Math.abs(horizontalDistance(player.centerX(),platform.centerX(),roiRight-roiLeft))<=(roiRight-roiLeft)*.42f)nearby=true;
         }
         return nearby&&max-min>=frameHeight*.14f;
+    }
+
+    /** Shortest horizontal distance in this explicitly wrapping Ari field. */
+    static float horizontalDistance(float from, float to, float width) {
+        float delta=to-from;
+        if (delta>width*.5f) delta-=width;
+        else if (delta< -width*.5f) delta+=width;
+        return delta;
+    }
+
+    /** Measured visible-body displacement; only opposite edges may explain a wrap. */
+    static float observedDeltaX(JumperState before, ObjectBox after, long at,
+                                int left, int top, int right, int bottom) {
+        if(before==null||before.player==null||after==null||at<=before.timestampMs
+                ||at-before.timestampMs>650||before.roiLeft!=left||before.roiTop!=top
+                ||before.roiRight!=right||before.roiBottom!=bottom) return Float.NaN;
+        float width=right-left,delta=after.centerX()-before.player.centerX();
+        if(width<=0) return Float.NaN;
+        if(Math.abs(delta)>width*.5f){
+            ObjectBox old=before.player;
+            float edge=Math.max(width*.06f,Math.max(old.width(),after.width()));
+            boolean opposite=delta<0?old.right>=right-edge&&after.left<=left+edge
+                    :old.left<=left+edge&&after.right>=right-edge;
+            if(!opposite||Math.abs(after.centerY()-old.centerY())>Math.max((bottom-top)*.10f,old.height()*2)
+                    ||after.height()<old.height()*.6f||after.height()>old.height()*1.6f) return Float.NaN;
+            delta=horizontalDistance(old.centerX(),after.centerX(),width);
+        }
+        // An interior teleport or a remaining implausibly large jump is unknown.
+        return Math.abs(delta)<=width*.35f?delta:Float.NaN;
+    }
+
+    static float observedDeltaX(JumperState before, JumperState after) {
+        if(after==null||before==null||before.frameWidth!=after.frameWidth||before.frameHeight!=after.frameHeight)
+            return Float.NaN;
+        return observedDeltaX(before,after.player,after.timestampMs,after.roiLeft,after.roiTop,after.roiRight,after.roiBottom);
     }
 }

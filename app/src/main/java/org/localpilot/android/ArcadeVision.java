@@ -56,12 +56,17 @@ public final class ArcadeVision {
  private static ArcadeObservation traffic(Frame f,long time,ArcadeObservation previous){
   int[] road=road(f);float left=road[0]/(float)f.w,right=road[1]/(float)f.w;
   List<Blob> red=f.blobs(RED),colored=f.blobs(SATURATED),players=new ArrayList<>();
-  // The player's car changes paint between Market Rush stages. Acquire the
-  // large, low car near its usual start position instead of assuming it is red.
+  // Paint alone does not identify the player: traffic can be red or green too.
+  // Keep an observed identity and use the distinctive red/yellow hood only for
+  // this known skin; an ambiguous unmarked scene requires manual calibration.
   if(right-left>.40f&&right-left<.86f)for(Blob b:colored)
    if(vehicle(b,left,right)&&b.box.top>.58f&&b.box.bottom>.72f&&b.box.bottom<.97f
      &&!fuelCan(f,b,left,right))players.add(b);
-  ArcadeObservation.Box player=chooseTrafficPlayer(players,previous==null?null:previous.player);
+  int hint=previous!=null&&previous.profile==ArcadeProfile.TRAFFIC
+    &&Math.abs(left-previous.left)<.015f&&Math.abs(right-previous.right)<.015f?previous.playerIdentity:0;
+  ArcadeObservation trackedPrevious=hint!=0&&previous.usable()&&time-previous.timestampMs<=500?previous:null;
+  Blob own=chooseTrafficPlayer(f,players,trackedPrevious,right-left,hint);
+  ArcadeObservation.Box player=own==null?null:own.box;int identity=own==null?hint:trafficIdentity(f,own);
   List<ArcadeObservation.Box> obstacles=new ArrayList<>(),collectibles=new ArrayList<>();
   for(Blob b:red)if(fuelCan(f,b,left,right))addVehicle(collectibles,b.box);
   List<Blob> cars=new ArrayList<>(colored);cars.addAll(f.blobs(LIGHT));cars.addAll(f.blobs(DARK_CAR));
@@ -70,21 +75,58 @@ public final class ArcadeVision {
   // A large pale result dialog covers the bottom road, unlike narrow lane marks.
   boolean terminal=right-left>.4f&&f.fraction(LIGHT,Math.max(left,.28f),.65f,Math.min(right,.75f),.95f)>.30f;
   ArcadeObservation base=observation(ArcadeProfile.TRAFFIC,time,player,player,obstacles,left,.13f,right,.97f,0,0,
-    player!=null&&right-left>.4f?.90f:0,terminal,previous);
+    player!=null&&right-left>.4f?.90f:0,terminal,trackedPrevious);
   return new ArcadeObservation(base.profile,base.timestampMs,base.player,base.control,base.obstacles,collectibles,
-    base.left,base.top,base.right,base.bottom,base.gapTop,base.gapBottom,base.vx,base.vy,base.confidence,base.tracked,base.terminal);
+    base.left,base.top,base.right,base.bottom,base.gapTop,base.gapBottom,base.vx,base.vy,base.confidence,base.tracked,base.terminal,terminal?0:identity);
  }
- private static ArcadeObservation.Box chooseTrafficPlayer(List<Blob> players,ArcadeObservation.Box previous){
-  Blob best=null;float bestScore=Float.POSITIVE_INFINITY,runnerUp=Float.POSITIVE_INFINITY;
+ private static Blob chooseTrafficPlayer(Frame f,List<Blob> players,ArcadeObservation previous,float roadWidth,int hint){
+  Blob unique=null,marked=null;int candidates=0,marks=0;
   for(Blob b:players){
    if(b.box.width()<.065f||b.box.height()<.065f||b.aspect()>.95f)continue;
-   float dx=b.box.x()-(previous==null?.5f:previous.x()),dy=b.box.y()-(previous==null?.80f:previous.y());
-   float score=dx*dx+dy*dy;
-   if(previous==null)score+=Math.max(0,.105f-b.box.width())*.35f;
-   if(score<bestScore){runnerUp=bestScore;bestScore=score;best=b;}else runnerUp=Math.min(runnerUp,score);
+   int identity=trafficIdentity(f,b);if(identity==0)continue;
+   // A lost/stale position cannot authorize motion, but an incompatible paint
+   // cannot become the player merely because it is now the sole visible car.
+   if(hint!=0&&((identity&255)!=(hint&255)||(hint&256)!=0&&(identity&256)==0))continue;
+   if(previous!=null){
+    ArcadeObservation.Box old=previous.player;
+    if((identity&255)!=(previous.playerIdentity&255)||(previous.playerIdentity&256)!=0&&(identity&256)==0
+      ||Math.abs(b.box.x()-old.x())>Math.min(.34f,roadWidth*.60f)
+      ||Math.abs(b.box.y()-old.y())>Math.max(.025f,old.height()*.20f)
+      ||b.box.width()<old.width()*.70f||b.box.width()>old.width()*1.4f
+      ||b.box.height()<old.height()*.70f||b.box.height()>old.height()*1.4f)continue;
+   }else if(b.box.bottom<.84f)continue;
+   candidates++;unique=b;if((identity&256)!=0){marks++;marked=b;}
   }
-  if(best==null||runnerUp-bestScore<.003f)return null;
-  return best.box;
+  if(marks==1)return marked;
+  return marks==0&&candidates==1?unique:null;
+ }
+ private static int trafficIdentity(Frame f,Blob car){
+  int[] hues=new int[8];int samples=0;
+  int l=Math.max(0,(int)(car.box.left*f.w)),r=Math.min(f.w,(int)Math.ceil(car.box.right*f.w));
+  int t=Math.max(0,(int)(car.box.top*f.h)),b=Math.min(f.h,(int)Math.ceil(car.box.bottom*f.h));
+  for(int y=t;y<b;y+=2)for(int x=l;x<r;x+=2){
+   int rgb=f.rgb[y*f.w+x],red=rgb>>16&255,green=rgb>>8&255,blue=rgb&255;
+   int hi=Math.max(red,Math.max(green,blue)),lo=Math.min(red,Math.min(green,blue)),d=hi-lo;
+   if(hi<85||d<55||d/(float)hi<.35f)continue;
+   float hue=hi==red?60f*(green-blue)/d:hi==green?120+60f*(blue-red)/d:240+60f*(red-green)/d;if(hue<0)hue+=360;
+   int bucket=hue<18||hue>=345?1:hue<45?2:hue<80?3:hue<165?4:hue<210?5:hue<285?6:7;
+   hues[bucket]++;samples++;
+  }
+  int paint=0;for(int i=1;i<hues.length;i++)if(hues[i]>hues[paint])paint=i;
+  if(samples<8||hues[paint]<samples*.55f)return 0;
+  if(paint!=1)return paint;
+  float x0=car.box.left+car.box.width()*.15f,x1=car.box.right-car.box.width()*.15f;
+  float y0=car.box.top+car.box.height()*.42f,y1=car.box.top+car.box.height()*.92f;
+  int yellow=0,total=0;
+  for(int y=Math.max(0,(int)(y0*f.h));y<Math.min(f.h,(int)(y1*f.h));y++)
+   for(int x=Math.max(0,(int)(x0*f.w));x<Math.min(f.w,(int)(x1*f.w));x++){
+    int c=f.rgb[y*f.w+x],red=c>>16&255,green=c>>8&255,blue=c&255;total++;
+    if(red>150&&green>125&&blue<115&&red>green*.88f&&red<green*1.45f)yellow++;
+   }
+  boolean hood=total>0&&yellow/(float)total>.07f&&yellow/(float)total<.65f
+    &&f.fraction(DARK,car.box.left+car.box.width()*.2f,car.box.top+car.box.height()*.12f,
+      car.box.right-car.box.width()*.2f,car.box.top+car.box.height()*.42f)>.12f;
+  return paint|(hood?256:0);
  }
  /** A small, nearly square red body with a dark handle is a fuel pickup, not a car. */
  private static boolean fuelCan(Frame f,Blob b,float left,float right){

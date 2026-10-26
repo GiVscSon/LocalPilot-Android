@@ -16,7 +16,7 @@ public final class VisualGameTarget {
   if(profile==null)throw new IllegalArgumentException("profile");return identity(pkg,slot)+"#"+profile.name();
  }
  public static String selectionKey(String pkg,String slot){return identity(pkg,slot)+"#mechanic";}
- public static boolean supportedProfile(int saved){return saved>=0&&saved<=7||saved==10||saved==11;}
+ public static boolean supportedProfile(int saved){return saved>=0&&saved<=7||saved==9||saved==10||saved==11;}
  public static boolean requiresProfileChoice(int saved,boolean browser,boolean contextConfirmed){return !supportedProfile(saved)||browser&&!contextConfirmed;}
  private static String identity(String pkg,String slot){
   if(pkg==null||!pkg.matches("[A-Za-z0-9_]+(\\.[A-Za-z0-9_]+)+")||slot==null||slot.length()>80||slot.trim().isEmpty())throw new IllegalArgumentException("game identity");

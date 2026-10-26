@@ -42,6 +42,7 @@ public final class RuntimeFlowTest {
   f.acknowledge(replacement);
   check(f.observe(state(7800,380),7300)==JumperFeedback.State.WAITING,"future observation rejected");
   check(f.observe(state(7100,380),7800)==JumperFeedback.State.RETRY,"same-time/pre-dispatch pixels never prove success");
+  edgeFeedback();
   for(int rows=3;rows<=10;rows++)for(int cols=3;cols<=10;cols++){
    var window=new GameViewport.Box(120,80,1200,2200);
    var initial=RegionPickerGeometry.initial(window,rows,cols);
@@ -57,5 +58,42 @@ public final class RuntimeFlowTest {
   }
   try{RegionPickerGeometry.selection(window,0,0,10,200,900,1500);throw new AssertionError("outside start accepted");}catch(IllegalArgumentException expected){checks++;}
   System.out.println("Runtime flow: "+checks+" assertions PASS (feedback and region geometry; not Android UI execution)");
+ }
+ private static JumperState edgeState(long time,float x){
+  var a=state(time,x);var p=new java.util.ArrayList<>(a.platforms);
+  p.set(2,new JumperState.ObjectBox(JumperState.Kind.PLATFORM,100,450,220,465,.9f));
+  p.set(3,new JumperState.ObjectBox(JumperState.Kind.PLATFORM,650,700,770,715,.9f));
+  return new JumperState(a.frameWidth,a.frameHeight,a.roiLeft,a.roiTop,a.roiRight,a.roiBottom,time,a.player,p,a.hazards,.9f,0,0,0);
+ }
+ private static void edgeFeedback(){
+  var f=new JumperFeedback();var right=edgeState(1000,830);var left=edgeState(1200,20);
+  long token=f.dispatched(JumperPolicy.Action.TAP_RIGHT,right,1000);f.acknowledge(token);
+  check(f.observe(left,1200)==JumperFeedback.State.VERIFIED,"rightward wrap is measured across opposite edges");
+  f.reset();token=f.dispatched(JumperPolicy.Action.TAP_LEFT,edgeState(2000,20),2000);f.acknowledge(token);
+  check(f.observe(edgeState(2200,830),2200)==JumperFeedback.State.VERIFIED,"leftward wrap is measured across opposite edges");
+  f.reset();token=f.dispatched(JumperPolicy.Action.TAP_LEFT,right,1000);f.acknowledge(token);
+  check(f.observe(left,1200)==JumperFeedback.State.WAITING,"rightward wrap cannot confirm left input");
+  f.reset();token=f.dispatched(JumperPolicy.Action.TAP_LEFT,edgeState(1000,400),1000);f.acknowledge(token);
+  check(f.observe(left,1200)==JumperFeedback.State.WAITING,"interior teleport is not an edge wrap or directional proof");
+  f.reset();token=f.dispatched(JumperPolicy.Action.TAP_LEFT,830,1000);f.acknowledge(token);
+  check(f.observe(left,1200)==JumperFeedback.State.WAITING,"no geometry baseline cannot reinterpret a huge jump as steering");
+  f.reset();token=f.dispatched(JumperPolicy.Action.TAP_RIGHT,right,1000);f.acknowledge(token);
+  var changed=new JumperState(900,1280,0,0,900,1280,1200,left.player,left.platforms,left.hazards,.9f,0,0,0);
+  check(f.observe(changed,1200)==JumperFeedback.State.WAITING,"changed ROI cannot verify wrap");
+  f.reset();token=f.dispatched(JumperPolicy.Action.TAP_RIGHT,right,1000);f.acknowledge(token);
+  var lowPlayer=new JumperState.ObjectBox(JumperState.Kind.PLAYER,10,850,30,890,.9f);
+  var low=new JumperState(854,1280,0,0,854,1280,1200,lowPlayer,left.platforms,left.hazards,.9f,0,0,0);
+  check(f.observe(low,1200)==JumperFeedback.State.WAITING,"different vertical object across edge is not the same wrap");
+  f.reset();token=f.dispatched(JumperPolicy.Action.TAP_RIGHT,right,1000);
+  check(f.observe(left,1200)==JumperFeedback.State.WAITING,"even valid wrap cannot bypass own Android completion");
+  f.reset();var clippedBefore=clippedScroll(1000,20,0);token=f.dispatched(JumperPolicy.Action.TAP_LEFT,clippedBefore,1000);f.acknowledge(token);
+  check(f.observe(clippedScroll(1200,8,20),1200)==JumperFeedback.State.WAITING,"one camera frame of changing edge fragment is insufficient");
+  check(f.observe(clippedScroll(1300,10,35),1300)==JumperFeedback.State.SCENE_PROGRESS,"coherent world scroll may release a clipped-width wait without steering reward");
+  check(f.report().contains("verified=0")&&f.report().contains("scene_progress=1"),"camera progress from clipping never becomes a steering success");
+ }
+ private static JumperState clippedScroll(long time,float width,float shift){
+  var a=edgeState(time,10);var p=a.platforms.stream().map(b->new JumperState.ObjectBox(b.kind,b.left,b.top+shift,b.right,b.bottom+shift,b.confidence)).toList();
+  var player=new JumperState.ObjectBox(JumperState.Kind.PLAYER,0,490-shift*.25f,width,530-shift*.25f,.9f);
+  return new JumperState(854,1280,0,0,854,1280,time,player,p,List.of(),.9f,0,0,0);
  }
 }

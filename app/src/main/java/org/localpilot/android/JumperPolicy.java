@@ -18,7 +18,7 @@ public final class JumperPolicy {
         float verticalMotion=state.playerVy-state.scrollVy;
         for (JumperState.ObjectBox platform : state.platforms) {
             float vertical = Math.abs(platform.centerY() - player.centerY());
-            float horizontal = Math.abs(platform.centerX() - player.centerX());
+            float horizontal = Math.abs(JumperState.horizontalDistance(player.centerX(),platform.centerX(),state.roiRight-state.roiLeft));
             if (vertical < 52f*scale || vertical > maxVerticalReach*scale || horizontal > maxHorizontalReach*scale) continue;
             if(verticalMotion < -28f*scale && platform.centerY() >= player.centerY()) continue;
             if(verticalMotion > 28f*scale && platform.centerY() <= player.centerY()) continue;
@@ -29,7 +29,7 @@ public final class JumperPolicy {
         boolean dangerLeft = false, dangerRight = false;
         for (JumperState.ObjectBox hazard : state.hazards) {
             float dy = Math.abs(hazard.centerY() - player.centerY());
-            float dx = hazard.centerX() - player.centerX();
+            float dx = JumperState.horizontalDistance(player.centerX(),hazard.centerX(),state.roiRight-state.roiLeft);
             float margin = Math.max(56f*scale, player.width() * .65f + hazard.width() * .35f);
             if (dy <= Math.max(105f*scale, player.height() * .9f) && Math.abs(dx) <= margin) {
                 if (dx < 0) dangerLeft = true; else dangerRight = true;
@@ -39,7 +39,7 @@ public final class JumperPolicy {
         if (dangerLeft && !dangerRight) return Action.TAP_RIGHT;
         if (dangerRight && !dangerLeft) return Action.TAP_LEFT;
         if (target == null) return Action.WAIT;
-        float delta = target.centerX() - player.centerX();
+        float delta = JumperState.horizontalDistance(player.centerX(),target.centerX(),state.roiRight-state.roiLeft);
         if (Math.abs(delta) <= trackTolerance*scale) return Action.WAIT;
         return delta < 0 ? Action.TAP_LEFT : Action.TAP_RIGHT;
     }
@@ -55,7 +55,7 @@ public final class JumperPolicy {
     private static boolean unsafeLanding(JumperState.ObjectBox platform, JumperState.ObjectBox player,
                                          JumperState state) {
         for (JumperState.ObjectBox hazard : state.hazards) {
-            float dx = Math.abs(hazard.centerX() - platform.centerX());
+            float dx = Math.abs(JumperState.horizontalDistance(platform.centerX(),hazard.centerX(),state.roiRight-state.roiLeft));
             float dy = Math.abs(hazard.centerY() - platform.centerY());
             if (dx < platform.width() * .5f + hazard.width() * .55f + player.width() * .25f
                     && dy < hazard.height() * .65f + player.height() * .7f) return true;

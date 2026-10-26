@@ -25,7 +25,7 @@ final class GameAreaOverlay extends FrameLayout {
  GameAreaOverlay(Context c,Rect bounds,int rows,int cols,Listener listener){
   super(c);if(bounds==null||listener==null)throw new IllegalArgumentException("region editor");
   this.window=new GameViewport.Box(bounds.left,bounds.top,bounds.right,bounds.bottom);
-  candidate=RegionPickerGeometry.initial(window,rows,cols);
+  candidate=rows==1&&cols==1?null:RegionPickerGeometry.initial(window,rows,cols);
   this.rows=rows;this.cols=cols;this.listener=listener;
   setWillNotDraw(false);setContentDescription("Выделение области игры "+rows+" на "+cols);
   LinearLayout header=new LinearLayout(c);header.setOrientation(LinearLayout.VERTICAL);header.setBackgroundColor(0xF0202830);
@@ -37,10 +37,12 @@ final class GameAreaOverlay extends FrameLayout {
   confirm=new Button(c);confirm.setText("Готово");confirm.setTextSize(12);confirm.setOnClickListener(v->confirm());
   buttons.addView(confirm,new LinearLayout.LayoutParams(0,dp(44),1));header.addView(buttons);
   message=new TextView(c);message.setTextColor(Color.WHITE);message.setTextSize(12);message.setPadding(dp(8),0,dp(8),dp(4));
-  message.setText("Коснитесь двух противоположных углов поля "+rows+"×"+cols+", затем «Готово»");header.addView(message);
+  message.setText(rows==1&&cols==1?"Выделите всю ширину игры: от верхних шаров до пушки снизу, затем «Готово»":"Коснитесь двух противоположных углов поля "+rows+"×"+cols+", затем «Готово»");header.addView(message);
+  confirm.setEnabled(candidate!=null);
   addView(header,new FrameLayout.LayoutParams(-1,-2,Gravity.TOP));
  }
  private int dp(int n){return Math.max(1,(int)(n*getResources().getDisplayMetrics().density));}
+ private String areaLabel(){return rows==1&&cols==1?"Область игры":"Сетка "+rows+"×"+cols;}
  @Override protected void onSizeChanged(int width,int height,int oldWidth,int oldHeight){super.onSizeChanged(width,height,oldWidth,oldHeight);setSystemGestureExclusionRects(java.util.Collections.singletonList(new Rect(0,0,width,height)));}
  private void cancel(){if(!finished){finished=true;listener.cancelled();}}
  private void confirm(){
@@ -81,7 +83,7 @@ final class GameAreaOverlay extends FrameLayout {
     if(event.getActionMasked()==MotionEvent.ACTION_UP){
      dragging=false;
      if(!cornerPending){cornerX=x+origin[0];cornerY=y+origin[1];cornerPending=true;candidate=null;message.setText("Первый угол отмечен · коснитесь противоположного угла поля");}
-     else{try{candidate=RegionPickerGeometry.selection(window,0,0,cornerX,cornerY,x+origin[0],y+origin[1]);cornerPending=false;message.setText("Сетка "+rows+"×"+cols+" · нажмите «Готово» или задайте углы заново");}catch(IllegalArgumentException error){candidate=null;message.setText("Второй угол слишком близко · коснитесь противоположного угла");}}
+     else{try{candidate=RegionPickerGeometry.selection(window,0,0,cornerX,cornerY,x+origin[0],y+origin[1]);cornerPending=false;message.setText(areaLabel()+" · нажмите «Готово» или задайте углы заново");}catch(IllegalArgumentException error){candidate=null;message.setText("Второй угол слишком близко · коснитесь противоположного угла");}}
      confirm.setEnabled(candidate!=null);invalidate();
     }
     return true;
@@ -89,7 +91,7 @@ final class GameAreaOverlay extends FrameLayout {
    cornerPending=false;
    try{
     candidate=RegionPickerGeometry.selection(window,origin[0],origin[1],sx,sy,x,y);
-    message.setText("Сетка "+rows+"×"+cols+" · "+candidate.width()+"×"+candidate.height()+" · «Готово» подтвердит область");
+    message.setText(areaLabel()+" · "+candidate.width()+"×"+candidate.height()+" · «Готово» подтвердит область");
    }catch(IllegalArgumentException error){candidate=null;message.setText("Выделите поле целиком внутри голубого окна");}
    if(event.getActionMasked()==MotionEvent.ACTION_UP){dragging=false;confirm.setEnabled(candidate!=null);}
    invalidate();return true;

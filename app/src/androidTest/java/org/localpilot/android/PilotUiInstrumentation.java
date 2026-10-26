@@ -69,7 +69,7 @@ public final class PilotUiInstrumentation extends Instrumentation {
             // our Accessibility service only after UiAutomation has attached here.
             Bundle ready=new Bundle();ready.putString("localpilot_ready","1");sendStatus(1,ready);
             evidence.put("package", getTargetContext().getPackageName());
-            evidence.put("scope", "native launcher/picker/overlay, DemoActivity real touches, rotation STOP, and screenshot-verified built-in 2048; not arbitrary external-game acceptance");
+            evidence.put("scope", "native launcher/picker/overlay, DemoActivity real touches, rotation STOP, screenshot-verified built-in 2048 and independent synthetic bubble fixture; not arbitrary external-game acceptance");
             evidence.put("setup", "showPanel/hidePanel use public service API; gameplay starts only through visible UI");
             evidence.put("checks", checks);
 
@@ -83,11 +83,12 @@ public final class PilotUiInstrumentation extends Instrumentation {
             checkStopDuringDemo();
             checkRotationStopsInput();
             check2048ScreenshotProgress();
+            checkBubbleScreenshotProgress();
             checkProjectionLifecycle();
             evidence.put("metrics", onMain(() -> service.exportMetrics()));
             passed = true;
             result.putString("result", "PASS");
-            result.putString("summary", "Launcher/picker, panel reopen, Demo x10 real touches, STOP, rotation disarm, region cancel, screenshot-verified 2048 and two real projection consent/start/stop cycles passed");
+            result.putString("summary", "Launcher/picker, panel reopen, Demo x10 real touches, STOP, rotation disarm, region cancel, screenshot-verified 2048/bubble fixture and two real projection consent/start/stop cycles passed");
         } catch (Throwable error) {
             result.putString("result", "FAIL");
             result.putString("summary", error.toString());
@@ -340,6 +341,65 @@ public final class PilotUiInstrumentation extends Instrumentation {
         // to UiAutomation. Require actual Android accessibility geometry too.
         await(()->{Rect rect=markerBounds("Выделение области игры 4 на 4");if(rect==null||rect.width()<=100||rect.height()<=100)return false;observed.set(rect);return true;},4_000,"Initial 4x4 region selection is not visible");
         return observed.get();
+    }
+
+    private void checkBubbleScreenshotProgress() throws Exception {
+        String fixturePackage=getContext().getPackageName();
+        onMain(()->{service.hidePanel();service.showPanel();return null;});
+        getTargetContext().startActivity(new Intent().setClassName(fixturePackage,BubbleFixtureActivity.class.getName())
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_CLEAR_TASK));
+        await(()->markerBounds("LOCALPILOT_BUBBLE_ARENA")!=null,5_000,"Independent bubble fixture did not launch");
+        onMain(()->{service.selectInstalledTarget(fixturePackage,"Bubble acceptance");return null;});
+        String profile="Шипучка · обычные шары (эксперимент)";
+        await(()->present(profile),6_000,"External bubble app did not request an explicit mechanic");
+        click(profile);
+        await(()->onMain(()->intField("selectedProfile")==9&&field("overlayDialog")==null),3_000,"Bubble mechanic did not commit");
+        if(!onMain(()->field("picker")!=null)){
+            bindWindow(fixturePackage);click("Область");
+        }
+        await(()->markerBounds("Выделение области игры 1 на 1")!=null&&present("Готово"),4_000,"Bubble arena picker is unavailable");
+        Rect arena=markerBounds("LOCALPILOT_BUBBLE_ARENA");require(arena!=null&&!arena.isEmpty(),"Bubble arena geometry disappeared");
+        tapAt(arena.left,arena.top);tapAt(arena.right,arena.bottom);
+        require(touchOwnControl("Готово"),"Bubble area Done control could not receive a real tap");
+        await(()->onMain(()->booleanField("manualVisualRoi")&&arena.equals(field("visualRoi"))),3_000,"Confirmed bubble ROI differs from the selected screen rectangle");
+        require(!onMain(()->booleanField("playingGrid")),"Choosing the bubble area silently started input");
+        bindWindow(fixturePackage);
+        if(!compact())click("Свернуть");
+        require(bubblePairPixels(arena,true),"Fixture screenshot did not show both red target circles before dispatch");
+        addCheck("bubble_explicit_profile_and_manual_area",new JSONObject().put("bounds",arena.toShortString()).put("real_region_touches",true));
+        if(compact())click("Развернуть");
+        click("Старт");
+        await(()->onMain(()->booleanField("playingGrid")&&intField("selectedProfile")==9),8_000,"Bubble loop did not start through the visible Start control");
+        await(()->markerBounds("LOCALPILOT_BUBBLE_SHOTS_1")!=null,20_000,"No real aim/release reached the independent bubble fixture");
+        await(()->onMain(()->((BubbleSession)field("bubbleSession")).verified()>=1),12_000,"Delivered bubble gesture did not yield the predicted visually verified board");
+        int verified=onMain(()->((BubbleSession)field("bubbleSession")).verified());
+        require(bubblePairPixels(arena,false),"Predicted removal is not visible in the real Android screenshot");
+        click("STOP");
+        await(()->!armed()&&!onMain(()->booleanField("busy")),4_000,"Bubble STOP did not revoke the gesture session");
+        long sent=onMain(()->((Number)field("dispatchedInputs")).longValue());
+        SystemClock.sleep(1_100);
+        require(onMain(()->!gate().armed()&&!permit().allows(gate().epoch(),SystemClock.elapsedRealtime())
+                &&!booleanField("playingGrid")&&((Number)field("dispatchedInputs")).longValue()==sent),"Bubble input resumed after STOP");
+        require(markerBounds("LOCALPILOT_BUBBLE_SHOTS_1")!=null&&bubblePairPixels(arena,false),"Stopped fixture changed after its first accepted ordinary shot");
+        addCheck("bubble_real_screenshot_aim_release_verification_stop",new JSONObject()
+                .put("fixture","independent synthetic test-APK view")
+                .put("visible_target_cells_before",9).put("visible_target_cells_after",7)
+                .put("verified_shots",verified).put("android_ack_is_not_success",true)
+                .put("red_pair_pixel_removal",true).put("stable_after_stop_ms",1_100));
+    }
+
+    private boolean bubblePairPixels(Rect arena,boolean before){
+        Bitmap screenshot=automation.takeScreenshot();if(screenshot==null)return false;
+        try{
+            float d=arena.width()/7f;int expected=before?0xe52c32:0x87ceeb;
+            for(int col=0;col<2;col++){
+                int x=Math.round(arena.left+(.8f+col)*d),y=Math.round(arena.top+1.5f*d);
+                if(x<0||x>=screenshot.getWidth()||y<0||y>=screenshot.getHeight())return false;
+                int rgb=screenshot.getPixel(x,y),r=(rgb>>16&255)-(expected>>16&255),g=(rgb>>8&255)-(expected>>8&255),b=(rgb&255)-(expected&255);
+                if(r*r+g*g+b*b>55*55)return false;
+            }
+            return true;
+        }finally{screenshot.recycle();}
     }
 
     private void checkProjectionLifecycle() throws Exception {

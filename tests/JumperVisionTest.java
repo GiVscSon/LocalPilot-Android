@@ -62,9 +62,44 @@ public final class JumperVisionTest {
         check(detect(body,null,1000,0,0,0,0).player==null);
         body.fill(370,800,374,804,0xffd000);
         check(detect(body,null,1000,0,0,0,0).player==null);
+        edgeContinuation();
         badGeometry();
-        if (checks != 35) throw new AssertionError("expected 35 checks, got " + checks);
+        if (checks != 51) throw new AssertionError("expected 51 checks, got " + checks);
         System.out.println("PASS " + checks + " jumper-vision assertions");
+    }
+
+    private static Scene edgeScene(int left,int right){
+        Scene scene=new Scene();scene.fill(100,900,220,920,0xf28c00);scene.fill(560,700,680,720,0xf28c00);
+        scene.fill(90,500,210,520,0xf28c00);scene.fill(620,350,740,370,0xf28c00);
+        scene.fill(320,1100,440,1120,0xf28c00);scene.fill(left,540,right,600,0xffd000);return scene;
+    }
+    private static void edgeContinuation(){
+        JumperState edge=detect(edgeScene(790,850),null,1000,0,0,0,0);
+        check(edge.usable());
+        Scene fragment=edgeScene(0,12);
+        JumperState wrapped=detect(fragment,edge,1100,0,0,0,0);
+        check(wrapped.usable());near(6,wrapped.player.centerX(),1);near(400,wrapped.playerVx,1);
+        check(wrapped.player.left==0&&wrapped.player.right==12); // Keep only visible evidence.
+        check(detect(fragment,null,1100,0,0,0,0).player==null);
+        check(detect(fragment,edge,1400,0,0,0,0).player==null);
+        JumperState interior=detect(edgeScene(370,430),null,1000,0,0,0,0);
+        check(detect(fragment,interior,1100,0,0,0,0).player==null);
+        check(detect(edgeScene(0,4),edge,1100,0,0,0,0).player==null);
+        var colors=new JumperVision.ColorProfile(0xffd000,0xf28c00,0xc91b18);
+        check(JumperVision.detect(fragment,854,1280,0,0,854,1280,0,0,0,0,1100,edge,colors).usable());
+        int offset=73,frameWidth=1000;
+        Scene first=edgeScene(790,850);
+        PixelBoardReader.Pixels paddedFirst=(x,y)->x<offset||x>=offset+854?0x245888:first.rgb(x-offset,y);
+        PixelBoardReader.Pixels paddedNext=(x,y)->x<offset||x>=offset+854?0x245888:fragment.rgb(x-offset,y);
+        JumperState padded=JumperVision.detect(paddedFirst,frameWidth,1280,offset,0,offset+854,1280,0,0,0,0,1000,null);
+        JumperState paddedWrapped=JumperVision.detect(paddedNext,frameWidth,1280,offset,0,offset+854,1280,0,0,0,0,1100,padded);
+        check(paddedWrapped.usable());near(offset+6,paddedWrapped.player.centerX(),1);near(400,paddedWrapped.playerVx,1);
+        Scene hud=edgeScene(370,430);hud.fill(740,10,780,50,0xffd000);
+        check(Math.abs(detect(hud,null,1000,0,0,0,0).player.centerY()-570)<2);
+        hud.fill(370,540,430,600,0xfaf8ef);
+        check(detect(hud,null,1000,0,0,0,0).player==null);
+        Scene hiddenPlatform=edgeScene(370,430);hiddenPlatform.fill(370,540,430,600,0xfaf8ef);
+        check(detect(hiddenPlatform,null,1000,140,890,230,930).player==null);
     }
 
     private static JumperState detect(Scene scene, JumperState previous, long timestamp,

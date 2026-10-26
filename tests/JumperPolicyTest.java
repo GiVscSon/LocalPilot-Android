@@ -32,7 +32,19 @@ public final class JumperPolicyTest {
             JumperState rising=new JumperState(854,1280,0,0,854,1280,1,player,base.platforms,List.of(),.9f,0,-100,0);
             eq(JumperPolicy.nextAction(rising),JumperPolicy.nextAction(scaled(rising,scale,160)));
         }
-        if (checks != 16) throw new AssertionError("expected 16 checks, got " + checks);
+        JumperState.ObjectBox edgePlayer=box(JumperState.Kind.PLAYER,0,500,36,570,.9f);
+        JumperState.ObjectBox across=box(JumperState.Kind.PLATFORM,760,440,840,460,.9f);
+        JumperState.ObjectBox interior=box(JumperState.Kind.PLATFORM,220,350,340,370,.9f);
+        var edgePlatforms=List.of(across,interior,farTop,farBottom,farTop2);
+        eq(JumperPolicy.Action.TAP_LEFT,JumperPolicy.nextAction(state(edgePlayer,edgePlatforms,List.of())));
+        eq(JumperPolicy.Action.TAP_RIGHT,JumperPolicy.nextAction(state(edgePlayer,edgePlatforms,
+                List.of(box(JumperState.Kind.HAZARD,770,420,830,455,.9f)))));
+        eq(JumperPolicy.Action.TAP_RIGHT,JumperPolicy.nextAction(state(edgePlayer,edgePlatforms,
+                List.of(box(JumperState.Kind.HAZARD,800,510,840,550,.9f)))));
+        var acrossOnly=java.util.stream.IntStream.of(100,300,440,700,1000)
+                .mapToObj(y->box(JumperState.Kind.PLATFORM,760,y,840,y+20,.9f)).toList();
+        eq(JumperPolicy.Action.TAP_LEFT,JumperPolicy.nextAction(state(edgePlayer,acrossOnly,List.of())));
+        if (checks != 20) throw new AssertionError("expected 20 checks, got " + checks);
         System.out.println("PASS " + checks + " jumper-policy assertions");
     }
 

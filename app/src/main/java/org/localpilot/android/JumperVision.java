@@ -70,19 +70,29 @@ public final class JumperVision {
         // coordinate scale, including pillarboxed landscape tablet captures.
         float shapeScale=Math.min((right-left)/854f,(bottom-top)/1280f);
         List<JumperState.ObjectBox> platforms = components(rgb, sampleWidth, sampleHeight, left, top,
-                JumperState.Kind.PLATFORM, timestampMs, profile, shapeScale);
+                JumperState.Kind.PLATFORM, timestampMs, profile, shapeScale, null, right, bottom);
         List<JumperState.ObjectBox> hazards = components(rgb, sampleWidth, sampleHeight, left, top,
-                JumperState.Kind.HAZARD, timestampMs, profile, shapeScale);
+                JumperState.Kind.HAZARD, timestampMs, profile, shapeScale, null, right, bottom);
+        boolean tracking=previous!=null&&previous.frameWidth==width&&previous.frameHeight==height
+                &&previous.roiLeft==left&&previous.roiTop==top&&previous.roiRight==right&&previous.roiBottom==bottom
+                &&timestampMs-previous.timestampMs<=650;
+        JumperState baseline=tracking?previous:null;
         List<JumperState.ObjectBox> players = components(rgb, sampleWidth, sampleHeight, left, top,
-                JumperState.Kind.PLAYER, timestampMs, profile, shapeScale);
-        JumperState.ObjectBox player = choosePlayer(players, previous);
+                JumperState.Kind.PLAYER, timestampMs, profile, shapeScale, baseline, right, bottom);
+        // A clipped orange platform at the overlay border can have the size of
+        // a yellow body. Partial occlusion cannot establish player identity.
+        if(excludedRight>excludedLeft&&excludedBottom>excludedTop)players.removeIf(p ->
+                p.right>=excludedLeft-STRIDE&&p.left<=excludedRight+STRIDE
+                &&p.bottom>=excludedTop-STRIDE&&p.top<=excludedBottom+STRIDE);
+        JumperState.ObjectBox player = choosePlayer(players, baseline, timestampMs, left, top, right, bottom);
         float vx = 0, vy = 0, scrollVy = 0;
-        if (player != null && previous != null && previous.player != null) {
-            float seconds = Math.min(1.0f, (timestampMs - previous.timestampMs) / 1000f);
+        if (player != null && baseline != null && baseline.player != null) {
+            float seconds = (timestampMs - baseline.timestampMs) / 1000f;
+            float deltaX=JumperState.observedDeltaX(baseline,player,timestampMs,left,top,right,bottom);
             if (seconds > .001f) {
-                vx = (player.centerX() - previous.player.centerX()) / seconds;
-                vy = (player.centerY() - previous.player.centerY()) / seconds;
-                scrollVy = estimateScroll(platforms, previous.platforms, seconds);
+                vx = Float.isFinite(deltaX)?deltaX/seconds:0;
+                vy = (player.centerY() - baseline.player.centerY()) / seconds;
+                scrollVy = estimateScroll(platforms, baseline.platforms, seconds);
             }
         }
         float confidence = player == null ? 0 : Math.min(player.confidence,
@@ -97,7 +107,8 @@ public final class JumperVision {
 
     private static List<JumperState.ObjectBox> components(int[] rgb, int width, int height,
                                                           int originX, int originY,
-                                                          JumperState.Kind kind, long now, ColorProfile profile, float scale) {
+                                                          JumperState.Kind kind, long now, ColorProfile profile, float scale,
+                                                          JumperState previous, int roiRight, int roiBottom) {
         boolean[] visited = new boolean[rgb.length];
         int[] queue = new int[rgb.length];
         List<JumperState.ObjectBox> result = new ArrayList<>();
@@ -121,14 +132,34 @@ public final class JumperVision {
             float aspect = boxWidth / (float) boxHeight;
             float areaPx = area * STRIDE * STRIDE;
             float normalizedWidth=boxWidth/scale,normalizedHeight=boxHeight/scale,normalizedArea=areaPx/(scale*scale);
-            if (!shape(kind, normalizedWidth, normalizedHeight, aspect, normalizedArea)) continue;
+            // The fixed top HUD/status band can contain a yellow battery whose
+            // color and dimensions otherwise beat the visible yellow body.
+            if(kind==JumperState.Kind.PLAYER&&minY*STRIDE<(roiBottom-originY)*.055f)continue;
+            boolean clipped=kind==JumperState.Kind.PLAYER&&(minX==0||maxX==width-1)
+                    &&clippedPlayer(previous,originX,originY,roiRight,roiBottom,now,
+                        originX+minX*STRIDE,originY+minY*STRIDE,boxWidth,boxHeight,
+                        normalizedWidth,normalizedHeight,normalizedArea);
+            if (!shape(kind, normalizedWidth, normalizedHeight, aspect, normalizedArea)&&!clipped) continue;
             float confidence = shapeConfidence(kind, normalizedWidth, normalizedHeight, aspect, normalizedArea);
             result.add(new JumperState.ObjectBox(kind, originX + minX * STRIDE, originY + minY * STRIDE,
-                    originX + (maxX + 1) * STRIDE, originY + (maxY + 1) * STRIDE, confidence));
+                    Math.min(roiRight,originX + (maxX + 1) * STRIDE), Math.min(roiBottom,originY + (maxY + 1) * STRIDE), confidence));
         }
         result.sort(Comparator.comparingDouble((JumperState.ObjectBox b) -> b.centerY())
                 .thenComparingDouble(JumperState.ObjectBox::centerX));
         return result;
+    }
+
+    /** Tiny edge fragments need a recent player baseline; clipping is not new-object evidence. */
+    private static boolean clippedPlayer(JumperState previous,int left,int top,int right,int bottom,long now,
+            float x,float y,float width,float height,float normalizedWidth,float normalizedHeight,float area) {
+        if(previous==null||previous.player==null||previous.player.confidence<.7f||now-previous.timestampMs>300
+                ||normalizedWidth<10||normalizedWidth>150||normalizedHeight<20||normalizedHeight>180
+                ||area<120||area>18000)return false;
+        JumperState.ObjectBox old=previous.player;
+        float edge=Math.max(old.width(),(right-left)*.06f);
+        if(old.left>left+edge&&old.right<right-edge)return false;
+        return height>=old.height()*.6f&&height<=old.height()*1.6f
+                &&Math.abs(y+height*.5f-old.centerY())<=Math.max(old.height()*2,(bottom-top)*.10f);
     }
 
     private static int add(int index, int[] rgb, boolean[] visited, int[] queue, int tail,
@@ -180,18 +211,22 @@ public final class JumperVision {
         return Math.max(.35f, Math.min(.96f, .52f + geometry * .28f + size * .16f));
     }
 
-    private static JumperState.ObjectBox choosePlayer(List<JumperState.ObjectBox> players, JumperState previous) {
+    private static JumperState.ObjectBox choosePlayer(List<JumperState.ObjectBox> players, JumperState previous,
+            long now,int left,int top,int right,int bottom) {
         JumperState.ObjectBox best = null;
-        float bestScore = -Float.MAX_VALUE;
+        float bestScore = -Float.MAX_VALUE,runnerUp=-Float.MAX_VALUE;
         for (JumperState.ObjectBox p : players) {
             float score = p.confidence + Math.min(.16f, (float) Math.sqrt(p.width() * p.height()) / 500f);
             if (previous != null && previous.player != null) {
-                float distance = (float) Math.hypot(p.centerX() - previous.player.centerX(), p.centerY() - previous.player.centerY());
+                float dx=JumperState.observedDeltaX(previous,p,now,left,top,right,bottom);
+                if(!Float.isFinite(dx))continue;
+                float distance = (float) Math.hypot(dx, p.centerY() - previous.player.centerY());
                 score -= Math.min(.55f, distance / Math.max(160f, previous.frameHeight * .22f));
             }
-            if (score > bestScore) { bestScore = score; best = p; }
+            if (score > bestScore) { runnerUp=bestScore;bestScore = score; best = p; }
+            else runnerUp=Math.max(runnerUp,score);
         }
-        return best;
+        return bestScore-runnerUp>=.03f?best:null;
     }
 
     private static float estimateScroll(List<JumperState.ObjectBox> current,

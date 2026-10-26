@@ -14,7 +14,7 @@ import javax.imageio.ImageIO;
 public final class ArcadeProfilesTest {
  private static int checks;
  public static void main(String[] args)throws Exception{
-  policies();perception();
+  policies();perception();trafficIdentity();
   System.out.println("arcade-profiles: "+checks+" assertions PASS");
   if(args.length>0)replay(Path.of(args[0]));
   if(args.length>1)recordedTallPhone(Path.of(args[1]));
@@ -147,6 +147,60 @@ public final class ArcadeProfilesTest {
   catch(IllegalArgumentException expected){checks++;}
   Thread.currentThread().interrupt();try{road.read(ArcadeProfile.TRAFFIC,1200,null);throw new AssertionError("cancel ignored");}
   catch(CancellationException expected){checks++;}finally{Thread.interrupted();}
+ }
+
+ private static Scene trafficIdentityScene(float ownX,boolean mark,boolean competitor){
+  Scene scene=new Scene(576,1280,0x3d8f28);scene.rect(.10f,0,.85f,1,0x7b7578);
+  scene.rect(ownX-.08f,.80f,ownX+.08f,.957f,0xe43020);
+  scene.rect(ownX-.056f,.834f,ownX+.055f,.863f,0x202b31);
+  if(mark){
+   // Yellow hood mark, physically separate from the windshield and fuel pickup.
+   scene.rect(ownX-.037f,.889f,ownX-.018f,.930f,0xf5da20);
+   scene.rect(ownX-.018f,.889f,ownX+.008f,.906f,0xf5da20);
+   scene.rect(ownX+.008f,.889f,ownX+.026f,.930f,0xf5da20);
+  }
+  if(competitor){scene.rect(.42f,.696f,.57f,.830f,0x42d039);scene.rect(.44f,.73f,.55f,.753f,0x202b31);}
+  scene.rect(.64f,.14f,.79f,.27f,0xf08016);
+  scene.rect(.23f,.86f,.34f,.92f,0xe43020);scene.rect(.26f,.864f,.30f,.876f,0x303030);
+  return scene;
+ }
+ private static void trafficIdentity(){
+  // Layout reproduces the user's screenshot, but these are synthetic pixels.
+  Scene actualLayout=trafficIdentityScene(.76f,true,true);
+  ArcadeObservation first=actualLayout.read(ArcadeProfile.TRAFFIC,1000,null);
+  check(first.usable()&&first.player.x()>.7f,"branded red player at low right is not replaced by central green traffic");
+  check((first.playerIdentity&256)!=0,"recognized hood and windshield evidence is retained with player");
+  check(first.collectibles.size()==1,"red handled can remains a pickup beside branded player");
+  check(first.obstacles.stream().anyMatch(b->b.x()>.45f&&b.x()<.55f&&b.y()>.7f),"green car remains a hazard");
+  ArcadeObservation next=actualLayout.read(ArcadeProfile.TRAFFIC,1125,first);
+  check(next.usable()&&next.player.x()>.7f&&next.tracked,"fresh frame tracks the same car");
+  Scene moved=trafficIdentityScene(.50f,true,false);moved.rect(.685f,.71f,.835f,.85f,0x42d039);
+  ArcadeObservation afterLane=moved.read(ArcadeProfile.TRAFFIC,1250,next);
+  check(afterLane.usable()&&Math.abs(afterLane.player.x()-.5f)<.02f,"one-lane move keeps identity when traffic occupies previous lane");
+  check(afterLane.playerIdentity==first.playerIdentity,"paint and hood identity survives the lane change");
+  Scene ambiguous=trafficIdentityScene(.76f,false,false);ambiguous.rect(.42f,.80f,.57f,.957f,0x42d039);
+  ArcadeObservation unknown=ambiguous.read(ArcadeProfile.TRAFFIC,1000,null);
+  check(!unknown.usable()&&!ArcadePolicy.next(unknown).sendsInput(),"two unmarked low cars do not establish player identity");
+  Scene unmarked=trafficIdentityScene(.76f,false,false);
+  check(!unmarked.read(ArcadeProfile.TRAFFIC,1125,first).usable(),"a recognized hood mark cannot silently disappear from tracked identity");
+  Scene missing=new Scene(576,1280,0x3d8f28);missing.rect(.10f,0,.85f,1,0x7b7578);missing.rect(.68f,.80f,.84f,.957f,0x42d039);
+  ArcadeObservation substitute=missing.read(ArcadeProfile.TRAFFIC,1125,first);
+  check(!substitute.usable()&&!ArcadePolicy.next(substitute).sendsInput(),"a sole green car in the old red player's position is not continuity evidence");
+  ArcadeObservation afterGap=missing.read(ArcadeProfile.TRAFFIC,1800,substitute);
+  check(!afterGap.usable()&&afterGap.playerIdentity==first.playerIdentity,"missing-frame appearance survives beyond the coordinate tracking TTL");
+  check(!missing.read(ArcadeProfile.TRAFFIC,2200,first).usable(),"stale last-usable appearance cannot reacquire a sole green substitute");
+  ArcadeObservation returned=actualLayout.read(ArcadeProfile.TRAFFIC,2000,afterGap);
+  check(returned.usable()&&!returned.tracked&&returned.vx==0&&returned.vy==0,"matching player can return without inheriting velocity across a gap");
+  ArcadeObservation stale=moved.read(ArcadeProfile.TRAFFIC,1700,first);
+  check(stale.usable()&&!stale.tracked&&stale.vx==0&&stale.vy==0,"old identity context cannot invent a lane velocity");
+  ArcadeObservation other=new ArcadeObservation(ArcadeProfile.FLAPPY,1000,first.player,first.player,List.of(),0,0,1,1,0,1,0,0,.9f,true,false);
+  ArcadeObservation reacquired=actualLayout.read(ArcadeProfile.TRAFFIC,1125,other);
+  check(reacquired.usable()&&reacquired.player.x()>.7f&&!reacquired.tracked,"another mechanic cannot carry player tracking into traffic");
+  Scene twoMarks=trafficIdentityScene(.76f,true,false);
+  twoMarks.rect(.42f,.80f,.58f,.957f,0xe43020);twoMarks.rect(.444f,.834f,.555f,.863f,0x202b31);twoMarks.rect(.463f,.889f,.526f,.930f,0xf5da20);
+  check(!twoMarks.read(ArcadeProfile.TRAFFIC,1000,null).usable(),"two branded candidates still require unambiguous acquisition");
+  try{new ArcadeObservation(ArcadeProfile.TRAFFIC,1000,first.player,first.player,List.of(),List.of(),0,0,1,1,0,0,0,0,.9f,true,false,256);throw new AssertionError("empty paint signature accepted");}
+  catch(IllegalArgumentException expected){checks++;}
  }
 
  private static void recordedTallPhone(Path path)throws Exception{
