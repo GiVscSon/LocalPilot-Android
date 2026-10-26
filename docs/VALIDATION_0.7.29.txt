@@ -1,6 +1,9 @@
 LocalPilot Android 0.7.29-dev / code45
 Дата: 2026-10-26
 Пакет: org.localpilot.android.dev
+Код APK: 63220aac3851bf5ab65815d4ee82be30ff085bfb
+Размер APK: 572338 bytes
+SHA256 APK: 6972dece365058859939133780cdb76da4652ab0aad6d6fe2e5d8285b7c31574
 Сертификат SHA256: 55626377256dda3a6b5824b7278eb12db75b8a7d1c80baa9d2af4402ccac2684
 Полный sourceCommit и хэши поставки записываются в MANIFEST.json / SHA256SUMS.
 
@@ -48,7 +51,29 @@ FlightSearchTest: 2400 bit-exact costs PASS. Остальные сценарии
 Изображения, видео и пользовательские журналы не публикуются и не входят
 в APK/исходники. Этот replay не отправляет жесты и не измеряет очки игры.
 
-Локальная сборка и Android CI: результаты финальной сборки добавляются ниже.
+Локальная финальная сборка: assembleDebug, lintDebug,
+compileDebugAndroidTestJavaWithJavac PASS (3m24s).
+Lint: 0 errors, 46 warnings. Пакет, code45 и прежний сертификат проверены
+build_debug.py / apksigner. Данные и ключ подписи не заменялись.
+
+GitHub Build CI для того же кода 63220aa: SUCCESS.
+https://github.com/GiVscSon/LocalPilot-Android/actions/runs/40287681205
+Все JVM-регрессии, Python release tooling, сборка/lint/упаковка PASS.
+Артефакт CI подписан изолированным ключом runner; для обновления на телефоне
+поставляется локальный APK с прежним Dev-сертификатом выше.
+
+Android device acceptance для кода 63220aa: SUCCESS.
+https://github.com/GiVscSon/LocalPilot-Android/actions/runs/40287681194
+API30 default — PASS, job121455107371.
+API35 default — PASS, job121455107604.
+API36 google_apis — PASS, job121455107563.
+На каждой версии выполнен существующий нативный runner: 13 сценариев
+панели/пикера, реальных демо-касаний, STOP, поворота, ручного выбора области,
+2048 с чтением снимков и подтверждением изменений, двух сеансов MediaProjection
+и сохранения захвата после краткой потери фокуса. Итог и успешное выполнение
+шага UI/жестов подтверждены статусами GitHub Actions для каждой job.
+Нативная матрица использует изолированное тестовое приложение, не Яндекс Маркет.
+Она не проверяет получение топлива, удаление листьев или рекорды в реальных играх.
 
 Границы проверки:
 - Физический телефон этой версией ещё не проверен. Рост рекорда не доказан.
