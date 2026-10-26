@@ -1,6 +1,6 @@
 LocalPilot Android 0.7.30-dev / code46 — 2026-10-26
 Пакет: org.localpilot.android.dev
-Ожидаемый сертификат SHA256: 55626377256dda3a6b5824b7278eb12db75b8a7d1c80baa9d2af4402ccac2684
+Сертификат SHA256: 55626377256dda3a6b5824b7278eb12db75b8a7d1c80baa9d2af4402ccac2684
 
 APK собран локально: assembleDebug/lintDebug/compileDebugAndroidTestJavaWithJavac
 PASS (2m25s), lint0 errors/45 warnings.
@@ -8,6 +8,25 @@ PASS (2m25s), lint0 errors/45 warnings.
 Размер601914 bytes, SHA256524c5df71cadf5afce8dd3294acadabfa761140414b158395f71e263daf2ca34.
 Сертификат проверен и совпадает с прежним Dev. Последующие исправления native
 тестов не изменяют код main APK; окончательный sourceCommit — в manifest.
+
+ОКОНЧАТЕЛЬНЫЙ код проверок: fbb4c0539477bb8c3b533207e5dd88abe5fc5b08.
+Build CI40341882482 SUCCESS: полный JVM-набор, release tooling, сборка/lint.
+https://github.com/GiVscSon/LocalPilot-Android/actions/runs/40341882482
+Android CI40341882322 SUCCESS: API30 default, API35 default,
+API36 google_apis — по15 actual Android acceptance scenarios PASS.
+https://github.com/GiVscSon/LocalPilot-Android/actions/runs/40341882322
+Подтверждены прежние13 сценариев и новые2: видимый ручной выбор области
+Шипучки; реальный aim/release, красная пара исчезает на снимках (9→7),
+BubbleSession подтверждает именно рассчитанное поле и STOP запрещает новый ввод.
+Это изолированная Android fixture; приёмка реального Маркета/телефона не заявляется.
+Статусы SUCCESS, матрица и три PASS15 получены с публичной страницы GitHub.
+
+Поставка: release/delivery/LocalPilot_Android_0.7.30_dev/ — локальный APK
+с прежней подписью, исходники, bundle, MANIFEST.json и SHA256SUMS.
+Артефакты CI подписаны отдельным ключом runner и не подменяют этот APK.
+GitHub: исходники синхронизированы; публичный Release с assets не создан,
+поскольку сеть uploads.github.com остаётся запрещена. Черновик разрешений
+сохранён, но требует Review/Save/Publish в настройках среды, не применён автоматически.
 
 Полный Verify локально PASS: arcade82, JumperVision51, JumperPolicy20,
 Gate240 и предыдущие отрицательные проверки. Между пропусками сцен сохраняется
