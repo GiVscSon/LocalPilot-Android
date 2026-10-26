@@ -604,7 +604,26 @@ public final class PilotUiInstrumentation extends Instrumentation {
     }
 
     private void bindDemoWindow() throws Exception {bindWindow(getTargetContext().getPackageName());}
-    private void bindWindow(String pkg)throws Exception{click("Окно");click("@contains:"+pkg);await(()->onMain(()->gate().armed()&&pkg.equals(field("target"))&&field("overlayDialog")==null),3_000,"Window selection did not commit before the next control");}
+    private void bindWindow(String pkg)throws Exception{
+        click("Окно");
+        String query="@contains:"+pkg;
+        // ACTION_CLICK may acknowledge an accessibility item from the previous
+        // dialog while its replacement is still being published. Select the
+        // visible row in the current dialog with one actual Android touch.
+        AtomicReference<Rect> choice=new AtomicReference<>();
+        await(()->{
+            Rect row=onMain(()->{
+                Object object=field("overlayDialog");
+                if(!(object instanceof android.app.Dialog dialog)||!dialog.isShowing())return null;
+                return ownControlBounds(dialog.getWindow().getDecorView(),query);
+            });
+            if(row==null||row.isEmpty())return false;
+            choice.set(row);return true;
+        },3_000,"The current window dialog has no visible target row");
+        Rect row=choice.get();
+        require(tapAt(row.centerX(),row.centerY()),"Android rejected the visible target-window row touch");
+        await(()->onMain(()->gate().armed()&&pkg.equals(field("target"))&&field("overlayDialog")==null),3_000,"Window selection did not commit before the next control");
+    }
     private void awaitBrowserMechanic()throws Exception{await(()->onMain(()->booleanField("browserProfileConfirmed")&&field("overlayDialog")==null),3_000,"Browser mechanic selection did not finish before the next action");}
 
     private void allowInput() throws Exception {
