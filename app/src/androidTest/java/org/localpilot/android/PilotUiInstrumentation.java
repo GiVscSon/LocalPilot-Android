@@ -596,6 +596,7 @@ public final class PilotUiInstrumentation extends Instrumentation {
     }
 
     private Rect markerBounds(String marker) {
+        refreshAutomationCache();
         int[] remaining = {2_000};
         for (AccessibilityWindowInfo window : automation.getWindows()) {
             AccessibilityNodeInfo root = window.getRoot();
@@ -644,6 +645,7 @@ public final class PilotUiInstrumentation extends Instrumentation {
         WindowRow(android.app.Dialog dialog,Rect row,Rect window){this.dialog=dialog;this.row=row;this.window=window;}
     }
     private boolean publishedWindowRow(WindowRow choice){
+        refreshAutomationCache();
         for(AccessibilityWindowInfo window:automation.getWindows()){
             if(window.getType()!=AccessibilityWindowInfo.TYPE_ACCESSIBILITY_OVERLAY)continue;
             Rect bounds=new Rect();window.getBoundsInScreen(bounds);
@@ -714,7 +716,10 @@ public final class PilotUiInstrumentation extends Instrumentation {
         await(() -> {
             AccessibilityNodeInfo node = findText(text);
             if (node == null) { if(touchOwnControl(text))return true;scrollForward();return false; }
-            try { return node.performAction(AccessibilityNodeInfo.ACTION_CLICK); }
+            try {
+                if(!node.refresh()||!node.isVisibleToUser()||!node.isEnabled()||!node.isClickable())return false;
+                return node.performAction(AccessibilityNodeInfo.ACTION_CLICK);
+            }
             finally { node.recycle(); }
         }, 6_000, "Visible clickable UI control not found: " + text);
     }
@@ -810,7 +815,16 @@ public final class PilotUiInstrumentation extends Instrumentation {
         }
     }
 
+    private void refreshAutomationCache(){
+        // Public UiAutomation API. Before API34, reapplying the unchanged info
+        // also clears its interaction cache (AOSP UiAutomation.setServiceInfo).
+        // Do not trust cached windows/children across Activity/dialog replacement.
+        if(android.os.Build.VERSION.SDK_INT>=34)automation.clearCache();
+        else automation.setServiceInfo(automation.getServiceInfo());
+    }
+
     private AccessibilityNodeInfo findText(String text) {
+        refreshAutomationCache();
         int[] remaining = {2_000};
         for (AccessibilityWindowInfo window : automation.getWindows()) {
             AccessibilityNodeInfo root = window.getRoot();
