@@ -150,6 +150,15 @@ public final class ArcadeController {
    }
    costs[dest]=bestPath;
   }
+  // A red fuel can is a pickup, never a traffic hazard. Seek one only if its
+  // lane is one change away and the obstacle rollout already marked that path safe.
+  for(ArcadeObservation.Box fuel:s.collectibles){
+   float arrival=(s.player.top-fuel.bottom)/Math.max(.1f,trafficSpeed)-age;
+   int target=lane(fuel.x(),s);
+   if(arrival<-.15f||arrival>1.6f||Math.abs(target-current)>1
+     ||!Float.isFinite(costs[target])||costs[target]>.45f)continue;
+   costs[target]-=.34f/(.65f+Math.max(0,arrival));
+  }
   int best=current;
   for(int dest=Math.max(0,current-1);dest<=Math.min(2,current+1);dest++)if(costs[dest]+.03f<costs[best])best=dest;
   if(best==current){

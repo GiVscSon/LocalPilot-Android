@@ -2,7 +2,7 @@ package org.localpilot.android;
 
 import java.util.Arrays;
 
-/** Immutable observed rectangular field. -1 is unknown/blocked; 0 is empty. */
+/** Immutable observed rectangular field. -1 is unknown; 0 is empty or a recognized protected cell. */
 public final class GridPuzzle {
  public final int rows,cols;
  private final int[] cells;

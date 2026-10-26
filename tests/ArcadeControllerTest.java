@@ -13,6 +13,11 @@ public class ArcadeControllerTest {
   var p=box(x,.84f,.10f,.13f);
   return new ArcadeObservation(ArcadeProfile.TRAFFIC,t,p,p,obstacles,.2f,.08f,.8f,.98f,0,0,0,0,.9f,true,false);
  }
+ private static ArcadeObservation roadWithFuel(float x,List<ArcadeObservation.Box> obstacles,float fuelX){
+  var p=box(x,.84f,.10f,.13f);
+  return new ArcadeObservation(ArcadeProfile.TRAFFIC,1000,p,p,obstacles,List.of(box(fuelX,.55f,.08f,.06f)),
+    .2f,.08f,.8f,.98f,0,0,0,0,.9f,true,false);
+ }
  private static boolean overlap(ArcadeObservation.Box a,ArcadeObservation.Box b){return a.left<b.right&&a.right>b.left&&a.top<b.bottom&&a.bottom>b.top;}
  public static void main(String[] args){
   invariants();
@@ -65,6 +70,9 @@ public class ArcadeControllerTest {
   check(c.model().equals(impulseModel),"mixed pre/post-flap velocity must not weaken learned impulse");
   c.reset();var first=c.decide(road(1000,.5f,List.of(box(.5f,.5f,.11f,.15f))),1000);c.actionDispatched(first,1000);
   check(!c.decide(road(1320,.38f,List.of()),1320).sendsInput(),"unknown discrete input does not get a centering tap from one partial observation");
+  c.reset();check(c.decide(roadWithFuel(.5f,List.of(),.3f),1000).action==ArcadePolicy.Action.LEFT,"reachable fuel in a clear adjacent lane attracts the car");
+  c.reset();check(!c.decide(roadWithFuel(.5f,List.of(box(.3f,.84f,.11f,.15f)),.3f),1000).sendsInput(),"fuel never justifies crossing a car beside the player");
+  c.reset();check(!c.decide(roadWithFuel(.3f,List.of(),.7f),1000).sendsInput(),"fuel two lanes away does not cause an unreachable maneuver");
  }
  private static int flight(boolean predictive,boolean integrated,float g,float impulse,int latency,int frameAge){
   ArcadeController controller=new ArcadeController();ArcadeFeedback feedback=new ArcadeFeedback();long feedbackToken=0,ackAt=-1;

@@ -34,9 +34,14 @@ public final class Upgrade726Test {
    read(session,after,c,before,0,time+200);session.confirm(after);
    check(session.learnedCount()==old+1,"rank committed after two frames "+rank);
    check(read(session,after,c,null,0,time+300).same(after),"learned tile readable next turn");
+   var restored=new Color2048Reader.Session();restored.restoreLearned(session.encodeLearned());
+   check(restored.learnedCount()==old+1&&read(restored,after,c,null,0,time+350).same(after),"verified palette survives a new session at rank "+rank);
    time+=500;
   }
   session.reset();check(session.learnedCount()==0,"session palette reset");
+  var restored=new Color2048Reader.Session();restored.restoreLearned(session.encodeLearned());check(restored.learnedCount()==0,"empty saved palette round-trips");
+  rejects(()->restored.restoreLearned("v1;f56400;-;-;-;-;-;-"),"saved rank cannot overlap a base tile color");
+  rejects(()->restored.restoreLearned("v1;zzzzzz;-;-;-;-;-;-"),"malformed saved color rejected");
   int[] v=new int[16];v[0]=v[1]=16;var before=new Board2048(v);int[] a=before.move(0).board.cells.clone();a[15]=2;var after=new Board2048(a);
   rejects(()->read(session,after,c,null,0,1000),"higher tile without predecessor rejected");
   int[] wrong=a.clone();wrong[14]=4;rejects(()->read(session,new Board2048(wrong),c,before,0,1100),"two spawns cannot teach");
@@ -110,16 +115,11 @@ public final class Upgrade726Test {
    check(session.observe(size,size,special.cells(),new BitSet(),1100,1100)==GridPuzzleSession.Status.WAIT_STABLE,"animated special bit resets stability");
   }
   int[] c={1,1,2,3,4,2,3,4,3};var b=new GridPuzzle(3,3,c);var mask=new BitSet();mask.set(5);
-  var base=GridPuzzlePolicy.choose(b,GridPuzzlePolicy.Mode.TAP_GROUP);var chosen=GridPuzzlePolicy.choose(b,GridPuzzlePolicy.Mode.TAP_GROUP,2,0,0,mask);
-  check(base.score==chosen.score&&chosen.fromRow==1&&chosen.fromCol==2&&chosen.specialInvolved==1,"equal tap groups prefer and tap special");
-  var random=new Random(726);boolean found=false;
-  for(int n=0;n<300&&!found;n++){
-   int[] cells=new int[36];for(int i=0;i<36;i++)cells[i]=1+random.nextInt(4);b=new GridPuzzle(6,6,cells);base=GridPuzzlePolicy.choose(b,GridPuzzlePolicy.Mode.SWAP_MATCH3);if(base==null)continue;
-   for(int i=0;i<36;i++){mask=new BitSet();mask.set(i);chosen=GridPuzzlePolicy.choose(b,GridPuzzlePolicy.Mode.SWAP_MATCH3,2,0,0,mask);
-    check(chosen.score==base.score,"special priority never sacrifices primary score");
-    if(chosen.fromRow!=base.fromRow||chosen.fromCol!=base.fromCol||chosen.toRow!=base.toRow||chosen.toCol!=base.toCol){check(chosen.specialInvolved==1,"equal swap prefers special");found=true;break;}
-   }
-  }
-  check(found,"swap tie scenario exercised");
+  var chosen=GridPuzzlePolicy.choose(b,GridPuzzlePolicy.Mode.TAP_GROUP,2,0,0,mask);
+  check(chosen!=null&&chosen.specialInvolved==0&&!contains(chosen.clearedCells(),5),"tap selection avoids marked skull/special cells");
+  b=new GridPuzzle(3,3,new int[]{1,2,1,2,1,3,4,5,6});mask.clear();mask.set(0);
+  chosen=GridPuzzlePolicy.choose(b,GridPuzzlePolicy.Mode.SWAP_MATCH3,2,0,0,mask);
+  check(chosen==null,"match-3 abstains when its only legal line includes a marked skull/special cell");
  }
+ private static boolean contains(int[] values,int target){for(int value:values)if(value==target)return true;return false;}
 }

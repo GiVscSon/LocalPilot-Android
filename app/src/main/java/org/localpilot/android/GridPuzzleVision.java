@@ -5,7 +5,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
-/** Conservative descriptors for a manually selected grid of two to six chromatic token types.
+/** Conservative descriptors for a manually selected grid of two to twelve chromatic token types.
  * Neutral/special icons and empty cells are uncertain, not assumed ordinary puzzle pieces. */
 public final class GridPuzzleVision {
  public interface Pixels { int get(int x,int y); }
@@ -40,7 +40,7 @@ public final class GridPuzzleVision {
   public int[] cells(){return values.clone();}
   public int type(int row,int col){if(row<0||row>=rows||col<0||col>=cols)throw new IllegalArgumentException("cell");return values[row*cols+col];}
   public Palette palette(){return palette;}
-  public boolean complete(){for(int value:values)if(value<1)return false;return true;}
+  public boolean complete(){for(int i=0;i<values.length;i++)if(values[i]<1&&!(values[i]==0&&specialCellsMask.get(i)))return false;return true;}
   public boolean usable(){return usable;}
   /** Depends on dimensions and symbolic cells, never the timestamp or palette serialization. */
   public long signature(){long h=0xcbf29ce484222325L;h=(h^rows)*0x100000001b3L;h=(h^cols)*0x100000001b3L;for(int i=0;i<values.length;i++){h=(h^values[i])*0x100000001b3L;h=(h^(specialCellsMask.get(i)?1:0))*0x100000001b3L;}return h;}
@@ -48,6 +48,12 @@ public final class GridPuzzleVision {
 
  public static Observation detect(Pixels pixels,int left,int top,int right,int bottom,int rows,int cols,
    int excludedLeft,int excludedTop,int excludedRight,int excludedBottom,long timestampMs,Palette previous){
+  return detect(pixels,left,top,right,bottom,rows,cols,excludedLeft,excludedTop,excludedRight,excludedBottom,timestampMs,previous,false);
+ }
+ /** The protected-skull preset is opt-in for the recorded octopus swap game.
+  * A confirmed skull is an unplayable zero cell, never an ordinary colour token. */
+ public static Observation detect(Pixels pixels,int left,int top,int right,int bottom,int rows,int cols,
+   int excludedLeft,int excludedTop,int excludedRight,int excludedBottom,long timestampMs,Palette previous,boolean protectSkulls){
   if(pixels==null||rows<3||rows>10||cols<3||cols>10||left<0||top<0||right-left<cols*12||bottom-top<rows*12||timestampMs<0)throw new IllegalArgumentException("grid geometry");
   float[][] rings=new float[rows*cols][];java.util.BitSet special=new java.util.BitSet(rows*cols);
   float[][] samples=new float[rows*cols][];int[] cells=new int[samples.length];java.util.Arrays.fill(cells,-1);
@@ -55,6 +61,7 @@ public final class GridPuzzleVision {
    float l=left+col*(right-left)/(float)cols,t=top+row*(bottom-top)/(float)rows;
    float r=left+(col+1)*(right-left)/(float)cols,b=top+(row+1)*(bottom-top)/(float)rows;
    if(excludedRight>excludedLeft&&excludedBottom>excludedTop&&Math.max(l,excludedLeft)<Math.min(r,excludedRight)&&Math.max(t,excludedTop)<Math.min(b,excludedBottom))continue;
+   if(protectSkulls&&protectedSkull(pixels,l,t,r,b)){cells[row*cols+col]=0;special.set(row*cols+col);continue;}
    float[] ring=ring(pixels,l,t,r,b);
    if(ring!=null){rings[row*cols+col]=ring;continue;}
    samples[row*cols+col]=describe(pixels,l,t,r,b);
@@ -68,6 +75,7 @@ public final class GridPuzzleVision {
   }
   Set<Integer> distinct=new HashSet<>();float quality=0;boolean complete=true;
   for(int index=0;index<samples.length;index++){
+   if(cells[index]==0&&special.get(index)){quality+=1;continue;}
    float[] sample=samples[index];
    if(rings[index]!=null){
     int nearest=-1;float first=Float.POSITIVE_INFINITY,second=Float.POSITIVE_INFINITY;
@@ -87,8 +95,40 @@ public final class GridPuzzleVision {
   }
   // A previously learned palette is not evidence that the current picture is a
   // puzzle board. Monochrome textures/menus must abstain even if their colour is known.
-  boolean usable=complete&&distinct.size()>=2&&distinct.size()<=6;
+  boolean usable=complete&&distinct.size()>=2&&distinct.size()<=12;
   return new Observation(rows,cols,timestampMs,cells,new Palette(prototypes),usable?.72f+.23f*quality/samples.length:0,usable,special);
+ }
+
+ private static int sample(Pixels pixels,float l,float t,float r,float b,float x,float y){return pixels.get((int)(l+x*(r-l)),(int)(t+y*(b-t)));}
+ private static int brightness(int rgb){return Math.max(rgb>>16&255,Math.max(rgb>>8&255,rgb&255));}
+ private static boolean bone(int rgb){int high=brightness(rgb),low=Math.min(rgb>>16&255,Math.min(rgb>>8&255,rgb&255));return high>=75&&high-low<high*.32f;}
+ /** Red tile, pale head, two separate dark eyes and two lower bones must agree.
+  * Uniform grey tokens, a red fruit, a white bonus or an occluded cell cannot qualify. */
+ private static boolean protectedSkull(Pixels pixels,float l,float t,float r,float b){
+  int red=0,rim=0;
+  for(int yy=0;yy<17;yy++)for(int xx=0;xx<17;xx++)if(xx<3||xx>13||yy<3||yy>13){
+   int rgb=sample(pixels,l,t,r,b,.14f+xx*.045f,.14f+yy*.045f),rr=rgb>>16&255,g=rgb>>8&255,bb=rgb&255;
+   if(rr>g*1.18f&&rr>bb*1.10f)red++;rim++;
+  }
+  if(red<rim*.50f)return false;
+  int count=0,total=0;
+  for(int yy=0;yy<9;yy++)for(int xx=0;xx<9;xx++){
+   int rgb=sample(pixels,l,t,r,b,.25f+xx*.45f/8,.20f+yy*.45f/8);
+   if(bone(rgb)){count++;total+=brightness(rgb);}
+  }
+  if(count<49)return false;
+  float eyeThreshold=total/(float)count*.65f;
+  for(int eye=0;eye<2;eye++){
+   int dark=0;float x=eye==0?.28f:.48f;
+   for(int yy=0;yy<9;yy++)for(int xx=0;xx<9;xx++)if(brightness(sample(pixels,l,t,r,b,x+xx*.14f/8,.32f+yy*.17f/8))<eyeThreshold)dark++;
+   if(dark<13||dark>57)return false;
+  }
+  for(int side=0;side<2;side++){
+   int pale=0;float x=side==0?.15f:.62f,y=side==0?.52f:.64f,spanY=side==0?.23f:.20f;
+   for(int yy=0;yy<9;yy++)for(int xx=0;xx<9;xx++)if(bone(sample(pixels,l,t,r,b,x+xx*.17f/8,y+yy*spanY/8)))pale++;
+   if(pale<37)return false;
+  }
+  return true;
  }
 
  /** Returns a chromatic ring descriptor for a contrasting centre; invalid rings carry NaN. */
@@ -144,7 +184,18 @@ public final class GridPuzzleVision {
   if(spread<.045f&&contrast<.09f)return null;
   // Grey/white special icons (e.g. skulls) need semantic handling. Do not merge
   // those into a similarly coloured ordinary piece and silently treat them as safe.
-  if((d[39]+d[40]+d[41])/count>.30f)return null;
+  if((d[39]+d[40]+d[41])/count>.30f){
+   // Rounded icons can have a large neutral background. Require a strongly
+   // chromatic centre instead of discarding every fish/ham silhouette with it.
+   int chromatic=0;
+   for(int yy=0;yy<7;yy++)for(int xx=0;xx<7;xx++){
+    int rgb=pixels.get((int)(l+(.35f+.30f*xx/6)*(r-l)),(int)(t+(.35f+.30f*yy/6)*(b-t)));
+    float hi=Math.max(rgb>>16&255,Math.max(rgb>>8&255,rgb&255))/255f;
+    float lo=Math.min(rgb>>16&255,Math.min(rgb>>8&255,rgb&255))/255f;
+    if(hi>=.2f&&hi-lo>=.12f&&(hi-lo)/hi>=.3f)chromatic++;
+   }
+   if(chromatic<40)return null;
+  }
   for(int gy=0;gy<3;gy++)for(int gx=0;gx<3;gx++){
    int base=(gy*3+gx)*3;
    for(int yy=0;yy<5;yy++)for(int xx=0;xx<5;xx++){

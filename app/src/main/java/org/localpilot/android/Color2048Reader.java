@@ -2,8 +2,8 @@ package org.localpilot.android;
 
 /**
  * Experimental reader for the colorful 4x4 "2048" skin shown in the user's
- * recordings. The current calibrated palette covers only 2, 4, 8 and 16;
- * unknown higher tiles fail closed instead of being guessed.
+ * recordings. Known colors cover 2, 4, 8 and 16; higher ranks are learned only
+ * from a deterministic merge in a visually validated move.
  */
 public final class Color2048Reader {
  private static final int[][] COLORS={
@@ -41,15 +41,36 @@ public final class Color2048Reader {
   return board;
  }
 
- /** Session-only palette. Candidates commit only after two distinct stable frames and full move validation. */
+ /** Game-scoped palette. Candidates commit only after two distinct stable frames and full move validation. */
  public static final class Session {
   private final int[] learned=new int[12];
   private int[] pending;private Board2048 pendingBoard,pendingBefore;private int pendingAction,stableReads;
   private long pendingAt=-1;
   public Session(){reset();}
   public void reset(){java.util.Arrays.fill(learned,-1);discard();}
+  /** A result/menu invalidates an in-flight merge, but not previously verified colors. */
+  public void cancelPending(){discard();}
   private void discard(){pending=null;pendingBoard=pendingBefore=null;pendingAt=-1;stableReads=0;}
   public int learnedCount(){int n=0;for(int i=5;i<=11;i++)if(learned[i]>=0)n++;return n;}
+  /** Bounded, versioned palette for the current game/profile key. */
+  public String encodeLearned(){StringBuilder out=new StringBuilder("v1");for(int rank=5;rank<=11;rank++){out.append(';');int rgb=learned[rank];if(rgb<0)out.append('-');else{String hex=Integer.toHexString(rgb&0xffffff);for(int n=hex.length();n<6;n++)out.append('0');out.append(hex);}}return out.toString();}
+  /** Restore only a complete palette with colors separated from known and each other. */
+  public void restoreLearned(String encoded){
+   if(encoded==null||encoded.length()>64)throw new IllegalArgumentException("invalid learned palette");
+   String[] parts=encoded.split(";",-1);if(parts.length!=8||!parts[0].equals("v1"))throw new IllegalArgumentException("invalid learned palette");
+   int[] restored=new int[12];java.util.Arrays.fill(restored,-1);
+   for(int n=0;n<7;n++){
+    String value=parts[n+1];if(value.equals("-"))continue;
+    if(value.length()!=6)throw new IllegalArgumentException("invalid learned color");int rgb=0;
+    for(int i=0;i<6;i++){int digit=Character.digit(value.charAt(i),16);if(digit<0)throw new IllegalArgumentException("invalid learned color");rgb=(rgb<<4)|digit;}
+    int low=Math.min(rgb>>16&255,Math.min(rgb>>8&255,rgb&255)),high=Math.max(rgb>>16&255,Math.max(rgb>>8&255,rgb&255));
+    if(high-low<60||high<70)throw new IllegalArgumentException("invalid learned color");
+    for(int[] base:COLORS)if(distance(rgb,(base[0]<<16)|(base[1]<<8)|base[2])<110*110)throw new IllegalArgumentException("learned color conflicts with base palette");
+    for(int rank=5;rank<5+n;rank++)if(restored[rank]>=0&&distance(rgb,restored[rank])<110*110)throw new IllegalArgumentException("learned colors conflict");
+    restored[5+n]=rgb;
+   }
+   System.arraycopy(restored,0,learned,0,learned.length);discard();
+  }
   public Board2048 read(PixelBoardReader.Pixels pixels,int width,int height,int left,int top,int right,int bottom,
     Board2048 before,int action,long frameAt){
    try{return candidate(pixels,width,height,left,top,right,bottom,before,action,frameAt);}

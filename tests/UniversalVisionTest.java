@@ -34,11 +34,28 @@ public final class UniversalVisionTest {
   var recovered=CustomArcadeVision.detect(ArcadeProfile.TRAFFIC,(x,y)->scene(ArcadeProfile.TRAFFIC,x/160f,y/240f,colors,.03f),0,0,160,240,0,0,0,0,1100,first,conf);
   check(recovered.usable()&&recovered.tracked&&recovered.vx>0,"real bounded movement remains tracked");
  }
+ private static void fuelGeometryRegression(){
+  int[] colors={0x42d039,0xe43020,0x2474df};var conf=config(ArcadeProfile.TRAFFIC,colors);
+  for(boolean tallCar:new boolean[]{false,true}){
+   var read=CustomArcadeVision.detect(ArcadeProfile.TRAFFIC,(x,y)->{
+    float nx=x/480f,ny=y/960f;
+    if(box(nx,ny,.44f,.70f,.56f,.87f))return colors[0];
+    if(box(nx,ny,.28f,.605f,.32f,.62f))return 0x303030;
+    if(box(nx,ny,.25f,.60f,.35f,tallCar?.70f:.65f))return colors[1];
+    return 0x202020;
+   },0,0,480,960,0,0,0,0,1000,null,conf);
+   check(read.usable(),"traffic player remains visible beside fuel/car");
+   check(read.collectibles.size()==(tallCar?0:1),"physical aspect distinguishes canister from red car with windshield");
+   check(read.obstacles.size()==(tallCar?1:0),"tall red car stays hazardous after downsampling");
+  }
+ }
  public static void main(String[]args)throws Exception{
   check(VisualGameTarget.requiresProfileChoice(-1,false,false),"new application cannot inherit global Market profile");
   check(VisualGameTarget.requiresProfileChoice(2,true,false),"browser start requires explicit mechanic confirmation");
   check(!VisualGameTarget.requiresProfileChoice(2,true,true),"confirmed browser mechanic can start");
   check(!VisualGameTarget.requiresProfileChoice(7,false,false),"saved native game mechanic can restore");
+  check(VisualGameTarget.requiresProfileChoice(8,false,true)&&VisualGameTarget.requiresProfileChoice(9,false,true),"menu commands and unsupported games are not executable profiles");
+  check(!VisualGameTarget.requiresProfileChoice(10,false,false)&&!VisualGameTarget.requiresProfileChoice(11,false,false),"new explicit grid profiles restore");
   check(!VisualGameTarget.selectionKey("com.browser.app","one").equals(VisualGameTarget.selectionKey("com.browser.app","two")),"named browser games keep independent choices");
   int[][] palettes={{0xff20c0,0x20e0e0,0xff9020},{0xf0e020,0x20d030,0x3060f0},{0xffb0e0,0x305020,0xb030f0}};
   for(var p:new ArcadeProfile[]{ArcadeProfile.PADDLE,ArcadeProfile.TRAFFIC,ArcadeProfile.FLAPPY})for(int[] colors:palettes)for(int w:new int[]{160,320,480}){
@@ -62,6 +79,7 @@ public final class UniversalVisionTest {
    check(conf.encode().equals(CustomVisionConfig.decode(conf.encode()).encode()),"visual config roundtrip");
   }
   trackingRegression();
+  fuelGeometryRegression();
   int[] c=palettes[0];var conf=new CustomVisionConfig(c,new float[]{.5f,.7f,.7f},new float[]{.5f,.2f,.8f});
   for(int width:new int[]{160,80,40,160}){
    final int size=width;

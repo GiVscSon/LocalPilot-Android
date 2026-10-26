@@ -12,6 +12,15 @@ public final class GridPuzzleVisionTest {
   if(nx>.57f&&ny>.57f)light-=12;
   int r=Math.min(255,Math.max(0,(color>>16&255)+light)),g=Math.min(255,Math.max(0,(color>>8&255)+light)),b=Math.min(255,Math.max(0,(color&255)+light));return r<<16|g<<8|b;
  }
+ private static int skullTile(int x,int y,boolean eyes,boolean redFrame){
+  float nx=x%80/80f,ny=y%80/80f;
+  if(nx<.12f||nx>.88f||ny<.12f||ny>.88f)return 0x707070;
+  int rgb=redFrame?0x9a4045:0x8d8d8d;
+  if(nx>=.25f&&nx<=.70f&&ny>=.20f&&ny<=.65f)rgb=0xbbbaad;
+  if(eyes&&ny>=.33f&&ny<=.48f&&(nx>=.29f&&nx<=.38f||nx>=.49f&&nx<=.59f))rgb=0x323232;
+  if(nx>=.15f&&nx<=.32f&&ny>=.52f&&ny<=.75f||nx>=.62f&&nx<=.79f&&ny>=.64f&&ny<=.84f)rgb=0xbbbaad;
+  return rgb;
+ }
  public static void main(String[] args){
   int[][] palettes={{0xe72832,0xfbc72b,0x4aa91f,0x266ac6},{0x993599,0xe28026,0x29b5ae,0x293758}};
   for(int rows:new int[]{3,6,7,10})for(int size:new int[]{16,37,80})for(int[] colors:palettes){
@@ -49,6 +58,24 @@ public final class GridPuzzleVisionTest {
   int[] monochrome=new int[36];java.util.Arrays.fill(monochrome,1);
   var singleColor=GridPuzzleVision.detect((x,y)->token(x,y,0,0,40,6,6,monochrome,vivid,0),0,0,240,240,6,6,0,0,0,0,1200,fullScale.palette());
   check(singleColor.complete()&&!singleColor.usable(),"even a real-looking monochrome grid abstains with a saved palette");
+  // Rounded foreground objects leave substantial neutral background inside the cell.
+  for(int center:new int[]{0xe72832,0x266ac6,0x808080}){
+   var rounded=GridPuzzleVision.detect((x,y)->{
+    int col=x/80,row=y/80; double dx=x%80-40,dy=y%80-40;
+    if(dx*dx+dy*dy>27*27)return 0xb0b0b0;
+    return ((row+col)%2==0)?center:0x4aa91f;
+   },0,0,480,480,6,6,0,0,0,0,1300,null);
+   check(center==0x808080?!rounded.usable():rounded.usable(),
+     "rounded chromatic foreground accepted; neutral foreground still rejected");
+  }
+  int[] ordinary=new int[36];for(int i=0;i<ordinary.length;i++)ordinary[i]=i%4;
+  for(boolean eyes:new boolean[]{false,true})for(boolean redFrame:new boolean[]{false,true}){
+   GridPuzzleVision.Pixels image=(x,y)->y/80*6+x/80==14?skullTile(x,y,eyes,redFrame):token(x,y,0,0,80,6,6,ordinary,vivid,0);
+   var protectedBoard=GridPuzzleVision.detect(image,0,0,480,480,6,6,0,0,0,0,1400,null,true);
+   check(eyes&&redFrame?protectedBoard.usable()&&protectedBoard.type(2,2)==0&&protectedBoard.specialCellsMask().get(14):!protectedBoard.specialCellsMask().get(14),"protected skull requires both face and red tile evidence");
+   var genericBoard=GridPuzzleVision.detect(image,0,0,480,480,6,6,0,0,0,0,1400,null);
+   check(genericBoard.type(2,2)!=0,"generic mode cannot silently enable the skull preset");
+  }
   try{GridPuzzleVision.Palette.decode("v1;NaN");throw new AssertionError("invalid palette accepted");}catch(IllegalArgumentException expected){checks++;}
   try{GridPuzzleVision.detect((x,y)->0,0,0,10,10,7,7,0,0,0,0,1000,null);throw new AssertionError("tiny geometry accepted");}catch(IllegalArgumentException expected){checks++;}
   System.out.println("Grid puzzle vision: "+checks+" assertions PASS; synthetic palettes, sizes, occlusion, persistence");

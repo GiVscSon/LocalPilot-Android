@@ -105,6 +105,19 @@ public final class ArcadeProfilesTest {
   ArcadeObservation driving=road.read(ArcadeProfile.TRAFFIC,1000,null);
   check(driving.usable(),"traffic scene detected");check(driving.obstacles.size()==1,"blue traffic obstacle detected");
   check(ArcadePolicy.next(driving).action==ArcadePolicy.Action.LEFT,"vision feeds lane policy");
+  road.rect(.44f,.45f,.56f,.61f,0xe8e8e8);
+  ArcadeObservation whiteCar=road.read(ArcadeProfile.TRAFFIC,1100,driving);
+  check(whiteCar.usable()&&whiteCar.obstacles.size()==1,"white traffic car remains detected outside saturated palette");
+  check(ArcadePolicy.next(whiteCar).action==ArcadePolicy.Action.LEFT,"white car still requires avoidance");
+  Scene pickup=new Scene(480,720,0x3d8f28);pickup.rect(.2f,0,.8f,1,0x7b7578);
+  pickup.rect(.44f,.70f,.56f,.87f,0x42d039);
+  pickup.rect(.24f,.62f,.34f,.685f,0xe43020);pickup.rect(.27f,.625f,.31f,.64f,0x303030);
+  ArcadeObservation withFuel=pickup.read(ArcadeProfile.TRAFFIC,1000,null);
+  check(withFuel.usable()&&withFuel.player.x()>.4f&&withFuel.player.x()<.6f,"green player car is acquired independently of red fuel");
+  check(withFuel.collectibles.size()==1&&withFuel.obstacles.isEmpty(),"red body and dark handle form fuel pickup rather than obstacle");
+  pickup.rect(.24f,.62f,.34f,.685f,0x2474df);pickup.rect(.27f,.625f,.31f,.64f,0x303030);
+  ArcadeObservation blueSmallCar=pickup.read(ArcadeProfile.TRAFFIC,1200,withFuel);
+  check(blueSmallCar.collectibles.isEmpty()&&!blueSmallCar.obstacles.isEmpty(),"small blue vehicle with windshield cannot be reclassified as red fuel");
   road.rect(.28f,.65f,.75f,.95f,0xffffff);ArcadeObservation result=road.read(ArcadeProfile.TRAFFIC,1125,driving);
   check(result.terminal&&!ArcadePolicy.next(result).sendsInput(),"traffic result dialog blocks input");
 

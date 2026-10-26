@@ -2,10 +2,11 @@ package org.localpilot.android;
 
 import java.util.Arrays;
 
-/** Separate immediate-move rules for swaps and orthogonally connected tap groups.
+/** Immediate-move rules for swaps, orthogonal tap groups and straight chains.
+ * Marked special cells are excluded until their semantic role is known.
  * No unobserved refill, cascade, booster or animation state is inferred. */
 public final class GridPuzzlePolicy {
- public enum Mode { SWAP_MATCH3,TAP_GROUP }
+ public enum Mode { SWAP_MATCH3,TAP_GROUP,TRACE_LINE }
  public static final class Decision {
   public final Mode mode;
   public final int fromRow,fromCol,toRow,toCol,expectedCleared,targetCleared;
@@ -27,7 +28,7 @@ public final class GridPuzzlePolicy {
 
  public static Decision choose(GridPuzzle board,Mode mode){return choose(board,mode,2,0,0);}
 
- /** targetType=0 or targetRemaining=0 disables goal weighting; minGroup applies to TAP_GROUP. */
+ /** targetType=0 or targetRemaining=0 disables goal weighting; minGroup applies to groups and chains. */
  public static Decision choose(GridPuzzle board,Mode mode,int minGroup,int targetType,int targetRemaining){return choose(board,mode,minGroup,targetType,targetRemaining,new java.util.BitSet());}
  public static Decision choose(GridPuzzle board,Mode mode,int minGroup,int targetType,int targetRemaining,java.util.BitSet special){
   if(board==null||mode==null||minGroup<2||minGroup>100||targetType<0||targetRemaining<0)throw new IllegalArgumentException("puzzle policy context");
@@ -51,10 +52,31 @@ public final class GridPuzzlePolicy {
      }
     }
     if(tail<minGroup)continue;
+    boolean containsSpecial=false;for(int i=0;i<tail;i++)if(special.get(queue[i])){containsSpecial=true;break;}
+    if(containsSpecial)continue;
     int[] group=Arrays.copyOf(queue,tail);Arrays.sort(group);
-    int tap=start;for(int index:group)if(special.get(index)){tap=index;break;}
-    Decision candidate=decision(mode,tap,tap,board.cols,cells,group,0,targetType,targetRemaining,special);
+    Decision candidate=decision(mode,start,start,board.cols,cells,group,0,targetType,targetRemaining,special);
     if(better(candidate,best))best=candidate;
+   }
+  }else if(mode==Mode.TRACE_LINE){
+   // A single straight swipe can safely select horizontal, vertical or
+   // diagonal chains. Bent chains need a polyline gesture and are not guessed.
+   int[][] directions={{0,1},{1,0},{1,1},{1,-1}};
+   for(int row=0;row<board.rows;row++)for(int col=0;col<board.cols;col++){
+    int start=row*board.cols+col,type=cells[start];if(type<=0)continue;
+    for(int[] direction:directions){
+     int dr=direction[0],dc=direction[1],pr=row-dr,pc=col-dc;
+     if(pr>=0&&pr<board.rows&&pc>=0&&pc<board.cols&&cells[pr*board.cols+pc]==type)continue;
+     int length=0,nr=row,nc=col;
+     while(nr>=0&&nr<board.rows&&nc>=0&&nc<board.cols&&cells[nr*board.cols+nc]==type){length++;nr+=dr;nc+=dc;}
+     if(length<minGroup)continue;
+     int[] chain=new int[length];nr=row;nc=col;
+     boolean containsSpecial=false;
+     for(int i=0;i<length;i++){chain[i]=nr*board.cols+nc;if(special.get(chain[i]))containsSpecial=true;nr+=dr;nc+=dc;}
+     if(containsSpecial)continue;
+     Decision candidate=decision(mode,chain[0],chain[length-1],board.cols,cells,chain,0,targetType,targetRemaining,special);
+     if(better(candidate,best))best=candidate;
+    }
    }
   }else{
    for(int from=0;from<cells.length;from++){
@@ -62,7 +84,7 @@ public final class GridPuzzlePolicy {
     int r=from/board.cols,c=from%board.cols;
     for(int direction=0;direction<2;direction++){
      int to=direction==0?(c+1<board.cols?from+1:-1):(r+1<board.rows?from+board.cols:-1);
-     if(to<0||cells[to]<=0||cells[to]==cells[from])continue;
+     if(to<0||cells[to]<=0||cells[to]==cells[from]||special.get(from)||special.get(to))continue;
      swap(cells,from,to);
      boolean[] matched=new boolean[cells.length];
      int bonus=markLines(cells,board.rows,board.cols,from,matched)+markLines(cells,board.rows,board.cols,to,matched);
@@ -70,7 +92,8 @@ public final class GridPuzzlePolicy {
      Decision candidate=null;
      if(count>=3){
       int[] cleared=new int[count];int cursor=0;for(int i=0;i<matched.length;i++)if(matched[i])cleared[cursor++]=i;
-      candidate=decision(mode,from,to,board.cols,cells,cleared,bonus,targetType,targetRemaining,special);
+      boolean containsSpecial=false;for(int index:cleared)if(special.get(index)){containsSpecial=true;break;}
+      if(!containsSpecial)candidate=decision(mode,from,to,board.cols,cells,cleared,bonus,targetType,targetRemaining,special);
      }
      swap(cells,from,to);
      if(candidate!=null&&better(candidate,best))best=candidate;

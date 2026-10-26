@@ -35,7 +35,8 @@ public final class GridPuzzleLoopTest {
    float toX=left+(decision.toCol+.5f)*size,toY=top+(decision.toRow+.5f)*size;
    check(fromX>=left&&fromX<left+cols*size&&toX>=left&&toX<left+cols*size&&fromY>=top&&fromY<top+rows*size&&toY>=top&&toY<top+rows*size,"gesture cell centers stay inside selected ROI");
    if(mode==GridPuzzlePolicy.Mode.SWAP_MATCH3)check(Math.abs(fromX-toX)+Math.abs(fromY-toY)==size,"swap gesture crosses exactly one orthogonal cell");
-   else check(fromX==toX&&fromY==toY,"group action maps to one stationary tap");
+   else if(mode==GridPuzzlePolicy.Mode.TAP_GROUP)check(fromX==toX&&fromY==toY,"group action maps to one stationary tap");
+   else check(fromX!=toX||fromY!=toY,"trace action maps to a swipe along the recognized line");
    session.sent(second.cells(),1150);session.acknowledge(1200);
    check(session.pending()&&session.verifiedChanges()==0,"dispatch and Android ACK are not game progress");
    var unchanged=read(physical,colors,left,top,size,rows,cols,1400,restoredPalette);

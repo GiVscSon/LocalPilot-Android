@@ -25,8 +25,12 @@ public final class CustomArcadeVision {
   List<ArcadeObservation.Box> second=blobs(rgb,excluded,w,h,config.colors[1],work);
   List<ArcadeObservation.Box> third=blobs(rgb,excluded,w,h,config.colors[2],work);
   ArcadeObservation.Box control=profile==ArcadeProfile.PADDLE?choose(second,oldControl,config.x[1],config.y[1],true):player;
-  List<ArcadeObservation.Box> obstacles=new ArrayList<>();
-  if(profile!=ArcadeProfile.PADDLE){for(var b:second)add(obstacles,b,player);for(var b:third)add(obstacles,b,player);}
+  List<ArcadeObservation.Box> obstacles=new ArrayList<>(),collectibles=new ArrayList<>();
+  float sourceAspect=(right-left)/(float)(bottom-top);
+  if(profile!=ArcadeProfile.PADDLE){
+   for(var b:second)addTrafficObject(profile,rgb,w,h,sourceAspect,obstacles,collectibles,b,player);
+   for(var b:third)addTrafficObject(profile,rgb,w,h,sourceAspect,obstacles,collectibles,b,player);
+  }
   float gapTop=0,gapBottom=1;
   if(profile==ArcadeProfile.FLAPPY&&player!=null){
    float nearest=Float.POSITIVE_INFINITY;
@@ -43,7 +47,28 @@ public final class CustomArcadeVision {
   float vx=0,vy=0;boolean tracked=false;
   if(freshPrevious&&player!=null){float dt=(time-previous.timestampMs)/1000f;if(dt>=.03f&&dt<=.5f&&Math.abs(player.x()-previous.player.x())<.3f&&Math.abs(player.y()-previous.player.y())<.4f){vx=(player.x()-previous.player.x())/dt;vy=(player.y()-previous.player.y())/dt;tracked=true;}}
   boolean usable=player!=null&&control!=null&&(profile!=ArcadeProfile.FLAPPY||gapBottom-gapTop>player.height()*1.5f);
-  return new ArcadeObservation(profile,time,player,control,obstacles,0,0,1,1,gapTop,gapBottom,vx,vy,usable?.85f:0,tracked,false);
+  return new ArcadeObservation(profile,time,player,control,obstacles,collectibles,0,0,1,1,gapTop,gapBottom,vx,vy,usable?.85f:0,tracked,false);
+ }
+ private static void addTrafficObject(ArcadeProfile profile,int[] rgb,int w,int h,float sourceAspect,
+   List<ArcadeObservation.Box> obstacles,List<ArcadeObservation.Box> collectibles,
+   ArcadeObservation.Box b,ArcadeObservation.Box player){
+  if(profile==ArcadeProfile.TRAFFIC&&fuelCan(rgb,w,h,sourceAspect,b)){
+   for(var old:collectibles)if(overlap(b,old)>.55f)return;collectibles.add(b);return;
+  }
+  add(obstacles,b,player);
+ }
+ private static boolean fuelCan(int[] rgb,int w,int h,float sourceAspect,ArcadeObservation.Box box){
+  // Normalized bounds and the stretched scratch image do not preserve physical shape.
+  float aspect=box.width()/box.height()*sourceAspect;
+  if(box.width()<.055f||box.width()>.16f||box.height()<.04f||box.height()>.13f||aspect<.82f||aspect>2.1f)return false;
+  int red=0,darkTop=0,total=0,x0=Math.max(0,(int)(box.left*w)),x1=Math.min(w,(int)Math.ceil(box.right*w));
+  int y0=Math.max(0,(int)(box.top*h)),y1=Math.min(h,(int)Math.ceil(box.bottom*h));
+  for(int yy=y0;yy<y1;yy++)for(int xx=x0;xx<x1;xx++){
+   int c=rgb[yy*w+xx],r=c>>16&255,g=c>>8&255,b=c&255,hi=Math.max(r,Math.max(g,b)),low=Math.min(r,Math.min(g,b));total++;
+   if(r>85&&r>g*1.65f&&r>b*1.45f&&g<145)red++;
+   if(yy<y0+(y1-y0)*.36f&&hi<125&&hi-low<65&&hi>12)darkTop++;
+  }
+  return total>0&&red/(float)total>.18f&&darkTop/(float)total>.025f;
  }
  private static boolean matches(int a,int b){int dr=(a>>16&255)-(b>>16&255),dg=(a>>8&255)-(b>>8&255),db=(a&255)-(b&255);return dr*dr+dg*dg+db*db<=48*48;}
  private static List<ArcadeObservation.Box> blobs(int[] rgb,boolean[] excluded,int w,int h,int color,Scratch work){

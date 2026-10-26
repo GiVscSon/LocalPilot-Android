@@ -21,13 +21,21 @@ public final class ArcadeObservation {
  public final long timestampMs;
  public final Box player,control;
  public final List<Box> obstacles;
+ /** Safe objects the policy may collect, such as fuel cans in Market Rush. */
+ public final List<Box> collectibles;
  public final float left,right,top,bottom,gapTop,gapBottom,vx,vy,confidence;
  public final boolean tracked,terminal;
  public ArcadeObservation(ArcadeProfile profile,long timestampMs,Box player,Box control,List<Box> obstacles,
    float left,float top,float right,float bottom,float gapTop,float gapBottom,float vx,float vy,
    float confidence,boolean tracked,boolean terminal){
+  this(profile,timestampMs,player,control,obstacles,List.of(),left,top,right,bottom,gapTop,gapBottom,vx,vy,confidence,tracked,terminal);
+ }
+ public ArcadeObservation(ArcadeProfile profile,long timestampMs,Box player,Box control,List<Box> obstacles,
+   List<Box> collectibles,float left,float top,float right,float bottom,float gapTop,float gapBottom,float vx,float vy,
+   float confidence,boolean tracked,boolean terminal){
+  if(profile==null||obstacles==null||collectibles==null)throw new IllegalArgumentException("arcade observation");
   this.profile=profile;this.timestampMs=timestampMs;this.player=player;this.control=control;
-  this.obstacles=List.copyOf(obstacles);this.left=left;this.top=top;this.right=right;this.bottom=bottom;
+  this.obstacles=List.copyOf(obstacles);this.collectibles=List.copyOf(collectibles);this.left=left;this.top=top;this.right=right;this.bottom=bottom;
   this.gapTop=gapTop;this.gapBottom=gapBottom;this.vx=vx;this.vy=vy;
   this.confidence=confidence;this.tracked=tracked;this.terminal=terminal;
  }

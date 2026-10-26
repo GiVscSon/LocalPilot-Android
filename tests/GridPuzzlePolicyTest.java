@@ -40,6 +40,12 @@ public final class GridPuzzlePolicyTest {
   var group=tap(board(1,1,2,3,1,2,4,5,2));check(group!=null&&group.expectedCleared==3,"orthogonal group size");
   check(group.fromRow==0&&group.fromCol==0&&group.fromRow==group.toRow&&group.fromCol==group.toCol,"tap has one location");
   check(Arrays.equals(group.clearedCells(),new int[]{0,1,4}),"group must be connected not arbitrary equal pieces");
+  java.util.BitSet markedSkull=new java.util.BitSet();markedSkull.set(4);
+  check(GridPuzzlePolicy.choose(board(1,1,2,1,1,3,4,5,6),GridPuzzlePolicy.Mode.TAP_GROUP,2,0,0,markedSkull)==null,"group mode must abstain when a candidate would clear a marked skull/special cell");
+  java.util.BitSet swapSkull=new java.util.BitSet();swapSkull.set(0);
+  check(GridPuzzlePolicy.choose(board(1,2,1,2,1,3,4,5,6),GridPuzzlePolicy.Mode.SWAP_MATCH3,2,0,0,swapSkull)==null,"match-3 must not form a line through a marked skull/special cell");
+  java.util.BitSet lineSkull=new java.util.BitSet();lineSkull.set(1);
+  check(GridPuzzlePolicy.choose(board(1,1,1,2,3,4,5,6,7),GridPuzzlePolicy.Mode.TRACE_LINE,3,0,0,lineSkull)==null,"trace mode must not swipe through a marked skull/special cell");
   check(tap(board(0,0,0,0,0,0,0,0,0))==null,"empty field cannot authorize input");
   check(GridPuzzlePolicy.choose(board(1,1,2,3,4,5,6,7,8),GridPuzzlePolicy.Mode.TAP_GROUP,3,0,0)==null,"minimum group size enforced");
   var target=GridPuzzlePolicy.choose(board(1,1,1,1,2,2,3,4,5),GridPuzzlePolicy.Mode.TAP_GROUP,2,2,9);

@@ -7,7 +7,7 @@ import java.util.concurrent.CancellationException;
 
 /** Bounded, resolution-normalized perception for the three recorded Market games. */
 public final class ArcadeVision {
- private static final int RED=1,WOOD=2,BLUE=4,LIGHT=8,DARK=16,GREEN=32,BALL=64,DARK_CAR=128;
+ private static final int RED=1,WOOD=2,BLUE=4,LIGHT=8,DARK=16,GREEN=32,BALL=64,DARK_CAR=128,SATURATED=256;
  private ArcadeVision(){}
 
  public static ArcadeObservation detect(ArcadeProfile profile,PixelBoardReader.Pixels pixels,
@@ -55,18 +55,45 @@ public final class ArcadeVision {
 
  private static ArcadeObservation traffic(Frame f,long time,ArcadeObservation previous){
   int[] road=road(f);float left=road[0]/(float)f.w,right=road[1]/(float)f.w;
-  List<Blob> red=f.blobs(RED),players=new ArrayList<>();
-  if(right-left>.40f&&right-left<.86f)for(Blob b:red)
-   if(vehicle(b,left,right)&&b.box.top>.62f&&b.box.bottom>.79f)players.add(b);
-  ArcadeObservation.Box player=choose(players,previous==null?null:previous.player,.5f,.85f);
-  List<ArcadeObservation.Box> obstacles=new ArrayList<>();
-  List<Blob> cars=new ArrayList<>(red);cars.addAll(f.blobs(BLUE));cars.addAll(f.blobs(LIGHT));cars.addAll(f.blobs(DARK_CAR));
-  for(Blob b:cars)if(vehicle(b,left,right)&&b.box.top>.13f
+  List<Blob> red=f.blobs(RED),colored=f.blobs(SATURATED),players=new ArrayList<>();
+  // The player's car changes paint between Market Rush stages. Acquire the
+  // large, low car near its usual start position instead of assuming it is red.
+  if(right-left>.40f&&right-left<.86f)for(Blob b:colored)
+   if(vehicle(b,left,right)&&b.box.top>.58f&&b.box.bottom>.72f&&b.box.bottom<.97f
+     &&!fuelCan(f,b,left,right))players.add(b);
+  ArcadeObservation.Box player=chooseTrafficPlayer(players,previous==null?null:previous.player);
+  List<ArcadeObservation.Box> obstacles=new ArrayList<>(),collectibles=new ArrayList<>();
+  for(Blob b:red)if(fuelCan(f,b,left,right))addVehicle(collectibles,b.box);
+  List<Blob> cars=new ArrayList<>(colored);cars.addAll(f.blobs(LIGHT));cars.addAll(f.blobs(DARK_CAR));
+  for(Blob b:cars)if(vehicle(b,left,right)&&b.box.top>.13f&&!fuelCan(f,b,left,right)
     &&(player==null||overlap(b.box,player)<.45f))addVehicle(obstacles,b.box);
   // A large pale result dialog covers the bottom road, unlike narrow lane marks.
   boolean terminal=right-left>.4f&&f.fraction(LIGHT,Math.max(left,.28f),.65f,Math.min(right,.75f),.95f)>.30f;
-  return observation(ArcadeProfile.TRAFFIC,time,player,player,obstacles,left,.13f,right,.97f,0,0,
+  ArcadeObservation base=observation(ArcadeProfile.TRAFFIC,time,player,player,obstacles,left,.13f,right,.97f,0,0,
     player!=null&&right-left>.4f?.90f:0,terminal,previous);
+  return new ArcadeObservation(base.profile,base.timestampMs,base.player,base.control,base.obstacles,collectibles,
+    base.left,base.top,base.right,base.bottom,base.gapTop,base.gapBottom,base.vx,base.vy,base.confidence,base.tracked,base.terminal);
+ }
+ private static ArcadeObservation.Box chooseTrafficPlayer(List<Blob> players,ArcadeObservation.Box previous){
+  Blob best=null;float bestScore=Float.POSITIVE_INFINITY,runnerUp=Float.POSITIVE_INFINITY;
+  for(Blob b:players){
+   if(b.box.width()<.065f||b.box.height()<.065f||b.aspect()>.95f)continue;
+   float dx=b.box.x()-(previous==null?.5f:previous.x()),dy=b.box.y()-(previous==null?.80f:previous.y());
+   float score=dx*dx+dy*dy;
+   if(previous==null)score+=Math.max(0,.105f-b.box.width())*.35f;
+   if(score<bestScore){runnerUp=bestScore;bestScore=score;best=b;}else runnerUp=Math.min(runnerUp,score);
+  }
+  if(best==null||runnerUp-bestScore<.003f)return null;
+  return best.box;
+ }
+ /** A small, nearly square red body with a dark handle is a fuel pickup, not a car. */
+ private static boolean fuelCan(Frame f,Blob b,float left,float right){
+  if(b.box.x()<left+.025f||b.box.x()>right-.025f||b.box.width()<.055f||b.box.width()>.16f
+    ||b.box.height()<.04f||b.box.height()>.13f||b.aspect()<.82f||b.aspect()>2.1f||b.density()<.22f)return false;
+  if(f.fraction(RED,b.box.left,b.box.top,b.box.right,b.box.bottom)<.28f)return false;
+  float x0=b.box.left+b.box.width()*.22f,x1=b.box.right-b.box.width()*.22f;
+  float y0=b.box.top+b.box.height()*.02f,y1=b.box.top+b.box.height()*.36f;
+  return f.fraction(DARK,x0,y0,x1,y1)>.035f;
  }
  private static boolean vehicle(Blob b,float left,float right){
   return b.box.x()>left+.025f&&b.box.x()<right-.025f
@@ -211,12 +238,12 @@ public final class ArcadeVision {
   float aspect(){return width/(float)height;}
  }
  private static final class Frame {
-  final int w,h;final int[] rgb;final byte[] mask;
-  private byte[] visited;private int[] queue;
+  final int w,h;final int[] rgb;final short[] mask;
+  private short[] visited;private int[] queue;
   Frame(PixelBoardReader.Pixels source,int l,int t,int r,int b,int el,int et,int er,int eb){
    int step=Math.max(1,(r-l+479)/480);w=(r-l+step-1)/step;h=(b-t+step-1)/step;
    if((long)w*h>600_000)throw new IllegalArgumentException("arcade sample limit");
-   rgb=new int[w*h];mask=new byte[w*h];
+   rgb=new int[w*h];mask=new short[w*h];
    for(int y=0;y<h;y++){checkCancelled();for(int x=0;x<w;x++){
     int px=l+x*step,py=t+y*step,index=y*w+x;
     if(er>el&&eb>et&&px>=el&&px<er&&py>=et&&py<eb)continue;
@@ -232,6 +259,7 @@ public final class ArcadeVision {
     if(high<125&&high-low<65&&high>12)mask[index]|=DARK;
     if(high<65&&high-low<30&&high>12)mask[index]|=DARK_CAR;
     if(green>50&&green>red*1.12f&&green>blue*1.15f)mask[index]|=GREEN;
+    if(high>100&&high-low>48)mask[index]|=SATURATED;
    }}
   }
   float fraction(int bit,float l,float t,float r,float b){
@@ -243,8 +271,8 @@ public final class ArcadeVision {
   }
   List<Blob> blobs(int bit){
    List<Blob> out=new ArrayList<>();
-   // One bounded workspace per frame, reused for all eight color channels.
-   if(visited==null){visited=new byte[mask.length];queue=new int[mask.length];}
+   // One bounded workspace per frame, reused for all color channels.
+   if(visited==null){visited=new short[mask.length];queue=new int[mask.length];}
    for(int start=0;start<mask.length;start++){
     if((start&4095)==0)checkCancelled();if((visited[start]&bit)!=0||(mask[start]&bit)==0)continue;
     int head=0,tail=1,minX=start%w,maxX=minX,minY=start/w,maxY=minY;queue[0]=start;visited[start]|=bit;
