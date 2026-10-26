@@ -48,6 +48,7 @@ public final class PilotUiInstrumentation extends Instrumentation {
     private DemoActivity demo;
     private long started;
     private long limit;
+    private String bubblePixelSample="not sampled";
 
     @Override public void onCreate(Bundle arguments) {
         super.onCreate(arguments);
@@ -367,7 +368,10 @@ public final class PilotUiInstrumentation extends Instrumentation {
         require(!onMain(()->booleanField("playingGrid")),"Choosing the bubble area silently started input");
         bindWindow(fixturePackage);
         if(!compact())click("Свернуть");
-        require(bubblePairPixels(arena,true),"Fixture screenshot did not show both red target circles before dispatch");
+        // ACTION_CLICK/layout flags can finish before SurfaceFlinger has
+        // removed the expanded overlay from the actual screenshot. Wait for
+        // the original, unmodified target colors to become visible.
+        awaitBubblePairPixels(arena,true,5_000,"Fixture screenshot did not show both red target circles before dispatch");
         addCheck("bubble_explicit_profile_and_manual_area",new JSONObject().put("bounds",arena.toShortString()).put("real_region_touches",true));
         if(compact())click("Развернуть");
         click("Старт");
@@ -375,14 +379,17 @@ public final class PilotUiInstrumentation extends Instrumentation {
         await(()->markerBounds("LOCALPILOT_BUBBLE_SHOTS_1")!=null,20_000,"No real aim/release reached the independent bubble fixture");
         await(()->onMain(()->((BubbleSession)field("bubbleSession")).verified()>=1),12_000,"Delivered bubble gesture did not yield the predicted visually verified board");
         int verified=onMain(()->((BubbleSession)field("bubbleSession")).verified());
-        require(bubblePairPixels(arena,false),"Predicted removal is not visible in the real Android screenshot");
+        awaitBubblePairPixels(arena,false,5_000,"Predicted removal is not visible in the real Android screenshot");
         click("STOP");
         await(()->!armed()&&!onMain(()->booleanField("busy")),4_000,"Bubble STOP did not revoke the gesture session");
         long sent=onMain(()->((Number)field("dispatchedInputs")).longValue());
         SystemClock.sleep(1_100);
         require(onMain(()->!gate().armed()&&!permit().allows(gate().epoch(),SystemClock.elapsedRealtime())
                 &&!booleanField("playingGrid")&&((Number)field("dispatchedInputs")).longValue()==sent),"Bubble input resumed after STOP");
-        require(markerBounds("LOCALPILOT_BUBBLE_SHOTS_1")!=null&&bubblePairPixels(arena,false),"Stopped fixture changed after its first accepted ordinary shot");
+        require(markerBounds("LOCALPILOT_BUBBLE_SHOTS_1")!=null,"Stopped fixture no longer reports its first accepted ordinary shot");
+        awaitBubblePairPixels(arena,false,3_000,"Stopped fixture changed after its first accepted ordinary shot");
+        require(onMain(()->!gate().armed()&&!permit().allows(gate().epoch(),SystemClock.elapsedRealtime())
+                &&((Number)field("dispatchedInputs")).longValue()==sent),"Bubble input resumed while the final screenshot settled");
         addCheck("bubble_real_screenshot_aim_release_verification_stop",new JSONObject()
                 .put("fixture","independent synthetic test-APK view")
                 .put("visible_target_cells_before",9).put("visible_target_cells_after",7)
@@ -390,17 +397,36 @@ public final class PilotUiInstrumentation extends Instrumentation {
                 .put("red_pair_pixel_removal",true).put("stable_after_stop_ms",1_100));
     }
 
+    private void awaitBubblePairPixels(Rect arena,boolean before,long timeout,String failure)throws Exception{
+        long end=Math.min(limit,SystemClock.uptimeMillis()+timeout);
+        do{
+            if(bubblePairPixels(arena,before))return;
+            SystemClock.sleep(100);
+        }while(SystemClock.uptimeMillis()<end);
+        String overlay=onMain(()->{
+            View view=(View)field("panel");Rect visible=new Rect();
+            if(view!=null)view.getGlobalVisibleRect(visible);
+            return " compact="+booleanField("panelCompact")+" panel="+visible.toShortString()+" picker="+(field("picker")!=null);
+        });
+        throw new AssertionError(failure+"; "+bubblePixelSample+overlay);
+    }
+
     private boolean bubblePairPixels(Rect arena,boolean before){
-        Bitmap screenshot=automation.takeScreenshot();if(screenshot==null)return false;
+        Bitmap screenshot=automation.takeScreenshot();if(screenshot==null){bubblePixelSample="null screenshot";return false;}
         try{
             float d=arena.width()/7f;int expected=before?0xe52c32:0x87ceeb;
+            boolean matches=true;StringBuilder sample=new StringBuilder("arena=").append(arena.toShortString())
+                    .append(" screenshot=").append(screenshot.getWidth()).append('x').append(screenshot.getHeight())
+                    .append(" expected=").append(Integer.toHexString(expected)).append(" probes=");
             for(int col=0;col<2;col++){
                 int x=Math.round(arena.left+(.8f+col)*d),y=Math.round(arena.top+1.5f*d);
-                if(x<0||x>=screenshot.getWidth()||y<0||y>=screenshot.getHeight())return false;
+                sample.append('(').append(x).append(',').append(y).append(")=");
+                if(x<0||x>=screenshot.getWidth()||y<0||y>=screenshot.getHeight()){sample.append("outside ");matches=false;continue;}
                 int rgb=screenshot.getPixel(x,y),r=(rgb>>16&255)-(expected>>16&255),g=(rgb>>8&255)-(expected>>8&255),b=(rgb&255)-(expected&255);
-                if(r*r+g*g+b*b>55*55)return false;
+                sample.append(Integer.toHexString(rgb&0xffffff)).append(' ');
+                if(r*r+g*g+b*b>55*55)matches=false;
             }
-            return true;
+            bubblePixelSample=sample.toString();return matches;
         }finally{screenshot.recycle();}
     }
 
@@ -413,7 +439,7 @@ public final class PilotUiInstrumentation extends Instrumentation {
         // as a caller because it belongs to a different installed UID.
         getTargetContext().startActivity(new Intent().setClassName(fixturePackage, CaptureFixtureActivity.class.getName())
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK));
-        await(() -> markerBounds("LOCALPILOT_CAPTURE_FIXTURE") != null, 5_000, "Isolated projection fixture did not launch");
+        await(() -> markerBounds("LOCALPILOT_CAPTURE_FIXTURE") != null, 8_000, "Projection fixture marker did not become visible after its single launch");
         onMain(()->{service.selectInstalledTarget(fixturePackage,"Capture acceptance");return null;});
         await(()->present(ArcadeProfile.ARI.label),6_000,"New external app reused the previous 2048 profile instead of requesting its mechanic");
         click(ArcadeProfile.ARI.label);
@@ -529,6 +555,12 @@ public final class PilotUiInstrumentation extends Instrumentation {
             try { Rect found = markerBounds(root, marker, 0, remaining); if (found != null) return found; }
             finally { root.recycle(); }
         }
+        // During an Activity transition within the same fixture package,
+        // window-list roots may lag the actual focused content. Query the real
+        // active root as well, with its own bounded traversal; never infer a
+        // marker from package identity or an ActivityManager launch record.
+        AccessibilityNodeInfo active=automation.getRootInActiveWindow();
+        if(active!=null)try{return markerBounds(active,marker,0,new int[]{2_000});}finally{active.recycle();}
         return null;
     }
 
