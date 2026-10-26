@@ -17,8 +17,15 @@
 Код APK: 63220aac3851bf5ab65815d4ee82be30ff085bfb. Build CI40287681205 PASS;
 Android CI40287681194: API30/35/36 PASS, по 13 сценариев существующего runner.
 Локальная сборка/lint PASS (0 errors, 46 warnings); Dev-сертификат совпадает.
-Поставка: release/LocalPilot_Android_0.7.29_dev/ — APK, source.zip, bundle.zip,
+Поставка: release/delivery/LocalPilot_Android_0.7.29_dev/ — APK, source.zip, bundle.zip,
 MANIFEST.json и SHA256SUMS. Финальный sourceCommit с документацией — в manifest.
+GitHub: исходники отправлены в sync/localpilot-android-0711. Публикация файлов
+v0.7.29-dev не завершена: CONNECT к uploads.github.com отклонён proxy HTTP403;
+публичный Release отсутствует (404). Не давать несуществующие ссылки на assets.
+Сохранён черновик сети с добавлением uploads.github.com и
+results-receiver.actions.githubusercontent.com (для логов CI); он НЕ применён.
+Нужно Review/Save/Publish в настройках среды. После применения повторить
+загрузку этих локальных артефактов, сохраняя Dev-подпись; APK из CI не подменять.
 Это не полная поддержка всех десяти описаний: автоматическое наведение и выстрел
 в «Шипучке», Hexa Sort, бурение и прыжки на врагов ещё не реализованы; отдельный режим
 цепочек ограничен прямой линией/диагональю, без ломаного drag-пути.
