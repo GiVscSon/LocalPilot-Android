@@ -357,7 +357,9 @@ public final class PilotUiInstrumentation extends Instrumentation {
         if(!onMain(()->field("picker")!=null)){
             bindWindow(fixturePackage);click("Область");
         }
-        await(()->markerBounds("Выделение области игры 1 на 1")!=null&&present("Готово"),4_000,"Bubble arena picker is unavailable");
+        // Done is intentionally disabled until both corners exist. Presence()
+        // searches enabled controls, so use the visible area and cancel button.
+        await(()->markerBounds("Выделение области игры 1 на 1")!=null&&present("STOP · отмена"),4_000,"Bubble arena picker is unavailable");
         Rect arena=markerBounds("LOCALPILOT_BUBBLE_ARENA");require(arena!=null&&!arena.isEmpty(),"Bubble arena geometry disappeared");
         tapAt(arena.left,arena.top);tapAt(arena.right,arena.bottom);
         require(touchOwnControl("Готово"),"Bubble area Done control could not receive a real tap");
