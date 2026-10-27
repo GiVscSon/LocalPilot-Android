@@ -53,7 +53,7 @@ public final class GridPuzzleSession {
    // A newly recognized UNKNOWN or a moving hint is not game progress.
    // When either snapshot is incomplete, require at least two changed
    // *known-to-known* cell identities on two distinct stable post-ACK frames.
-   if(partialPending||hasUnknown(cells)){
+   if(partialPending||hasUnknown(cells)||predictedImpact!=null){
     int shared=0,changed=0;
     for(int i=0;i<cells.length;i++)if(before[i]>=0&&cells[i]>=0){
      shared++;if(before[i]!=cells[i])changed++;

@@ -95,6 +95,19 @@ public final class GridPartialVerifyTest {
   check(session.observePartial(6,6,after,new BitSet(),2300,2300)==GridPuzzleSession.Status.READY
     &&session.verifiedChanges()==1,"static partial field never earns a second result");
 
+  int[] complete=scene();for(int i=12;i<=18;i++)complete[i]=100+i;
+  GridPuzzleSession full=new GridPuzzleSession();
+  var fullMove=GridPuzzlePolicy.choose(new GridPuzzle(6,6,complete),GridPuzzlePolicy.Mode.SWAP_MATCH3,2,0,0,new BitSet());
+  check(fullMove!=null,"complete board has a move");
+  full.observe(6,6,complete,1000,1000);full.observe(6,6,complete,1100,1100);
+  full.sent(complete,1200,fullMove);full.acknowledge(1250);
+  int[] unrelatedFull=complete.clone();unrelatedFull[30]=91;unrelatedFull[31]=92;
+  full.observe(6,6,unrelatedFull,1500,1500);
+  check(full.observe(6,6,unrelatedFull,1600,1600)==GridPuzzleSession.Status.WAIT_RESPONSE,"complete board unrelated changes do not verify action");
+  int[] relevantFull=complete.clone();int[] footprint=fullMove.clearedCells();relevantFull[footprint[0]]=90;relevantFull[footprint[1]]=91;
+  full.observe(6,6,relevantFull,1700,1700);
+  check(full.observe(6,6,relevantFull,1800,1800)==GridPuzzleSession.Status.CHANGED,"stable local changes verify response");
+
   GridPuzzleSession noResponse=new GridPuzzleSession();
   noResponse.observePartial(6,6,cells,new BitSet(),1000,1000);
   noResponse.observePartial(6,6,cells,new BitSet(),1100,1100);
