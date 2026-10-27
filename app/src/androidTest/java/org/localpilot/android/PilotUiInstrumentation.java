@@ -60,6 +60,19 @@ public final class PilotUiInstrumentation extends Instrumentation {
     private final Object traceLock=new Object();
     private final ArrayDeque<TraceEntry> lifecycleTrace=new ArrayDeque<>();
     private final ArrayDeque<TraceEntry> clickTrace=new ArrayDeque<>();
+    private final ArrayDeque<TraceEntry> slowMainTrace=new ArrayDeque<>();
+    private volatile long mainDispatchAt;
+    private volatile String mainDispatch="";
+    private volatile boolean samplingMain;
+    private Thread mainSampler;
+    private final android.util.Printer mainQueueMonitor=message->{
+        if(message.startsWith(">>>>>")){mainDispatchAt=SystemClock.uptimeMillis();mainDispatch=message;}
+        else if(message.startsWith("<<<<<")&&mainDispatchAt>0){
+            long elapsed=SystemClock.uptimeMillis()-mainDispatchAt;
+            if(elapsed>=500)appendTrace(slowMainTrace,20,"main dispatch "+elapsed+"ms "+mainDispatch.substring(0,Math.min(220,mainDispatch.length())));
+            mainDispatchAt=0;
+        }
+    };
     private String lastClickTrace="";
     private long traceSequence;
     private Application tracedApplication;
@@ -91,7 +104,30 @@ public final class PilotUiInstrumentation extends Instrumentation {
         Bundle result = new Bundle();
         boolean passed = false;
         try {
-            onMain(()->{tracedApplication=(Application)getTargetContext().getApplicationContext();tracedApplication.registerActivityLifecycleCallbacks(lifecycleCallbacks);return null;});
+            onMain(()->{tracedApplication=(Application)getTargetContext().getApplicationContext();tracedApplication.registerActivityLifecycleCallbacks(lifecycleCallbacks);android.os.Looper.getMainLooper().setMessageLogging(mainQueueMonitor);return null;});
+            samplingMain=true;
+            mainSampler=new Thread(()->{
+                long sampled=0;
+                while(samplingMain){
+                    long at=mainDispatchAt;
+                    if(at>0&&at!=sampled&&SystemClock.uptimeMillis()-at>=1000){
+                        sampled=at;StringBuilder stack=new StringBuilder("main stack: ");
+                        for(StackTraceElement frame:android.os.Looper.getMainLooper().getThread().getStackTrace()){
+                            if(stack.length()>1500)break;stack.append(frame).append(" | ");
+                        }
+                        appendTrace(slowMainTrace,20,stack.toString());
+                        for(java.util.Map.Entry<Thread,StackTraceElement[]> entry:Thread.getAllStackTraces().entrySet()){
+                            if(entry.getKey()==android.os.Looper.getMainLooper().getThread())continue;
+                            boolean relevant=false;for(StackTraceElement frame:entry.getValue())if(frame.getClassName().contains("AccessibilityInteractionClient")||frame.getClassName().contains("AccessibilityCache")){relevant=true;break;}
+                            if(!relevant)continue;
+                            StringBuilder other=new StringBuilder("accessibility thread ").append(entry.getKey().getName()).append(": ");
+                            for(StackTraceElement frame:entry.getValue()){if(other.length()>1100)break;other.append(frame).append(" | ");}
+                            appendTrace(slowMainTrace,20,other.toString());
+                        }
+                    }
+                    SystemClock.sleep(250);
+                }
+            },"acceptance-main-sampler");mainSampler.setDaemon(true);mainSampler.start();
             automation = getUiAutomation(UiAutomation.FLAG_DONT_SUPPRESS_ACCESSIBILITY_SERVICES);
             android.accessibilityservice.AccessibilityServiceInfo info = automation.getServiceInfo();
             info.flags |= android.accessibilityservice.AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
@@ -137,6 +173,7 @@ public final class PilotUiInstrumentation extends Instrumentation {
                 evidence.put("stack", stack.toString());
                 evidence.put("visible_ui", visibleUi());
                 evidence.put("interaction_trace",interactionTrace());
+                evidence.put("slow_main_trace",slowMainTrace());
                 String fixtureState=bubbleFixtureState();
                 if(service!=null)evidence.put("own_state",onMain(()->"connected="+(PilotService.instance==service)+" registered="+field("panelRegistered")+" panel="+(field("panel")!=null)+" note="+field("note")+" demo_score="+(demo==null?-1:visibleScore(demo.getWindow().getDecorView()))+" demo_verified="+field("demoVerified")+" gesture="+field("lastGestureContext")+bubbleControllerState())+" fixture="+fixtureState);
                 if (service != null) evidence.put("metrics", onMain(() -> service.exportMetrics()));
@@ -144,6 +181,7 @@ public final class PilotUiInstrumentation extends Instrumentation {
                 result.putString("cleanup_error", secondary.toString());
             }
         } finally {
+            samplingMain=false;
             try {
                 if (automation != null) automation.setRotation(UiAutomation.ROTATION_UNFREEZE);
                 if (service != null) onMain(() -> { service.hidePanel(); return null; });
@@ -151,7 +189,7 @@ public final class PilotUiInstrumentation extends Instrumentation {
             try {
                 evidence.put("interaction_trace",interactionTrace());
                 evidence.put("safe_fallback_touches",safeFallbackTouches);
-                if(tracedApplication!=null)onMain(()->{tracedApplication.unregisterActivityLifecycleCallbacks(lifecycleCallbacks);return null;});
+                if(tracedApplication!=null)onMain(()->{android.os.Looper.getMainLooper().setMessageLogging(null);tracedApplication.unregisterActivityLifecycleCallbacks(lifecycleCallbacks);return null;});
                 evidence.put("result", passed ? "PASS" : "FAIL");
                 evidence.put("duration_ms", SystemClock.uptimeMillis() - started);
                 File folder = getTargetContext().getExternalFilesDir("instrumentation");
@@ -203,6 +241,11 @@ public final class PilotUiInstrumentation extends Instrumentation {
 
     private void checkCollapseAndReopen() throws Exception {
         launchDemo();
+        click("Игра");click("Гексон · пока не поддерживается");
+        await(()->onMain(()->booleanField("unsupportedGame")&&!gate().armed()),3_000,"Unsupported game was not safely marked");
+        click("Игра");click(ArcadeProfile.ARI.label);
+        await(()->onMain(()->!booleanField("unsupportedGame")&&field("overlayDialog")==null),3_000,"Supported game did not clear the unsupported selection");
+        addCheck("unsupported_game_selection_disarmed",new JSONObject().put("game","Гексон").put("input_armed",false));
         bindDemoWindow();
         await(this::armed, 2_000, "Overlay did not bind to DemoActivity");
         allowInput();
@@ -685,14 +728,18 @@ public final class PilotUiInstrumentation extends Instrumentation {
         String query="@contains:"+pkg;
         // Require the current live dialog, but do not equate decor bounds with
         // accessibility window frames: shadows/insets differ across Android.
-        await(()->onMain(()->{
+        await(()->{
+            String state=onMain(()->"epoch="+gate().epoch()+" note="+field("note")+" dialog="+(field("overlayDialog")!=null));
+            traceClick("window-selection "+state+" "+windowSummary());
+            return onMain(()->{
                 Object object=field("overlayDialog");
                 if(!(object instanceof android.app.Dialog dialog)||!dialog.isShowing())return false;
                 View decor=dialog.getWindow().getDecorView();
                 if(!decor.isLaidOut())return false;
                 Rect row=ownControlBounds(decor,query);
                 return row!=null&&!row.isEmpty();
-            }),3_000,"The current window dialog has no visible target row");
+            });
+        },3_000,"The current window dialog has no visible target row");
         // click() performs a fresh lookup and refreshes the actionable node.
         click(query);
         await(()->onMain(()->gate().armed()&&pkg.equals(field("target"))&&field("overlayDialog")==null),3_000,"Window selection did not commit before the next control");
@@ -735,6 +782,11 @@ public final class PilotUiInstrumentation extends Instrumentation {
             try {
                 if(!node.refresh()||!node.isVisibleToUser()||!node.isEnabled()||!node.isClickable()){traceClick("click label="+text+" path=node refreshed-actionable=false");return false;}
                 Rect bounds=new Rect();node.getBoundsInScreen(bounds);
+                // Android 11 shares its interaction cache with the service in
+                // this instrumentation process. Discard lookup cache before a
+                // click can trigger content-change refresh on UiAutomation.
+                // The live node still performs the actual Android action.
+                if(android.os.Build.VERSION.SDK_INT<=30)refreshAutomationCache();
                 boolean handled=node.performAction(AccessibilityNodeInfo.ACTION_CLICK);
                 traceClick("click label="+text+" path=node pkg="+node.getPackageName()+" window="+node.getWindowId()+" bounds="+bounds.toShortString()+" handled="+handled);
                 return handled;
@@ -746,13 +798,16 @@ public final class PilotUiInstrumentation extends Instrumentation {
     private boolean scrollForward() {
         int[] remaining = {2_000};
         for (AccessibilityWindowInfo window : automation.getWindows()) {
-            if(window.getType()!=AccessibilityWindowInfo.TYPE_APPLICATION||!window.isFocused())continue;
+            boolean app=window.getType()==AccessibilityWindowInfo.TYPE_APPLICATION&&window.isFocused();
+            boolean ownOverlay=window.getType()==AccessibilityWindowInfo.TYPE_ACCESSIBILITY_OVERLAY;
+            if(!app&&!ownOverlay)continue;
             AccessibilityNodeInfo root = window.getRoot();if (root == null) continue;
             try {
                 String pkg=String.valueOf(root.getPackageName());
                 // A late app tree must never turn a test scroll into a system
                 // notification/quick-settings gesture or affect another app.
                 if(!pkg.equals(getTargetContext().getPackageName())&&!pkg.equals(getContext().getPackageName()))continue;
+                if(ownOverlay&&!pkg.equals(getTargetContext().getPackageName()))continue;
                 if (scrollForward(root, 0, remaining)) return true;
             }
             finally { root.recycle(); }
@@ -773,8 +828,13 @@ public final class PilotUiInstrumentation extends Instrumentation {
     }
 
     private boolean present(String text) {
+        // The test and PilotService share a process. Prefer the actual visible
+        // own view before asking UiAutomation for a duplicate accessibility
+        // tree; on API 30 that tree can hold the global cache lock while it
+        // waits on the same main looper. External UI still uses UiAutomation.
+        try{if(onMain(()->ownControlBounds(text)!=null))return true;}catch(Exception ignored){}
         AccessibilityNodeInfo node = findText(text);
-        if (node == null)try{return onMain(()->ownControlBounds(text)!=null);}catch(Exception error){return false;}
+        if (node == null)return false;
         node.recycle();
         return true;
     }
@@ -914,9 +974,12 @@ public final class PilotUiInstrumentation extends Instrumentation {
     }
     private JSONArray interactionTrace(){
         synchronized(traceLock){
-            java.util.ArrayList<TraceEntry> entries=new java.util.ArrayList<>(lifecycleTrace);entries.addAll(clickTrace);entries.sort(java.util.Comparator.comparingLong(entry->entry.sequence));
+            java.util.ArrayList<TraceEntry> entries=new java.util.ArrayList<>(lifecycleTrace);entries.addAll(clickTrace);entries.addAll(slowMainTrace);entries.sort(java.util.Comparator.comparingLong(entry->entry.sequence));
             JSONArray result=new JSONArray();for(TraceEntry entry:entries)result.put(entry.at+"ms "+entry.message);return result;
         }
+    }
+    private JSONArray slowMainTrace(){
+        synchronized(traceLock){JSONArray result=new JSONArray();for(TraceEntry entry:slowMainTrace)result.put(entry.at+"ms "+entry.message);return result;}
     }
     private void drag(float x,float y,float endX,float endY)throws Exception{
         long down=SystemClock.uptimeMillis();
@@ -967,14 +1030,18 @@ public final class PilotUiInstrumentation extends Instrumentation {
             out.append("id=").append(window.getId()).append(" type=").append(window.getType())
                 .append(" focused=").append(window.isFocused()).append(" bounds=").append(bounds.toShortString());
             AccessibilityNodeInfo root=window.getRoot();
-            try{out.append(" root=").append(root==null?"null":root.getPackageName()).append(';');}
+            try{out.append(" root=").append(root==null?"null":root.getPackageName());if(root!=null)out.append(" rootWindow=").append(root.getWindowId());out.append(';');}
             finally{if(root!=null)root.recycle();}
         }
     }
 
     private String visibleUi(){
         StringBuilder text=new StringBuilder();int[] left={120};
-        for(AccessibilityWindowInfo window:automation.getWindows()){
+        java.util.List<AccessibilityWindowInfo> windows=automation.getWindows();
+        // The focused system consent or ANR dialog is the relevant failure
+        // evidence. Status/navigation trees must not consume the bounded dump.
+        for(int pass=0;pass<2;pass++)for(AccessibilityWindowInfo window:windows){
+            if(window.isFocused()!=(pass==0))continue;
             AccessibilityNodeInfo root=window.getRoot();if(root==null)continue;
             try{describe(root,text,0,left);}finally{root.recycle();}
         }
@@ -983,6 +1050,7 @@ public final class PilotUiInstrumentation extends Instrumentation {
     private void describe(AccessibilityNodeInfo node,StringBuilder text,int depth,int[] left){
         if(depth>24||--left[0]<0||text.length()>3500)return;
         if(node.isVisibleToUser())text.append(node.getPackageName()).append(' ').append(node.getClassName())
+                .append(" id=").append(node.getViewIdResourceName()).append(" enabled=").append(node.isEnabled())
                 .append(" clickable=").append(node.isClickable()).append(" text=")
                 .append(String.valueOf(node.getText()).substring(0,Math.min(90,String.valueOf(node.getText()).length()))).append('\n');
         for(int i=0;i<node.getChildCount();i++){

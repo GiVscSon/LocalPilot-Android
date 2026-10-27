@@ -9,6 +9,11 @@ import java.util.Set;
  * Neutral/special icons and empty cells are uncertain, not assumed ordinary puzzle pieces. */
 public final class GridPuzzleVision {
  public interface Pixels { int get(int x,int y); }
+ /** Trace-only reasons; these labels do not authorize a game gesture. */
+ public enum CellReason {
+  KNOWN, KNOWN_SPECIAL, PROTECTED_SKULL, EXCLUDED_OVERLAY,
+  RING_NO_MATCH, RING_AMBIGUOUS, COLOR_NO_MATCH, COLOR_AMBIGUOUS, NO_SAMPLE
+ }
  private static final int FEATURES=42,MAX_TYPES=24;
  private static final float MATCH=.14f,AMBIGUITY=.025f;
  private GridPuzzleVision(){}
@@ -33,15 +38,51 @@ public final class GridPuzzleVision {
   public final float confidence;
   private final int[] values;
   private final Palette palette;
-  private final boolean usable;
+  private final boolean usable,partialUsable;
   private final java.util.BitSet specialCellsMask;
-  private Observation(int rows,int cols,long time,int[] cells,Palette palette,float confidence,boolean usable,java.util.BitSet special){specialCellsMask=(java.util.BitSet)special.clone();this.rows=rows;this.cols=cols;timestampMs=time;values=cells.clone();this.palette=palette;this.confidence=confidence;this.usable=usable;}
+  private final CellReason[] cellReasons;
+  private Observation(int rows,int cols,long time,int[] cells,Palette palette,float confidence,boolean usable,boolean partialUsable,java.util.BitSet special,CellReason[] reasons){
+   specialCellsMask=(java.util.BitSet)special.clone();this.rows=rows;this.cols=cols;timestampMs=time;
+   values=cells.clone();this.palette=palette;this.confidence=confidence;this.usable=usable;this.partialUsable=partialUsable;
+   cellReasons=reasons.clone();
+  }
+  public CellReason reason(int row,int col){
+   if(row<0||row>=rows||col<0||col>=cols)throw new IllegalArgumentException("cell");
+   return cellReasons[row*cols+col];
+  }
+  /** Row-major indices of cells the current detector could not identify. */
+  public int[] unknownIndices(){
+   int count=0;for(int value:values)if(value<0)count++;
+   int[] out=new int[count];int n=0;
+   for(int i=0;i<values.length;i++)if(values[i]<0)out[n++]=i;
+   return out;
+  }
+  /** Bounded, pixel-free diagnostics suitable for the on-screen status panel. */
+  public String unknownSummary(int limit){
+   if(limit<0||limit>rows*cols)throw new IllegalArgumentException("limit");
+   StringBuilder out=new StringBuilder();int shown=0,total=0;
+   for(int i=0;i<values.length;i++)if(values[i]<0){
+    total++;
+    if(shown<limit){
+     if(shown>0)out.append("; ");
+     out.append("R").append(i/cols+1).append("C").append(i%cols+1).append(":").append(cellReasons[i]);
+     shown++;
+    }
+   }
+   if(total>shown)out.append(" (+").append(total-shown).append(")");
+   return out.toString();
+  }
   public java.util.BitSet specialCellsMask(){return (java.util.BitSet)specialCellsMask.clone();}
   public int[] cells(){return values.clone();}
   public int type(int row,int col){if(row<0||row>=rows||col<0||col>=cols)throw new IllegalArgumentException("cell");return values[row*cols+col];}
   public Palette palette(){return palette;}
   public boolean complete(){for(int i=0;i<values.length;i++)if(values[i]<1&&!(values[i]==0&&specialCellsMask.get(i)))return false;return true;}
   public boolean usable(){return usable;}
+  /** A geometrically stable incomplete board: unknowns remain -1, and
+   * overlay occlusion is never accepted as partial evidence. The controller
+   * still requires an authenticated target, two fresh frames and post-ACK CV.
+   */
+  public boolean partialUsable(){return partialUsable;}
   /** Depends on dimensions and symbolic cells, never the timestamp or palette serialization. */
   public long signature(){long h=0xcbf29ce484222325L;h=(h^rows)*0x100000001b3L;h=(h^cols)*0x100000001b3L;for(int i=0;i<values.length;i++){h=(h^values[i])*0x100000001b3L;h=(h^(specialCellsMask.get(i)?1:0))*0x100000001b3L;}return h;}
  }
@@ -57,14 +98,21 @@ public final class GridPuzzleVision {
   if(pixels==null||rows<3||rows>10||cols<3||cols>10||left<0||top<0||right-left<cols*12||bottom-top<rows*12||timestampMs<0)throw new IllegalArgumentException("grid geometry");
   float[][] rings=new float[rows*cols][];java.util.BitSet special=new java.util.BitSet(rows*cols);
   float[][] samples=new float[rows*cols][];int[] cells=new int[samples.length];java.util.Arrays.fill(cells,-1);
+  CellReason[] reasons=new CellReason[samples.length];
+  java.util.Arrays.fill(reasons,CellReason.NO_SAMPLE);
   for(int row=0;row<rows;row++)for(int col=0;col<cols;col++){
    float l=left+col*(right-left)/(float)cols,t=top+row*(bottom-top)/(float)rows;
    float r=left+(col+1)*(right-left)/(float)cols,b=top+(row+1)*(bottom-top)/(float)rows;
-   if(excludedRight>excludedLeft&&excludedBottom>excludedTop&&Math.max(l,excludedLeft)<Math.min(r,excludedRight)&&Math.max(t,excludedTop)<Math.min(b,excludedBottom))continue;
-   if(protectSkulls&&protectedSkull(pixels,l,t,r,b)){cells[row*cols+col]=0;special.set(row*cols+col);continue;}
+   int index=row*cols+col;
+   if(excludedRight>excludedLeft&&excludedBottom>excludedTop&&Math.max(l,excludedLeft)<Math.min(r,excludedRight)&&Math.max(t,excludedTop)<Math.min(b,excludedBottom)){
+    reasons[index]=CellReason.EXCLUDED_OVERLAY;continue;
+   }
+   if(protectSkulls&&protectedSkull(pixels,l,t,r,b)){
+    cells[index]=0;special.set(index);reasons[index]=CellReason.PROTECTED_SKULL;continue;
+   }
    float[] ring=ring(pixels,l,t,r,b);
-   if(ring!=null){rings[row*cols+col]=ring;continue;}
-   samples[row*cols+col]=describe(pixels,l,t,r,b);
+   if(ring!=null){rings[index]=ring;reasons[index]=CellReason.RING_NO_MATCH;continue;}
+   samples[index]=describe(pixels,l,t,r,b);reasons[index]=CellReason.COLOR_NO_MATCH;
   }
   List<float[]> prototypes=new ArrayList<>();if(previous!=null)for(float[] d:previous.descriptors)prototypes.add(d.clone());
   int fixed=prototypes.size();int[] counts=new int[MAX_TYPES];
@@ -84,19 +132,35 @@ public final class GridPuzzleVision {
      float d=ringDistance(rings[index],prototypes.get(n));
      if(d<first){second=first;first=d;nearest=n;}else second=Math.min(second,d);
     }
-    if(nearest<0||first>.09f||second-first<.03f){complete=false;continue;}
-    cells[index]=nearest+1;special.set(index);distinct.add(nearest);quality+=1-first/.09f;continue;
+    if(nearest<0||first>.09f){reasons[index]=CellReason.RING_NO_MATCH;complete=false;continue;}
+    if(second-first<.03f){reasons[index]=CellReason.RING_AMBIGUOUS;complete=false;continue;}
+    cells[index]=nearest+1;special.set(index);reasons[index]=CellReason.KNOWN_SPECIAL;
+    distinct.add(nearest);quality+=1-first/.09f;continue;
    }
    if(sample==null){complete=false;continue;}
    int nearest=-1;float first=Float.POSITIVE_INFINITY,second=Float.POSITIVE_INFINITY;
    for(int n=0;n<prototypes.size();n++){float d=distance(sample,prototypes.get(n));if(d<first){second=first;first=d;nearest=n;}else second=Math.min(second,d);}
-   if(nearest<0||first>MATCH||second-first<AMBIGUITY){complete=false;continue;}
-   cells[index]=nearest+1;distinct.add(nearest);quality+=Math.max(0,1-first/MATCH);
+   if(nearest<0||first>MATCH){reasons[index]=CellReason.COLOR_NO_MATCH;complete=false;continue;}
+   if(second-first<AMBIGUITY){reasons[index]=CellReason.COLOR_AMBIGUOUS;complete=false;continue;}
+   cells[index]=nearest+1;reasons[index]=CellReason.KNOWN;
+   distinct.add(nearest);quality+=Math.max(0,1-first/MATCH);
   }
   // A previously learned palette is not evidence that the current picture is a
   // puzzle board. Monochrome textures/menus must abstain even if their colour is known.
-  boolean usable=complete&&distinct.size()>=2&&distinct.size()<=12;
-  return new Observation(rows,cols,timestampMs,cells,new Palette(prototypes),usable?.72f+.23f*quality/samples.length:0,usable,special);
+  boolean sceneDiverse=distinct.size()>=2&&distinct.size()<=12;
+  boolean usable=complete&&sceneDiverse;
+  int known=0;boolean overlayOccluded=false;
+  for(int i=0;i<cells.length;i++){
+   if(cells[i]>0||cells[i]==0&&special.get(i))known++;
+   if(reasons[i]==CellReason.EXCLUDED_OVERLAY)overlayOccluded=true;
+  }
+  // Incomplete boards need strong, independent evidence. One unknown
+  // is no longer a global stop, but the ROI still must be mostly readable.
+  boolean partialUsable=!complete&&sceneDiverse&&!overlayOccluded
+    &&known>=Math.max(6,(cells.length*72+99)/100);
+  float resultConfidence=usable?.72f+.23f*quality/samples.length:
+    partialUsable?.60f+.20f*quality/samples.length:0f;
+  return new Observation(rows,cols,timestampMs,cells,new Palette(prototypes),resultConfidence,usable,partialUsable,special,reasons);
  }
 
  private static int sample(Pixels pixels,float l,float t,float r,float b,float x,float y){return pixels.get((int)(l+x*(r-l)),(int)(t+y*(b-t)));}

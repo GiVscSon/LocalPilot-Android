@@ -1,3 +1,12 @@
+# Обновление панели и расследование API30 · 27 октября
+
+Рабочая ветка fix/grid-diagnostics-bubble-hud-20261027 / PR #8. В меню игры
+добавлены честные неподдерживаемые пункты Гексон и Котобашня; в «Ещё» есть
+справка по панели. На поздний callback жеста теперь проверяется срок.
+Подробности, CI и доказанный конфликт тестового UiAutomation с системным
+AccessibilityCache: docs/ACCEPTANCE_INVESTIGATION_0.7.34.ru.md. Стабильный
+релиз и физическая приёмка не подтверждены.
+
 # НОВАЯ ОБЩАЯ ИНЖЕНЕРНАЯ ТОЧКА ПРОДОЛЖЕНИЯ · 27.10.2026
 
 Главный документ для других чатов/Codex с матрицей и ссылками на исходники: [LOCALPILOT_UNIFIED_HANDOFF_2026-10-27.ru.md](docs/LOCALPILOT_UNIFIED_HANDOFF_2026-10-27.ru.md).
@@ -933,3 +942,10 @@ Git read/push по github.com работает; main не менялась. Пр
 Пользователь попросил реальные игровые скриншоты для телефона и планшета. Запросы itunes.apple.com и play.google.com блокируются прокси: домены отсутствуют в allowlist. Изображения не получены, размеры не подтверждены. В сохранённый черновик среды добавлены itunes.apple.com,apps.apple.com,play.google.com,play-lh.googleusercontent.com,*.mzstatic.com с сохранением прежних правил (включая api.github.com). Черновик не применяет сеть: нужны review/save/publish в настройках среды. После применения возобновить загрузку; фиксировать источник, версию, исходные размеры и phone/tablet-категорию. iOS-референс не считать кадром пользовательской Android-версии.
 
 Статус Android-приёмки 0.7.26: API 35 PASS; API 30 и 36 FAIL при открытии/выборе тестового окна. Причина не установлена. Поставка экспериментальная; подробности в docs/VALIDATION_0.7.26.txt.
+
+
+## НОВОЕ: 0.7.34-dev / code50, 27.10.2026
+**Рабочая RC-ветка:** `fix/grid-diagnostics-bubble-hud-20261027`. **Draft PR:** https://github.com/GiVscSon/LocalPilot-Android/pull/8 . **Roadmap:** https://github.com/GiVscSon/LocalPilot-Android/blob/fix/grid-diagnostics-bubble-hud-20261027/docs/ROADMAP_0.7.34.ru.md . **Описание:** `docs/RELEASE_0.7.34.ru.md`.
+- Java код: безопасный `PanelDocking`, повторная проверка post-layout bounds, координаты и причины UNKNOWN клеток, исправлена ложная 6×6 подпись Bubble.
+- Регрессия: 5000 геометрий в `tests/PanelDockingVerify.java`, CI BUILD/JVM был PASS на предыдущем code49; code50 проверять по текущему CI run.
+- Блокер физической/эмуляторной приёмки: https://github.com/GiVscSon/LocalPilot-Android/issues/7 , API30 выбор окна, API35 кнопка «Показать панель». APK/подпись и физическая установка НЕ проверены. Не выдавать 0.7.34 за stable, не переносить в main без полного контроля и тестирования.

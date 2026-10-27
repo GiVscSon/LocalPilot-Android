@@ -40,8 +40,12 @@ public final class GridPuzzleVisionTest {
    int[] copy=changed.cells();copy[0]=999;check(changed.type(0,0)!=999,"observation cells are immutable");
    var masked=GridPuzzleVision.detect((x,y)->token(x,y,left,top,size,rows,cols,types,colors,0),left,top,left+size*cols,top+size*rows,rows,cols,left+size,top+size,left+size*2,top+size*2,1600,restored);
    check(!masked.usable()&&!masked.complete()&&masked.type(1,1)==-1,"panel occlusion is unknown, never a token");
+   check(masked.reason(1,1)==GridPuzzleVision.CellReason.EXCLUDED_OVERLAY,"excluded cell reason preserves panel overlap");
+   check(java.util.Arrays.stream(masked.unknownIndices()).anyMatch(i->i==cols+1),"unknown indices identify the excluded cell");
+   check(masked.unknownSummary(3).contains("R2C2:EXCLUDED_OVERLAY"),"bounded per-cell status is readable");
    types[0]=-1;var missing=GridPuzzleVision.detect((x,y)->token(x,y,left,top,size,rows,cols,types,colors,0),left,top,left+size*cols,top+size*rows,rows,cols,0,0,0,0,1700,restored);
    check(!missing.usable()&&missing.type(0,0)==-1,"blank cell is uncertain, no fabricated empty tile");
+   check(missing.reason(0,0)!=GridPuzzleVision.CellReason.KNOWN,"missing symbol may not claim a known classification");
   }
   for(int color:new int[]{0,0xffffff,0x209030,0x808080}){var blank=GridPuzzleVision.detect((x,y)->color,0,0,420,420,7,7,0,0,0,0,1000,null);check(!blank.usable()&&blank.palette().size()==0,"uniform scene abstains");}
   var gradient=GridPuzzleVision.detect((x,y)->{int v=70+x/10+y/10;return v<<16|v<<8|v;},0,0,420,420,7,7,0,0,0,0,1000,null);check(!gradient.usable(),"smooth background abstains");
@@ -73,6 +77,8 @@ public final class GridPuzzleVisionTest {
    GridPuzzleVision.Pixels image=(x,y)->y/80*6+x/80==14?skullTile(x,y,eyes,redFrame):token(x,y,0,0,80,6,6,ordinary,vivid,0);
    var protectedBoard=GridPuzzleVision.detect(image,0,0,480,480,6,6,0,0,0,0,1400,null,true);
    check(eyes&&redFrame?protectedBoard.usable()&&protectedBoard.type(2,2)==0&&protectedBoard.specialCellsMask().get(14):!protectedBoard.specialCellsMask().get(14),"protected skull requires both face and red tile evidence");
+   if(eyes&&redFrame)check(protectedBoard.reason(2,2)==GridPuzzleVision.CellReason.PROTECTED_SKULL,
+     "protected skull carries a distinct diagnostic reason");
    var genericBoard=GridPuzzleVision.detect(image,0,0,480,480,6,6,0,0,0,0,1400,null);
    check(genericBoard.type(2,2)!=0,"generic mode cannot silently enable the skull preset");
   }

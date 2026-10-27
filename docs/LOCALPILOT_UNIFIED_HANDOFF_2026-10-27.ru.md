@@ -129,6 +129,27 @@
 **Приёмка:** фиксируем, какие именно семь клеток и почему отвергаются в обоих кадрах; устраняем ложное 6×6 на Bubble HUD; защита Stop, target/window/frame TTL остаётся; отдельные JVM/эмулятор/физическое устройство. На 27.10 новых JVM-испытаний и нативных прогонов **в этом исследовании не было**; код и APK НЕ изменены.
 
 
+## 8. 0.7.34-dev / code50, инженерная реализация 27.10.2026
+
+- [Шестиступенчатая матрица 0.7.34](ROADMAP_0.7.34.ru.md), [описание кандидата](RELEASE_0.7.34.ru.md), [Draft PR #8](https://github.com/GiVscSon/LocalPilot-Android/pull/8), ветка `fix/grid-diagnostics-bubble-hud-20261027`, base `sync/localpilot-android-0711`.
+- В `app/build.gradle` установлен `versionName 0.7.34`, `versionCode 50` (debug 0.7.34-dev). Это не релиз для установки; версия на телефоне не доказана.
+- Изменён код: `PanelDocking.java` с bounded placement у боковых/верхних/нижних границ; `PilotService.movePanelAway()` и повторный post-layout контроль `panelOutsideRoi()` для Grid/Bubble/2048/AutoBoard; фейл закрывает ввод. Сохранили ROI gate/STOP.
+- Диагностика `GridPuzzleVision.Observation.reason`, координаты первых неизвестных клеток и корректный мини-HUD Шипучки; нет снятия блока на неизвестные special/низкую уверенность.
+- `tests/PanelDockingTest.java` проверяет 5000 случайных раскладок на отсутствие любого пересечения, полноту поиска или безопасный отказ, `tests/PanelDockingVerify.java` включён в workflow. [Build/JVM 40488512182](https://github.com/GiVscSon/LocalPilot-Android/actions/runs/40488512182) зелёный для исходной версии кода до code50; обязательно проверить `0.7.34` head отдельно.
+- Обнаружены **реальные** emulator blockers [Issue #7](https://github.com/GiVscSon/LocalPilot-Android/issues/7): API30 `The current window dialog has no visible target row`, API35 `Visible clickable UI control not found: Показать панель`. Подтверждено чтением workflow job logs. Их нельзя списать только на Gradle или считать исправленными.
+- ВНЕ СКОУПА: полное решение 7/36, ходы на полусетке, угадывание бустеров, Stomp, HexaSort, автонажатие «Играть снова» и обнуление skippedFrames без профилирования. Продолжать строго по roadmap и issue. Физический Android/Яндекс Маркет **NOT RUN**.
+
+
+## Продолжение: панель и API30
+
+Изменения панели, проверка просроченного ACK и фактические результаты
+Android CI находятся в docs/ACCEPTANCE_INVESTIGATION_0.7.34.ru.md.
+Ограничение подписки UiAutomation не устранило блокировку и отменено.
+Стабильный релиз, три успешные матрицы и приёмка физического телефона
+не подтверждены.
+
+
+
 ## 9. Архитектурные рекомендации: проверка производительности и безопасности 27.10.2026
 
 Этот раздел составлен по семи новым предложенным архитектурным оптимизациям и **прямому чтению исходников Android** (статический аудит, не физический бенчмарк). Текущая предлагаемая диагностическая ветка: https://github.com/GiVscSon/LocalPilot-Android/tree/fix/grid-diagnostics-bubble-hud-20261027 ; её коммиты НЕ слиты в основной код, статус проверки уточнять перед использованием. GitHub Issue #4: https://github.com/GiVscSon/LocalPilot-Android/issues/4
@@ -196,3 +217,33 @@ Issue #1 Match World; #2 7 unknown; #3 Bubble HUD/ROI; #4 frame pacing/overlay/C
 - Лог `connected=true registered=true panel=true`, `note=Ожидаю список окон Android…`; найден overlay window id=21 bounds=[0,143][630,739], application window id=23 bounds=[0,0][1080,1920], focused=true. Эмулятор загрузился и Gradle собрал instrumentation успешно. `demo_verified=10` доказывает только встроенное демо в тесте, не Market.
 - Указание в dump `Crashed services` требует проверки отдельного crash-logcat/artifact; не заявлять как доказанную первопричину отсутствия строки диалога.
 - Новый [GitHub Issue #5](https://github.com/GiVscSon/LocalPilot-Android/issues/5) отслеживает проблему. Следующий эксперимент: compare bindWindow/Accessibility overlay UI row API30 vs API35 same state, сохранить реальные window-ID/focus/timing и доказать PASS на всей матрице без обхода ActionGate. Статус на реальном Android телефоне: NOT RUN.
+
+
+## 10. Синхронизация веток PR #8 и актуальное состояние CI (27.10.2026)
+- Два независимых дополнения документа были объединены **без удаления записей**: ветка `sync/localpilot-android-0711` содержит независимые исследования производительности, ROI-перекрытия и API30, а ветка кандидата `fix/grid-diagnostics-bubble-hud-20261027` содержит план и код 0.7.34-dev.
+- HEAD к моменту документального слияния: `0f71c7d63cc5f93f35a5edb7c8f9c49b053be72a`. [Build/JVM/packaging PASS](https://github.com/GiVscSon/LocalPilot-Android/actions/runs/40499115167). [Android device acceptance PASS на API30/35/36](https://github.com/GiVscSon/LocalPilot-Android/actions/runs/40499115218).
+- Ранее эмуляторная матрица часто падала. Один зелёный запуск на HEAD не означает **трёх последовательных успешных прогонов** на одном SHA. После слияния ветки нужен новый прогон на **новом merge SHA** и повторный цикл.
+- Механическое разрешение конфликта **не означает слияние PR #8 в целевую ветку**. PR сохранять draft, пока не пройдены обязательные проверки и не проведена физическая приёмка с проверкой данных, разрешений и APK-подписи.
+
+
+## 8. LOCALPILOT 0.7.34-dev: PARTIAL GRID + ONLINE EVIDENCE · 27.10.2026
+
+**Новый фактический код в PR #8** https://github.com/GiVscSon/LocalPilot-Android/pull/8
+После обращения пользователя «3 хода, затем неизвестная картинка, и всё останавливается» реализована **ограниченная**, а не безусловная непрерывность:
+
+- `GridPuzzlePolicy.choosePartial` допускает неизвестные -1 вне действия; не нажимает на UNKNOWN, skull/booster/special; требуется минимум 2/3 известного поля. Обычный `choose` остаётся строгим и совместимым с прежними тестами.
+- `GridPuzzleVision.Observation.partialUsable()` доступен только при минимум 72% идентифицированных клеток, 2–12 различимых типах, без пересечения ROI оверлеем. Если сцена не распознана, только read-only повторные кадры, никаких случайных жестов.
+- `GridPuzzleSession.observePartial`: два свежих устойчивых кадра до действия, Android ACK отдельно, затем минимум ДВА изменённых значения известных клеток на двух устойчивых post-ACK кадрах; изменение UNKNOWN→known само по себе не успех. Для частичного действия требуется изменение хотя бы одной клетки из предсказанных непосредственных затронутых позиций (from/to/cleared). При отсутствии подтверждения по deadline прежняя безопасная PAUSED, а не бесконечная серия нажатий.
+- `PilotService.gridStep` больше не обнуляет все 36 клеток при **достоверно** частичном распознавании. Вызывает `chooseAdaptive(...partialGrid...)`, оставляет `GridPuzzleVision` palette неполного поля в RAM и не сохраняет сомнительные изменения palette в долгоживущие preferences. На плохом ROI продолжает read-only поиск.
+- Новый `GridOnlineLearning`: по каждому **реально пост-ACK VERIFIED** ходу увеличивает счётчик успехов класса действия; при подтверждённом ACK без видимой реакции записывает отдельный `unconfirmed`. Версионированная строка `online-v1` хранится в `grid-puzzle` SharedPreferences в scope пакета/slot/режима; бонус ранжирования в интервале [-6,+6], применён ТОЛЬКО между уже допустимыми ходами. Это **инкрементальное онлайн-накопление подтверждённого опыта**, а не полноценный DQN/PPO/обучение всех десяти игр; не считать ACK наградой.
+- Добавлены `tests/GridPartialVerifyTest.java`, `tests/GridOnlineLearningTest.java`; оба включены в `tests/GridVerify.java`. Проверяются 7 неизвестных клеток из 36, запрет касания неизвестных/защищённых, overlay occlusion, неполная схема, неподвижный кадр, двухклеточная анимация ВНЕ области хода, отсутствующий ответ, возобновление корректных подтверждений, импорт и ограничение модели.
+- Точные code commits в PR #8: `528ae41` (partial policy), `8b14614` (partial session), `f1c5fbb` (vision gate), `39622f3` (service integration), `7b0a2ba` (strict regression), `5f99465` (partial test), `eff5331` (JVM gate), `8772c4e` (online model), `6fc2695` (adaptive ranking), `2c27d99` (ACK state), `ddd3c8e` (persistence), `f98b631` (learning test), `f0393ab` (JVM gate), `e930bfa` (local effect), `fad40b2` (service proof), `b063ca8` (negative test).
+- Last pure-code head at audit: `b063ca8aa61a7391aef7784298853d5572d1ccb0`. CI for that SHA (Build run 40524825626 / device run 40524825985) was **QUEUED** at inspection, not PASS/FAIL. A docs commit changes HEAD and requires fresh CI. Physical POCO / real Yandex WebView / reward NOT RUN. Do not call 0.7.34 stable or recommend overwriting an existing installed APK without matching signer and backup.
+
+### Следующее действие Codex
+1. Прочитать фактический diff текущего PR #8 и прогнать `java tests/GridVerify.java`, `java tests/Verify.java`, all Gradle/lint, emulator API30/35/36. Не заявлять PASS без конкретного запуска на новом HEAD.
+2. При FAIL идти циклом: первый диагностический лог → причина → минимальный фикс → повтор теста. Не снимать ActionGate/InputPermit/window/ROI/STOP.
+3. Проверить точность `partialUsable()` и частичного `GridPuzzlePolicy` на локальных реальных ROI без публикации пользовательских изображений. При false positive по нейтральным/тёмным спецэлементам оставаться read-only.
+4. На физическом устройстве подтвердить 1 затем 5 подряд post-ACK VERIFIED действий при появляющихся неизвестных и смене палитры. Развести Android ACK / изменение клетки / начисление очков.
+5. Следующий backlog: BubbleSession и Color2048Reader tolerant vision, ограниченное безопасное восстановление из PAUSED и опыт по ВСЕМ игровым профилям. Это пока не реализовано данным патчем.
+

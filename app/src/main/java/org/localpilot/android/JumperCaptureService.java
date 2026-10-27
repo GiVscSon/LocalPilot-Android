@@ -166,7 +166,7 @@ public final class JumperCaptureService extends Service {
             long now = SystemClock.elapsedRealtime();
             PilotService pilot = PilotService.instance;
             boolean accepted=framePacer.accept(SystemClock.elapsedRealtimeNanos(),pilot!=null&&pilot.wantsJumperFrame(session));
-            if(pilot!=null)pilot.onCapturePacing(session,framePacer.acceptedFrames(),framePacer.skippedFrames());
+            if(pilot!=null)pilot.onCapturePacing(session,framePacer.acceptedFrames(),framePacer.skippedFrames(),framePacer.throttledFrames(),framePacer.unwantedFrames(),framePacer.invalidClockFrames());
             if(!accepted)return;
             if (image.getWidth() != width || image.getHeight() != height) throw new IllegalStateException("display changed");
             Image.Plane plane = image.getPlanes()[0];

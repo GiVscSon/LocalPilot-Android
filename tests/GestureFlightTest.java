@@ -21,6 +21,12 @@ public final class GestureFlightTest {
   long fourth=f.begin(14000);f.clear();check(!f.active()&&!f.complete(fourth),"service destruction invalidates callbacks");
   long fifth=f.begin(15000);check(fifth>fourth&&!f.complete(fourth)&&f.active(),"clear never reuses a sequence");
   check(f.complete(fifth)&&!f.complete(fifth),"duplicate callback ignored");
+  // A congested main looper can deliver the callback before its queued watchdog,
+  // even though the elapsed deadline has already passed.
+  long late=f.begin(20000);check(f.timeout(late,23001),"late callback detects elapsed deadline itself");
+  check(!f.complete(late),"late callback cannot be accepted after expiry");
+  long next=f.begin(24000);check(!f.timeout(late,27001)&&f.active(),"late callback cannot expire a newer gesture");
+  check(!f.timeout(next,26999)&&f.complete(next),"callback before deadline remains accepted");
   check(f.report(16000).contains("pending=false"),"idle diagnostic");
   try{f.begin(-1);throw new AssertionError("negative clock");}catch(IllegalStateException expected){checks++;}
   System.out.println("Gesture flight: "+checks+" assertions PASS");
