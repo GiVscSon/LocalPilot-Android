@@ -33,6 +33,23 @@ public final class BubbleTest {
   int[] packed=b.cells();for(int row=1;row<12;row++)for(int col=0;col<6-row%2;col++)packed[row*6+col]=2;
   check(BubblePolicy.choose(after(b,packed))==null,"overlapping loaded ball cannot shoot through a low board");
  }
+ private static void singleRemaining(){
+  int[] cells=new int[72];cells[2]=1;
+  BubbleBoard b=new BubbleBoard(320,640,6,12,32,80,50,160,600,1,cells);
+  BubblePolicy.Shot shot=BubblePolicy.choose(b);
+  check(shot!=null&&shot.removed==0&&shot.dropped==0,"one candy can be joined by a matching shot");
+  BubbleBoard pair=new BubbleBoard(b.width,b.height,b.cols,b.rows,b.x0,b.y0,b.step,b.launcherX,b.launcherY,1,shot.expectedCells());
+  check(pair.count()==2&&pair.neighbor(2,shot.landing),"first shot builds a connected pair");
+  BubbleSession session=new BubbleSession();session.observe(b,1000,1000);session.observe(b,1200,1200);session.sent(b,shot,1200);
+  session.observe(pair,1800,1800);session.observe(pair,2000,2000);check(session.verified()==0,"pair cannot be verified before ACK");
+  session.acknowledge(2050);session.observe(pair,2200,2200);
+  check(session.observe(pair,2400,2400)==BubbleSession.Status.VERIFIED,"two fresh predicted frames verify the pair");
+  BubblePolicy.Shot finish=BubblePolicy.choose(pair);
+  check(finish!=null&&finish.removed==3&&Arrays.stream(finish.expectedCells()).allMatch(x->x==0),"next matching shot clears the triple");
+  BubbleBoard wrong=new BubbleBoard(320,640,6,12,32,80,50,160,600,2,cells);
+  check(BubblePolicy.choose(wrong)==null,"unknown next color cannot justify a mismatched shot at the final candy");
+  Arrays.fill(cells,0);check(BubblePolicy.choose(new BubbleBoard(320,640,6,12,32,80,50,160,600,1,cells))==null,"empty board never authorizes input");
+ }
  private static void session(){
   BubbleBoard b=board(1);BubblePolicy.Shot shot=BubblePolicy.choose(b);BubbleBoard next=after(b,shot.expectedCells());
   BubbleSession s=new BubbleSession();check(s.observe(b,1000,1000)==BubbleSession.Status.SEARCHING,"first frame is not enough");
@@ -126,6 +143,11 @@ public final class BubbleTest {
   check(r.usable(),"ordinary synthetic field: "+r.reason());check(r.board().count()==17&&r.board().loadedColor==1,"reserve and bonus do not become launched bubble");
   check(Math.abs(r.board().step-48)<2&&Math.abs(r.board().x0-26)<3&&Math.abs(r.board().y0-80)<3,"lattice fitted in source pixels");
   var tracked=BubbleVision.read(im::getRGB,320,640,0,0,320,640,0,0,0,0,r.board());check(tracked.usable()&&tracked.board().same(r.board()),"stable geometry can read next frame");
+  BufferedImage one=synthetic();var oneBrush=one.createGraphics();oneBrush.setColor(new java.awt.Color(COLORS[0]));oneBrush.fillRect(0,45,320,160);
+  oneBrush.setColor(new java.awt.Color(COLORS[1]));oneBrush.fillOval(26-23,80-23,46,46);oneBrush.dispose();
+  var last=BubbleVision.read(one::getRGB,320,640,0,0,320,640,0,0,0,0,r.board());
+  check(last.usable()&&last.board().count()==1,"tracked geometry reads the last candy from pixels");
+  check(!BubbleVision.read(one::getRGB,320,640,0,0,320,640,0,0,0,0,null).usable(),"a single candy cannot invent initial board geometry");
   int[] calls={0};var sampled=BubbleVision.read((x,y)->{calls[0]++;return im.getRGB(x,y);},320,640,0,0,320,640,0,0,0,0,r.board());
   check(sampled.usable()&&calls[0]<12_000,"cached geometry probes bounded cells instead of copying the frame");
   check(!BubbleVision.read((x,y)->0x202020,320,640,0,0,320,640,0,0,0,0,r.board()).usable(),"cached probes never retain pixels from an earlier image");
@@ -167,5 +189,5 @@ public final class BubbleTest {
    System.out.printf(java.util.Locale.ROOT,"Recorded bubble frame scale=%.2f count=%d x0=%.2f y0=%.2f step=%.2f; cloud JVM acquire=%.2fms cached-p50=%.2fms cached-max=%.2fms policy=%.2fms%n",scale,b.count(),b.x0/scale,b.y0/scale,b.step/scale,coldNs/1e6,elapsed[4]/1e6,elapsed[7]/1e6,policyNs/1e6);
   }
  }
- public static void main(String[] args)throws Exception{geometryAndPolicy();directShotGeometry();session();diagnostics();perception();if(args.length>0)recorded(Path.of(args[0]));System.out.println("Bubble board/policy/feedback: "+checks+" assertions PASS; no physical-device claim");}
+ public static void main(String[] args)throws Exception{geometryAndPolicy();singleRemaining();directShotGeometry();session();diagnostics();perception();if(args.length>0)recorded(Path.of(args[0]));System.out.println("Bubble board/policy/feedback: "+checks+" assertions PASS; no physical-device claim");}
 }

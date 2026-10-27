@@ -25,7 +25,11 @@ public final class BubblePolicy {
  /** Explicit direct-only plan, also used when a caller cannot validate a complete side-wall area. */
  public static Shot chooseDirect(BubbleBoard b){return choose(b,false);}
  private static Shot choose(BubbleBoard b,boolean allowBounce){
-  if(b==null||b.count()<2||!b.ceilingConnected())return null;
+  if(b==null||b.count()==0||!b.ceilingConnected())return null;
+  // With one remaining candy, only build a pair of its own color. Geometry
+  // must already have been acquired; an unrelated loaded color is ambiguous.
+  if(b.count()==1){int remaining=0;for(int i=0;i<b.size();i++)if(b.color(i)>0)remaining=b.color(i);
+   if(remaining!=b.loadedColor)return null;}
   for(int i=0;i<b.size();i++)if(b.color(i)>0){float x=b.launcherX-b.x(i),y=b.launcherY-b.y(i);
    if(x*x+y*y<=b.step*b.step)return null;}
   float left=b.x0,right=b.x0+(b.cols-1)*b.step;
