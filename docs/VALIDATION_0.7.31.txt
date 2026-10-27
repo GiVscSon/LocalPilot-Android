@@ -17,13 +17,21 @@ Python release tooling: 10 PASS.
 
 BubbleVerify: existing164 synthetic assertions + private image replay
 (48 annotated cells at .75/1/1.5 scales) =776 PASS.
-BubbleBounceTest1305 PASS: 96 independent route/graph checks on connected scenes;
+BubbleBounceTest1319 PASS: 96 independent route/graph checks on connected scenes;
 profitable left/right single ricochets in three scales, sampled flight legs,
 cluster and ceiling connectivity independent of production resolver;
 ACK alone and post-shot frames before ACK cannot verify;
 only two fresh expected states release pending action.
 Sixteen rendered fixture sizes/aspect ratios are also recognized and choose
 the independently annotated landing13, with source19→16 and no imaginary drops.
+ShortArena1032x1130 is a persisted regression: landing18 removes only the
+lower orange pair (19→17 visible), while source6 remains. This is a legal
+alternative, not a failed ricochet. Independent fixture now resolves arbitrary
+normal matches rather than hardcoding only landing13/rem4. Local extra sweep:
+1145 recognized scenes at widths1032/1036/1038 and integer heights1100..1500,
+8015 assertions PASS (source pixels → policy → independent reflection/resolver,
+float/rounded dispatch, exact expected array); unrecognized/no-bounce cases
+were not counted as successful shots. This is cloud JVM evidence only.
 Cropped/inset wall geometry, launcher outside center walls and overlapping
 launcher do not authorize reflected shots. No guessing of bombs/rainbow/refill.
 Original private images are not packaged or published.
@@ -32,10 +40,67 @@ ANDROID BUILD / CI
 Local build_debug.py assembleDebug/lintDebug/compileDebugAndroidTestJavaWithJavac
 PASS, 1m35s. Lint0 errors/45 warnings. APK604046bytes.
 SHA256668e9ce8b21e166bca4e25b5317553dd6ab33608f9fee791494ed29b00982482.
-Original Dev signer verified. Native API30/35/36 results pending CI at this commit.
+Original Dev signer verified. AndroidTest compiled again after test changes PASS.
+Build CI40413051414 PASS2m5s at ea7b382; CI40413920795 PASS2m11s at b554a08.
+Full workflow includes all JVM runners listed in .github/workflows/android.yml.
+
+First native CI40413051375: API35 PASS18; overall FAIL. API36 stopped during
+existing2048 window selection; API30's independent fixture incorrectly rejected
+legal landing18/rem3 because it only accepted landing13/rem4. Core reflection
+was independently confirmed; fixture now resolves real matches.
+Second native CI40413920917 FAIL: replacing row ACTION_CLICK with one touch
+alone did not fix asynchronous UI publication. Main APK was unchanged.
+Earlier harness attempts required exact published-window/decor geometry before
+one touch. The final harness uses the current live dialog and fresh refreshed
+accessibility row, without assuming those outer frames are identical.
+It retains actual clipped visible bounds;
+scroll only focused target/test application (never SystemUI); focused live
+Activity geometry is used when the accessibility tree is late. Strict binding,
+STOP, visual verification and negative checks remain mandatory.
+Build CI40415268099 at4405996 PASS2m18s; third native CI40415268264 FAIL
+in existing launcher/2048/window stages before a complete bubble acceptance.
+Further test-only discovery now invalidates UiAutomation cache via public
+clearCache onAPI34+, or reapplies unchanged ServiceInfo onAPI30..33 as supported
+by AOSP; ACTION_CLICK refreshes/rechecks its node before dispatch. Production
+service code, gates and gesture verification are not changed. Android11 AOSP
+uses a shared interaction cache for both clients inside this test process;
+the test-only public cache reset can therefore invalidate both cached views.
+Fourth build CI40416370449 PASS2m23s. Native CI40416370448: API36 PASS18,
+overall FAIL (API35 launcher/2048 transition; API30 window-row setup).
+API36 evidence SHA256cc73a21f1f4ffbaadb2fee5c526ba896de7c6be0530f016d080a36e4ca69beed.
+The extra exact decor/window-frame equality proved unvalidated and was removed;
+actual dialog visibility and strict successful binding remain mandatory.
+Demo rotation now runs after ordinary game cases, before the last projection
+case, to isolate pending Activity recreation from subsequent same-task launches.
+This is a test-isolation hypothesis; fifth native CI40417482617 and build
+CI40417482631 at923d4b8: build PASS1m48s; native API35 again failed at
+MainActivity→2048 (focused Launcher, expected board marker absent). Therefore
+rotation isolation did NOT resolve the failure and is not a confirmed root cause.
+NATIVE MATRIX STATUS: NOT PASSED. Do not label this delivery stable/full support.
+Final native CI40417482617 FAIL5m31s (all3 jobs completed):
+- API36/google_apis PASS18. Evidence artifact SHA256
+  64db86e18362f4f903171f607cc584eb0fe34aac52b03c9b6e984e6908199779.
+- API35/default FAIL at Main→2048 marker absence, focused Launcher.
+- API30/default delivered an accepted legal ricochet, refs1/hit19/landing18,
+  matched3/dropped0, visible cells17. BubbleSession remained pending and paused
+  before exact visual verification. This is an OPEN BUG, not a successful shot.
+  Actual ROI Rect(21,630-1059,1773), local1038x1143, fitted grid6x4,
+  x0=114.740005,y0=243.55501,step=161.85,gun517.5,1005.
+  Physical gesture approx539,1635→136,1353/220ms, local518,1005→115,723.
+  At failure READ4, ANDROID_ACK true, verified0; independent target accepted1,
+  exact same predicted triple. Pixel observation/freshness/deadline need further
+  investigation; timeout/vision is a hypothesis, not a proven cause.
+The final run confirms API30 reached the new fixture after window selection;
+prior exact-frame guard is no longer a blocker, but feedback is still incomplete.
+Status is read from normal public GitHub Actions pages; API/upload/log hosts
+remain unavailable under current network policy, with saved but unapplied draft.
 Earlier 0.7.30 CI results are historical, not evidence for this iteration.
 
 SCOPE AND LIMITS
+Main APK code corresponds to ea7b382544687bdc1f539b55f34d6c47bb34d7c3.
+Subsequent commits changed tests/docs only, verified by git diff on app/src/main
+and app/build.gradle. The supplied APK uses the original local Dev signer;
+CI APK signing identities do not replace it.
 No physical Android device is connected. Native fixture is an independent
 synthetic target in the test APK, not Yandex Market. It validates Android
 capture/gesture/verification/STOP; it does not establish real wall position,
@@ -45,6 +110,8 @@ Main APK does not include the synthetic target game.
 Bubble geometry is bounded to four ordinary colors and at most one inferred
 side-wall reflection. Aim ends at first wall, impact coordinates are separate.
 Exact expected field remains mandatory after ACK; unsupported changes pause input.
+Initial lattice acquisition needs at least three anchors across two rows.
+Policy count<2 currently waits; clearing a single remaining bubble is not automated.
 Guide source: user material, checked against code; external reviews and reward
 amounts not independently verified. Six-by-six octopus swap preserved, not
 silently converted to a line-path game. Hexa Sort/Kototower remain unsupported.
