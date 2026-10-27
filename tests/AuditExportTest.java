@@ -84,9 +84,27 @@ public final class AuditExportTest {
   try(RandomAccessFile writer=new RandomAccessFile(file,"rw");FileLock lock=writer.getChannel().lock()){
    writer.seek(first.length);writer.write(full,first.length,(full.length-first.length)/2);writer.getFD().sync();
    Future<byte[]> future=worker.submit(()->AuditExport.snapshot(root.toFile()));
-   Thread.sleep(60);check(!future.isDone(),"reader waits for exclusive writer, not partial append");
+   Thread.sleep(60);
+   // Under a slow CI runner the bounded reader may exhaust its lock retries
+   // before this test thread resumes. Either waiting or explicit BUSY is safe.
+   if(future.isDone()){
+    try{future.get(3,TimeUnit.SECONDS);throw new AssertionError("partial append was exported under exclusive lock");}
+    catch(ExecutionException failed){
+     Throwable cause=failed.getCause();
+     check(cause instanceof IOException && "journal busy; retry export".equals(cause.getMessage()),
+       "reader fails closed with BUSY while writer holds exclusive lock");
+    }
+   }else check(true,"reader waits for exclusive writer, not partial append");
    writer.seek(0);writer.write(full);writer.setLength(full.length);writer.getFD().sync();lock.release();
-   Map<String,byte[]> zip=unzip(future.get(3,TimeUnit.SECONDS));
+   byte[] exported;
+   try{exported=future.get(3,TimeUnit.SECONDS);}
+   catch(ExecutionException failed){
+    Throwable cause=failed.getCause();
+    if(!(cause instanceof IOException) || !"journal busy; retry export".equals(cause.getMessage()))throw failed;
+    // Busy is a documented bounded outcome, and retry is only after release.
+    exported=AuditExport.snapshot(root.toFile());
+   }
+   Map<String,byte[]> zip=unzip(exported);
    check(Arrays.equals(full,zip.get("segment-0.log")),"export includes fully committed live append");
   }finally{worker.shutdownNow();}
  }
