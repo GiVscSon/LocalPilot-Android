@@ -340,7 +340,7 @@ public class PilotService extends AccessibilityService {
  private void single(String label,Runnable callback){Button v=new Button(this);v.setText(label);v.setTextSize(12);v.setOnClickListener(x->callback.run());controls.addView(v,new LinearLayout.LayoutParams(-1,dp(40)));}
  private void row(String a,Runnable ar,String b,Runnable br,boolean needsInput){LinearLayout line=new LinearLayout(this);for(int i=0;i<2;i++){Button v=new Button(this);v.setText(i==0?a:b);v.setTextSize(12);Runnable r=i==0?ar:br;v.setOnClickListener(x->r.run());if(needsInput)manualControls.add(v);line.addView(v,new LinearLayout.LayoutParams(0,dp(40),1));}(controls==null?panel:controls).addView(line);}
  public void hidePanel(){try{stop("STOP");}finally{clearPanel();}}
- private String captureCounters(){return "Захват: кадры="+captureFrames+" · READ="+captureReads+" · решения="+captureDecisions+" · ввод="+captureSent+" · ACK="+captureCompleted+" · decode="+captureAcceptedFrames+" · skippedFrames="+captureSkippedFrames;}
+ private String captureCounters(){return "Захват: кадры="+captureFrames+" · READ="+captureReads+" · решения="+captureDecisions+" · ввод="+captureSent+" · ACK="+captureCompleted+" · decode="+(playingJumper?captureAcceptedFrames:0)+" · skippedFrames="+(playingJumper?captureSkippedFrames:0)+(playingJumper?" · source=MediaProjection":" · source=takeScreenshot");}
  private void update(){
   boolean inputReady=gate.armed()&&!gate.paused()&&permit.allows(gate.epoch(),SystemClock.elapsedRealtime());for(Button control:manualControls)control.setEnabled(inputReady&&!busy);
   long renderNow=SystemClock.elapsedRealtime();if(playingJumper&&renderNow-lastPanelRender<100)return;lastPanelRender=renderNow;
@@ -371,6 +371,8 @@ public class PilotService extends AccessibilityService {
   synchronized(jumperFrameLock){Bitmap queued;while((queued=jumperQueuedFrames.poll())!=null)if(!queued.isRecycled())queued.recycle();}
   View calibration=jumperCalibrationOverlay;jumperCalibrationOverlay=null;removeOverlay(calibration);
   if(stopJumper)CaptureCleanup.run(()->stopService(new Intent(this,JumperCaptureService.class)));
+  // The last session report retains historical pacing; the next game must not display it.
+  captureSession=0;captureAcceptedFrames=captureSkippedFrames=0;
   audit(SafeJournal.Event.STOP,0,0);boardSearch.reset();boardReadMisses=0;boardReadGeneration++;windowFocus.reset();focusPaused=false;focusWatch=false;focusWatchId++;autoLeft=0;playing2048=false;colored2048=false;colorSession.reset();playingMini=false;discoveringBoard=false;boardRoi=null;
   if(visionPending){visionPending=false;visionRequest++;if(visionTask!=null)visionTask.cancel(true);visionTask=null;metrics.cancelled(StageMetrics.Stage.READ);}
   if(captureBusy){metrics.cancelled(StageMetrics.Stage.CAPTURE);captureBusy=false;pendingCapture=++captureCounter;}
@@ -1295,9 +1297,19 @@ public class PilotService extends AccessibilityService {
   });
  }
  private boolean movePanelAway(Rect roi){
-  Rect current=panelBounds();if(!Rect.intersects(current,roi))return true;int w=current.width(),h=current.height();if(w<=0||h<=0||w>armedBounds.width()||h>armedBounds.height())return false;
-  int[][] corners={{armedBounds.left,armedBounds.top},{armedBounds.right-w,armedBounds.top},{armedBounds.left,armedBounds.bottom-h},{armedBounds.right-w,armedBounds.bottom-h}};
-  for(int[] corner:corners){Rect candidate=new Rect(corner[0],corner[1],corner[0]+w,corner[1]+h);if(Rect.intersects(candidate,roi))continue;int x=layout.x+candidate.left-current.left,y=layout.y+candidate.top-current.top;if(x<0||y<0)continue;layout.x=x;layout.y=y;return updatePanelLayout();}return false;
+  // The visible STOP control stays available; failure is a safe STOP, not an invisible overlay.
+  // Call only after compact(true) and afterPanelLayout have settled.
+  if(roi==null||roi.isEmpty()||panel==null||layout==null||wm==null||!panelCompact||consentPanelDetached)return false;
+  Rect current=panelBounds();
+  Point display=new Point();wm.getDefaultDisplay().getRealSize(display);
+  PanelParking.Position destination=PanelParking.place(display.x,display.y,dp(24),dp(24),
+    current.width(),current.height(),roi.left,roi.top,roi.right,roi.bottom,
+    dp(16),current.left,current.top);
+  if(destination==null)return false;
+  if(current.left==destination.x&&current.top==destination.y)return true;
+  layout.x+=destination.x-current.left;
+  layout.y+=destination.y-current.top;
+  return updatePanelLayout();
  }
  private boolean captureEnabled(){return playing2048||playingMini||discoveringBoard||playingGrid;}
  private void selectBoard(){

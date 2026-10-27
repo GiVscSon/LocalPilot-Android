@@ -9,14 +9,14 @@ public final class GridPuzzleSession {
  private final long responseTimeoutMs;
  private Status status=Status.WAIT_STABLE;
  private int rows,cols;
- private java.util.BitSet candidateSpecial;
+ private java.util.BitSet candidateSpecial,stableSpecial,beforeSpecial;
  private int[] candidate,stable,before;
  private long candidateAt=-1,lastFrameAt=-1,dispatchedAt=-1,completedAt=-1;
  private int verifiedChanges;
 
  public GridPuzzleSession(){this(2500);}
  public GridPuzzleSession(long responseTimeoutMs){if(responseTimeoutMs<1000||responseTimeoutMs>10000)throw new IllegalArgumentException("response timeout outside 1000..10000 ms");this.responseTimeoutMs=responseTimeoutMs;}
- public void reset(){status=Status.WAIT_STABLE;rows=cols=0;candidate=stable=before=null;candidateAt=lastFrameAt=dispatchedAt=completedAt=-1;verifiedChanges=0;}
+ public void reset(){status=Status.WAIT_STABLE;rows=cols=0;candidate=stable=before=null;stableSpecial=beforeSpecial=null;candidateAt=lastFrameAt=dispatchedAt=completedAt=-1;verifiedChanges=0;}
  public Status status(){return status;}
  public boolean pending(){return before!=null;}
  public boolean paused(){return status==Status.PAUSED;}
@@ -31,22 +31,22 @@ public final class GridPuzzleSession {
   if(frameAt<0||now<frameAt||now-frameAt>FRESH_MS||frameAt<=lastFrameAt){return waitAgain();}
   lastFrameAt=frameAt;
   if(!complete(nextRows,nextCols,cells)||pending()&&(nextRows!=rows||nextCols!=cols))return waitAgain();
-  if(!pending()&&(nextRows!=rows||nextCols!=cols)){rows=nextRows;cols=nextCols;stable=null;clearCandidate();}
+  if(!pending()&&(nextRows!=rows||nextCols!=cols)){rows=nextRows;cols=nextCols;stable=null;stableSpecial=null;clearCandidate();}
   if(pending()&&(completedAt<0||frameAt<=completedAt||frameAt-dispatchedAt<SETTLE_MS))return waitAgain();
   if(candidate==null||!Arrays.equals(candidate,cells)||!special.equals(candidateSpecial)){candidate=cells.clone();candidateSpecial=(java.util.BitSet)special.clone();candidateAt=frameAt;status=pending()?Status.WAIT_RESPONSE:Status.WAIT_STABLE;return status;}
   if(frameAt-candidateAt<STABLE_MS){status=pending()?Status.WAIT_RESPONSE:Status.WAIT_STABLE;return status;}
   if(pending()){
-   if(Arrays.equals(before,cells)){status=Status.WAIT_RESPONSE;return status;}
-   stable=cells.clone();before=null;dispatchedAt=completedAt=-1;verifiedChanges++;status=Status.CHANGED;return status;
+   if(Arrays.equals(before,cells)&&special.equals(beforeSpecial)){status=Status.WAIT_RESPONSE;return status;}
+   stable=cells.clone();stableSpecial=(java.util.BitSet)special.clone();before=null;beforeSpecial=null;dispatchedAt=completedAt=-1;verifiedChanges++;status=Status.CHANGED;return status;
   }
-  stable=cells.clone();status=Status.READY;return status;
+  stable=cells.clone();stableSpecial=(java.util.BitSet)special.clone();status=Status.READY;return status;
  }
 
  /** Call when dispatching the action selected from the latest stable board. */
  public void sent(int[] snapshot,long at){
   if(paused()||pending()||(status!=Status.READY&&status!=Status.CHANGED)||stable==null||!Arrays.equals(stable,snapshot)||at<lastFrameAt||at-lastFrameAt>FRESH_MS)
    throw new IllegalStateException("a fresh stable board is required before dispatch");
-  before=stable.clone();dispatchedAt=at;completedAt=-1;clearCandidate();status=Status.WAIT_RESPONSE;
+  before=stable.clone();beforeSpecial=(java.util.BitSet)stableSpecial.clone();dispatchedAt=at;completedAt=-1;clearCandidate();status=Status.WAIT_RESPONSE;
  }
  /** Android completion only opens response observation; it never counts a success. */
  public void acknowledge(long at){
