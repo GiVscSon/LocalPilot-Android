@@ -14,10 +14,11 @@ public final class GridPuzzleSession {
  private long candidateAt=-1,lastFrameAt=-1,dispatchedAt=-1,completedAt=-1;
  private int verifiedChanges;
  private boolean partialPending;
+ private java.util.BitSet predictedImpact;
 
  public GridPuzzleSession(){this(2500);}
  public GridPuzzleSession(long responseTimeoutMs){if(responseTimeoutMs<1000||responseTimeoutMs>10000)throw new IllegalArgumentException("response timeout outside 1000..10000 ms");this.responseTimeoutMs=responseTimeoutMs;}
- public void reset(){status=Status.WAIT_STABLE;rows=cols=0;candidate=stable=before=null;candidateAt=lastFrameAt=dispatchedAt=completedAt=-1;verifiedChanges=0;partialPending=false;}
+ public void reset(){status=Status.WAIT_STABLE;rows=cols=0;candidate=stable=before=null;candidateAt=lastFrameAt=dispatchedAt=completedAt=-1;verifiedChanges=0;partialPending=false;predictedImpact=null;}
  public Status status(){return status;}
  public boolean pending(){return before!=null;}
  public boolean acknowledged(){return pending()&&completedAt>=0;}
@@ -57,20 +58,43 @@ public final class GridPuzzleSession {
     for(int i=0;i<cells.length;i++)if(before[i]>=0&&cells[i]>=0){
      shared++;if(before[i]!=cells[i])changed++;
     }
-    if(shared<Math.max(6,(cells.length+1)/2)||changed<2){
+    boolean impacted=predictedImpact==null;
+    if(predictedImpact!=null)for(int index=predictedImpact.nextSetBit(0);index>=0;index=predictedImpact.nextSetBit(index+1)){
+     if(before[index]>=0&&cells[index]>=0&&before[index]!=cells[index]){impacted=true;break;}
+    }
+    if(shared<Math.max(6,(cells.length+1)/2)||changed<2||!impacted){
      status=Status.WAIT_RESPONSE;return status;
     }
    }
-   stable=cells.clone();before=null;partialPending=false;dispatchedAt=completedAt=-1;verifiedChanges++;status=Status.CHANGED;return status;
+   stable=cells.clone();before=null;partialPending=false;predictedImpact=null;dispatchedAt=completedAt=-1;verifiedChanges++;status=Status.CHANGED;return status;
   }
   stable=cells.clone();status=Status.READY;return status;
  }
 
  /** Call when dispatching the action selected from the latest stable board. */
- public void sent(int[] snapshot,long at){
+ public void sent(int[] snapshot,long at){sent(snapshot,at,null);}
+ /**
+  * Optional immediate-impact proof: for incomplete fields, an unrelated
+  * animation elsewhere must not validate an otherwise unobserved gesture.
+  */
+ public void sent(int[] snapshot,long at,GridPuzzlePolicy.Decision action){
   if(paused()||pending()||(status!=Status.READY&&status!=Status.CHANGED)||stable==null||!Arrays.equals(stable,snapshot)||at<lastFrameAt||at-lastFrameAt>FRESH_MS)
    throw new IllegalStateException("a fresh stable board is required before dispatch");
-  before=stable.clone();partialPending=hasUnknown(stable);dispatchedAt=at;completedAt=-1;clearCandidate();status=Status.WAIT_RESPONSE;
+  java.util.BitSet impact=null;
+  if(action!=null){
+   impact=new java.util.BitSet(snapshot.length);
+   int from=action.fromRow*cols+action.fromCol,to=action.toRow*cols+action.toCol;
+   if(action.fromRow<0||action.fromRow>=rows||action.toRow<0||action.toRow>=rows
+     ||action.fromCol<0||action.fromCol>=cols||action.toCol<0||action.toCol>=cols
+     ||snapshot[from]<0||snapshot[to]<0)throw new IllegalArgumentException("action outside known grid");
+   impact.set(from);impact.set(to);
+   for(int index:action.clearedCells()){
+    if(index<0||index>=snapshot.length||snapshot[index]<0)throw new IllegalArgumentException("predicted clear unknown");
+    impact.set(index);
+   }
+  }
+  before=stable.clone();partialPending=hasUnknown(stable);predictedImpact=impact;
+  dispatchedAt=at;completedAt=-1;clearCandidate();status=Status.WAIT_RESPONSE;
  }
  /** Android completion only opens response observation; it never counts a success. */
  public void acknowledge(long at){
