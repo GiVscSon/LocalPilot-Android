@@ -31,7 +31,7 @@ public final class GridPuzzlePolicy {
  /** targetType=0 or targetRemaining=0 disables goal weighting; minGroup applies to groups and chains. */
  public static Decision choose(GridPuzzle board,Mode mode,int minGroup,int targetType,int targetRemaining){return choose(board,mode,minGroup,targetType,targetRemaining,new java.util.BitSet());}
  public static Decision choose(GridPuzzle board,Mode mode,int minGroup,int targetType,int targetRemaining,java.util.BitSet special){
-  return chooseInternal(board,mode,minGroup,targetType,targetRemaining,special,false);
+  return chooseInternal(board,mode,minGroup,targetType,targetRemaining,special,false,null);
  }
  /**
   * Opt-in planner for incomplete but independently authenticated game boards.
@@ -40,9 +40,13 @@ public final class GridPuzzlePolicy {
   * the window, ROI, scene, stable frames and the post-ACK game response.
   */
  public static Decision choosePartial(GridPuzzle board,Mode mode,int minGroup,int targetType,int targetRemaining,java.util.BitSet special){
-  return chooseInternal(board,mode,minGroup,targetType,targetRemaining,special,true);
+  return chooseInternal(board,mode,minGroup,targetType,targetRemaining,special,true,null);
  }
- private static Decision chooseInternal(GridPuzzle board,Mode mode,int minGroup,int targetType,int targetRemaining,java.util.BitSet special,boolean partialAllowed){
+ /** Online ranking changes only preference among independently legal moves. */
+ public static Decision chooseAdaptive(GridPuzzle board,Mode mode,int minGroup,int targetType,int targetRemaining,java.util.BitSet special,boolean partialAllowed,GridOnlineLearning learning){
+  return chooseInternal(board,mode,minGroup,targetType,targetRemaining,special,partialAllowed,learning);
+ }
+ private static Decision chooseInternal(GridPuzzle board,Mode mode,int minGroup,int targetType,int targetRemaining,java.util.BitSet special,boolean partialAllowed,GridOnlineLearning learning){
   if(board==null||mode==null||minGroup<2||minGroup>100||targetType<0||targetRemaining<0)throw new IllegalArgumentException("puzzle policy context");
   if(special==null||special.length()>board.rows*board.cols)throw new IllegalArgumentException("special mask outside board");
   special=(java.util.BitSet)special.clone();
@@ -72,7 +76,7 @@ public final class GridPuzzlePolicy {
     if(containsSpecial)continue;
     int[] group=Arrays.copyOf(queue,tail);Arrays.sort(group);
     Decision candidate=decision(mode,start,start,board.cols,cells,group,0,targetType,targetRemaining,special);
-    if(better(candidate,best))best=candidate;
+    if(better(candidate,best,learning))best=candidate;
    }
   }else if(mode==Mode.TRACE_LINE){
    // A single straight swipe can safely select horizontal, vertical or
@@ -91,7 +95,7 @@ public final class GridPuzzlePolicy {
      for(int i=0;i<length;i++){chain[i]=nr*board.cols+nc;if(special.get(chain[i]))containsSpecial=true;nr+=dr;nc+=dc;}
      if(containsSpecial)continue;
      Decision candidate=decision(mode,chain[0],chain[length-1],board.cols,cells,chain,0,targetType,targetRemaining,special);
-     if(better(candidate,best))best=candidate;
+     if(better(candidate,best,learning))best=candidate;
     }
    }
   }else{
@@ -112,13 +116,18 @@ public final class GridPuzzlePolicy {
       if(!containsSpecial)candidate=decision(mode,from,to,board.cols,cells,cleared,bonus,targetType,targetRemaining,special);
      }
      swap(cells,from,to);
-     if(candidate!=null&&better(candidate,best))best=candidate;
+     if(candidate!=null&&better(candidate,best,learning))best=candidate;
     }
    }
   }
   return best;
  }
- private static boolean better(Decision candidate,Decision previous){return previous==null||candidate.score>previous.score||candidate.score==previous.score&&candidate.specialInvolved>previous.specialInvolved;}
+ private static boolean better(Decision candidate,Decision previous,GridOnlineLearning learning){
+  if(previous==null)return true;
+  double candidateScore=candidate.score+(learning==null?0:learning.bonus(candidate));
+  double previousScore=previous.score+(learning==null?0:learning.bonus(previous));
+  return candidateScore>previousScore||candidateScore==previousScore&&candidate.specialInvolved>previous.specialInvolved;
+ }
  private static void swap(int[] cells,int a,int b){int value=cells[a];cells[a]=cells[b];cells[b]=value;}
  private static Decision decision(Mode mode,int from,int to,int cols,int[] cells,int[] cleared,int bonus,int targetType,int targetRemaining,java.util.BitSet special){
   int target=0;for(int index:cleared)if(targetType>0&&cells[index]==targetType)target++;
