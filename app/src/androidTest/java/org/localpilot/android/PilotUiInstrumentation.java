@@ -402,6 +402,8 @@ public final class PilotUiInstrumentation extends Instrumentation {
         }
         await(() -> onMain(() -> intField("moves2048")) >= 4, 25_000,
                 "2048 did not produce at least three visually verified swipes");
+        await(() -> onMain(() -> ((LiveGameLearning)field("learning2048")).verifiedCount()>=3),
+                4_000,"Visually verified 2048 moves did not update the real-game learner");
         click("STOP");
         await(() -> !armed() && !onMain(() -> booleanField("busy")), 4_000,
                 "2048 STOP did not settle and revoke input");
@@ -480,6 +482,8 @@ public final class PilotUiInstrumentation extends Instrumentation {
         await(()->onMain(()->booleanField("playingGrid")&&intField("selectedProfile")==9),8_000,"Bubble loop did not start through the visible Start control");
         await(()->markerBounds("LOCALPILOT_BUBBLE_SHOTS_1")!=null,20_000,"No real aim/release reached the independent bubble fixture");
         await(()->onMain(()->((BubbleSession)field("bubbleSession")).verified()>=1),12_000,"Delivered bubble gesture did not yield the predicted visually verified board");
+        await(()->onMain(()->((LiveGameLearning)field("bubbleLearning")).verifiedCount()>=1),3_000,
+                "Bubble gameplay verified the shot but did not teach the real-game learner");
         int verified=onMain(()->((BubbleSession)field("bubbleSession")).verified());
         AtomicReference<String> observedFixture=new AtomicReference<>();
         await(()->{
