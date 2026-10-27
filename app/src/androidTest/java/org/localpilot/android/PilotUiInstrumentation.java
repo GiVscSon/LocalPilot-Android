@@ -802,13 +802,16 @@ public final class PilotUiInstrumentation extends Instrumentation {
     private boolean scrollForward() {
         int[] remaining = {2_000};
         for (AccessibilityWindowInfo window : automation.getWindows()) {
-            if(window.getType()!=AccessibilityWindowInfo.TYPE_APPLICATION||!window.isFocused())continue;
+            boolean app=window.getType()==AccessibilityWindowInfo.TYPE_APPLICATION&&window.isFocused();
+            boolean ownOverlay=window.getType()==AccessibilityWindowInfo.TYPE_ACCESSIBILITY_OVERLAY;
+            if(!app&&!ownOverlay)continue;
             AccessibilityNodeInfo root = window.getRoot();if (root == null) continue;
             try {
                 String pkg=String.valueOf(root.getPackageName());
                 // A late app tree must never turn a test scroll into a system
                 // notification/quick-settings gesture or affect another app.
                 if(!pkg.equals(getTargetContext().getPackageName())&&!pkg.equals(getContext().getPackageName()))continue;
+                if(ownOverlay&&!pkg.equals(getTargetContext().getPackageName()))continue;
                 if (scrollForward(root, 0, remaining)) return true;
             }
             finally { root.recycle(); }
