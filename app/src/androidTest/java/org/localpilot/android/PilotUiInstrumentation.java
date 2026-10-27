@@ -776,10 +776,6 @@ public final class PilotUiInstrumentation extends Instrumentation {
 
     private void click(String text) throws Exception {
         traceClick("click begin label="+text+" "+onMain(this::activitySummary));
-        // Exercise the real STOP touch without caching our overlay's node in
-        // the concurrent UiAutomation accessibility client on Android 11.
-        // Callers still assert disarm and completion after the injected tap.
-        if("STOP".equals(text)&&touchOwnControl(text))return;
         await(() -> {
             AccessibilityNodeInfo node = findText(text);
             if (node == null) { if(touchOwnControl(text))return true;boolean scrolled=scrollForward();traceClick("click label="+text+" path=own-app-scroll result="+scrolled);return false; }
