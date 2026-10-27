@@ -19,7 +19,7 @@ public final class Web2048Transfer {
   sourceGame=source;
   int total=0;
   for(int i=0;i<DIRECTIONS;i++){
-   if(counts[i]<0||counts[i+4]<0)throw new IllegalArgumentException("negative count");
+   if(counts[i]<0||counts[i+4]<0||counts[i]>MAX_SAMPLES||counts[i+4]>MAX_SAMPLES)throw new IllegalArgumentException("invalid count");
    positive[i]=counts[i];negative[i]=counts[i+4];
    total+=counts[i]+counts[i+4];
   }
