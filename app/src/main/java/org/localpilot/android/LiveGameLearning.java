@@ -18,14 +18,16 @@ public final class LiveGameLearning {
  }
  public Game game(){return game;}
  private void require(Game expected){if(game!=expected)throw new IllegalArgumentException("wrong game model");}
- private static int bubbleBucket(BubblePolicy.Shot shot){
-  if(shot==null||shot.bounces<0||shot.bounces>1||shot.removed<0||shot.dropped<0)throw new IllegalArgumentException("shot");
-  return shot.bounces*3+(shot.removed==0?0:shot.dropped>0?2:1);
+ private static int bubbleBucket(int bounces,int removed,int dropped){
+  if(bounces<0||bounces>1||removed<0||dropped<0)throw new IllegalArgumentException("shot");
+  return bounces*3+(removed==0?0:dropped>0?2:1);
  }
  private void record(int bucket,int quality,boolean success){
   if(bucket<0||bucket>=verified.length||quality<0||quality>MAX_QUALITY)throw new IllegalArgumentException("bucket/quality");
   if(verified[bucket]+unconfirmed[bucket]>=CAP){
-   verified[bucket]/=2;unconfirmed[bucket]/=2;qualityTotal[bucket]/=2;
+   verified[bucket]=(verified[bucket]+1)/2;
+   unconfirmed[bucket]=(unconfirmed[bucket]+1)/2;
+   qualityTotal[bucket]=Math.min(verified[bucket]*MAX_QUALITY,(qualityTotal[bucket]+1)/2);
   }
   if(success){verified[bucket]++;qualityTotal[bucket]+=quality;}
   else unconfirmed[bucket]++;
@@ -38,13 +40,13 @@ public final class LiveGameLearning {
   record(direction,quality,true);
  }
  /** Call exclusively after BubbleSession.VERIFIED (exact predicted board). */
- public void verifiedBubble(BubblePolicy.Shot shot){
+ public void verifiedBubble(int bounces,int removed,int dropped){
   require(Game.BUBBLE);
-  record(bubbleBucket(shot),Math.min(MAX_QUALITY,shot.removed*2+shot.dropped*3),true);
+  record(bubbleBucket(bounces,removed,dropped),Math.min(MAX_QUALITY,(long)removed*2+(long)dropped*3>MAX_QUALITY?MAX_QUALITY:removed*2+dropped*3),true);
  }
  /** Only an ACK with expired, unverified response; never label it a game defeat. */
- public void unconfirmedBubble(BubblePolicy.Shot shot){
-  require(Game.BUBBLE);record(bubbleBucket(shot),0,false);
+ public void unconfirmedBubble(int bounces,int removed,int dropped){
+  require(Game.BUBBLE);record(bubbleBucket(bounces,removed,dropped),0,false);
  }
  /** Small directional preference; existing 2048 legality, heuristic and reward remain authoritative. */
  public double bonus2048(int direction){
@@ -55,8 +57,8 @@ public final class LiveGameLearning {
   return Math.max(-1.5,Math.min(3.0,(mean-2.0)*0.65*confidence));
  }
  /** Maximum six score points versus a normal bubble clear worth >=100 points. */
- public double bonusBubble(BubblePolicy.Shot shot){
-  require(Game.BUBBLE);int i=bubbleBucket(shot),n=verified[i]+unconfirmed[i];
+ public double bonusBubble(int bounces,int removed,int dropped){
+  require(Game.BUBBLE);int i=bubbleBucket(bounces,removed,dropped),n=verified[i]+unconfirmed[i];
   if(n<3)return 0;
   double quality=verified[i]==0?0:(double)qualityTotal[i]/verified[i];
   double reliability=(verified[i]+1.0)/(n+2.0);
