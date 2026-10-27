@@ -686,7 +686,8 @@ public final class PilotUiInstrumentation extends Instrumentation {
         // Require the current live dialog, but do not equate decor bounds with
         // accessibility window frames: shadows/insets differ across Android.
         await(()->{
-            traceClick("window-selection "+windowSummary());
+            String state=onMain(()->"epoch="+gate().epoch()+" note="+field("note")+" dialog="+(field("overlayDialog")!=null));
+            traceClick("window-selection "+state+" "+windowSummary());
             return onMain(()->{
                 Object object=field("overlayDialog");
                 if(!(object instanceof android.app.Dialog dialog)||!dialog.isShowing())return false;
