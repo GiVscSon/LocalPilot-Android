@@ -23,10 +23,10 @@ public final class BubblePolicy {
  private BubblePolicy(){}
  public static Shot choose(BubbleBoard b){return choose(b,true,null);}
  /** Uses observed real-game feedback only to rank independently safe trajectories. */
- public static Shot choose(BubbleBoard b,LiveGameLearning learned){return choose(b,true,learned);}
+ public static Shot choose(BubbleBoard b,java.util.function.ToDoubleFunction<Shot> learned){return choose(b,true,learned);}
  /** Explicit direct-only plan, also used when a caller cannot validate a complete side-wall area. */
  public static Shot chooseDirect(BubbleBoard b){return choose(b,false,null);}
- private static Shot choose(BubbleBoard b,boolean allowBounce,LiveGameLearning learned){
+ private static Shot choose(BubbleBoard b,boolean allowBounce,java.util.function.ToDoubleFunction<Shot> learned){
   if(b==null||b.count()==0||!b.ceilingConnected())return null;
   // With one remaining candy, only build a pair of its own color. Geometry
   // must already have been acquired; an unrelated loaded color is ambiguous.
@@ -95,7 +95,7 @@ public final class BubblePolicy {
    // Prefer a direct route when its normal-bubble result is otherwise equal.
    Shot proposed=new Shot(b,aimX,aimY,x,y,bounceX,bounceY,bounces,landing,removed,dropped,cells);
    float score=removed*100+dropped*120+(removed==0?tail*8:0)-(landing/b.cols)*.2f-nearest/b.radius-bounces*3;
-   if(learned!=null)score+=(float)learned.bonusBubble(proposed);
+   if(learned!=null)score+=(float)learned.applyAsDouble(proposed);
    if(score>bestScore){bestScore=score;best=proposed;}
   }
   return best;
