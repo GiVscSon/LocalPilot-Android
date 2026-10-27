@@ -696,17 +696,17 @@ public class PilotService extends AccessibilityService {
    BubbleSession.Status status=bubbleSession.observe(read.board(),frameAt,SystemClock.elapsedRealtime());
    if(status==BubbleSession.Status.PAUSED){
     if(bubblePendingShot!=null&&bubbleSession.acknowledged()){
-     bubbleLearning.unconfirmedBubble(bubblePendingShot);saveLiveGameLearning(bubbleLearning,false);
+     bubbleLearning.unconfirmedBubble(bubblePendingShot.bounces,bubblePendingShot.removed,bubblePendingShot.dropped);saveLiveGameLearning(bubbleLearning,false);
     }
     bubblePendingShot=null;
     note="Шипучка: "+(bubbleSession.acknowledged()?"Android завершил жест; ":"нет подтверждения Android; ")+bubbleWaitMessage(bubbleSession.lastWait())+" · ввод приостановлен. Старт — повторить";update();return;}
    if(status!=BubbleSession.Status.READY&&status!=BubbleSession.Status.VERIFIED){note=read.usable()?(bubbleSession.pending()?"Шипучка: проверяю попадание":"Шипучка: ожидаю второй устойчивый кадр"):read.reason();update();scheduleGrid(epoch);return;}
    bubbleGeometry=read.board();gridVerified=bubbleSession.verified();
    if(status==BubbleSession.Status.VERIFIED&&bubblePendingShot!=null){
-    bubbleLearning.verifiedBubble(bubblePendingShot);saveLiveGameLearning(bubbleLearning,false);
+    bubbleLearning.verifiedBubble(bubblePendingShot.bounces,bubblePendingShot.removed,bubblePendingShot.dropped);saveLiveGameLearning(bubbleLearning,false);
     bubblePendingShot=null;
    }
-   metrics.attempt(StageMetrics.Stage.POLICY);started=SystemClock.elapsedRealtimeNanos();BubblePolicy.Shot shot=BubblePolicy.choose(bubbleGeometry,bubbleLearning);
+   metrics.attempt(StageMetrics.Stage.POLICY);started=SystemClock.elapsedRealtimeNanos();BubblePolicy.Shot shot=BubblePolicy.choose(bubbleGeometry,plan->bubbleLearning.bonusBubble(plan.bounces,plan.removed,plan.dropped));
    captureDecisions++;metrics.record(StageMetrics.Stage.POLICY,SystemClock.elapsedRealtimeNanos()-started);
    uiStats="Шипучка · шаров "+bubbleGeometry.count()+" · выстрелов "+gridMoves+" · подтверждено "+gridVerified
       +" · опыт "+bubbleLearning.verifiedCount()+" / "+bubbleLearning.unconfirmedCount();
@@ -1578,7 +1578,7 @@ public class PilotService extends AccessibilityService {
     before2048=null;
    }
    if(board.max()>=2048){stop("2048: распознана плитка 2048; сверить визуально");return;}
-   metrics.attempt(StageMetrics.Stage.POLICY);long policyNs=SystemClock.elapsedRealtimeNanos();long started=SystemClock.elapsedRealtime();int d;try{d=board.choose(learning2048);}catch(RuntimeException error){failStage(StageMetrics.Stage.POLICY,"POLICY_FAILED","Не удалось выбрать ход");return;}metrics.record(StageMetrics.Stage.POLICY,SystemClock.elapsedRealtimeNanos()-policyNs);long think=SystemClock.elapsedRealtime()-started;if(d<0){stop("2048: допустимых ходов нет");return;}if(!Verified2048.mask(board)[d]){stop("2048: ход вне маски");return;}if(!valid(ticket)){if(deferFocus(invalidReason(ticket)))return;stop("План устарел");return;}
+   metrics.attempt(StageMetrics.Stage.POLICY);long policyNs=SystemClock.elapsedRealtimeNanos();long started=SystemClock.elapsedRealtime();int d;try{d=board.choose(learning2048::bonus2048);}catch(RuntimeException error){failStage(StageMetrics.Stage.POLICY,"POLICY_FAILED","Не удалось выбрать ход");return;}metrics.record(StageMetrics.Stage.POLICY,SystemClock.elapsedRealtimeNanos()-policyNs);long think=SystemClock.elapsedRealtime()-started;if(d<0){stop("2048: допустимых ходов нет");return;}if(!Verified2048.mask(board)[d]){stop("2048: ход вне маски");return;}if(!valid(ticket)){if(deferFocus(invalidReason(ticket)))return;stop("План устарел");return;}
    Rect r=new Rect(boardRoi);float x=r.exactCenterX(),y=r.exactCenterY(),dx=0,dy=0;switch(d){case Board2048.LEFT:dx=-r.width()*.30f;break;case Board2048.RIGHT:dx=r.width()*.30f;break;case Board2048.UP:dy=-r.height()*.30f;break;case Board2048.DOWN:dy=r.height()*.30f;break;}
    before2048=board;direction2048=d;moves2048++;uiStats="кадр "+captureMs+" мс · CPU "+think+" мс · проверено "+learning2048.verifiedCount()+" · опыт игры";note="Ход "+moves2048+" · max "+board.max()+" · кадр "+captureMs+"мс · CPU "+think+"мс";update();
    long sentBefore=dispatchedInputs;
