@@ -47,12 +47,8 @@ public final class Native2048Learning {
   }catch(NumberFormatException e){throw new IllegalArgumentException("native 2048 counts",e);}
   return result;
  }
- /** Web trainer + actual-game feedback share a strict total +/-0.4 cap. */
- public static double[] combine(Web2048Transfer web,Native2048Learning nativeModel){
-  double[] w=web==null?new double[4]:web.bonus();
-  double[] n=nativeModel==null?new double[4]:nativeModel.bonus();
-  double[] out=new double[4];
-  for(int d=0;d<4;d++)out[d]=Math.max(-.4,Math.min(.4,w[d]*.5+n[d]));
-  return out;
+ /** Safe real-game feedback, bounded below the policy limit. */
+ public static double[] combine(Native2048Learning nativeModel){
+  return nativeModel==null?new double[4]:nativeModel.bonus();
  }
 }
