@@ -24,7 +24,7 @@ public final class Response2048 {
  public void readFailed(){if(stage==Stage.ACKED&&unreadable<Integer.MAX_VALUE)unreadable++;}
  public void unstable(){if(stage==Stage.ACKED&&unstable<Integer.MAX_VALUE)unstable++;}
  public boolean verify(Board2048 after,long now){
-  if(stage!=Stage.ACKED||now<ackAt||after==null)return false;
+  if(stage!=Stage.ACKED||now<ackAt||timedOut(now)||after==null)return false;
   if(!before.verifies(after,action)){
    if(mismatched<Integer.MAX_VALUE)mismatched++;
    return false;
@@ -33,5 +33,5 @@ public final class Response2048 {
  }
  public boolean timedOut(long now){return stage==Stage.ACKED&&now>=ackAt&&now-ackAt>=timeoutMs;}
  public String report(){return "stage="+stage+" ack="+(ackAt>=0)+" pending="+pending()
-  +" wait_ms="+(ackAt<0?-1:timeoutMs)+" unknown_reads="+unreadable+" unstable="+unstable+" mismatched="+mismatched;}
+  +" timeout_ms="+timeoutMs+" unknown_reads="+unreadable+" unstable="+unstable+" mismatched="+mismatched;}
 }
