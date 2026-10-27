@@ -104,9 +104,13 @@ public final class GridPartialVerifyTest {
   int[] unrelatedFull=complete.clone();unrelatedFull[30]=91;unrelatedFull[31]=92;
   full.observe(6,6,unrelatedFull,1500,1500);
   check(full.observe(6,6,unrelatedFull,1600,1600)==GridPuzzleSession.Status.WAIT_RESPONSE,"complete board unrelated changes do not verify action");
+  int[] justSwap=complete.clone();int start=fullMove.fromRow*6+fullMove.fromCol,end=fullMove.toRow*6+fullMove.toCol;
+  justSwap[start]=complete[end];justSwap[end]=complete[start];
+  full.observe(6,6,justSwap,1650,1650);
+  check(full.observe(6,6,justSwap,1730,1730)==GridPuzzleSession.Status.WAIT_RESPONSE,"swapped endpoints alone cannot confirm a match");
   int[] relevantFull=complete.clone();int[] footprint=fullMove.clearedCells();relevantFull[footprint[0]]=90;relevantFull[footprint[1]]=91;
-  full.observe(6,6,relevantFull,1700,1700);
-  check(full.observe(6,6,relevantFull,1800,1800)==GridPuzzleSession.Status.CHANGED,"stable local changes verify response");
+  full.observe(6,6,relevantFull,1800,1800);
+  check(full.observe(6,6,relevantFull,1900,1900)==GridPuzzleSession.Status.CHANGED,"stable local changes verify response");
 
   GridPuzzleSession noResponse=new GridPuzzleSession();
   noResponse.observePartial(6,6,cells,new BitSet(),1000,1000);

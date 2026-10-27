@@ -15,10 +15,11 @@ public final class GridPuzzleSession {
  private int verifiedChanges;
  private boolean partialPending;
  private java.util.BitSet predictedImpact;
+ private int swapFrom=-1,swapTo=-1;
 
  public GridPuzzleSession(){this(2500);}
  public GridPuzzleSession(long responseTimeoutMs){if(responseTimeoutMs<1000||responseTimeoutMs>10000)throw new IllegalArgumentException("response timeout outside 1000..10000 ms");this.responseTimeoutMs=responseTimeoutMs;}
- public void reset(){status=Status.WAIT_STABLE;rows=cols=0;candidate=stable=before=null;candidateAt=lastFrameAt=dispatchedAt=completedAt=-1;verifiedChanges=0;partialPending=false;predictedImpact=null;}
+ public void reset(){status=Status.WAIT_STABLE;rows=cols=0;candidate=stable=before=null;candidateAt=lastFrameAt=dispatchedAt=completedAt=-1;verifiedChanges=0;partialPending=false;predictedImpact=null;swapFrom=swapTo=-1;}
  public Status status(){return status;}
  public boolean pending(){return before!=null;}
  public boolean acknowledged(){return pending()&&completedAt>=0;}
@@ -51,8 +52,9 @@ public final class GridPuzzleSession {
   if(pending()){
    if(Arrays.equals(before,cells)){status=Status.WAIT_RESPONSE;return status;}
    // A newly recognized UNKNOWN or a moving hint is not game progress.
-   // When either snapshot is incomplete, require at least two changed
-   // *known-to-known* cell identities on two distinct stable post-ACK frames.
+   // Partial snapshots and action-bound verification require at least two
+   // known-to-known changes on two distinct stable post-ACK frames.
+   // A swap must also affect a predicted cell beyond its endpoints.
    if(partialPending||hasUnknown(cells)||predictedImpact!=null){
     int shared=0,changed=0;
     for(int i=0;i<cells.length;i++)if(before[i]>=0&&cells[i]>=0){
@@ -60,13 +62,13 @@ public final class GridPuzzleSession {
     }
     boolean impacted=predictedImpact==null;
     if(predictedImpact!=null)for(int index=predictedImpact.nextSetBit(0);index>=0;index=predictedImpact.nextSetBit(index+1)){
-     if(before[index]>=0&&cells[index]>=0&&before[index]!=cells[index]){impacted=true;break;}
+     if(index!=swapFrom&&index!=swapTo&&before[index]>=0&&cells[index]>=0&&before[index]!=cells[index]){impacted=true;break;}
     }
     if(shared<Math.max(6,(cells.length+1)/2)||changed<2||!impacted){
      status=Status.WAIT_RESPONSE;return status;
     }
    }
-   stable=cells.clone();before=null;partialPending=false;predictedImpact=null;dispatchedAt=completedAt=-1;verifiedChanges++;status=Status.CHANGED;return status;
+   stable=cells.clone();before=null;partialPending=false;predictedImpact=null;swapFrom=swapTo=-1;dispatchedAt=completedAt=-1;verifiedChanges++;status=Status.CHANGED;return status;
   }
   stable=cells.clone();status=Status.READY;return status;
  }
@@ -94,6 +96,8 @@ public final class GridPuzzleSession {
    }
   }
   before=stable.clone();partialPending=hasUnknown(stable);predictedImpact=impact;
+  swapFrom=action!=null&&action.mode==GridPuzzlePolicy.Mode.SWAP_MATCH3?action.fromRow*cols+action.fromCol:-1;
+  swapTo=action!=null&&action.mode==GridPuzzlePolicy.Mode.SWAP_MATCH3?action.toRow*cols+action.toCol:-1;
   dispatchedAt=at;completedAt=-1;clearCandidate();status=Status.WAIT_RESPONSE;
  }
  /** Android completion only opens response observation; it never counts a success. */

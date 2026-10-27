@@ -10,7 +10,7 @@ public final class PanelDocking {
  public static final class Area {
   public final int left,top,right,bottom;
   public Area(int left,int top,int right,int bottom){
-   if(right<=left||bottom<=top)throw new IllegalArgumentException("empty rectangle");
+   if(right<=left||bottom<=top||(long)right-left>Integer.MAX_VALUE||(long)bottom-top>Integer.MAX_VALUE)throw new IllegalArgumentException("invalid rectangle");
    this.left=left;this.top=top;this.right=right;this.bottom=bottom;
   }
   public int width(){return right-left;}
@@ -31,8 +31,8 @@ public final class PanelDocking {
   if(safe.contains(current)&&!current.intersects(roi))return current;
   // Try a comfortable margin first, then exact non-overlap if the window is tight.
   for(int margin:new int[]{gapPx,0}){
-   int[] xs={current.left,safe.left,safe.right-w,roi.left-w-margin,roi.right+margin};
-   int[] ys={current.top,safe.top,safe.bottom-h,roi.top-h-margin,roi.bottom+margin};
+   int[] xs={current.left,safe.left,safe.right-w,bounded((long)roi.left-w-margin),bounded((long)roi.right+margin)};
+   int[] ys={current.top,safe.top,safe.bottom-h,bounded((long)roi.top-h-margin),bounded((long)roi.bottom+margin)};
    Area best=null;long bestMovement=Long.MAX_VALUE;
    for(int x:xs)for(int y:ys){
     if(x<safe.left||y<safe.top||(long)x+w>safe.right||(long)y+h>safe.bottom)continue;
@@ -46,6 +46,8 @@ public final class PanelDocking {
   }
   return null;
  }
+
+ private static int bounded(long value){return (int)Math.max(Integer.MIN_VALUE,Math.min(Integer.MAX_VALUE,value));}
 
  private static boolean intersectsExpanded(Area panel,Area roi,int gap){
   return (long)panel.left<((long)roi.right+gap)&&((long)roi.left-gap)<panel.right

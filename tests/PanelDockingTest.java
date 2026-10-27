@@ -54,6 +54,13 @@ public final class PanelDockingTest {
    check((result!=null)==feasible,"return placement iff a safe placement exists ("+n+")");
    if(result!=null)check(s.contains(result)&&!r.intersects(result),"safe result ("+n+")");
   }
+  var edgeSafe=a(Integer.MAX_VALUE-200,0,Integer.MAX_VALUE,100);
+  var edgeRoi=a(Integer.MAX_VALUE-100,0,Integer.MAX_VALUE,100);
+  var edgePanel=a(Integer.MAX_VALUE-90,10,Integer.MAX_VALUE-40,60);
+  var edgeResult=PanelDocking.choose(edgeSafe,edgePanel,edgeRoi,50);
+  check(edgeResult!=null&&edgeSafe.contains(edgeResult)&&!edgeResult.intersects(edgeRoi),"docking near integer boundary cannot overflow");
+  try{a(Integer.MIN_VALUE,0,Integer.MAX_VALUE,10);throw new AssertionError("overflow dimensions accepted");}
+  catch(IllegalArgumentException expected){checks++;}
   try{PanelDocking.choose(phone,current,roi,-1);throw new AssertionError("negative gap accepted");}
   catch(IllegalArgumentException expected){checks++;}
   System.out.println("Panel docking: "+checks+" assertions PASS; 5000 randomized safe/fail-closed layouts");
