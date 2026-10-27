@@ -56,7 +56,7 @@ public final class GridPuzzlePolicy {
   if(mode==Mode.TAP_GROUP){
    boolean[] visited=new boolean[cells.length];int[] queue=new int[cells.length];
    for(int start=0;start<cells.length;start++){
-    if(cells[start]<=0||visited[start]||special.get(start))continue;
+    if(cells[start]<=0||visited[start]||partialAllowed&&special.get(start))continue;
     int head=0,tail=1;queue[0]=start;visited[start]=true;
     while(head<tail){
      int index=queue[head++],r=index/board.cols,c=index%board.cols;
@@ -64,7 +64,7 @@ public final class GridPuzzlePolicy {
       int nr=r+(direction==0?-1:direction==1?1:0),nc=c+(direction==2?-1:direction==3?1:0);
       if(nr<0||nr>=board.rows||nc<0||nc>=board.cols)continue;
       int next=nr*board.cols+nc;
-      if(!visited[next]&&!special.get(next)&&cells[next]==cells[start]){visited[next]=true;queue[tail++]=next;}
+      if(!visited[next]&&(!partialAllowed||!special.get(next))&&cells[next]==cells[start]){visited[next]=true;queue[tail++]=next;}
      }
     }
     if(tail<minGroup)continue;
