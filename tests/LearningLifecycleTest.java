@@ -14,7 +14,7 @@ public final class LearningLifecycleTest {
  }
  private static float param(ArcadeController c,String name){for(String token:c.model().split(" "))if(token.startsWith(name+"="))return Float.parseFloat(token.substring(name.length()+1));throw new AssertionError(name);}
  public static void main(String[]args)throws Exception{
-  motion();response();verifiedImpulse();persistence();rules2048();
+  motion();response();verifiedImpulse();persistence();sharedStore();rules2048();
   System.out.println("Learning lifecycle: "+checks+" assertions PASS (synthetic, no phone test)");
  }
  private static void motion(){
@@ -108,7 +108,36 @@ public final class LearningLifecycleTest {
   check(reloaded.losses("example.bird","one",ArcadeProfile.FLAPPY)==1,"only successfully committed loss persists");
   check(reloaded.get("example.bird","two",ArcadeProfile.FLAPPY)==null,"other game never receives this model");
   check(reloaded.get("example.bird","one",ArcadeProfile.TRAFFIC)==null,"other mechanic never receives this model");
-  Files.delete(file);Files.delete(dir);
+  Files.delete(file);Files.deleteIfExists(dir.resolve("models.log.lock"));Files.delete(dir);
+ }
+ private static void sharedStore()throws Exception{
+  Path dir=Files.createTempDirectory("pilot-learning-shared-"),file=dir.resolve("models.log");
+  ArcadeLearningStore first=new ArcadeLearningStore(file.toFile()),second=new ArcadeLearningStore(file.toFile());
+  first.save("example.one","default",ArcadeProfile.FLAPPY,"gravity=1");
+  second.save("example.two","default",ArcadeProfile.TRAFFIC,"roadSpeed=2");
+  first.recordResult("example.one","default",ArcadeProfile.FLAPPY,"gravity=1");
+  second.recordResult("example.one","default",ArcadeProfile.FLAPPY,"gravity=1");
+  ArcadeLearningStore reloaded=new ArcadeLearningStore(file.toFile());
+  check("gravity=1".equals(reloaded.get("example.one","default",ArcadeProfile.FLAPPY)),"first scoped model survives stale writer");
+  check("roadSpeed=2".equals(reloaded.get("example.two","default",ArcadeProfile.TRAFFIC)),"second scoped model survives stale writer");
+  check(reloaded.losses("example.one","default",ArcadeProfile.FLAPPY)==2,"both result increments survive stale writers");
+  byte[] committed=Files.readAllBytes(file);
+  try{first.save("example.one","default",ArcadeProfile.FLAPPY,"");throw new AssertionError("empty model accepted");}catch(IOException expected){}
+  check(java.util.Arrays.equals(committed,Files.readAllBytes(file)),"invalid model leaves committed data unchanged");
+  try(var handle=new java.io.RandomAccessFile(dir.resolve("models.log.lock").toFile(),"rw");var lock=handle.getChannel().lock()){
+   try{first.save("example.one","default",ArcadeProfile.FLAPPY,"gravity=4");throw new AssertionError("locked store accepted write");}catch(IOException expected){}
+  }
+  check(java.util.Arrays.equals(committed,Files.readAllBytes(file)),"failed lock acquisition preserves committed data");
+  java.util.concurrent.atomic.AtomicReference<Throwable> failure=new java.util.concurrent.atomic.AtomicReference<>();
+  Runnable a=()->{try{for(int i=0;i<10;i++)first.recordResult("example.one","default",ArcadeProfile.FLAPPY,"gravity=1");}catch(Throwable error){failure.set(error);}};
+  Runnable b=()->{try{for(int i=0;i<10;i++)second.recordResult("example.one","default",ArcadeProfile.FLAPPY,"gravity=1");}catch(Throwable error){failure.set(error);}};
+  Thread left=new Thread(a),right=new Thread(b);left.start();right.start();left.join();right.join();
+  check(failure.get()==null,"same-process writers serialize instead of failing on overlapping locks");
+  check(new ArcadeLearningStore(file.toFile()).losses("example.one","default",ArcadeProfile.FLAPPY)==22,"concurrent increments are not lost");
+  Files.writeString(file,"damaged-record\n",StandardOpenOption.APPEND);byte[] damaged=Files.readAllBytes(file);
+  try{first.save("example.one","default",ArcadeProfile.FLAPPY,"gravity=5");throw new AssertionError("damaged file overwritten");}catch(IOException expected){}
+  check(java.util.Arrays.equals(damaged,Files.readAllBytes(file)),"malformed source is not silently rewritten");
+  Files.delete(file);Files.delete(dir.resolve("models.log.lock"));Files.delete(dir);
  }
  private static void rules2048(){
   Board2048 b=new Board2048(new int[]{2,2,4,0, 0,0,0,0, 0,0,0,0, 0,0,0,0});

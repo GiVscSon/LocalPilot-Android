@@ -6,7 +6,29 @@ public final class GridPuzzleSessionTest {
  private static int[] board(){return new int[]{1,2,3,2,3,1,3,1,2};}
  private static GridPuzzleSession ready(){GridPuzzleSession s=new GridPuzzleSession();s.observe(3,3,board(),1000,1000);check(s.observe(3,3,board(),1100,1100)==GridPuzzleSession.Status.READY,"two stable fresh frames become ready");return s;}
  private static void illegal(Runnable action,String message){try{action.run();throw new AssertionError(message);}catch(IllegalStateException expected){checks++;}}
+ private static void actionBoundResponse(){
+  int[] a={1,1,1,2,3,2,3,2,3};GridPuzzlePolicy.Decision action=GridPuzzlePolicy.choose(new GridPuzzle(3,3,a),GridPuzzlePolicy.Mode.TAP_GROUP);
+  check(action!=null,"group action available");GridPuzzleSession s=new GridPuzzleSession();s.observe(3,3,a,1000,1000);s.observe(3,3,a,1100,1100);s.sent(a,action,1200);s.acknowledge(1250);
+  int[] unrelated=a.clone();unrelated[8]=4;s.observe(3,3,unrelated,1500,1500);
+  check(s.observe(3,3,unrelated,1600,1600)==GridPuzzleSession.Status.WAIT_RESPONSE&&s.pending(),"unrelated stable cell cannot confirm a group action");
+  int[] relevant=a.clone();int[] cleared=action.clearedCells();relevant[cleared[0]]=4;relevant[cleared[1]]=4;
+  s.observe(3,3,relevant,1700,1700);s.invalidateCandidate();check(s.pending()&&s.verifiedChanges()==0,"focus loss preserves unresolved action");
+  check(s.observe(3,3,relevant,1800,1800)==GridPuzzleSession.Status.WAIT_RESPONSE,"focus recovery needs a new first frame");
+  check(s.observe(3,3,relevant,1900,1900)==GridPuzzleSession.Status.CHANGED&&s.verifiedChanges()==1,"two relevant post-focus frames confirm one response");
+  int[] b={1,2,1,2,1,3,3,2,3};action=GridPuzzlePolicy.choose(new GridPuzzle(3,3,b),GridPuzzlePolicy.Mode.SWAP_MATCH3);check(action!=null,"swap action available");
+  s=new GridPuzzleSession();s.observe(3,3,b,1000,1000);s.observe(3,3,b,1100,1100);s.sent(b,action,1200);s.acknowledge(1250);
+  int from=action.fromRow*3+action.fromCol,to=action.toRow*3+action.toCol;int[] swapped=b.clone();swapped[from]=b[to];swapped[to]=b[from];
+  s.observe(3,3,swapped,1500,1500);check(s.observe(3,3,swapped,1600,1600)==GridPuzzleSession.Status.WAIT_RESPONSE,"swap without a predicted clear cannot confirm success");
+  int[] result=swapped.clone();for(int i:action.clearedCells())if(i!=from&&i!=to)result[i]=4;
+  s.observe(3,3,result,1700,1700);check(s.observe(3,3,result,1800,1800)==GridPuzzleSession.Status.CHANGED,"predicted clear away from swap confirms response");
+  int[] two={1,1,2,3,4,5,6,7,8};action=GridPuzzlePolicy.choose(new GridPuzzle(3,3,two),GridPuzzlePolicy.Mode.TAP_GROUP,2,0,0);check(action!=null&&action.expectedCleared==2,"two-candy group remains supported");
+  s=new GridPuzzleSession();s.observe(3,3,two,1000,1000);s.observe(3,3,two,1100,1100);s.sent(two,action,1200);
+  s.invalidateCandidate();int[] changed=two.clone();changed[0]=4;changed[1]=4;
+  s.observe(3,3,changed,1500,1500);check(s.observe(3,3,changed,1600,1600)==GridPuzzleSession.Status.WAIT_RESPONSE,"focus loss before ACK cannot confirm a pair");
+  s.acknowledge(1650);s.observe(3,3,changed,1800,1800);check(s.observe(3,3,changed,1900,1900)==GridPuzzleSession.Status.CHANGED,"two changed group cells confirm a two-candy move after ACK");
+ }
  public static void main(String[] args){
+  actionBoundResponse();
   GridPuzzleSession s=new GridPuzzleSession();int[] a=board(),b=board();b[0]=4;
   check(s.observe(3,3,a,1000,1000)==GridPuzzleSession.Status.WAIT_STABLE,"one frame cannot authorize input");
   check(s.observe(3,3,a,1050,1050)==GridPuzzleSession.Status.WAIT_STABLE,"50ms is too short for stability");

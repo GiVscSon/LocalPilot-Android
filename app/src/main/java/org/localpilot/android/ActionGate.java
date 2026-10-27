@@ -48,6 +48,13 @@ public final class ActionGate {
   return t.consumed?null:"TICKET_NOT_CONSUMED";
  }
  public boolean valid(Ticket t,long now,String p,int w,int x,int y){return rejection(t,now,p,w,x,y)==null;}
+ /** Validate floating-point endpoints before any integer conversion or path construction. */
+ public static boolean coordinatesValid(float x,float y,float endX,float endY,int left,int top,int right,int bottom){
+  return left<right&&top<bottom&&Float.isFinite(x)&&Float.isFinite(y)&&Float.isFinite(endX)&&Float.isFinite(endY)
+   &&x>=0&&y>=0&&endX>=0&&endY>=0
+   &&(double)x>=left&&(double)x<right&&(double)y>=top&&(double)y<bottom
+   &&(double)endX>=left&&(double)endX<right&&(double)endY>=top&&(double)endY<bottom;
+ }
  public boolean consume(Ticket t,long now,String p,int w,int x,int y){if(!valid(t,now,p,w,x,y)||t.consumed)return false;t.consumed=true;return true;}
  public boolean armed(){return armed;}
  public long epoch(){return epoch;}

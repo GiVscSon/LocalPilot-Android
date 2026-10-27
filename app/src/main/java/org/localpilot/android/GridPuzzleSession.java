@@ -11,12 +11,16 @@ public final class GridPuzzleSession {
  private int rows,cols;
  private java.util.BitSet candidateSpecial;
  private int[] candidate,stable,before;
+ private int[] expectedClears;
+ private int swapFrom=-1,swapTo=-1;
  private long candidateAt=-1,lastFrameAt=-1,dispatchedAt=-1,completedAt=-1;
  private int verifiedChanges;
 
  public GridPuzzleSession(){this(2500);}
  public GridPuzzleSession(long responseTimeoutMs){if(responseTimeoutMs<1000||responseTimeoutMs>10000)throw new IllegalArgumentException("response timeout outside 1000..10000 ms");this.responseTimeoutMs=responseTimeoutMs;}
- public void reset(){status=Status.WAIT_STABLE;rows=cols=0;candidate=stable=before=null;candidateAt=lastFrameAt=dispatchedAt=completedAt=-1;verifiedChanges=0;}
+ public void reset(){status=Status.WAIT_STABLE;rows=cols=0;candidate=stable=before=expectedClears=null;swapFrom=swapTo=-1;candidateAt=lastFrameAt=dispatchedAt=completedAt=-1;verifiedChanges=0;}
+ /** Revoke pre-focus observations without forgetting an unresolved gesture. */
+ public void invalidateCandidate(){clearCandidate();stable=null;if(!paused())status=pending()?Status.WAIT_RESPONSE:Status.WAIT_STABLE;}
  public Status status(){return status;}
  public boolean pending(){return before!=null;}
  public boolean paused(){return status==Status.PAUSED;}
@@ -36,8 +40,8 @@ public final class GridPuzzleSession {
   if(candidate==null||!Arrays.equals(candidate,cells)||!special.equals(candidateSpecial)){candidate=cells.clone();candidateSpecial=(java.util.BitSet)special.clone();candidateAt=frameAt;status=pending()?Status.WAIT_RESPONSE:Status.WAIT_STABLE;return status;}
   if(frameAt-candidateAt<STABLE_MS){status=pending()?Status.WAIT_RESPONSE:Status.WAIT_STABLE;return status;}
   if(pending()){
-   if(Arrays.equals(before,cells)){status=Status.WAIT_RESPONSE;return status;}
-   stable=cells.clone();before=null;dispatchedAt=completedAt=-1;verifiedChanges++;status=Status.CHANGED;return status;
+   if(Arrays.equals(before,cells)||!expectedChange(cells)){status=Status.WAIT_RESPONSE;return status;}
+   stable=cells.clone();before=null;expectedClears=null;swapFrom=swapTo=-1;dispatchedAt=completedAt=-1;verifiedChanges++;status=Status.CHANGED;return status;
   }
   stable=cells.clone();status=Status.READY;return status;
  }
@@ -46,7 +50,23 @@ public final class GridPuzzleSession {
  public void sent(int[] snapshot,long at){
   if(paused()||pending()||(status!=Status.READY&&status!=Status.CHANGED)||stable==null||!Arrays.equals(stable,snapshot)||at<lastFrameAt||at-lastFrameAt>FRESH_MS)
    throw new IllegalStateException("a fresh stable board is required before dispatch");
-  before=stable.clone();dispatchedAt=at;completedAt=-1;clearCandidate();status=Status.WAIT_RESPONSE;
+  before=stable.clone();expectedClears=null;swapFrom=swapTo=-1;dispatchedAt=at;completedAt=-1;clearCandidate();status=Status.WAIT_RESPONSE;
+ }
+ /** Bind the response to the cells predicted by the action, not arbitrary board animation. */
+ public void sent(int[] snapshot,GridPuzzlePolicy.Decision action,long at){
+  if(action==null)throw new IllegalArgumentException("decision required");
+  int[] cells=action.clearedCells();if(cells.length<2||(action.mode==GridPuzzlePolicy.Mode.SWAP_MATCH3&&cells.length<3))throw new IllegalArgumentException("predicted clear required");
+  boolean[] seen=new boolean[rows*cols];for(int i:cells){if(i<0||i>=seen.length||seen[i])throw new IllegalArgumentException("invalid predicted cell");seen[i]=true;}
+  int from=action.fromRow*cols+action.fromCol,to=action.toRow*cols+action.toCol;
+  if(action.fromRow<0||action.fromRow>=rows||action.fromCol<0||action.fromCol>=cols||action.toRow<0||action.toRow>=rows||action.toCol<0||action.toCol>=cols)throw new IllegalArgumentException("decision outside board");
+  sent(snapshot,at);expectedClears=cells;
+  if(action.mode==GridPuzzlePolicy.Mode.SWAP_MATCH3){swapFrom=from;swapTo=to;}
+ }
+ private boolean expectedChange(int[] cells){
+  if(expectedClears==null)return true; // Legacy observation-only callers.
+  int changed=0;boolean outsideSwap=false;
+  for(int index:expectedClears)if(before[index]!=cells[index]){changed++;if(index!=swapFrom&&index!=swapTo)outsideSwap=true;}
+  return changed>=2&&(swapFrom<0||outsideSwap);
  }
  /** Android completion only opens response observation; it never counts a success. */
  public void acknowledge(long at){

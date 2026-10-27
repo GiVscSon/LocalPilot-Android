@@ -37,14 +37,14 @@ public final class GridPuzzleLoopTest {
    if(mode==GridPuzzlePolicy.Mode.SWAP_MATCH3)check(Math.abs(fromX-toX)+Math.abs(fromY-toY)==size,"swap gesture crosses exactly one orthogonal cell");
    else if(mode==GridPuzzlePolicy.Mode.TAP_GROUP)check(fromX==toX&&fromY==toY,"group action maps to one stationary tap");
    else check(fromX!=toX||fromY!=toY,"trace action maps to a swipe along the recognized line");
-   session.sent(second.cells(),1150);session.acknowledge(1200);
+   session.sent(second.cells(),decision,1150);session.acknowledge(1200);
    check(session.pending()&&session.verifiedChanges()==0,"dispatch and Android ACK are not game progress");
    var unchanged=read(physical,colors,left,top,size,rows,cols,1400,restoredPalette);
    session.observe(rows,cols,unchanged.cells(),1400,1400);
    check(session.observe(rows,cols,unchanged.cells(),1480,1480)==GridPuzzleSession.Status.WAIT_RESPONSE&&session.verifiedChanges()==0,"unchanged pixels never confirm response");
    int[] response=physical.clone();
    if(mode==GridPuzzlePolicy.Mode.SWAP_MATCH3){int a=decision.fromRow*cols+decision.fromCol,b=decision.toRow*cols+decision.toCol,tmp=response[a];response[a]=response[b];response[b]=tmp;}
-   else for(int index:decision.clearedCells())response[index]=(response[index]+1)%colors.length;
+   for(int index:decision.clearedCells())response[index]=(physical[index]+1)%colors.length;
    // This controlled response tests visual change confirmation. It does not
    // simulate full refill rules, score, cascades or a successful game round.
    var after=read(response,colors,left,top,size,rows,cols,1600,restoredPalette);

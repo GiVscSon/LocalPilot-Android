@@ -13,7 +13,37 @@ public class GateTest {
   consumptionContract();
   diagnosticsDoNotChangeAuthority();
   delayedObservationDoesNotRenewActions();
+  coordinateBounds();
+  previewBinding();
   System.out.println("PASS "+checks+" gate checks");
+ }
+
+ private static void previewBinding(){
+  ActionGate g=armed();long captureEpoch=g.epoch();
+  check(CaptureFreshness.previewCurrent(captureEpoch,g.epoch(),true,false,true));
+  // Result handling can stop and rearm synchronously before publishing preview.
+  g.stop();g.arm("other",4,1080,2400);
+  check(!CaptureFreshness.previewCurrent(captureEpoch,g.epoch(),true,false,true));
+  check(!CaptureFreshness.previewCurrent(g.epoch(),g.epoch(),false,false,true));
+  check(!CaptureFreshness.previewCurrent(g.epoch(),g.epoch(),true,true,true));
+  check(!CaptureFreshness.previewCurrent(g.epoch(),g.epoch(),true,false,false));
+ }
+
+ private static void coordinateBounds(){
+  check(ActionGate.coordinatesValid(0,0,1079.5f,2399.5f,0,0,1080,2400));
+  check(ActionGate.coordinatesValid(10.25f,20.75f,109.99f,219.99f,10,20,110,220));
+  for(float invalid:new float[]{Float.NaN,Float.POSITIVE_INFINITY,Float.NEGATIVE_INFINITY,-0.5f}){
+   check(!ActionGate.coordinatesValid(invalid,1,1,1,0,0,1080,2400));
+   check(!ActionGate.coordinatesValid(1,invalid,1,1,0,0,1080,2400));
+   check(!ActionGate.coordinatesValid(1,1,invalid,1,0,0,1080,2400));
+   check(!ActionGate.coordinatesValid(1,1,1,invalid,0,0,1080,2400));
+  }
+  check(!ActionGate.coordinatesValid(1080,1,1,1,0,0,1080,2400));
+  check(!ActionGate.coordinatesValid(1,2400,1,1,0,0,1080,2400));
+  check(!ActionGate.coordinatesValid(1,1,1,1,10,10,10,20));
+  check(!ActionGate.coordinatesValid(9.99f,21,20,30,10,20,110,220));
+  check(!ActionGate.coordinatesValid(11,21,110,30,10,20,110,220));
+  check(!ActionGate.coordinatesValid(16777216f,1,16777218f,1,16777217,0,16777300,10));
  }
 
  private static void transientFocus(){

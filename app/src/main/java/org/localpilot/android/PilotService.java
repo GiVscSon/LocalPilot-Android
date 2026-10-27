@@ -408,7 +408,7 @@ public class PilotService extends AccessibilityService {
    arcadePending=null;arcadeBefore=null;arcadeLastUsable=null;arcadeState=null;jumperState=null;
    captureBusy=false;pendingCapture=++captureCounter;
    if(visionPending&&visionTask!=null){visionTask.cancel(true);visionTask=null;}visionPending=false;visionRequest++;
-   gridSession.reset();bubbleSession.invalidateCandidate();
+   gridSession.invalidateCandidate();bubbleSession.invalidateCandidate();
    note="Фокус временно потерян · ввод приостановлен, захват сохранён";update();
   }
   if(!focusWatch){focusWatch=true;long epoch=gate.epoch(),watch=++focusWatchId;handler.postDelayed(()->watchFocus(epoch,watch),75);}
@@ -708,7 +708,7 @@ public class PilotService extends AccessibilityService {
    if(busy||!valid(ticket)||SystemClock.elapsedRealtime()-frameAt>300){note="Жду свежий кадр для хода";update();scheduleGrid(epoch);return;}
    float x=r.left+(action.fromCol+.5f)*r.width()/gridConfig.cols,y=r.top+(action.fromRow+.5f)*r.height()/gridConfig.rows;
    float ex=r.left+(action.toCol+.5f)*r.width()/gridConfig.cols,ey=r.top+(action.toRow+.5f)*r.height()/gridConfig.rows;
-   long sentBefore=captureSent;gridSession.sent(observation.cells(),SystemClock.elapsedRealtime());
+   long sentBefore=captureSent;gridSession.sent(observation.cells(),action,SystemClock.elapsedRealtime());
    sendObserved(x,y,ex,ey,ticket,()->{gridSession.acknowledge(SystemClock.elapsedRealtime());note="Жест доставлен · проверяю поле";update();scheduleGrid(epoch);},frameAt,action.mode==GridPuzzlePolicy.Mode.TAP_GROUP?55:160);
    if(captureSent>sentBefore){gridMoves++;gridSawAction=true;incrementGridStat("dispatched");note="Ход "+gridMoves+" · ожидается фишек "+action.expectedCleared+" · изменений подтверждено "+gridVerified;update();}
    else if(playingGrid){gridSession.reset();scheduleGrid(epoch);}
@@ -1094,7 +1094,7 @@ public class PilotService extends AccessibilityService {
  private void sendObserved(float x,float y,float ex,float ey,ActionGate.Ticket ticket,Runnable done,long frameAt,int holdMs){
   metrics.attempt(StageMetrics.Stage.ANDROID_ACK);
   if(busy){metrics.failure(StageMetrics.Stage.ANDROID_ACK,"EXECUTOR_BUSY");note="Исполнитель занят";update();return;}String rejection=invalidReason(ticket);if(rejection!=null){if(deferFocus(rejection))return;failStage(StageMetrics.Stage.ANDROID_ACK,rejection,"Привяжите текущее окно заново; ввод не отправлен");return;}
-  if(!armedBounds.contains((int)x,(int)y)||!armedBounds.contains((int)ex,(int)ey)){failStage(StageMetrics.Stage.ANDROID_ACK,"OUTSIDE_WINDOW","Жест вне окна");return;}
+  if(!ActionGate.coordinatesValid(x,y,ex,ey,armedBounds.left,armedBounds.top,armedBounds.right,armedBounds.bottom)){failStage(StageMetrics.Stage.ANDROID_ACK,"OUTSIDE_WINDOW","Жест вне окна");return;}
   if(panel==null||!panel.isShown()){failStage(StageMetrics.Stage.ANDROID_ACK,"STOP_PANEL_MISSING","Нет панели Stop");return;}int[] panelXY=new int[2];panel.getLocationOnScreen(panelXY);Rect panelRect=new Rect(panelXY[0],panelXY[1],panelXY[0]+panel.getWidth(),panelXY[1]+panel.getHeight());
   Rect pathRect=new Rect((int)Math.min(x,ex)-2,(int)Math.min(y,ey)-2,(int)Math.max(x,ex)+3,(int)Math.max(y,ey)+3);
   if(Rect.intersects(panelRect,pathRect)){failStage(StageMetrics.Stage.ANDROID_ACK,"PANEL_OVERLAP","Панель перекрывает жест: передвиньте её");return;}
@@ -1358,7 +1358,8 @@ public class PilotService extends AccessibilityService {
      // Board games use Accessibility screenshots rather than MediaProjection.
      // Refresh their preview too, so it cannot keep showing the last arcade.
      long previewAt=SystemClock.elapsedRealtime();
-     if(diagnosticFrameAt<0||previewAt-diagnosticFrameAt>=1000){
+     if(CaptureFreshness.previewCurrent(epoch,gate.epoch(),captureEnabled(),focusPaused,boardRoi!=null&&roi.equals(boardRoi))
+       &&(diagnosticFrameAt<0||previewAt-diagnosticFrameAt>=1000)){
       clearDiagnosticFrame();
       try{diagnosticFrame=Bitmap.createBitmap(roi.width(),roi.height(),Bitmap.Config.ARGB_8888);new Canvas(diagnosticFrame).drawBitmap(pixels,roi,new Rect(0,0,roi.width(),roi.height()),null);diagnosticFrameAt=previewAt;diagnosticFrameGeometry="profile="+profileLabel()+" roi="+roi.toShortString()+" frame_elapsed_ms="+previewAt;}
       catch(RuntimeException|OutOfMemoryError ignored){clearDiagnosticFrame();}
