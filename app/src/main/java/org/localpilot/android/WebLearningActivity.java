@@ -78,7 +78,7 @@ public final class WebLearningActivity extends Activity {
    help.setText("1. «Настроить API»: HTTPS, ключ и vision-модель.\n2. «Подсказка» отправит снимок игровой области провайдеру.\n3. Проверьте ответ и нажмите «Применить». Быстрая аркада может измениться до ответа.");
    button(controls,"Настроить API",this::configure);button(controls,"Подсказка",this::teacher);button(controls,"Применить",this::applySuggestion);
   }
-  if(mode<2){LinearLayout outcomes=new LinearLayout(this);modeBox.addView(outcomes);button(outcomes,"Оценка / цель ▾",this::outcomeMenu);}
+  if(mode<2){LinearLayout outcomes=new LinearLayout(this);modeBox.addView(outcomes);button(outcomes,"Оценка / цель ▾",this::outcomeMenu);button(outcomes,"В реальный 2048",this::transfer2048);}
  }
  private void say(String text){status.setText(text+"\nИгра: "+(selectedProfile.isEmpty()?"не выбрана":selectedProfile)+(lesson==null?"":" · примеры "+lesson.size()+"/"+WebLesson.MAX_ROWS+"\n"+lesson.outcomeSummary()));}
  private void stop(String reason){
@@ -253,6 +253,23 @@ public final class WebLearningActivity extends Activity {
   if(pending!=null){say("Дождитесь кадра результата текущего действия, затем нажмите Обучить");return;}
   stop("Подготавливаю модель по примерам");if(lesson==null||!lesson.identified()){say("Сначала выберите профиль через «Игра ▾»");return;}WebLesson data=lesson.copy();int token=generation;long revision=outcomeRevision;
   io.execute(()->{try{String report=data.trainReport();ui(()->{if(token==generation&&revision==outcomeRevision){model=data;say(report);}});}catch(RuntimeException e){ui(()->{if(token==generation)say("Нужно минимум 10 примеров. Для оценки нужна отдельная сессия записи");});}});
+ }
+ /** Explicit opt-in. Full Web imitation never drives external Android apps. */
+ private void transfer2048(){
+  if(model==null||lesson==null||!model.identified()
+    ||!model.game.equals(lesson.game)||!model.profileId.equals(lesson.profileId)){
+   say("Сначала выберите профиль 2048, оцените действия и нажмите «Обучить»");return;
+  }
+  try{
+   Web2048Transfer transfer=Web2048Transfer.fromLesson(model);
+   // Only aggregated, rated directions are shared with real 2048; the
+   // source Web lesson with private screenshots/features remains untouched.
+   getSharedPreferences("real-2048-transfer",MODE_PRIVATE).edit()
+     .putString("model",transfer.encode()).apply();
+   say("Передано "+transfer.evidence()+" оценённых направлений для обычного 2048. Это малый бонус выбора СРЕДИ допустимых ходов; исход хода всё равно проверяется по экрану.");
+  }catch(IllegalArgumentException error){
+   say("Перенос доступен только для названного профиля «2048»: нужно минимум 10 оценённых направленных свайпов, из них 5 успешных. Другие игры и необработанные кадры не переносятся.");
+  }
  }
  private void autoplay(){stop("Подготовка игры по примерам");if(!ready()||model==null||!model.game.equals(lesson.game)||!model.profileId.equals(lesson.profileId)){say("Откройте игру, запишите/импортируйте примеры и нажмите «Обучить»");return;}playing=true;lastAuto=0;say("Локальная модель включена. STOP или ручное касание выключает управление");}
  private void inject(WebLesson.Action action){
