@@ -63,7 +63,9 @@ public final class LiveGameLearning {
   double quality=verified[i]==0?0:(double)qualityTotal[i]/verified[i];
   double reliability=(verified[i]+1.0)/(n+2.0);
   double confidence=(double)n/(n+8);
-  return Math.max(-6,Math.min(6,((quality-3)*.8+(reliability-.75)*3)*confidence));
+  // An ACK without a proven effect must reduce rather than conceal the
+  // success signal, even when a few early verified shots had high reward.
+  return Math.max(-6,Math.min(6,((quality-3)*.8*reliability+(reliability-.75)*3)*confidence));
  }
  public int verifiedCount(){int sum=0;for(int x:verified)sum+=x;return sum;}
  public int unconfirmedCount(){int sum=0;for(int x:unconfirmed)sum+=x;return sum;}
