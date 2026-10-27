@@ -17,11 +17,12 @@ public final class Response2048Test {
   require(!r.verify(board(4,8,0,0,0,0,0,0,0,0,0,0,0,0,0,0),700),"impossible spawn rejected");
   require(!r.timedOut(9299)&&r.timedOut(9300),"bounded post ACK timeout");
   require(r.report().contains("unknown_reads=1")&&r.report().contains("unstable=1")&&r.report().contains("mismatched=3"),"diagnostics");
-  require(r.verify(after,9301),"verified exact merge plus one spawn");
-  require(!r.pending()&&!r.timedOut(100000),"verified clears pending");
+  require(!r.verify(after,9301),"timeout cannot be bypassed by a late frame");
+  require(r.pending()&&r.timedOut(9301),"timed-out transition remains pending until STOP");
   r.reset();require(r.stage()==Response2048.Stage.IDLE,"reset");
   r.sent(before,Board2048.LEFT,100);r.acknowledge(120);
   require(r.verify(after,150),"valid transition");
+  require(!r.pending()&&!r.timedOut(100000),"verified clears pending");
   require(!r.verify(after,160),"no double reward");
   r.reset();
   try{r.sent(before,Board2048.UP,0);throw new AssertionError("illegal no-op sent");}catch(IllegalArgumentException expected){}
