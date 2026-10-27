@@ -1,3 +1,20 @@
+# АКТУАЛЬНАЯ НАВИГАЦИЯ ДЛЯ CODEX · 2026-10-27
+
+⚠️ Ниже сохранён ИСТОРИЧЕСКИЙ handoff 0.3.2. Эта ветка main по-прежнему НЕ содержит последних исходников Android.
+Актуальная версия Android: 0.7.33-dev / code49 в ветке sync/localpilot-android-0711. НЕЛЬЗЯ начинать ремонт от устаревшей main или объединять Android с основным PC LocalPilot.
+
+Читать прежде любых действий:
+- ПОЛНАЯ единая инженерная точка: https://github.com/GiVscSon/LocalPilot-Android/blob/sync/localpilot-android-0711/docs/LOCALPILOT_UNIFIED_HANDOFF_2026-10-27.ru.md
+- Актуальный Android handoff: https://github.com/GiVscSon/LocalPilot-Android/blob/sync/localpilot-android-0711/LOCALPILOT_ANDROID_HANDOFF.md
+- Основной общедоступный через подключённый Google Drive документ разных чатов: https://docs.google.com/document/d/1d_U4NLmOQTyzvRQ1PdUVMkLGh0-eH_PCwleFPetbFK8/edit
+- Приоритетный баг Match World / overlay / ACK: https://github.com/GiVscSon/LocalPilot-Android/issues/1
+
+P0 на реальных пользовательских скриншотах: PANEL_COVERS_ROI (2 и 99 кадров, 0 решений) и 3 решения/3 ввода/3 ACK без подтверждения изменения Match World. В коде GridPuzzleSession стандартный response timeout 2500 ms; это НЕ подтверждённый «лимит 3 ходов». Карканоид: по сообщению пользователя проигрыш от блоков, пересекающих невидимую линию; требует калибровки по видео. 0.7.33 JVM/build отчёты имеются, физической приёмки нет.
+
+Не менять main-код, подписи, данные, веса или игры на основании одного гайда. Чтение по ссылкам доступно при правах владельца/коннектора; **истории других чатов Codex автоматически не изменяются**.
+
+---
+
 # LocalPilot Android — точка продолжения
 
 Дата: 2026-10-20.
