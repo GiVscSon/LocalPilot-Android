@@ -58,6 +58,15 @@ public final class GridPuzzleVisionTest {
   },0,0,280,280,7,7,0,0,0,0,1000,null);
   check(irregularBoard.type(0,0)==-1&&irregularBoard.reason(0,0)==GridPuzzleVision.CellReason.NO_SAMPLE,"flat corner remains unknown with a distinct reason");
   check(!irregularBoard.usable()&&irregularBoard.unknownSummary(1).contains("NO_SAMPLE"),"irregular corners never authorize a complete board");
+  int expectedUnknown=irregularBoard.unknownIndices().length;
+  check(irregularBoard.unknownReasonCounts().equals("NO_SAMPLE="+expectedUnknown),"counts every unknown corner without pixels");
+  var mixedReasons=GridPuzzleVision.detect((x,y)->{
+   int row=y/40,col=x/40;
+   if((row<2||row>4)&&(col<2||col>4))return 0xb9cce1;
+   return token(x,y,0,0,40,7,7,irregular,new int[]{0xe72832,0xfbc72b,0x4aa91f,0x266ac6},0);
+  },0,0,280,280,7,7,80,80,120,120,1100,null);
+  check(mixedReasons.unknownReasonCounts().contains("EXCLUDED_OVERLAY=1")&&mixedReasons.unknownReasonCounts().contains("NO_SAMPLE="+expectedUnknown),"counts overlay separately from flat unknowns");
+  check(!mixedReasons.partialUsable(),"an overlay is never permitted as a partial observation");
   var gradient=GridPuzzleVision.detect((x,y)->{int v=70+x/10+y/10;return v<<16|v<<8|v;},0,0,420,420,7,7,0,0,0,0,1000,null);check(!gradient.usable(),"smooth background abstains");
   int[] sixBySix=new int[36];for(int i=0;i<sixBySix.length;i++)sixBySix[i]=i%4;
   int[] specials={0xd02020,0x20a020,0x3060e0,0xd0d0d0};

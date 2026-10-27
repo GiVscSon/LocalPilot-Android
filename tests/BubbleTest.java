@@ -144,11 +144,29 @@ public final class BubbleTest {
   // Like the supplied screenshot, the second row begins half a step left of the first.
   for(int row=0;row<3;row++)for(int col=0;col<(row%2==0?5:6);col++){
    int x=50+col*48-(row%2)*24,y=Math.round(80+row*48*.8660254f);
-   g.setColor(new java.awt.Color(COLORS[1+(col+row)%4]));g.fillOval(x-20,y-20,40,40);
+   g.setColor(new java.awt.Color(COLORS[1+(col+row)%4]));g.fillOval(x-23,y-23,46,46);
   }
-  g.setColor(new java.awt.Color(COLORS[3]));g.fillOval(140,580,40,40);g.dispose();
+  g.setColor(new java.awt.Color(COLORS[3]));g.fillOval(137,577,46,46);g.dispose();
   var read=BubbleVision.read(im::getRGB,320,640,0,0,320,640,0,0,0,0,null);
-  check(!read.usable(),"opposite row staggering must not be silently misread by the current board model");
+  check(read.usable(),"opposite row staggering must be recognized: "+read.reason());
+  BubbleBoard reverse=read.board();check(reverse.shortRowParity==0&&!reverse.slot(reverse.cols-1)&&reverse.slot(2*reverse.cols-1),"short first row and long second row retained");
+  check(reverse.neighbor(0,reverse.cols)&&reverse.neighbor(0,reverse.cols+1),"opposite phase adjacency");
+  var tracked=BubbleVision.read(im::getRGB,320,640,0,0,320,640,0,0,0,0,reverse);check(tracked.usable()&&tracked.board().same(reverse),"tracked reversed geometry stable");
+  int[] simple=new int[6*12];simple[1]=1;simple[2]=1;
+  BubbleBoard scene=new BubbleBoard(320,640,6,12,26,80,48,160,600,1,simple,0);
+  BubblePolicy.Shot shot=BubblePolicy.choose(scene);check(shot!=null&&scene.slot(shot.landing),"reverse phase shot lands on visible slot");
+  BubbleSession session=new BubbleSession();session.observe(scene,1000,1000);session.observe(scene,1200,1200);session.sent(scene,shot,1200);session.acknowledge(1250);
+  BubbleBoard result=new BubbleBoard(320,640,6,12,26,80,48,160,600,2,shot.expectedCells(),0);
+  session.observe(result,1700,1700);check(session.observe(result,1900,1900)==BubbleSession.Status.VERIFIED,"reverse phase verifies predicted outcome");
+  BubbleBoard wrongPhase=new BubbleBoard(320,640,6,12,26,80,48,160,600,2,shot.expectedCells(),1);
+  check(!scene.sameGeometry(wrongPhase),"different row phases cannot confirm each other");
+  BufferedImage ambiguous=new BufferedImage(320,640,BufferedImage.TYPE_INT_RGB);var brush=ambiguous.createGraphics();
+  brush.setColor(new java.awt.Color(COLORS[0]));brush.fillRect(0,0,320,640);
+  for(int row:new int[]{0,2})for(int col=0;col<5;col++){
+   int x=50+col*48,y=Math.round(80+row*48*.8660254f);brush.setColor(new java.awt.Color(COLORS[1+(col+row)%4]));brush.fillOval(x-23,y-23,46,46);
+  }
+  brush.setColor(new java.awt.Color(COLORS[3]));brush.fillOval(137,577,46,46);brush.dispose();
+  check(!BubbleVision.read(ambiguous::getRGB,320,640,0,0,320,640,0,0,0,0,null).usable(),"one observed row phase cannot infer alternating lattice");
   System.out.println("Reversed stagger fixture: "+read.reason());
  }
  private static void perception(){

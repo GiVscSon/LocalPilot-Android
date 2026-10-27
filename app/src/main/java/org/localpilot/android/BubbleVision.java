@@ -40,11 +40,11 @@ public final class BubbleVision {
   // Initial acquisition needs components; a tracked board samples only the
   // bounded circle probes. Never copy/parse an entire screen for cached geometry.
   if(previous==null)for(int i=0;i<n;i++)work.sample(i);
-  float x0,y0,step,lx,ly;int cols,rows,loaded;
+  float x0,y0,step,lx,ly;int cols,rows,loaded,shortParity;
   if(previous!=null){
    if(previous.width!=rw||previous.height!=rh)return new Read(null,"Геометрия области изменилась");
    x0=previous.x0/scale;y0=previous.y0/scale;step=previous.step/scale;
-   lx=previous.launcherX/scale;ly=previous.launcherY/scale;cols=previous.cols;rows=previous.rows;
+   lx=previous.launcherX/scale;ly=previous.launcherY/scale;cols=previous.cols;rows=previous.rows;shortParity=previous.shortRowParity;
    loaded=circle(work,w,h,lx,ly,step*.5f);
    if(loaded<=0)return new Read(null,"Ожидаю обычный шар в пушке");
   }else{
@@ -69,22 +69,22 @@ public final class BubbleVision {
     if(count>w*.12f){first=y;break;}}
    if(first<0)return new Read(null,"Не найдена верхняя граница рядов");
    float best=Float.POSITIVE_INFINITY;float[] fit=null;
-   for(float d=diameter*.86f;d<=diameter*1.12f;d+=.25f){
+   for(int parity=0;parity<2;parity++)for(float d=diameter*.86f;d<=diameter*1.12f;d+=.25f){
     for(float oy=first+d*.30f;oy<first+d*.68f;oy+=.5f)for(float ox=d*.40f;ox<d*.90f;ox+=.5f){
-     float error=0;int minRow=100,maxRow=-1,matched=0;
+     float error=0;int minRow=100,maxRow=-1,matched=0,rowPhases=0;
      for(Blob b:anchors){
       int row=Math.round((b.y()-oy)/(d*.8660254f));if(row<0||row>23)continue;
-      int col=Math.round((b.x()-ox)/d-(row%2)*.5f);if(col<0||col>15)continue;
-      float dx=b.x()-(ox+(col+(row%2)*.5f)*d),dy=b.y()-(oy+row*d*.8660254f),e=dx*dx+dy*dy;
-      if(e>d*d*.045f){error+=d*d;continue;}error+=e;matched++;minRow=Math.min(minRow,row);maxRow=Math.max(maxRow,row);
+      int col=Math.round((b.x()-ox)/d-(row%2==parity?.5f:0f));if(col<0||col>15)continue;
+      float dx=b.x()-(ox+(col+(row%2==parity?.5f:0f))*d),dy=b.y()-(oy+row*d*.8660254f),e=dx*dx+dy*dy;
+      if(e>d*d*.045f){error+=d*d;continue;}error+=e;matched++;rowPhases|=1<<(row%2);minRow=Math.min(minRow,row);maxRow=Math.max(maxRow,row);
      }
-     if(matched<3||matched<anchors.size()||maxRow<=minRow)continue;
+     if(matched<3||matched<anchors.size()||maxRow<=minRow||rowPhases!=3)continue;
      error/=matched*d*d;
-     if(error<best){best=error;fit=new float[]{ox,oy,d};}
+     if(error<best){best=error;fit=new float[]{ox,oy,d,parity};}
     }
    }
    if(fit==null||best>.006f)return new Read(null,"Круглые объекты не образуют устойчивые ряды");
-   x0=fit[0];y0=fit[1];step=fit[2];
+   x0=fit[0];y0=fit[1];step=fit[2];shortParity=(int)fit[3];
    cols=(int)Math.floor((w-x0-step*.40f)/step)+1;
    rows=Math.min(24,(int)Math.floor((ly-step*2-y0)/(step*.8660254f))+1);
    if(cols<4||cols>16||rows<2||cols*rows>BubbleBoard.MAX_CELLS)return new Read(null,"Неподдержанная геометрия рядов");
@@ -92,8 +92,8 @@ public final class BubbleVision {
   int[] cells=new int[rows*cols];int emptyRows=0,count=0;
   for(int row=0;row<rows;row++){
    int occupied=0;
-   for(int col=0;col<cols-(row%2);col++){
-    int type=circle(work,w,h,x0+(col+(row%2)*.5f)*step,y0+row*step*.8660254f,step*.5f);
+   for(int col=0;col<cols-(row%2==shortParity?1:0);col++){
+    int type=circle(work,w,h,x0+(col+(row%2==shortParity?.5f:0f))*step,y0+row*step*.8660254f,step*.5f);
     if(type<0)return new Read(null,"Анимация, бонус или неразличимый шар в ряду "+(row+1));
     cells[row*cols+col]=type;if(type>0){occupied++;count++;}
    }
@@ -104,7 +104,7 @@ public final class BubbleVision {
   }
   if(count<2&&previous==null)return new Read(null,"Недостаточно шаров для определения поля");
   BubbleBoard board;
-  try{board=new BubbleBoard(rw,rh,cols,rows,x0*scale,y0*scale,step*scale,lx*scale,ly*scale,loaded,cells);}
+  try{board=new BubbleBoard(rw,rh,cols,rows,x0*scale,y0*scale,step*scale,lx*scale,ly*scale,loaded,cells,shortParity);}
   catch(IllegalArgumentException invalid){return new Read(null,"Геометрия шаров выходит за область");}
   if(!board.ceilingConnected())return new Read(null,"Ожидаю завершения падения шаров");
   return new Read(board,"Обычные шары: "+count+" · цвет пушки "+loaded);

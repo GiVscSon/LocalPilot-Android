@@ -72,6 +72,16 @@ public final class GridPuzzleVision {
    if(total>shown)out.append(" (+").append(total-shown).append(")");
    return out.toString();
   }
+  /** Counts every unknown reason, without storing pixels or assuming cell semantics. */
+  public String unknownReasonCounts(){
+   int[] counts=new int[CellReason.values().length];
+   for(int i=0;i<values.length;i++)if(values[i]<0)counts[cellReasons[i].ordinal()]++;
+   StringBuilder out=new StringBuilder();
+   for(CellReason reason:CellReason.values())if(counts[reason.ordinal()]>0){
+    if(out.length()>0)out.append(", ");out.append(reason).append("=").append(counts[reason.ordinal()]);
+   }
+   return out.toString();
+  }
   public java.util.BitSet specialCellsMask(){return (java.util.BitSet)specialCellsMask.clone();}
   public int[] cells(){return values.clone();}
   public int type(int row,int col){if(row<0||row>=rows||col<0||col>=cols)throw new IllegalArgumentException("cell");return values[row*cols+col];}
