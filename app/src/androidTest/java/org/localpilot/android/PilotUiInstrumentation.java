@@ -822,7 +822,7 @@ public final class PilotUiInstrumentation extends Instrumentation {
             visible=new Rect(localVisible);visible.offset(xy[0],xy[1]);
             WindowMetrics metrics=view.getContext().getSystemService(WindowManager.class).getCurrentWindowMetrics();
             window=new Rect(metrics.getBounds());insets=metrics.getWindowInsets().getInsets(WindowInsets.Type.systemBars()|WindowInsets.Type.displayCutout());
-            safe=new Rect(window);safe.inset(insets.left,insets.top,insets.right,insets.bottom);
+            safe=new Rect(window);safe.set(safe.left+insets.left,safe.top+insets.top,safe.right-insets.right,safe.bottom-insets.bottom);
             clipped=new Rect(visible);if(!clipped.intersect(safe))clipped.setEmpty();
         }
         // Scroll a clipped control into view instead of tapping its first sliver.
@@ -898,7 +898,7 @@ public final class PilotUiInstrumentation extends Instrumentation {
         View decor=activity.getWindow().getDecorView();
         WindowMetrics metrics=activity.getWindowManager().getCurrentWindowMetrics();
         Insets insets=metrics.getWindowInsets().getInsets(WindowInsets.Type.systemBars()|WindowInsets.Type.displayCutout());
-        Rect safe=new Rect(metrics.getBounds());safe.inset(insets.left,insets.top,insets.right,insets.bottom);
+        Rect safe=new Rect(metrics.getBounds());safe.set(safe.left+insets.left,safe.top+insets.top,safe.right-insets.right,safe.bottom-insets.bottom);
         return "activity="+activity.getClass().getSimpleName()+" finishing="+activity.isFinishing()+" destroyed="+activity.isDestroyed()+" focus="+decor.hasWindowFocus()+" attached="+decor.isAttachedToWindow()+" insets="+insets+" safe="+safe.toShortString();
     }
 
