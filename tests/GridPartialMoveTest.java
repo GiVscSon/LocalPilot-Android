@@ -56,7 +56,7 @@ public final class GridPartialMoveTest {
   ok(shadow(grid(3,3,1,2,1,2,1,3,3,2,3),
      GridPuzzlePolicy.Mode.SWAP_MATCH3,new BitSet())==null,
     "full board uses existing validated policy, not the fallback");
-  ok(shadow(grid(3,3,1,2,1,2,1,3,3,2,Integer.MAX_VALUE),
+  ok(shadow(grid(3,3,1,2,1,2,1,3,3,-1,Integer.MAX_VALUE),
      GridPuzzlePolicy.Mode.SWAP_MATCH3,new BitSet())==null,
     "surrogate arithmetic must not overflow");
   BitSet invalid=new BitSet();invalid.set(100);
