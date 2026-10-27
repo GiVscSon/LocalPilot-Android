@@ -108,7 +108,7 @@ public final class BubbleTest {
   check(s.report().contains("reason=NULL_SCENE")&&s.report().contains("observed_cells=-1"),"missing scene is diagnosed without a guessed board");
   s.observe(b,1100,1501);
   check(s.report().contains("reason=STALE")&&s.report().contains("frame_age_ms=401")&&s.report().contains("NULL_SCENE:1,STALE:1"),"bounded reason counts preserve a missing scene followed by stale pixels");
-  s=pending(b,shot);s.observe(next,1700,1700);
+  s=pending(b,shot);check(!s.acknowledged(),"dispatch is not Android completion");s.observe(next,1700,1700);
   check(s.report().contains("reason=BEFORE_ACK")&&s.pending()&&s.verified()==0,"pre-ACK visual change is diagnosed without verification");
   s.acknowledge(1750);s.observe(next,1800,1800);s.observe(next,1850,1850);
   check(s.report().contains("reason=UNSTABLE")&&s.report().contains("candidate_age_ms=50"),"a distinct but too-close frame still needs stability");
@@ -123,7 +123,7 @@ public final class BubbleTest {
   s=pending(b,shot);s.acknowledge(1400);s.observe(unrelated,1800,1800);s.observe(unrelated,2000,2000);
   check(s.pending()&&s.verified()==0&&s.report().contains("reason=CELLS_MISMATCH")&&s.report().contains("mismatched_cells=1"),"a stable unrelated board reports the exact mismatch count without its colors");
   s.observe(next,8200,8200);String expired=s.report();
-  check(s.paused()&&s.pending()&&s.verified()==0&&expired.contains("reason=EXPIRED last_wait=CELLS_MISMATCH")&&expired.contains("sent_age_ms=7000"),"deadline retains the prior rejected branch while refusing even matching pixels");
+  check(s.paused()&&s.pending()&&s.acknowledged()&&s.lastWait()==BubbleSession.Reason.CELLS_MISMATCH&&s.verified()==0&&expired.contains("reason=EXPIRED last_wait=CELLS_MISMATCH")&&expired.contains("sent_age_ms=7000"),"deadline retains the prior rejected branch while refusing even matching pixels");
   s.observe(next,8300,8300);check(s.report().equals(expired),"later paused observations cannot overwrite the evidence that caused the pause");
   s.visionReason("reader\n"+"x".repeat(300));String report=s.report();String detail=report.substring(report.indexOf("vision_reason=")+14);
   check(detail.length()==120&&!detail.contains("\n")&&report.length()<2000,"reader explanation and total metadata stay bounded on one line");

@@ -21,6 +21,8 @@ public final class BubbleSession {
   reason=lastWait=Reason.RESET;Arrays.fill(reasonCounts,0);observations=0;frameAge=sentAge=ackAge=candidateAge=-1;observedCells=expectedCells=mismatchedCells=-1;visionReason="none";}
  public boolean pending(){return before!=null;}
  public boolean paused(){return status==Status.PAUSED;}
+ public boolean acknowledged(){return pending()&&ackAt>=0;}
+ public Reason lastWait(){return lastWait;}
  public int verified(){return verified;}
  /** Only the bounded reader's explanation is retained; no frame, pixels or board array enters the report. */
  public void visionReason(String value){

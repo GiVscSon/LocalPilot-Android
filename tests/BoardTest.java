@@ -5,7 +5,7 @@ public class BoardTest {
  static Board2048 b(int...a){return new Board2048(a);}
  public static void main(String[]args)throws Exception{
   Board2048 x=b(2,2,2,2, 4,4,8,0, 0,0,0,0, 0,0,0,0);Board2048.Move m=x.move(0);yes(Arrays.equals(m.board.cells,new int[]{4,4,0,0,8,8,0,0,0,0,0,0,0,0,0,0}));yes(m.reward==16);
-  int[] after=m.board.cells.clone();after[15]=2;yes(x.verifies(new Board2048(after),0));yes(Verified2048.mergeReward(x,0,new Board2048(after))==16);yes(!x.verifies(m.board,0));after[14]=2;yes(!x.verifies(new Board2048(after),0));yes(!Verified2048.ppoEligible());yes(Verified2048.features(x)[0]==1);yes(Verified2048.mask(x)[x.choose()]);
+  int[] after=m.board.cells.clone();after[15]=2;yes(x.verifies(new Board2048(after),0));yes(Verified2048.mergeReward(x,0,new Board2048(after))==16);yes(!x.verifies(m.board,0));after[14]=2;yes(!x.verifies(new Board2048(after),0));yes(x.verification(x,0)==Board2048.Verification.UNCHANGED);yes(x.verification(m.board,0)==Board2048.Verification.MISSING_SPAWN);yes(x.verification(new Board2048(after),0)==Board2048.Verification.MULTIPLE_SPAWNS);yes(!Verified2048.ppoEligible());yes(Verified2048.features(x)[0]==1);yes(Verified2048.mask(x)[x.choose()]);
   for(int i=0;i<Board2048.PALETTE.length;i++)yes(Board2048.colorTile(Board2048.PALETTE[i])==(i==0?0:1<<i));yes(Board2048.colorTile(0x00ff00)==-1);
   PixelBoardReader.Pixels pixels=(px,py)->{int c=px/100,r=py/100,value=x.cells[r*4+c];return Board2048.PALETTE[value==0?0:Integer.numberOfTrailingZeros(value)];};yes(PixelBoardReader.read(pixels,400,400,0,0,400,400).same(x));
   try{PixelBoardReader.read((px,py)->0x123456,400,400,0,0,400,400);throw new AssertionError();}catch(IllegalArgumentException expected){yes(true);}
