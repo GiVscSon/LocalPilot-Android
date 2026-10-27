@@ -258,18 +258,33 @@ public final class WebLearningActivity extends Activity {
  private void transfer2048(){
   if(model==null||lesson==null||!model.identified()
     ||!model.game.equals(lesson.game)||!model.profileId.equals(lesson.profileId)){
-   say("Сначала выберите профиль 2048, оцените действия и нажмите «Обучить»");return;
+   new AlertDialog.Builder(this).setTitle("Обучение для обычного 2048")
+     .setMessage("Для переноса сначала выберите профиль 2048, оцените действия и нажмите «Обучить». Существующий перенос можно отключить без очистки данных.")
+     .setNegativeButton("Закрыть",null)
+     .setNeutralButton("Отключить перенос",(d,w)->disable2048Transfer()).show();
+   return;
   }
-  try{
-   Web2048Transfer transfer=Web2048Transfer.fromLesson(model);
-   // Only aggregated, rated directions are shared with real 2048; the
-   // source Web lesson with private screenshots/features remains untouched.
-   getSharedPreferences("real-2048-transfer",MODE_PRIVATE).edit()
-     .putString("model",transfer.encode()).apply();
-   say("Передано "+transfer.evidence()+" оценённых направлений для обычного 2048. Это малый бонус выбора СРЕДИ допустимых ходов; исход хода всё равно проверяется по экрану.");
-  }catch(IllegalArgumentException error){
-   say("Перенос доступен только для названного профиля «2048»: нужно минимум 10 оценённых направленных свайпов, из них 5 успешных. Другие игры и необработанные кадры не переносятся.");
+  final Web2048Transfer transfer;
+  try{transfer=Web2048Transfer.fromLesson(model);}
+  catch(IllegalArgumentException error){
+   new AlertDialog.Builder(this).setTitle("Недостаточно совместимого опыта")
+     .setMessage("Нужен именованный профиль «2048» и минимум 10 оценённых направленных свайпов, среди них 5 успешных. Чужие игры и неоценённые жесты не используются.")
+     .setNegativeButton("Закрыть",null)
+     .setNeutralButton("Отключить перенос",(d,w)->disable2048Transfer()).show();
+   return;
   }
+  new AlertDialog.Builder(this).setTitle("Передать опыт обычному 2048?")
+    .setMessage("Перенести "+transfer.evidence()+" оценённых свайпов? Они дадут небольшой бонус выбора среди допустимых направлений. Снимки и касания не копируются. Реальные ходы по-прежнему подтверждаются по экрану.")
+    .setNegativeButton("Отмена",null)
+    .setNeutralButton("Отключить перенос",(d,w)->disable2048Transfer())
+    .setPositiveButton("Использовать",(d,w)->{
+     getSharedPreferences("real-2048-transfer",MODE_PRIVATE).edit().putString("model",transfer.encode()).apply();
+     say("Опыт 2048 подключён к настоящему CPU-планировщику: "+transfer.evidence()+" оценённых направлений, бонус только среди допустимых ходов.");
+    }).show();
+ }
+ private void disable2048Transfer(){
+  getSharedPreferences("real-2048-transfer",MODE_PRIVATE).edit().remove("model").apply();
+  say("Перенос опыта в настоящий 2048 отключён. Исходные уроки не удалены. Текущий запущенный игровой сеанс надо перезапустить.");
  }
  private void autoplay(){stop("Подготовка игры по примерам");if(!ready()||model==null||!model.game.equals(lesson.game)||!model.profileId.equals(lesson.profileId)){say("Откройте игру, запишите/импортируйте примеры и нажмите «Обучить»");return;}playing=true;lastAuto=0;say("Локальная модель включена. STOP или ручное касание выключает управление");}
  private void inject(WebLesson.Action action){
