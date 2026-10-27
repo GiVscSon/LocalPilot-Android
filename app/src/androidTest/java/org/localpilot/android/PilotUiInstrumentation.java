@@ -132,7 +132,16 @@ public final class PilotUiInstrumentation extends Instrumentation {
             android.accessibilityservice.AccessibilityServiceInfo info = automation.getServiceInfo();
             info.flags |= android.accessibilityservice.AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
                     | android.accessibilityservice.AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS;
+            // Android 11 UiAutomation runs in this test process: a content-change
+            // cache refresh can hold AccessibilityCache's lock while synchronously
+            // waiting for the app main thread, which then needs the same lock to
+            // process PilotService's event. Do not subscribe this test observer to
+            // that event; PilotService's own subscription remains unchanged.
+            // UI lookups explicitly refresh the automation cache before use.
+            info.eventTypes &= ~AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED;
             automation.setServiceInfo(info);
+            require((automation.getServiceInfo().eventTypes&AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED)==0,
+                    "UiAutomation content-change event filter was not applied");
             // am instrument restarts the target process. The isolated CI runner enables
             // our Accessibility service only after UiAutomation has attached here.
             Bundle ready=new Bundle();ready.putString("localpilot_ready","1");sendStatus(1,ready);
