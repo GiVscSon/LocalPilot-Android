@@ -56,7 +56,7 @@ public final class GridPuzzlePolicy {
   if(mode==Mode.TAP_GROUP){
    boolean[] visited=new boolean[cells.length];int[] queue=new int[cells.length];
    for(int start=0;start<cells.length;start++){
-    if(cells[start]<=0||visited[start])continue;
+    if(cells[start]<=0||visited[start]||special.get(start))continue;
     int head=0,tail=1;queue[0]=start;visited[start]=true;
     while(head<tail){
      int index=queue[head++],r=index/board.cols,c=index%board.cols;
@@ -64,7 +64,7 @@ public final class GridPuzzlePolicy {
       int nr=r+(direction==0?-1:direction==1?1:0),nc=c+(direction==2?-1:direction==3?1:0);
       if(nr<0||nr>=board.rows||nc<0||nc>=board.cols)continue;
       int next=nr*board.cols+nc;
-      if(!visited[next]&&cells[next]==cells[start]){visited[next]=true;queue[tail++]=next;}
+      if(!visited[next]&&!special.get(next)&&cells[next]==cells[start]){visited[next]=true;queue[tail++]=next;}
      }
     }
     if(tail<minGroup)continue;
@@ -79,12 +79,12 @@ public final class GridPuzzlePolicy {
    // diagonal chains. Bent chains need a polyline gesture and are not guessed.
    int[][] directions={{0,1},{1,0},{1,1},{1,-1}};
    for(int row=0;row<board.rows;row++)for(int col=0;col<board.cols;col++){
-    int start=row*board.cols+col,type=cells[start];if(type<=0)continue;
+    int start=row*board.cols+col,type=cells[start];if(type<=0||special.get(start))continue;
     for(int[] direction:directions){
      int dr=direction[0],dc=direction[1],pr=row-dr,pc=col-dc;
-     if(pr>=0&&pr<board.rows&&pc>=0&&pc<board.cols&&cells[pr*board.cols+pc]==type)continue;
+     if(pr>=0&&pr<board.rows&&pc>=0&&pc<board.cols&&cells[pr*board.cols+pc]==type&&!special.get(pr*board.cols+pc))continue;
      int length=0,nr=row,nc=col;
-     while(nr>=0&&nr<board.rows&&nc>=0&&nc<board.cols&&cells[nr*board.cols+nc]==type){length++;nr+=dr;nc+=dc;}
+     while(nr>=0&&nr<board.rows&&nc>=0&&nc<board.cols&&cells[nr*board.cols+nc]==type&&!special.get(nr*board.cols+nc)){length++;nr+=dr;nc+=dc;}
      if(length<minGroup)continue;
      int[] chain=new int[length];nr=row;nc=col;
      boolean containsSpecial=false;
