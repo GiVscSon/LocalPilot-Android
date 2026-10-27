@@ -79,6 +79,18 @@ public final class GridPuzzleSessionTest {
   slow.reset();check(slow.report().contains("response_timeout_ms=4500"),"reset preserves configured timeout");
   for(long invalid:new long[]{-1,0,999,10001,Long.MAX_VALUE})try{new GridPuzzleSession(invalid);throw new AssertionError("invalid timeout accepted");}catch(IllegalArgumentException expected){checks++;}
   check(new GridPuzzleSession(1000).report().contains("1000")&&new GridPuzzleSession(10000).report().contains("10000"),"timeout limits inclusive");
+  // A stable visual change in special-cell identity is a response only after ACK.
+  GridPuzzleSession specialSession=ready();int[] unchanged=board();
+  specialSession.sent(unchanged,1200);specialSession.acknowledge(1250);
+  java.util.BitSet booster=new java.util.BitSet();booster.set(4);
+  check(specialSession.observe(3,3,unchanged,booster,1500,1500)==GridPuzzleSession.Status.WAIT_RESPONSE,
+    "first post-ACK special-mask frame is insufficient");
+  check(specialSession.observe(3,3,unchanged,booster,1600,1600)==GridPuzzleSession.Status.CHANGED,
+    "two stable post-ACK frames verify visual special-mask transition");
+  check(specialSession.verifiedChanges()==1,"special-mask response counts only once");
+  GridPuzzleSession noAck=ready();noAck.sent(board(),1200);
+  check(noAck.observe(3,3,board(),booster,1500,1500)==GridPuzzleSession.Status.WAIT_RESPONSE,
+    "special mask without ACK never verifies action");
   System.out.println("Grid puzzle lifecycle: "+checks+" assertions PASS; synthetic snapshots only");
  }
 }
