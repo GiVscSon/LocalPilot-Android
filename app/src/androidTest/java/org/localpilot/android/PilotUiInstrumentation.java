@@ -782,6 +782,11 @@ public final class PilotUiInstrumentation extends Instrumentation {
             try {
                 if(!node.refresh()||!node.isVisibleToUser()||!node.isEnabled()||!node.isClickable()){traceClick("click label="+text+" path=node refreshed-actionable=false");return false;}
                 Rect bounds=new Rect();node.getBoundsInScreen(bounds);
+                // Android 11 shares its interaction cache with the service in
+                // this instrumentation process. Discard lookup cache before a
+                // click can trigger content-change refresh on UiAutomation.
+                // The live node still performs the actual Android action.
+                if(android.os.Build.VERSION.SDK_INT<=30)refreshAutomationCache();
                 boolean handled=node.performAction(AccessibilityNodeInfo.ACTION_CLICK);
                 traceClick("click label="+text+" path=node pkg="+node.getPackageName()+" window="+node.getWindowId()+" bounds="+bounds.toShortString()+" handled="+handled);
                 return handled;
