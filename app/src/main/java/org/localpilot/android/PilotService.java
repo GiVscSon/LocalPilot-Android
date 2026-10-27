@@ -631,8 +631,10 @@ public class PilotService extends AccessibilityService {
   if(automatic())permit.grantSession(gate.epoch(),SystemClock.elapsedRealtime());
   compact(true);note="Шипучка · проверяю обычные шары и пушку";update();long epoch=gate.epoch(),generation=boardReadGeneration;
   afterPanelLayout(()->{if(epoch!=gate.epoch()||generation!=boardReadGeneration||!playingGrid||focusPaused)return;
-   if(!movePanelAway(boardRoi)){stop("Панель STOP закрывает область: оставьте место над шарами");return;}
-   afterPanelLayout(()->{if(generation==boardReadGeneration)scheduleGrid(epoch);});});
+   if(!movePanelAway(boardRoi)){stop("Панель STOP закрывает область: безопасного места нет");return;}
+   afterPanelLayout(()->{if(epoch!=gate.epoch()||generation!=boardReadGeneration||!playingGrid||focusPaused)return;
+    if(!panelOutsideRoi(boardRoi)){stop("PANEL_COVERS_ROI: панель после перемещения перекрывает Шипучку");return;}
+    scheduleGrid(epoch);});});
  }
  private void bubbleStep(long epoch){
   if(epoch!=gate.epoch()||!playingGrid||selectedProfile!=9||bubbleSession.paused()||focusPaused)return;
@@ -679,7 +681,10 @@ public class PilotService extends AccessibilityService {
   gridSession.reset();gridMoves=gridVerified=0;gridResultVisible=gridSawAction=false;playingGrid=true;clearDiagnosticFrame();captureFrames=captureReads=captureDecisions=captureSent=captureCompleted=0;
   if(automatic())permit.grantSession(gate.epoch(),SystemClock.elapsedRealtime());
   compact(true);note="Проверяю устойчивую сетку "+gridConfig.rows+"×"+gridConfig.cols;update();long epoch=gate.epoch(),generation=boardReadGeneration;
-  afterPanelLayout(()->{if(epoch!=gate.epoch()||generation!=boardReadGeneration||!playingGrid||focusPaused)return;if(!movePanelAway(boardRoi)){stop("Панель STOP закрывает сетку: передвиньте её");return;}afterPanelLayout(()->{if(generation==boardReadGeneration)scheduleGrid(epoch);});});
+  afterPanelLayout(()->{if(epoch!=gate.epoch()||generation!=boardReadGeneration||!playingGrid||focusPaused)return;if(!movePanelAway(boardRoi)){stop("Панель STOP закрывает сетку: безопасного места нет");return;}
+   afterPanelLayout(()->{if(epoch!=gate.epoch()||generation!=boardReadGeneration||!playingGrid||focusPaused)return;
+    if(!panelOutsideRoi(boardRoi)){stop("PANEL_COVERS_ROI: панель после перемещения перекрывает сетку");return;}
+    scheduleGrid(epoch);});});
  }
  /** A focus pause invalidates pending reads even when the bound session survives. */
  private void postBoardTask(long epoch,long delay,Runnable task){
@@ -1298,13 +1303,35 @@ public class PilotService extends AccessibilityService {
   if(epoch!=gate.epoch()||focusPaused)return;discoveringBoard=true;boardRoi=new Rect(selected.left,selected.top,selected.right,selected.bottom);compact(true);
   afterPanelLayout(()->{
    if(epoch!=gate.epoch()||generation!=boardReadGeneration||focusPaused)return;if(!movePanelAway(boardRoi)){stop("Панель не помещается вне поля: поверните телефон или передвиньте её");return;}
-   afterPanelLayout(()->{if(epoch!=gate.epoch()||generation!=boardReadGeneration||focusPaused)return;discoveringBoard=false;uiStats="Автополе: "+selected.profile+" · "+boardRoi.width()+"×"+boardRoi.height();if(selected.profile==BoardSelection.Profile.GAME_2048)start2048();else startMini(selected.profile==BoardSelection.Profile.TTT?0:1);});
+   afterPanelLayout(()->{if(epoch!=gate.epoch()||generation!=boardReadGeneration||focusPaused)return;
+    if(!panelOutsideRoi(boardRoi)){stop("PANEL_COVERS_ROI: панель после перемещения закрыла найденное поле");return;}
+    discoveringBoard=false;uiStats="Автополе: "+selected.profile+" · "+boardRoi.width()+"×"+boardRoi.height();if(selected.profile==BoardSelection.Profile.GAME_2048)start2048();else startMini(selected.profile==BoardSelection.Profile.TTT?0:1);});
   });
  }
+ /** Dock a measured compact STOP panel outside the ROI; fail if no safe place exists. */
  private boolean movePanelAway(Rect roi){
-  Rect current=panelBounds();if(!Rect.intersects(current,roi))return true;int w=current.width(),h=current.height();if(w<=0||h<=0||w>armedBounds.width()||h>armedBounds.height())return false;
-  int[][] corners={{armedBounds.left,armedBounds.top},{armedBounds.right-w,armedBounds.top},{armedBounds.left,armedBounds.bottom-h},{armedBounds.right-w,armedBounds.bottom-h}};
-  for(int[] corner:corners){Rect candidate=new Rect(corner[0],corner[1],corner[0]+w,corner[1]+h);if(Rect.intersects(candidate,roi))continue;int x=layout.x+candidate.left-current.left,y=layout.y+candidate.top-current.top;if(x<0||y<0)continue;layout.x=x;layout.y=y;return updatePanelLayout();}return false;
+  if(roi==null||roi.isEmpty()||panel==null||layout==null||wm==null||consentPanelDetached||armedBounds.isEmpty())return false;
+  Rect current=panelBounds();if(current.isEmpty())return false;
+  Point size=new Point();wm.getDefaultDisplay().getRealSize(size);
+  Rect safe=new Rect(Math.max(0,armedBounds.left),Math.max(0,armedBounds.top),
+    Math.min(size.x,armedBounds.right),Math.min(size.y-dp(24),armedBounds.bottom));
+  if(safe.isEmpty())return false;
+  PanelDocking.Area placement=PanelDocking.choose(
+    new PanelDocking.Area(safe.left,safe.top,safe.right,safe.bottom),
+    new PanelDocking.Area(current.left,current.top,current.right,current.bottom),
+    new PanelDocking.Area(roi.left,roi.top,roi.right,roi.bottom),dp(8));
+  if(placement==null)return false;
+  int oldX=layout.x,oldY=layout.y;
+  layout.x+=placement.left-current.left;
+  layout.y+=placement.top-current.top;
+  if(updatePanelLayout())return true;
+  if(layout!=null){layout.x=oldX;layout.y=oldY;}
+  return false;
+ }
+ /** WindowManager may clamp/resize panel after updateViewLayout: verify the actual layout. */
+ private boolean panelOutsideRoi(Rect roi){
+  Rect measured=panelBounds();
+  return roi!=null&&!roi.isEmpty()&&!measured.isEmpty()&&!Rect.intersects(measured,roi);
  }
  private boolean captureEnabled(){return playing2048||playingMini||discoveringBoard||playingGrid;}
  private void selectBoard(){
@@ -1402,7 +1429,10 @@ public class PilotService extends AccessibilityService {
   afterPanelLayout(()->{
    if(epoch!=gate.epoch()||generation!=boardReadGeneration||!playing2048||focusPaused)return;
    if(!movePanelAway(boardRoi)){stop("Панель STOP закрывает поле: передвиньте её и повторите");return;}
-   afterPanelLayout(()->{if(epoch==gate.epoch()&&generation==boardReadGeneration&&playing2048&&!focusPaused)postBoardTask(epoch,captureDelay(),()->stable(epoch,(board,t,ms)->{
+   afterPanelLayout(()->{if(epoch==gate.epoch()&&generation==boardReadGeneration&&playing2048&&!focusPaused&&!panelOutsideRoi(boardRoi)){
+     stop("PANEL_COVERS_ROI: панель после перемещения закрыла 2048");return;
+    }
+    if(epoch==gate.epoch()&&generation==boardReadGeneration&&playing2048&&!focusPaused)postBoardTask(epoch,captureDelay(),()->stable(epoch,(board,t,ms)->{
    StringBuilder text=new StringBuilder("Сверьте все 16 клеток с игрой:\n");for(int i=0;i<16;i++){text.append(board.cells[i]==0?"·":board.cells[i]).append(i%4==3?"\n":"  ");}
    text.append("До STOP или конца партии. Кадры только в RAM. Это CPU-алгоритм, не обучение.");
    if(automatic()){permit.grantSession(epoch,SystemClock.elapsedRealtime());moves2048=0;mergeTotal=0;before2048=null;uiStats=text.toString();postBoardTask(epoch,captureDelay(),()->round2048(epoch));return;}
