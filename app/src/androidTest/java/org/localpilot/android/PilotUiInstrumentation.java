@@ -392,6 +392,11 @@ public final class PilotUiInstrumentation extends Instrumentation {
                 require(Boolean.TRUE.equals(method.invoke(service,"WINDOW_STATE_UNAVAILABLE")),"Interrupted gesture did not handle focus loss");
                 require(!gate().armed()&&!booleanField("playing2048"),"Interrupted 2048 gesture did not stop");return null;});
             addCheck("2048_interrupted_gesture_stops",new JSONObject().put("loss_notification_injected",true));
+            // STOP is intentionally fail-closed, and the panel may stay compact.
+            // Reopen visible controls before explicitly binding a fresh window;
+            // never auto-resume a ticket from the interrupted session.
+            if(compact())click("Развернуть");
+            await(()->present("Окно"),3_000,"Focus STOP did not expose window selection after expanding panel");
             bindDemoWindow();click("Старт");
             await(()->onMain(()->booleanField("playing2048")),12_000,"2048 did not restart after interruption");
         }else{
