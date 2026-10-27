@@ -31,11 +31,27 @@ public final class GridPuzzlePolicy {
  /** targetType=0 or targetRemaining=0 disables goal weighting; minGroup applies to groups and chains. */
  public static Decision choose(GridPuzzle board,Mode mode,int minGroup,int targetType,int targetRemaining){return choose(board,mode,minGroup,targetType,targetRemaining,new java.util.BitSet());}
  public static Decision choose(GridPuzzle board,Mode mode,int minGroup,int targetType,int targetRemaining,java.util.BitSet special){
+  return chooseInternal(board,mode,minGroup,targetType,targetRemaining,special,false);
+ }
+ /**
+  * Opt-in planner for incomplete but independently authenticated game boards.
+  * Unknown (-1) cells are obstacles, never guessed tokens. Only observed
+  * ordinary actions and immediate clears are considered. Caller must verify
+  * the window, ROI, scene, stable frames and the post-ACK game response.
+  */
+ public static Decision choosePartial(GridPuzzle board,Mode mode,int minGroup,int targetType,int targetRemaining,java.util.BitSet special){
+  return chooseInternal(board,mode,minGroup,targetType,targetRemaining,special,true);
+ }
+ private static Decision chooseInternal(GridPuzzle board,Mode mode,int minGroup,int targetType,int targetRemaining,java.util.BitSet special,boolean partialAllowed){
   if(board==null||mode==null||minGroup<2||minGroup>100||targetType<0||targetRemaining<0)throw new IllegalArgumentException("puzzle policy context");
   if(special==null||special.length()>board.rows*board.cols)throw new IllegalArgumentException("special mask outside board");
   special=(java.util.BitSet)special.clone();
-  // A partially identified grid may hide an obstacle or special item: abstain.
-  if(!board.known())return null;
+  if(!partialAllowed&&!board.known())return null;
+  // Second gate, independent of scene classification by GridPuzzleVision.
+  if(partialAllowed){
+   int known=0;for(int cell:board.cells())if(cell>=0)known++;
+   if(known<Math.max(6,(board.rows*board.cols*2+2)/3))return null;
+  }
   int[] cells=board.cells();Decision best=null;
   if(mode==Mode.TAP_GROUP){
    boolean[] visited=new boolean[cells.length];int[] queue=new int[cells.length];
