@@ -51,6 +51,10 @@ public class PilotService extends AccessibilityService {
  private boolean playingGrid,gridResultVisible,gridSawAction; // Shared screenshot loop for grid and bubble puzzles.
  private final BubbleSession bubbleSession=new BubbleSession();
  private BubbleBoard bubbleGeometry;
+ private BubblePolicy.Shot bubblePendingShot;
+ private LiveGameLearning bubbleLearning=new LiveGameLearning(LiveGameLearning.Game.BUBBLE);
+ private LiveGameLearning learning2048=new LiveGameLearning(LiveGameLearning.Game.GAME_2048);
+ private boolean bubbleLearningWritable=true,learning2048Writable=true;
  private GridPuzzleConfig gridConfig=new GridPuzzleConfig(6,6,2);
  private GridPuzzleVision.Palette gridPalette;
  private GridPuzzleGoal.Color gridGoal=GridPuzzleGoal.Color.ANY;
@@ -118,6 +122,12 @@ public class PilotService extends AccessibilityService {
     .append("\nCUSTOM_VISION: ").append(customVision!=null).append(" control_mode=").append(controlMode);
   out.append('\n').append(gridSession.report()).append(" unknown_reasons=").append(gridUnknownReasons).append(" size=").append(gridConfig.rows).append('x').append(gridConfig.cols).append(" goal_color=").append(gridGoal).append(" dispatched=").append(gridMoves).append(" visual_changes=").append(gridVerified);
   out.append('\n').append(bubbleSession.report());
+  out.append("\nLIVE_LEARNING_2048: verified=").append(learning2048.verifiedCount())
+   .append(" unconfirmed=").append(learning2048.unconfirmedCount())
+   .append(" saved=").append(learning2048Writable)
+   .append("\nLIVE_LEARNING_BUBBLE: verified=").append(bubbleLearning.verifiedCount())
+   .append(" unconfirmed=").append(bubbleLearning.unconfirmedCount())
+   .append(" saved=").append(bubbleLearningWritable);
   if(arcadeState!=null)out.append("\narcade_usable=").append(arcadeState.usable()).append(" confidence=").append(arcadeState.confidence)
     .append(" terminal=").append(arcadeState.terminal).append(" tracked=").append(arcadeState.tracked)
     .append("\nplayer=").append(diagnosticBox(arcadeState.player)).append(" control=").append(diagnosticBox(arcadeState.control))
@@ -142,6 +152,25 @@ public class PilotService extends AccessibilityService {
  private String confirmedProfileScope="";
  private String profileChoiceKey(String pkg){String slot=getSharedPreferences("panel",MODE_PRIVATE).getString("game_slot."+pkg,"default");return VisualGameTarget.selectionKey(pkg,slot);}
  private String color2048PaletteKey(){if(target==null||target.isEmpty())throw new IllegalStateException("2048 game scope unavailable");return profileChoiceKey(target)+".learned_colors";}
+ private String liveLearningKey(LiveGameLearning.Game game,boolean color2048){
+  return profileChoiceKey(target)+(game==LiveGameLearning.Game.BUBBLE?".bubble":color2048?".color2048":".2048")+".verified-live-v1";
+ }
+ private LiveGameLearning loadLiveGameLearning(LiveGameLearning.Game game,boolean color2048){
+  String saved=getSharedPreferences("live-game-learning",MODE_PRIVATE).getString(liveLearningKey(game,color2048),null);
+  if(saved==null)return new LiveGameLearning(game);
+  try{return LiveGameLearning.decode(game,saved);}
+  catch(IllegalArgumentException broken){
+   if(game==LiveGameLearning.Game.BUBBLE)bubbleLearningWritable=false;else learning2048Writable=false;
+   note="Модель игровых ходов повреждена; исходные данные сохранены, обучение отключено";
+   return new LiveGameLearning(game);
+  }
+ }
+ private void saveLiveGameLearning(LiveGameLearning learned,boolean color2048){
+  if(learned.game()==LiveGameLearning.Game.BUBBLE&&!bubbleLearningWritable
+      ||learned.game()==LiveGameLearning.Game.GAME_2048&&!learning2048Writable)return;
+  getSharedPreferences("live-game-learning",MODE_PRIVATE).edit()
+    .putString(liveLearningKey(learned.game(),color2048),learned.encode()).apply();
+ }
  private boolean browserTarget(){try{return getPackageManager().resolveActivity(new Intent(Intent.ACTION_VIEW,android.net.Uri.parse("https://localpilot.invalid")).setPackage(target),android.content.pm.PackageManager.MATCH_DEFAULT_ONLY)!=null;}catch(RuntimeException ignored){return true;}}
  private boolean explicitWindow;
  private Rect visualBounds(){return visualRoi!=null&&armedBounds.contains(visualRoi)?new Rect(visualRoi):new Rect(armedBounds);}
@@ -382,7 +411,7 @@ public class PilotService extends AccessibilityService {
   // gesture was needed. Stopping a session is not a new round loss.
   if(playingJumper&&jumperCaptureReady)CaptureCleanup.run(()->persistArcadeModel(false));
   captureStartup.stop(SystemClock.elapsedRealtime());clearDiagnosticFrame();arcadeSceneGeneration++;
-  playingGrid=false;gridSession.reset();gridPalette=null;gridPendingDecision=null;gridUnknownReasons="none";bubbleSession.reset();bubbleGeometry=null;
+  playingGrid=false;gridSession.reset();gridPalette=null;gridPendingDecision=null;gridUnknownReasons="none";bubbleSession.reset();bubbleGeometry=null;bubblePendingShot=null;
   arcadeLastUsable=null;arcadeController.reset();arcadeFeedback.reset();jumperFeedback.reset();arcadeState=null;arcadeBefore=null;arcadePending=null;arcadeAck=false;
   boolean stopJumper=playingJumper||jumperCaptureReady||jumperConsentPending;
   playingJumper=false;jumperCaptureReady=false;jumperConsentPending=false;jumperVisionPending=false;jumperAwaitingVerification=false;jumperCalibrationPending=false;jumperState=null;
