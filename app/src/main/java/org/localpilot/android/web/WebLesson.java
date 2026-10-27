@@ -81,6 +81,25 @@ public final class WebLesson {
  public synchronized boolean hasMetricRewards(){return samples.stream().anyMatch(s->s.outcome.source==GoalReward.Source.PROGRESS||s.outcome.source==GoalReward.Source.DISTANCE);}
  public synchronized Sample lastSample(){return samples.isEmpty()?null:samples.get(samples.size()-1);}
  public synchronized String outcomeSummary(){int good=0,bad=0,neutral=0,unknown=0;for(Sample s:samples)if(!s.outcome.known())unknown++;else if(s.outcome.value>0)good++;else if(s.outcome.value<0)bad++;else neutral++;return "Удачные "+good+" · ошибки "+bad+" · нейтральные "+neutral+" · без оценки "+unknown;}
+ /** Count ONLY outcome-rated, unambiguous directional swipes of this 2048 profile.
+  * Layout-dependent pixels, coordinates, unlabeled samples and other profiles
+  * are never transferred into the real 2048 controller.
+  * Indexes: LEFT,UP,RIGHT,DOWN successes; then the four failures.
+  */
+ public synchronized int[] graded2048Directions(){
+  if(!identified()||!"2048".equalsIgnoreCase(profileName))throw new IllegalArgumentException("not an identified 2048 profile");
+  int[] counts=new int[8];
+  for(Sample s:samples){
+   if(s.action.kind!=Kind.DRAG||!s.outcome.known()||s.outcome.value==0)continue;
+   float dx=s.action.toX-s.action.x,dy=s.action.toY-s.action.y;
+   float horizontal=Math.abs(dx),vertical=Math.abs(dy),main=Math.max(horizontal,vertical),minor=Math.min(horizontal,vertical);
+   if(main<.15f||main<minor*1.7f)continue;
+   int direction=horizontal>vertical?(dx<0?0:2):(dy<0?1:3);
+   counts[direction+(s.outcome.value>0?0:4)]++;
+  }
+  return counts;
+ }
+
  private static boolean unit(float f){return Float.isFinite(f)&&f>=0&&f<=1;}
  private static void validateFeatures(float[] f){if(f==null||f.length!=FEATURES)throw new IllegalArgumentException("feature shape");for(float v:f)if(!Float.isFinite(v)||v< -1||v>1)throw new IllegalArgumentException("feature range");}
  public static String sha(String s){try{byte[] b=MessageDigest.getInstance("SHA-256").digest(s.getBytes(StandardCharsets.UTF_8));char[] hex="0123456789abcdef".toCharArray(),out=new char[b.length*2];for(int i=0;i<b.length;i++){out[2*i]=hex[(b[i]&255)>>>4];out[2*i+1]=hex[b[i]&15];}return new String(out);}catch(NoSuchAlgorithmException e){throw new IllegalStateException(e);}}
