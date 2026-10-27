@@ -20,6 +20,7 @@ public final class GridPuzzleSession {
  public void reset(){status=Status.WAIT_STABLE;rows=cols=0;candidate=stable=before=null;candidateAt=lastFrameAt=dispatchedAt=completedAt=-1;verifiedChanges=0;partialPending=false;}
  public Status status(){return status;}
  public boolean pending(){return before!=null;}
+ public boolean acknowledged(){return pending()&&completedAt>=0;}
  public boolean paused(){return status==Status.PAUSED;}
  public int verifiedChanges(){return verifiedChanges;}
 
