@@ -56,6 +56,8 @@ public class PilotService extends AccessibilityService {
  private GridPuzzleGoal.Color gridGoal=GridPuzzleGoal.Color.ANY;
  private final GridPuzzleSession gridSession=new GridPuzzleSession(Build.VERSION.SDK_INT>=31?3000:4500);
  private long gridMoves,gridVerified;
+ private GridOnlineLearning gridLearning=new GridOnlineLearning();
+ private GridPuzzlePolicy.Decision gridPendingDecision;
  private CustomVisionConfig customVision;
  private boolean customCalibrationPending;
  private View customCalibrationOverlay;
@@ -378,7 +380,7 @@ public class PilotService extends AccessibilityService {
   // gesture was needed. Stopping a session is not a new round loss.
   if(playingJumper&&jumperCaptureReady)CaptureCleanup.run(()->persistArcadeModel(false));
   captureStartup.stop(SystemClock.elapsedRealtime());clearDiagnosticFrame();arcadeSceneGeneration++;
-  playingGrid=false;gridSession.reset();gridPalette=null;bubbleSession.reset();bubbleGeometry=null;
+  playingGrid=false;gridSession.reset();gridPalette=null;gridPendingDecision=null;bubbleSession.reset();bubbleGeometry=null;
   arcadeLastUsable=null;arcadeController.reset();arcadeFeedback.reset();jumperFeedback.reset();arcadeState=null;arcadeBefore=null;arcadePending=null;arcadeAck=false;
   boolean stopJumper=playingJumper||jumperCaptureReady||jumperConsentPending;
   playingJumper=false;jumperCaptureReady=false;jumperConsentPending=false;jumperVisionPending=false;jumperAwaitingVerification=false;jumperCalibrationPending=false;jumperState=null;
@@ -688,6 +690,10 @@ public class PilotService extends AccessibilityService {
   learningSlot=getSharedPreferences("panel",MODE_PRIVATE).getString("game_slot."+target,"default");
   try{gridGoal=GridPuzzleGoal.Color.valueOf(getSharedPreferences("grid-puzzle",MODE_PRIVATE).getString(gridKey()+".goal","ANY"));}catch(IllegalArgumentException error){gridGoal=GridPuzzleGoal.Color.ANY;}
   gridSession.reset();gridMoves=gridVerified=0;gridResultVisible=gridSawAction=false;playingGrid=true;clearDiagnosticFrame();captureFrames=captureReads=captureDecisions=captureSent=captureCompleted=0;
+  gridPendingDecision=null;gridLearning=new GridOnlineLearning();
+  String savedLearning=getSharedPreferences("grid-puzzle",MODE_PRIVATE).getString(gridKey()+".online-v1",null);
+  if(savedLearning!=null)try{gridLearning=GridOnlineLearning.decode(savedLearning);}
+  catch(IllegalArgumentException invalid){note="Статистика ходов повреждена: использую безопасную базовую стратегию";}
   if(automatic())permit.grantSession(gate.epoch(),SystemClock.elapsedRealtime());
   compact(true);note="Проверяю устойчивую сетку "+gridConfig.rows+"×"+gridConfig.cols;update();long epoch=gate.epoch(),generation=boardReadGeneration;
   afterPanelLayout(()->{if(epoch!=gate.epoch()||generation!=boardReadGeneration||!playingGrid||focusPaused)return;if(!movePanelAway(boardRoi)){stop("Панель STOP закрывает сетку: безопасного места нет");return;}
@@ -713,30 +719,69 @@ public class PilotService extends AccessibilityService {
    long frameAt=SystemClock.elapsedRealtime()-Math.max(0,SystemClock.uptimeMillis()-lastShotTimestamp);
    GridPuzzleVision.Observation observation=GridPuzzleVision.detect(pixels::getPixel,r.left,r.top,r.right,r.bottom,gridConfig.rows,gridConfig.cols,panel.left,panel.top,panel.right,panel.bottom,frameAt,gridPalette,selectedProfile==11);
    captureReads++;metrics.record(StageMetrics.Stage.READ,SystemClock.elapsedRealtimeNanos()-readNs);
-   int[] observedCells=observation.cells();if(!observation.usable())java.util.Arrays.fill(observedCells,-1);
-   GridPuzzleSession.Status status=gridSession.observe(gridConfig.rows,gridConfig.cols,observedCells,observation.specialCellsMask(),frameAt,SystemClock.elapsedRealtime());
-   if(status==GridPuzzleSession.Status.PAUSED){incrementGridStat("unconfirmed");note="Нет подтверждённого изменения поля · ввод приостановлен. Проверьте режим и область; Старт — повторить";update();return;}
-   if(status==GridPuzzleSession.Status.CHANGED){gridVerified++;incrementGridStat("visual_changes");}
-   if(status!=GridPuzzleSession.Status.READY&&status!=GridPuzzleSession.Status.CHANGED){note=observation.usable()?(gridSession.pending()?"Проверяю изменение поля после жеста":"Ожидаю второй устойчивый кадр"):"Не распознано "+unknownGridCells(observation)+" из "+(gridConfig.rows*gridConfig.cols)+" клеток · "+observation.unknownSummary(3)+" · проверьте область; необычные фишки пока не трогаю";update();scheduleGrid(epoch);return;}
+   boolean partialGrid=observation.partialUsable();
+   int[] observedCells=observation.cells();
+   // Keep individually recognized cells; the policy treats every unknown as
+   // an obstacle.  Reject a wrong screen or overlay-covered ROI as a whole.
+   if(!observation.usable()&&!partialGrid)java.util.Arrays.fill(observedCells,-1);
+   GridPuzzleSession.Status status=partialGrid||gridSession.pending()
+     ?gridSession.observePartial(gridConfig.rows,gridConfig.cols,observedCells,observation.specialCellsMask(),frameAt,SystemClock.elapsedRealtime())
+     :gridSession.observe(gridConfig.rows,gridConfig.cols,observedCells,observation.specialCellsMask(),frameAt,SystemClock.elapsedRealtime());
+   if(status==GridPuzzleSession.Status.PAUSED){
+    incrementGridStat("unconfirmed");
+    if(gridPendingDecision!=null&&gridSession.acknowledged()){
+     gridLearning.recordNoResponse(gridPendingDecision);saveGridLearning();
+    }
+    gridPendingDecision=null;
+    note="Android завершил жест, но игра не подтвердила ход · ввод приостановлен. Старт — повторить";
+    update();return;
+   }
+   if(status==GridPuzzleSession.Status.CHANGED){
+    gridVerified++;incrementGridStat("visual_changes");
+    if(gridPendingDecision!=null){
+     gridLearning.recordVerified(gridPendingDecision);saveGridLearning();gridPendingDecision=null;
+    }
+   }
+   if(status!=GridPuzzleSession.Status.READY&&status!=GridPuzzleSession.Status.CHANGED){
+    note=observation.usable()||partialGrid
+      ?(gridSession.pending()?"Проверяю подтверждённое изменение поля после жеста":"Ожидаю второй устойчивый кадр"+(partialGrid?" · частичная сетка":""))
+      :"Не распознано "+unknownGridCells(observation)+" из "+(gridConfig.rows*gridConfig.cols)+" клеток · "+observation.unknownSummary(3)+" · продолжаю чтение без ввода";
+    update();scheduleGrid(epoch);return;
+   }
    gridPalette=observation.palette();
-   getSharedPreferences("grid-puzzle",MODE_PRIVATE).edit().putString(gridKey()+".palette",gridPalette.encode()).apply();
+   // Only fully verified observations may overwrite a stored game palette.
+   // Partial observations remain session-local until a complete board appears.
+   if(observation.usable())getSharedPreferences("grid-puzzle",MODE_PRIVATE).edit()
+     .putString(gridKey()+".palette",gridPalette.encode()).apply();
    metrics.attempt(StageMetrics.Stage.POLICY);long policyNs=SystemClock.elapsedRealtimeNanos();
    int targetType=GridPuzzleGoal.targetType(gridPalette,gridGoal);
-   GridPuzzlePolicy.Decision action=GridPuzzlePolicy.choose(new GridPuzzle(gridConfig.rows,gridConfig.cols,observation.cells()),gridMode(),gridConfig.minGroup,targetType,gridConfig.rows*gridConfig.cols,observation.specialCellsMask());
+   GridPuzzle board=new GridPuzzle(gridConfig.rows,gridConfig.cols,observation.cells());
+   GridPuzzlePolicy.Decision action=GridPuzzlePolicy.chooseAdaptive(
+     board,gridMode(),gridConfig.minGroup,targetType,gridConfig.rows*gridConfig.cols,
+     observation.specialCellsMask(),partialGrid,gridLearning);
    captureDecisions++;metrics.record(StageMetrics.Stage.POLICY,SystemClock.elapsedRealtimeNanos()-policyNs);
    if(!automatic()){note="Наблюдение: сетка прочитана · "+(action==null?"совпадений не найдено":"найден ход, фишек "+action.expectedCleared);update();scheduleGrid(epoch);return;}
-   if(action==null){note="Допустимых ходов не найдено · ожидаю новое поле";update();scheduleGrid(epoch);return;}
+   if(action==null){note="Нет проверяемого хода · продолжаю наблюдение"+(partialGrid?" (неизвестные клетки не трогаю)":"");update();scheduleGrid(epoch);return;}
    if(busy||!valid(ticket)||SystemClock.elapsedRealtime()-frameAt>300){note="Жду свежий кадр для хода";update();scheduleGrid(epoch);return;}
    float x=r.left+(action.fromCol+.5f)*r.width()/gridConfig.cols,y=r.top+(action.fromRow+.5f)*r.height()/gridConfig.rows;
    float ex=r.left+(action.toCol+.5f)*r.width()/gridConfig.cols,ey=r.top+(action.toRow+.5f)*r.height()/gridConfig.rows;
-   long sentBefore=captureSent;gridSession.sent(observation.cells(),SystemClock.elapsedRealtime());
+   long sentBefore=captureSent;gridSession.sent(observation.cells(),SystemClock.elapsedRealtime(),partialGrid?action:null);
    sendObserved(x,y,ex,ey,ticket,()->{gridSession.acknowledge(SystemClock.elapsedRealtime());note="Жест доставлен · проверяю поле";update();scheduleGrid(epoch);},frameAt,action.mode==GridPuzzlePolicy.Mode.TAP_GROUP?55:160);
-   if(captureSent>sentBefore){gridMoves++;gridSawAction=true;incrementGridStat("dispatched");note="Ход "+gridMoves+" · ожидается фишек "+action.expectedCleared+" · изменений подтверждено "+gridVerified;update();}
-   else if(playingGrid){gridSession.reset();scheduleGrid(epoch);}
+   if(captureSent>sentBefore){
+    gridPendingDecision=action;gridMoves++;gridSawAction=true;incrementGridStat("dispatched");
+    note="Ход "+gridMoves+" · ожидается фишек "+action.expectedCleared+" · подтверждено "+gridVerified
+      +" · обучение "+gridLearning.verifiedCount()+" / "+gridLearning.notConfirmedCount();
+    update();
+   }
+   else if(playingGrid){gridPendingDecision=null;gridSession.reset();scheduleGrid(epoch);}
   });
  }
  private int unknownGridCells(GridPuzzleVision.Observation observation){int count=0;for(int type:observation.cells())if(type<0)count++;return count;}
  private void incrementGridStat(String name){android.content.SharedPreferences prefs=getSharedPreferences("grid-puzzle",MODE_PRIVATE);String key=gridKey()+"."+name;long count=prefs.getLong(key,0);prefs.edit().putLong(key,count==Long.MAX_VALUE?count:count+1).apply();}
+ /** Persist only verified response statistics, scoped by target + game slot + mode. */
+ private void saveGridLearning(){
+  getSharedPreferences("grid-puzzle",MODE_PRIVATE).edit().putString(gridKey()+".online-v1",gridLearning.encode()).apply();
+ }
 
  private void showCustomCalibration(Bitmap frame){
   final JumperFrameGeometry geometry=visualGeometry(frame);final int fw=frame.getWidth(),fh=frame.getHeight();

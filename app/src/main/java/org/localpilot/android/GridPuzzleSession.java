@@ -13,40 +13,88 @@ public final class GridPuzzleSession {
  private int[] candidate,stable,before;
  private long candidateAt=-1,lastFrameAt=-1,dispatchedAt=-1,completedAt=-1;
  private int verifiedChanges;
+ private boolean partialPending;
+ private java.util.BitSet predictedImpact;
 
  public GridPuzzleSession(){this(2500);}
  public GridPuzzleSession(long responseTimeoutMs){if(responseTimeoutMs<1000||responseTimeoutMs>10000)throw new IllegalArgumentException("response timeout outside 1000..10000 ms");this.responseTimeoutMs=responseTimeoutMs;}
- public void reset(){status=Status.WAIT_STABLE;rows=cols=0;candidate=stable=before=null;candidateAt=lastFrameAt=dispatchedAt=completedAt=-1;verifiedChanges=0;}
+ public void reset(){status=Status.WAIT_STABLE;rows=cols=0;candidate=stable=before=null;candidateAt=lastFrameAt=dispatchedAt=completedAt=-1;verifiedChanges=0;partialPending=false;predictedImpact=null;}
  public Status status(){return status;}
  public boolean pending(){return before!=null;}
+ public boolean acknowledged(){return pending()&&completedAt>=0;}
  public boolean paused(){return status==Status.PAUSED;}
  public int verifiedChanges(){return verifiedChanges;}
 
  public Status observe(int nextRows,int nextCols,int[] cells,long frameAt,long now){return observe(nextRows,nextCols,cells,new java.util.BitSet(),frameAt,now);}
  public Status observe(int nextRows,int nextCols,int[] cells,java.util.BitSet special,long frameAt,long now){
+  return observeCore(nextRows,nextCols,cells,special,frameAt,now,false);
+ }
+ /** Opt-in partial read; the caller must first authenticate this as a game board.
+  * Unlike observe(), this accepts -1 as an unknown obstacle, not as a piece.
+  */
+ public Status observePartial(int nextRows,int nextCols,int[] cells,java.util.BitSet special,long frameAt,long now){
+  return observeCore(nextRows,nextCols,cells,special,frameAt,now,true);
+ }
+ private Status observeCore(int nextRows,int nextCols,int[] cells,java.util.BitSet special,long frameAt,long now,boolean allowPartial){
   if(special==null||special.length()>nextRows*nextCols)throw new IllegalArgumentException("special mask outside board");
   if(paused())return status;
   // Check the response deadline even when the next frame is missing or invalid.
   if(pending()&&now>=dispatchedAt&&now-dispatchedAt>=responseTimeoutMs){clearCandidate();status=Status.PAUSED;return status;}
   if(frameAt<0||now<frameAt||now-frameAt>FRESH_MS||frameAt<=lastFrameAt){return waitAgain();}
   lastFrameAt=frameAt;
-  if(!complete(nextRows,nextCols,cells)||pending()&&(nextRows!=rows||nextCols!=cols))return waitAgain();
+  if(!(complete(nextRows,nextCols,cells)||(allowPartial&&validPartial(nextRows,nextCols,cells)))
+      ||pending()&&(nextRows!=rows||nextCols!=cols))return waitAgain();
   if(!pending()&&(nextRows!=rows||nextCols!=cols)){rows=nextRows;cols=nextCols;stable=null;clearCandidate();}
   if(pending()&&(completedAt<0||frameAt<=completedAt||frameAt-dispatchedAt<SETTLE_MS))return waitAgain();
   if(candidate==null||!Arrays.equals(candidate,cells)||!special.equals(candidateSpecial)){candidate=cells.clone();candidateSpecial=(java.util.BitSet)special.clone();candidateAt=frameAt;status=pending()?Status.WAIT_RESPONSE:Status.WAIT_STABLE;return status;}
   if(frameAt-candidateAt<STABLE_MS){status=pending()?Status.WAIT_RESPONSE:Status.WAIT_STABLE;return status;}
   if(pending()){
    if(Arrays.equals(before,cells)){status=Status.WAIT_RESPONSE;return status;}
-   stable=cells.clone();before=null;dispatchedAt=completedAt=-1;verifiedChanges++;status=Status.CHANGED;return status;
+   // A newly recognized UNKNOWN or a moving hint is not game progress.
+   // When either snapshot is incomplete, require at least two changed
+   // *known-to-known* cell identities on two distinct stable post-ACK frames.
+   if(partialPending||hasUnknown(cells)){
+    int shared=0,changed=0;
+    for(int i=0;i<cells.length;i++)if(before[i]>=0&&cells[i]>=0){
+     shared++;if(before[i]!=cells[i])changed++;
+    }
+    boolean impacted=predictedImpact==null;
+    if(predictedImpact!=null)for(int index=predictedImpact.nextSetBit(0);index>=0;index=predictedImpact.nextSetBit(index+1)){
+     if(before[index]>=0&&cells[index]>=0&&before[index]!=cells[index]){impacted=true;break;}
+    }
+    if(shared<Math.max(6,(cells.length+1)/2)||changed<2||!impacted){
+     status=Status.WAIT_RESPONSE;return status;
+    }
+   }
+   stable=cells.clone();before=null;partialPending=false;predictedImpact=null;dispatchedAt=completedAt=-1;verifiedChanges++;status=Status.CHANGED;return status;
   }
   stable=cells.clone();status=Status.READY;return status;
  }
 
  /** Call when dispatching the action selected from the latest stable board. */
- public void sent(int[] snapshot,long at){
+ public void sent(int[] snapshot,long at){sent(snapshot,at,null);}
+ /**
+  * Optional immediate-impact proof: for incomplete fields, an unrelated
+  * animation elsewhere must not validate an otherwise unobserved gesture.
+  */
+ public void sent(int[] snapshot,long at,GridPuzzlePolicy.Decision action){
   if(paused()||pending()||(status!=Status.READY&&status!=Status.CHANGED)||stable==null||!Arrays.equals(stable,snapshot)||at<lastFrameAt||at-lastFrameAt>FRESH_MS)
    throw new IllegalStateException("a fresh stable board is required before dispatch");
-  before=stable.clone();dispatchedAt=at;completedAt=-1;clearCandidate();status=Status.WAIT_RESPONSE;
+  java.util.BitSet impact=null;
+  if(action!=null){
+   impact=new java.util.BitSet(snapshot.length);
+   int from=action.fromRow*cols+action.fromCol,to=action.toRow*cols+action.toCol;
+   if(action.fromRow<0||action.fromRow>=rows||action.toRow<0||action.toRow>=rows
+     ||action.fromCol<0||action.fromCol>=cols||action.toCol<0||action.toCol>=cols
+     ||snapshot[from]<0||snapshot[to]<0)throw new IllegalArgumentException("action outside known grid");
+   impact.set(from);impact.set(to);
+   for(int index:action.clearedCells()){
+    if(index<0||index>=snapshot.length||snapshot[index]<0)throw new IllegalArgumentException("predicted clear unknown");
+    impact.set(index);
+   }
+  }
+  before=stable.clone();partialPending=hasUnknown(stable);predictedImpact=impact;
+  dispatchedAt=at;completedAt=-1;clearCandidate();status=Status.WAIT_RESPONSE;
  }
  /** Android completion only opens response observation; it never counts a success. */
  public void acknowledge(long at){
@@ -57,6 +105,12 @@ public final class GridPuzzleSession {
  public String report(){return "GRID_SESSION: status="+status+" pending="+pending()+" android_ack="+(completedAt>=0)+" visual_changes="+verifiedChanges+" response_timeout_ms="+responseTimeoutMs;}
  private Status waitAgain(){clearCandidate();status=pending()?Status.WAIT_RESPONSE:Status.WAIT_STABLE;return status;}
  private void clearCandidate(){candidate=null;candidateSpecial=null;candidateAt=-1;}
+ private static boolean hasUnknown(int[] cells){for(int cell:cells)if(cell<0)return true;return false;}
+ private static boolean validPartial(int rows,int cols,int[] cells){
+  if(rows<3||rows>10||cols<3||cols>10||cells==null||cells.length!=rows*cols)return false;
+  int known=0;for(int cell:cells){if(cell< -1)return false;if(cell>=0)known++;}
+  return known>=Math.max(6,(cells.length*2+2)/3);
+ }
  private static boolean complete(int rows,int cols,int[] cells){
   if(rows<3||rows>10||cols<3||cols>10||cells==null||cells.length!=rows*cols)return false;
   for(int cell:cells)if(cell<0)return false;

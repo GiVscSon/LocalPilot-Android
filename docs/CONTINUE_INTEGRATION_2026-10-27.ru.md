@@ -1,0 +1,9 @@
+# Продолжение интеграции LocalPilot Android · 27.10.2026
+
+Локальная ветка integration/panel-grid-20261027 объединяет ab73ad07880aae81cd4741e371461681f99ba2f7 и ef677b5616124a64c855c88c6640e657dcb692d1 (общий предок 0f71c7d63cc5f93f35a5edb7c8f9c49b053be72a). Автоматическое объединение без текстовых конфликтов; исходные remote-ветки не менялись. Резервная копия всех загруженных refs: /workspace/localpilot-before-integration.bundle, только локально.
+
+Внимание: техническое объединение не является подтверждением безопасности. В ef677b5 partial-grid подключён к автоматическому вводу в PilotService.gridStep, хотя раздел 8 unified handoff предусматривает сначала shadow-mode. Проверить границы UNKNOWN и special, все затронутые ячейки, post-ACK и решить безопасное включение до использования. Сохранять STOP, ActionGate, InputPermit, окно, ROI, свежесть, данные и dev signer. Не считать ACK игровым успехом. Не публиковать стабильную версию.
+
+Локально: 10 тестов release tools PASS; основной Verify PASS (6131 board/reader/parity и 2634 hardening/mini-game, включая дополнительные проверки). GridVerify FAIL из-за окружения: runtime Java 21 не содержит ct.sym для --release 17. Полный JVM пакет не завершён, Gradle/lint и Android device acceptance NOT RUN: отсутствуют полноценный JDK, Gradle, Android SDK/adb и /dev/kvm. Физический телефон NOT RUN. Прежние PASS на 0f71c7d и ef677b5 не относятся к объединённому коммиту.
+
+Далее: 1) проверить partial-grid и обеспечить shadow до доказательства безопасности; 2) выполнить JVM пакет из .github/workflows/build.yml и Gradle/lint на JDK 21 и Android SDK; 3) выполнить три последовательных PASS API 30/35/36 на одном точном объединённом SHA; 4) проверить физический Android и сохранение данных/подписи. Не удалять установку. Не коммитить частные кадры, журналы или ключи. Публикация локальной ветки и CI ещё не выполнялись.
