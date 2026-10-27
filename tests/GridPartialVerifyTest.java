@@ -112,6 +112,37 @@ public final class GridPartialVerifyTest {
   full.observe(6,6,relevantFull,1800,1800);
   check(full.observe(6,6,relevantFull,1900,1900)==GridPuzzleSession.Status.CHANGED,"stable local changes verify response");
 
+  // A top-row match cannot depend on a cell above the board.  The third
+  // predicted cell must be observed changing on two post-ACK frames.
+  int[] top=new int[49];for(int i=0;i<top.length;i++)top[i]=100+i;
+  top[0]=1;top[1]=2;top[2]=1;top[8]=1;
+  var topMove=GridPuzzlePolicy.choose(new GridPuzzle(7,7,top),GridPuzzlePolicy.Mode.SWAP_MATCH3,2,0,0,new BitSet());
+  check(topMove!=null&&Arrays.equals(topMove.clearedCells(),new int[]{0,1,2}),"predicted horizontal top-row triple");
+  int topFrom=topMove.fromRow*7+topMove.fromCol,topTo=topMove.toRow*7+topMove.toCol;
+  int outside=-1;for(int index:topMove.clearedCells())if(index!=topFrom&&index!=topTo){outside=index;break;}
+  check(outside>=0,"top match includes a non-endpoint cell");
+  GridPuzzleSession topSession=new GridPuzzleSession();
+  topSession.observe(7,7,top,1000,1000);topSession.observe(7,7,top,1100,1100);topSession.sent(top,1200,topMove);topSession.acknowledge(1250);
+  int[] topAfter=top.clone();topAfter[topFrom]=90;topAfter[outside]=91;
+  topSession.observe(7,7,topAfter,1500,1500);
+  check(topSession.observe(7,7,topAfter,1600,1600)==GridPuzzleSession.Status.CHANGED,"stable change to a non-endpoint in row zero confirms a response");
+
+  // Refill can reproduce the old color, even in the top row: failure to
+  // observe that change is uncertainty, not proof that the game ignored it.
+  GridPuzzleSession sameRefill=new GridPuzzleSession();
+  sameRefill.observe(7,7,top,1000,1000);sameRefill.observe(7,7,top,1100,1100);sameRefill.sent(top,1200,topMove);sameRefill.acknowledge(1250);
+  int[] ambiguous=top.clone();ambiguous[topFrom]=top[topTo];ambiguous[topTo]=top[topFrom];
+  sameRefill.observe(7,7,ambiguous,1500,1500);
+  check(sameRefill.observe(7,7,ambiguous,1600,1600)==GridPuzzleSession.Status.WAIT_RESPONSE,"same-color refill with endpoint-only differences remains unverified");
+  check(sameRefill.observe(7,7,ambiguous,3700,3700)==GridPuzzleSession.Status.PAUSED,"ambiguous response pauses rather than issuing another gesture");
+
+  // Seven unknowns out of 36 permit read-only proposal selection after the
+  // two-frame partial-session gate; this does not enable live gesture input.
+  GridPuzzleSession traceSession=new GridPuzzleSession();
+  traceSession.observePartial(6,6,trace,new BitSet(),1000,1000);
+  check(traceSession.observePartial(6,6,trace,new BitSet(),1100,1100)==GridPuzzleSession.Status.READY,"29 known cells become stable for observation");
+  check(GridPuzzlePolicy.choosePartial(new GridPuzzle(6,6,trace),GridPuzzlePolicy.Mode.TRACE_LINE,3,0,0,new BitSet())!=null,"seven unknown cells do not block a known straight trace proposal");
+
   GridPuzzleSession noResponse=new GridPuzzleSession();
   noResponse.observePartial(6,6,cells,new BitSet(),1000,1000);
   noResponse.observePartial(6,6,cells,new BitSet(),1100,1100);
