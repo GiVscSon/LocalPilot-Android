@@ -66,6 +66,20 @@ def main():
         print(json.dumps(report, indent=2), flush=True)
         if report.get('result') != 'PASS':
             annotation('notice', 'Failure at ms=' + str(report.get('failed_at_ms')) + '\nWindows: ' + str(report.get('windows','')))
+            # This runner accepts only an isolated synthetic emulator. Keep the
+            # failure evidence bounded and useful without downloading raw logs.
+            trace = report.get('interaction_trace')
+            if trace:
+                if isinstance(trace, list):
+                    trace = trace[-12:]
+                annotation('notice', 'UI interaction/lifecycle trace:\n'
+                           + json.dumps(trace, ensure_ascii=False)[-3500:])
+            metrics = report.get('metrics')
+            if isinstance(metrics, str):
+                selected = [line[:500] for line in metrics.splitlines()
+                            if line.startswith(('CAPTURE ', 'READ ', 'ANDROID_ACK '))]
+                if selected:
+                    annotation('notice', 'Capture/read/ACK metrics:\n' + '\n'.join(selected[:6]))
             raise RuntimeError(str(report.get('failure', report.get('evidence_error', 'No PASS result')))
                                + '\n' + str(report.get('own_state',''))
                                + '\nUI: ' + str(report.get('visible_ui',''))[:2000]

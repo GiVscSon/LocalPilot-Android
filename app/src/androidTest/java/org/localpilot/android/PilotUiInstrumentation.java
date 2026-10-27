@@ -1,18 +1,24 @@
 package org.localpilot.android;
 
 import android.app.Activity;
+import android.app.Application;
 import android.app.Instrumentation;
 import android.app.UiAutomation;
 import android.content.Context;
 import android.content.Intent;
 import android.content.res.Configuration;
 import android.graphics.Bitmap;
+import android.graphics.Insets;
 import android.graphics.Rect;
 import android.os.Bundle;
 import android.os.SystemClock;
 import android.view.KeyEvent;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.WindowInsets;
+import android.view.WindowManager;
+import android.view.WindowMetrics;
+import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
 import android.view.accessibility.AccessibilityWindowInfo;
 import android.widget.TextView;
@@ -26,6 +32,7 @@ import java.io.StringWriter;
 import java.lang.reflect.Field;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.util.ArrayDeque;
 import java.util.concurrent.Callable;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Matcher;
@@ -50,6 +57,28 @@ public final class PilotUiInstrumentation extends Instrumentation {
     private long started;
     private long limit;
     private String bubblePixelSample="not sampled";
+    private final Object traceLock=new Object();
+    private final ArrayDeque<TraceEntry> lifecycleTrace=new ArrayDeque<>();
+    private final ArrayDeque<TraceEntry> clickTrace=new ArrayDeque<>();
+    private String lastClickTrace="";
+    private long traceSequence;
+    private Application tracedApplication;
+    private Activity resumedActivity;
+    private int safeFallbackTouches;
+    private final Application.ActivityLifecycleCallbacks lifecycleCallbacks=new Application.ActivityLifecycleCallbacks(){
+        private void record(Activity activity,String stage){
+            String pkg=activity.getPackageName();
+            if(!pkg.equals(getTargetContext().getPackageName())&&!pkg.equals(getContext().getPackageName()))return;
+            appendTrace(lifecycleTrace,80,stage+" "+activity.getClass().getSimpleName()+"@"+Integer.toHexString(System.identityHashCode(activity))+" finishing="+activity.isFinishing()+" config="+activity.isChangingConfigurations());
+        }
+        @Override public void onActivityCreated(Activity activity,Bundle state){record(activity,"create");}
+        @Override public void onActivityStarted(Activity activity){record(activity,"start");}
+        @Override public void onActivityResumed(Activity activity){resumedActivity=activity;record(activity,"resume");}
+        @Override public void onActivityPaused(Activity activity){if(resumedActivity==activity)resumedActivity=null;record(activity,"pause");}
+        @Override public void onActivityStopped(Activity activity){record(activity,"stop");}
+        @Override public void onActivitySaveInstanceState(Activity activity,Bundle state){record(activity,"save");}
+        @Override public void onActivityDestroyed(Activity activity){record(activity,"destroy");}
+    };
 
     @Override public void onCreate(Bundle arguments) {
         super.onCreate(arguments);
@@ -62,6 +91,7 @@ public final class PilotUiInstrumentation extends Instrumentation {
         Bundle result = new Bundle();
         boolean passed = false;
         try {
+            onMain(()->{tracedApplication=(Application)getTargetContext().getApplicationContext();tracedApplication.registerActivityLifecycleCallbacks(lifecycleCallbacks);return null;});
             automation = getUiAutomation(UiAutomation.FLAG_DONT_SUPPRESS_ACCESSIBILITY_SERVICES);
             android.accessibilityservice.AccessibilityServiceInfo info = automation.getServiceInfo();
             info.flags |= android.accessibilityservice.AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
@@ -106,6 +136,7 @@ public final class PilotUiInstrumentation extends Instrumentation {
                 evidence.put("windows", windowSummary());
                 evidence.put("stack", stack.toString());
                 evidence.put("visible_ui", visibleUi());
+                evidence.put("interaction_trace",interactionTrace());
                 String fixtureState=bubbleFixtureState();
                 if(service!=null)evidence.put("own_state",onMain(()->"connected="+(PilotService.instance==service)+" registered="+field("panelRegistered")+" panel="+(field("panel")!=null)+" note="+field("note")+" demo_score="+(demo==null?-1:visibleScore(demo.getWindow().getDecorView()))+" demo_verified="+field("demoVerified")+" gesture="+field("lastGestureContext")+bubbleControllerState())+" fixture="+fixtureState);
                 if (service != null) evidence.put("metrics", onMain(() -> service.exportMetrics()));
@@ -118,6 +149,9 @@ public final class PilotUiInstrumentation extends Instrumentation {
                 if (service != null) onMain(() -> { service.hidePanel(); return null; });
             } catch (Throwable ignored) { /* Preserve the primary acceptance result. */ }
             try {
+                evidence.put("interaction_trace",interactionTrace());
+                evidence.put("safe_fallback_touches",safeFallbackTouches);
+                if(tracedApplication!=null)onMain(()->{tracedApplication.unregisterActivityLifecycleCallbacks(lifecycleCallbacks);return null;});
                 evidence.put("result", passed ? "PASS" : "FAIL");
                 evidence.put("duration_ms", SystemClock.uptimeMillis() - started);
                 File folder = getTargetContext().getExternalFilesDir("instrumentation");
@@ -140,6 +174,7 @@ public final class PilotUiInstrumentation extends Instrumentation {
     private void checkLauncherAndPicker() throws Exception {
         onMain(() -> { service.hidePanel(); return null; });
         launch(MainActivity.class);
+        await(()->onMain(this::launcherInsetsApplied),3_000,"Launcher did not inset its scroll viewport from system bars and cutouts");
         click("Показать панель");
         await(() -> present("STOP") && present("Игра") && present("Окно"), 3_000,
                 "Main screen did not recover visible overlay controls");
@@ -154,7 +189,7 @@ public final class PilotUiInstrumentation extends Instrumentation {
         waitForIdleSync();
         click("Показать панель");
         await(() -> present("STOP"), 3_000, "Panel could not be reopened after returning from picker");
-        addCheck("launcher_picker_and_panel_recovery", new JSONObject().put("input_armed", false));
+        addCheck("launcher_picker_and_panel_recovery", new JSONObject().put("input_armed", false).put("system_bar_padding_verified",true));
     }
 
     private Activity launch(Class<? extends Activity> type) {
@@ -263,13 +298,16 @@ public final class PilotUiInstrumentation extends Instrumentation {
     private void check2048ScreenshotProgress() throws Exception {
         onMain(() -> { service.hidePanel(); return null; });
         launch(MainActivity.class);
+        await(()->onMain(this::launcherInsetsApplied),3_000,"2048 launcher did not apply safe scroll viewport insets");
         // The real launcher intentionally starts a selected built-in game when
         // automatic control is enabled. Configure observation through its visible
         // switch first so this manual-region scenario starts from a stopped game.
         if(onMain(()->getTargetContext().getSharedPreferences(MainActivity.PREF,Context.MODE_PRIVATE).getBoolean("auto_control",true)))
             click("Автоуправление выбранной игрой");
         await(()->onMain(()->!getTargetContext().getSharedPreferences(MainActivity.PREF,Context.MODE_PRIVATE).getBoolean("auto_control",true)),3_000,"Launcher observation mode did not commit");
+        traceClick("2048 before input "+onMain(this::activitySummary));
         click("Открыть 2048");
+        traceClick("2048 after input "+onMain(this::activitySummary));
         // Observe the real rendered destination. Older Android can publish an
         // Activity to the screen without notifying this process's class monitor.
         await(() -> markerBounds("LOCALPILOT_BOARD_2048") != null, 10_000, "Main screen did not show the actual 2048 board");
@@ -690,12 +728,16 @@ public final class PilotUiInstrumentation extends Instrumentation {
     }
 
     private void click(String text) throws Exception {
+        traceClick("click begin label="+text+" "+onMain(this::activitySummary));
         await(() -> {
             AccessibilityNodeInfo node = findText(text);
-            if (node == null) { if(touchOwnControl(text))return true;scrollForward();return false; }
+            if (node == null) { if(touchOwnControl(text))return true;boolean scrolled=scrollForward();traceClick("click label="+text+" path=own-app-scroll result="+scrolled);return false; }
             try {
-                if(!node.refresh()||!node.isVisibleToUser()||!node.isEnabled()||!node.isClickable())return false;
-                return node.performAction(AccessibilityNodeInfo.ACTION_CLICK);
+                if(!node.refresh()||!node.isVisibleToUser()||!node.isEnabled()||!node.isClickable()){traceClick("click label="+text+" path=node refreshed-actionable=false");return false;}
+                Rect bounds=new Rect();node.getBoundsInScreen(bounds);
+                boolean handled=node.performAction(AccessibilityNodeInfo.ACTION_CLICK);
+                traceClick("click label="+text+" path=node pkg="+node.getPackageName()+" window="+node.getWindowId()+" bounds="+bounds.toShortString()+" handled="+handled);
+                return handled;
             }
             finally { node.recycle(); }
         }, 6_000, "Visible clickable UI control not found: " + text);
@@ -737,12 +779,12 @@ public final class PilotUiInstrumentation extends Instrumentation {
         return true;
     }
 
-    /** Inspect only visible UI geometry; input still traverses Android's real dispatcher. */
-    private Rect ownControlBounds(String text) throws Exception {
+    /** Inspect only our live controls; coordinate input must also avoid system bars. */
+    private ControlTarget ownControlTarget(String text) throws Exception {
         if(service==null)return null;
         for(String name:new String[]{"picker","overlayDialog","panel"}){
             Object object=field(name);View root=object instanceof View?(View)object:object instanceof android.app.Dialog?((android.app.Dialog)object).getWindow().getDecorView():null;
-            Rect found=ownControlBounds(root,text);if(found!=null)return found;
+            ControlTarget found=ownControlTarget(root,text);if(found!=null)return found;
         }
         // The actual launched Activity can be laid out before its accessibility
         // tree is published. Use only its focused live decor as a geometry
@@ -750,25 +792,83 @@ public final class PilotUiInstrumentation extends Instrumentation {
         Activity activity=launchedActivity;
         if(activity!=null&&!activity.isFinishing()&&!activity.isDestroyed()){
             View decor=activity.getWindow().getDecorView();
-            if(decor.isAttachedToWindow()&&decor.getWindowVisibility()==View.VISIBLE&&decor.hasWindowFocus())return ownControlBounds(decor,text);
+            if(decor.isAttachedToWindow()&&decor.getWindowVisibility()==View.VISIBLE&&decor.hasWindowFocus())return ownControlTarget(decor,text);
         }
         return null;
     }
+    private Rect ownControlBounds(String text)throws Exception{
+        ControlTarget target=ownControlTarget(text);return target==null||!target.canTap()?null:new Rect(target.clipped);
+    }
     private Rect ownControlBounds(View view,String text){
+        ControlTarget target=ownControlTarget(view,text);return target==null||!target.canTap()?null:new Rect(target.clipped);
+    }
+    private ControlTarget ownControlTarget(View view,String text){
         if(view==null||!view.isAttachedToWindow()||!view.isShown()||!view.isEnabled())return null;
         if(view instanceof TextView){
             String label=String.valueOf(((TextView)view).getText());
-            boolean match=text.startsWith("@contains:")?label.toLowerCase(java.util.Locale.ROOT).contains(text.substring(10).toLowerCase(java.util.Locale.ROOT)):text.equalsIgnoreCase(label);
-            if(match&&(view.isClickable()||view.getParent() instanceof android.widget.AbsListView)){
-                Rect visible=new Rect();if(view.getLocalVisibleRect(visible)&&!visible.isEmpty()){int[] xy=new int[2];view.getLocationOnScreen(xy);visible.offset(xy[0],xy[1]);return visible;}
+            if(matchesText(label,text)&&(view.isClickable()||view.getParent() instanceof android.widget.AbsListView)){
+                Rect visible=new Rect();if(view.getLocalVisibleRect(visible)&&!visible.isEmpty())return new ControlTarget(view,visible);
             }
         }
-        if(view instanceof ViewGroup){ViewGroup group=(ViewGroup)view;for(int i=0;i<group.getChildCount();i++){Rect found=ownControlBounds(group.getChildAt(i),text);if(found!=null)return found;}}
+        if(view instanceof ViewGroup){ViewGroup group=(ViewGroup)view;for(int i=0;i<group.getChildCount();i++){ControlTarget found=ownControlTarget(group.getChildAt(i),text);if(found!=null)return found;}}
         return null;
     }
+    private static boolean matchesText(String label,String query){return query.startsWith("@contains:")?label.toLowerCase(java.util.Locale.ROOT).contains(query.substring(10).toLowerCase(java.util.Locale.ROOT)):query.equalsIgnoreCase(label);}
+    private static final class ControlTarget{
+        final View view;final Rect full,visible,window,safe,clipped;final Insets insets;
+        ControlTarget(View view,Rect localVisible){
+            this.view=view;int[] xy=new int[2];view.getLocationOnScreen(xy);
+            full=new Rect(xy[0],xy[1],xy[0]+view.getWidth(),xy[1]+view.getHeight());
+            visible=new Rect(localVisible);visible.offset(xy[0],xy[1]);
+            WindowMetrics metrics=view.getContext().getSystemService(WindowManager.class).getCurrentWindowMetrics();
+            window=new Rect(metrics.getBounds());insets=metrics.getWindowInsets().getInsets(WindowInsets.Type.systemBars()|WindowInsets.Type.displayCutout());
+            safe=new Rect(window);safe.inset(insets.left,insets.top,insets.right,insets.bottom);
+            clipped=new Rect(visible);if(!clipped.intersect(safe))clipped.setEmpty();
+        }
+        // Scroll a clipped control into view instead of tapping its first sliver.
+        boolean canTap(){return !full.isEmpty()&&clipped.contains(full.centerX(),full.centerY());}
+        String describe(){return "full="+full.toShortString()+" visible="+visible.toShortString()+" window="+window.toShortString()+" insets="+insets+" safe="+safe.toShortString()+" clipped="+clipped.toShortString()+" xy="+full.centerX()+","+full.centerY();}
+    }
     private boolean touchOwnControl(String text)throws Exception{
-        Rect rect=onMain(()->ownControlBounds(text));if(rect==null)return false;
-        return tapAt(rect.centerX(),rect.centerY());
+        ControlTarget target=onMain(()->ownControlTarget(text));if(target==null)return false;
+        if(!target.canTap()){traceClick("click label="+text+" path=touch blocked "+target.describe());return false;}
+        require(target.safe.contains(target.full.centerX(),target.full.centerY()),"Fallback tap center lies outside safe system-bar/cutout content");
+        boolean fresh=onMain(()->{
+            ControlTarget current=ownControlTarget(text);
+            return current!=null&&current.view==target.view&&current.canTap()&&current.full.equals(target.full)&&current.clipped.equals(target.clipped)&&current.safe.equals(target.safe);
+        });
+        if(!fresh){traceClick("click label="+text+" path=touch geometry changed before input");return false;}
+        traceClick("click label="+text+" path=touch "+target.describe());
+        AtomicReference<Throwable> injectionError=new AtomicReference<>();
+        AtomicReference<Boolean> injected=new AtomicReference<>(false);
+        AccessibilityEvent clicked;
+        try{
+            clicked=automation.executeAndWaitForEvent(()->{
+                try{injected.set(tapAt(target.full.centerX(),target.full.centerY()));}
+                catch(Throwable error){injectionError.set(error);}
+            },event->{
+                String pkg=String.valueOf(event.getPackageName());
+                if(event.getEventType()!=AccessibilityEvent.TYPE_VIEW_CLICKED||(!pkg.equals(getTargetContext().getPackageName())&&!pkg.equals(getContext().getPackageName())))return false;
+                for(CharSequence label:event.getText())if(matchesText(String.valueOf(label),text))return true;
+                return false;
+            },500);
+        }catch(java.util.concurrent.TimeoutException error){
+            traceClick("click label="+text+" path=touch injected="+injected.get()+" matching-click-event=false "+onMain(this::activitySummary));
+            if(injectionError.get()!=null)throw new Exception("Fallback input failed",injectionError.get());
+            require(injected.get(),"Android rejected fallback control input: "+text);
+            safeFallbackTouches++;
+            // A control may detach before emitting TYPE_VIEW_CLICKED. This event
+            // is diagnostic; each caller still asserts its actual destination,
+            // dialog commitment, authorization or rendered game result.
+            return true;
+        }
+        try{
+            if(injectionError.get()!=null)throw new Exception("Fallback input failed",injectionError.get());
+            require(injected.get(),"Android rejected fallback control input: "+text);
+            safeFallbackTouches++;
+            traceClick("click label="+text+" path=touch injected=true matching-click-event=true "+onMain(this::activitySummary));
+            return true;
+        }finally{clicked.recycle();}
     }
     private boolean tapAt(float x,float y)throws Exception{
         long down=SystemClock.uptimeMillis();
@@ -779,6 +879,44 @@ public final class PilotUiInstrumentation extends Instrumentation {
         android.view.MotionEvent end=android.view.MotionEvent.obtain(down,SystemClock.uptimeMillis(),android.view.MotionEvent.ACTION_UP,x,y,0);
         end.setSource(android.view.InputDevice.SOURCE_TOUCHSCREEN);
         try{return automation.injectInputEvent(end,true)&&accepted;}finally{end.recycle();}
+    }
+
+    private boolean launcherInsetsApplied(){
+        Activity activity=launchedActivity;
+        if(!(activity instanceof MainActivity)||activity.isFinishing()||activity.isDestroyed())return false;
+        View content=activity.findViewById(android.R.id.content);
+        if(!(content instanceof ViewGroup group)||group.getChildCount()!=1||!(group.getChildAt(0) instanceof android.widget.ScrollView scroll))return false;
+        WindowInsets applied=scroll.getRootWindowInsets();
+        if(applied==null||!scroll.isLaidOut())return false;
+        Insets expected=applied.getInsets(WindowInsets.Type.systemBars()|WindowInsets.Type.displayCutout());
+        return scroll.getPaddingLeft()==expected.left&&scroll.getPaddingTop()==expected.top&&scroll.getPaddingRight()==expected.right&&scroll.getPaddingBottom()==expected.bottom;
+    }
+
+    private String activitySummary(){
+        Activity activity=resumedActivity!=null?resumedActivity:launchedActivity;
+        if(activity==null)return "activity=none";
+        View decor=activity.getWindow().getDecorView();
+        WindowMetrics metrics=activity.getWindowManager().getCurrentWindowMetrics();
+        Insets insets=metrics.getWindowInsets().getInsets(WindowInsets.Type.systemBars()|WindowInsets.Type.displayCutout());
+        Rect safe=new Rect(metrics.getBounds());safe.inset(insets.left,insets.top,insets.right,insets.bottom);
+        return "activity="+activity.getClass().getSimpleName()+" finishing="+activity.isFinishing()+" destroyed="+activity.isDestroyed()+" focus="+decor.hasWindowFocus()+" attached="+decor.isAttachedToWindow()+" insets="+insets+" safe="+safe.toShortString();
+    }
+
+    private static final class TraceEntry{
+        final long sequence,at;final String message;
+        TraceEntry(long sequence,long at,String message){this.sequence=sequence;this.at=at;this.message=message;}
+    }
+    private void appendTrace(ArrayDeque<TraceEntry> entries,int maximum,String message){
+        synchronized(traceLock){while(entries.size()>=maximum)entries.removeFirst();entries.addLast(new TraceEntry(++traceSequence,SystemClock.uptimeMillis()-started,message));}
+    }
+    private void traceClick(String message){
+        synchronized(traceLock){if(message.equals(lastClickTrace))return;lastClickTrace=message;appendTrace(clickTrace,40,message);}
+    }
+    private JSONArray interactionTrace(){
+        synchronized(traceLock){
+            java.util.ArrayList<TraceEntry> entries=new java.util.ArrayList<>(lifecycleTrace);entries.addAll(clickTrace);entries.sort(java.util.Comparator.comparingLong(entry->entry.sequence));
+            JSONArray result=new JSONArray();for(TraceEntry entry:entries)result.put(entry.at+"ms "+entry.message);return result;
+        }
     }
     private void drag(float x,float y,float endX,float endY)throws Exception{
         long down=SystemClock.uptimeMillis();

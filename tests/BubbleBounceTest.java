@@ -83,18 +83,19 @@ public final class BubbleBounceTest {
    session.observe(result,2100,2100);check(session.observe(result,2300,2300)==BubbleSession.Status.VERIFIED,"Two fresh predicted frames verify a reflected shot");
   }
  }
- private static java.awt.image.BufferedImage fixtureImage(int width,int height){
-  int[][] rows={{3,3,4,3,3,2},{2,3,3,1,2},{0,0,1,3,4,4},{0,2,2,1,2}};
+ private static int[] fixtureCells(){return new int[]{3,3,4,3,3,2,2,3,3,1,2,0,0,0,1,3,4,4,0,2,2,1,2,0};}
+ private static java.awt.image.BufferedImage fixtureImage(int width,int height){return fixtureImage(width,height,fixtureCells(),2);}
+ private static java.awt.image.BufferedImage fixtureImage(int width,int height,int[] cells,int loaded){
   int[] rgb={0x87ceeb,0xe52c32,0xf08016,0xf0cf20,0x4ab63b};
   float step=width/6.4f,x0=step*.7f;
   java.awt.image.BufferedImage image=new java.awt.image.BufferedImage(width,height,java.awt.image.BufferedImage.TYPE_INT_RGB);
   var brush=image.createGraphics();brush.setRenderingHint(java.awt.RenderingHints.KEY_ANTIALIASING,java.awt.RenderingHints.VALUE_ANTIALIAS_ON);
   brush.setColor(new java.awt.Color(rgb[0]));brush.fillRect(0,0,width,height);
-  for(int row=0;row<rows.length;row++)for(int col=0;col<rows[row].length;col++)if(rows[row][col]>0){
-   brush.setColor(new java.awt.Color(rgb[rows[row][col]]));float cx=x0+(col+row%2*.5f)*step,cy=(1.5f+row*.8660254f)*step;
+  for(int i=0;i<cells.length;i++)if(cells[i]>0){
+   int row=i/6,col=i%6;brush.setColor(new java.awt.Color(rgb[cells[i]]));float cx=x0+(col+row%2*.5f)*step,cy=(1.5f+row*.8660254f)*step;
    brush.fill(new java.awt.geom.Ellipse2D.Float(cx-step*.46f,cy-step*.46f,step*.92f,step*.92f));
   }
-  brush.setColor(new java.awt.Color(rgb[2]));brush.fill(new java.awt.geom.Ellipse2D.Float(width*.5f-step*.46f,height*.88f-step*.46f,step*.92f,step*.92f));brush.dispose();return image;
+  brush.setColor(new java.awt.Color(rgb[loaded]));brush.fill(new java.awt.geom.Ellipse2D.Float(width*.5f-step*.46f,height*.88f-step*.46f,step*.92f,step*.92f));brush.dispose();return image;
  }
  private static void renderedFixture(){
   for(int width:new int[]{320,480,672,1036})for(float aspect:new float[]{1.2f,1.3f,1.7f,2f}){
@@ -117,6 +118,67 @@ public final class BubbleBounceTest {
   route(b,shot);int[] expected=b.cells();expected[19]=expected[20]=0;
   check(expected[6]==2&&Arrays.equals(expected,shot.expectedCells()),"Alternate triple preserves the upper orange cell and removes only the lower pair");
  }
+ /** Original screenshot coordinates from the API30 failure; the sky is not rescaled or cropped by vision. */
+ private static java.awt.image.BufferedImage sourceFixture(int[] cells,int loaded){
+  var image=new java.awt.image.BufferedImage(1080,1920,java.awt.image.BufferedImage.TYPE_INT_RGB);
+  var brush=image.createGraphics();brush.drawImage(fixtureImage(1038,1143,cells,loaded),21,630,null);brush.dispose();return image;
+ }
+ /** Small-step contact against the fixture's own dimensions and integer-dispatched direction. */
+ private static int roundedFixtureLanding(BubbleBoard b,BubblePolicy.Shot shot){
+  float d=1038/6.4f,left=.7f*d,right=left+5*d,x=Math.round(b.launcherX),y=Math.round(b.launcherY);
+  float dx=Math.round(shot.aimX)-x,dy=Math.round(shot.aimY)-y,length=(float)Math.hypot(dx,dy);dx/=length;dy/=length;
+  int[] cells=fixtureCells();int reflections=0;
+  for(int tick=0;tick<4096;tick++){
+   x+=dx*d*.01f;y+=dy*d*.01f;
+   if(x<left){x=2*left-x;dx=-dx;reflections++;}else if(x>right){x=2*right-x;dx=-dx;reflections++;}
+   if(reflections>1||y<d*1.5f)return -1;
+   int hit=-1;float hitDistance=Float.POSITIVE_INFINITY;
+   for(int i=0;i<cells.length;i++)if(cells[i]>0){
+    float distance=(float)Math.hypot(x-(left+(i%6+(i/6%2)*.5f)*d),y-(1.5f+i/6*.8660254f)*d);
+    if(distance<d&&distance<hitDistance){hit=i;hitDistance=distance;}
+   }
+   if(hit<0)continue;
+   int nearest=-1;float distance=Float.POSITIVE_INFINITY;
+   float hx=left+(hit%6+(hit/6%2)*.5f)*d,hy=(1.5f+hit/6*.8660254f)*d;
+   for(int row=0;row<6;row++)for(int col=0;col<6-row%2;col++){
+    int i=row*6+col;if(i<cells.length&&cells[i]>0)continue;
+    float cx=left+(col+(row%2)*.5f)*d,cy=(1.5f+row*.8660254f)*d;
+    if(Math.hypot(cx-hx,cy-hy)>d*1.03f)continue;
+    float at=(float)Math.hypot(x-cx,y-cy);if(at<distance){distance=at;nearest=i;}
+   }
+   return reflections==1&&distance<d*.46f?nearest:-1;
+  }
+  return -1;
+ }
+ private static void nativeSourceCoordinates(){
+  var image=sourceFixture(fixtureCells(),2);
+  var read=BubbleVision.read(image::getRGB,1080,1920,21,630,1059,1773,0,0,0,0,null);
+  check(read.usable(),"Exact API30 source rectangle is recognizable: "+read.reason());
+  BubbleBoard b=read.board();
+  check(b.width==1038&&b.height==1143&&b.cols==6&&b.rows==4&&b.count()==19&&b.loadedColor==2,"Source ROI retains the native six-by-four board");
+  check(Math.abs(b.x0-114.740005f)<.01f&&Math.abs(b.y0-243.55501f)<.01f&&Math.abs(b.step-161.85f)<.01f
+    &&Math.abs(b.launcherX-517.5f)<.01f&&Math.abs(b.launcherY-1005f)<.01f,"Source-coordinate fit reproduces the API30 annotation");
+  BubblePolicy.Shot shot=BubblePolicy.choose(b);
+  check(shot!=null&&shot.bounces==1&&shot.landing==18&&shot.removed==3&&shot.dropped==0,"Native short arena chooses the lower orange triple");
+  route(b,shot);
+  check(Math.round(b.launcherX)==518&&Math.round(b.launcherY)==1005&&Math.round(shot.aimX)==115&&Math.round(shot.aimY)==723
+    &&roundedFixtureLanding(b,shot)==18,"Rounded native gesture reaches the independent fixture's lower orange cell");
+  int[] expected=fixtureCells();expected[19]=expected[20]=0;
+  check(Arrays.equals(expected,shot.expectedCells())&&expected[6]==2,"The expected result removes only source cells19 and20");
+  var nextImage=sourceFixture(expected,3);
+  var post=BubbleVision.read(nextImage::getRGB,1080,1920,21,630,1059,1773,0,0,0,0,b);
+  check(post.usable()&&post.board().sameGeometry(b)&&post.board().count()==17&&post.board().loadedColor==3
+    &&Arrays.equals(expected,post.board().cells()),"Cached source-coordinate read sees17 retained source cells and the next loaded color");
+  BubbleBoard next=post.board();BubbleSession session=new BubbleSession();
+  check(session.observe(b,1000,1000)==BubbleSession.Status.SEARCHING&&session.observe(b,2100,2100)==BubbleSession.Status.READY,"Two API30-spaced source frames open policy");
+  session.sent(b,shot,2100);session.acknowledge(2320);
+  check(session.observe(next,3420,3420)==BubbleSession.Status.WAIT_RESPONSE&&session.observe(next,4520,4520)==BubbleSession.Status.VERIFIED
+    &&session.verified()==1&&!session.pending(),"Two fresh post-ACK source frames verify the native alternate triple");
+  session.reset();session.observe(b,1000,1000);session.observe(b,2100,2100);session.sent(b,shot,2100);session.acknowledge(2320);
+  check(session.observe(next,3420,3820)==BubbleSession.Status.WAIT_RESPONSE&&session.verified()==0,"A matching but stale source frame cannot verify the native shot");
+  check(session.observe(next,9050,9100)==BubbleSession.Status.PAUSED&&session.pending()&&session.verified()==0
+    &&session.report().contains("android_ack=true"),"Expired native verification preserves pending Android ACK without asserting a game response");
+ }
  private static void uncertainWalls(){
   int[] cells=new int[72];System.arraycopy(new int[]{1,2,1,3,4,4},0,cells,0,6);
   BubbleBoard loose=new BubbleBoard(640,640,6,12,192,80,50,320,600,1,cells);
@@ -128,5 +190,5 @@ public final class BubbleBounceTest {
   BubbleBoard blocked=board(cells,1);int[] packed=blocked.cells();for(int row=1;row<12;row++)for(int col=0;col<6-row%2;col++)packed[row*6+col]=2;
   check(BubblePolicy.choose(board(packed,1))==null,"A launcher overlapping the board cannot escape by reflection");
  }
- public static void main(String[] args){seededScenes();profitableRicochets();renderedFixture();shortArena();uncertainWalls();System.out.println("Bubble ricochet oracle: "+checks+" assertions PASS; physical Market walls unverified");}
+ public static void main(String[] args){seededScenes();profitableRicochets();renderedFixture();shortArena();nativeSourceCoordinates();uncertainWalls();System.out.println("Bubble ricochet oracle: "+checks+" assertions PASS; physical Market walls unverified");}
 }

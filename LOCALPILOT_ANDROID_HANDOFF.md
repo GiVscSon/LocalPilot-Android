@@ -1,4 +1,34 @@
-# Текущий этап: 0.7.31-dev / code47 — экспериментальная поставка
+# В работе: 0.7.32-dev / code48 — 27 октября 2026
+
+Продолжение1ec77ea. Контрольная0.7.31 уже сохранена в
+release/delivery/LocalPilot_Android_0.7.31_dev/ (sourceCommit1ec77ea, dirtyfalse,
+source693020bytes, APK604046bytes, исходнаяDev-подпись, ZIP CRC проверены).
+Backup: /workspace/localpilot-backups/android-before-feedback-0732.bundle.
+
+MainActivity теперь явно используетedge-to-edge и отступыsystemBars/cutout
+наScrollView; кнопки не должны находиться подHome. Конкретная атрибуция
+прошлогоCI-сбоя остаётся гипотезой до нового нативного результата.
+PilotUiInstrumentation запрещаетfallback-касания внеsafecontent, проверяет
+актуальную геометрию и пишет bounded lifecycle80/click40 trace. Все18 проверок
+сохранены; событиеVIEW_CLICKED диагностическое, не заменяет результат игры.
+
+BubbleSession добавляет bounded reason/counts/ages/observed-vs-expected
+metadata и последнее120-character сообщениеBubbleVision. Условия300ms,
+100ms/350ms/7000ms, точное поле и ACK+2кадра пока НЕ менялись. Экспорт метрик
+сохраняетbubbleReport доSTOP. Точный1038×1143 source-replay проходит;
+синтетический stale/deadline путь воспроизводитPAUSED, но не доказывает
+причину настоящегоAPI30 отказа. Native следующий шаг обязателен.
+
+JVM Bubble788 сprivateimage +1341 ricochet PASS; differential50000 операций
+относительно1ec77ea без изменения состояний/исключений; tooling10 PASS.
+Локальный build/lint/compileAndroidTest PASS1m24s, сертификат прежний.
+APK607978bytes, SHA2567fbcc26df97e4749325864350b9d8a2ef402df5c03bd1f9430842a1dcc66a1ec.
+Это диагностическая сборка; нативная матрица ещё не выполнена.
+Задание: docs/IMPROVEMENT_PROMPT_0.7.32.ru.md. Следующийшаг — CI наAPI30/35/36
+с bounded аннотациями UI_TRACE иCAPTURE/READ/ACK, затем исправление доказанной
+причины. Не удлинятьтаймаут/ослаблятьсвежесть по одному предположению.
+
+# Архивная точка: 0.7.31-dev / code47 — экспериментальная поставка
 
 26 октября 2026. Проект /workspace/LocalPilot-Android; ветка
 sync/localpilot-android-0711, remote https://github.com/GiVscSon/LocalPilot-Android.git.

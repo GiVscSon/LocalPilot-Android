@@ -82,6 +82,36 @@ public final class BubbleTest {
    BubbleBoard expected=after(b,shot.expectedCells());check(expected.ceilingConnected(),"predicted remaining objects stay attached to ceiling");
   }
  }
+ private static BubbleSession pending(BubbleBoard b,BubblePolicy.Shot shot){
+  BubbleSession s=new BubbleSession();s.observe(b,1000,1000);s.observe(b,1200,1200);s.sent(b,shot,1200);return s;
+ }
+ private static void diagnostics(){
+  BubbleBoard b=board(1);BubblePolicy.Shot shot=BubblePolicy.choose(b);BubbleBoard next=after(b,shot.expectedCells());
+  BubbleSession s=new BubbleSession();s.observe(null,1000,1000);
+  check(s.report().contains("reason=NULL_SCENE")&&s.report().contains("observed_cells=-1"),"missing scene is diagnosed without a guessed board");
+  s.observe(b,1100,1501);
+  check(s.report().contains("reason=STALE")&&s.report().contains("frame_age_ms=401")&&s.report().contains("NULL_SCENE:1,STALE:1"),"bounded reason counts preserve a missing scene followed by stale pixels");
+  s=pending(b,shot);s.observe(next,1700,1700);
+  check(s.report().contains("reason=BEFORE_ACK")&&s.pending()&&s.verified()==0,"pre-ACK visual change is diagnosed without verification");
+  s.acknowledge(1750);s.observe(next,1800,1800);s.observe(next,1850,1850);
+  check(s.report().contains("reason=UNSTABLE")&&s.report().contains("candidate_age_ms=50"),"a distinct but too-close frame still needs stability");
+  s.observe(next,2000,2000);
+  check(s.verified()==1&&s.report().contains("reason=VERIFIED")&&s.report().contains("sent_age_ms=800 ack_age_ms=250")&&s.report().contains("observations=6")&&s.report().contains("mismatched_cells=0"),"verified report retains the actual frame/send/ACK ages after clearing pending state");
+  s=pending(b,shot);s.acknowledge(1250);s.observe(next,1300,1300);
+  check(s.pending()&&s.report().contains("reason=SETTLING"),"post-ACK settling is distinguished from absent ACK");
+  BubbleBoard shifted=new BubbleBoard(b.width,b.height,b.cols,b.rows,b.x0,b.y0+6,b.step,b.launcherX,b.launcherY,2,shot.expectedCells());
+  s=pending(b,shot);s.acknowledge(1400);s.observe(shifted,1800,1800);s.observe(shifted,2000,2000);
+  check(s.pending()&&s.verified()==0&&s.report().contains("reason=GEOMETRY_MISMATCH")&&s.report().contains("mismatched_cells=0"),"same colors at shifted geometry do not verify and report the geometry branch");
+  int[] wrong=shot.expectedCells();wrong[2]=wrong[2]==3?4:3;BubbleBoard unrelated=after(b,wrong);
+  s=pending(b,shot);s.acknowledge(1400);s.observe(unrelated,1800,1800);s.observe(unrelated,2000,2000);
+  check(s.pending()&&s.verified()==0&&s.report().contains("reason=CELLS_MISMATCH")&&s.report().contains("mismatched_cells=1"),"a stable unrelated board reports the exact mismatch count without its colors");
+  s.observe(next,8200,8200);String expired=s.report();
+  check(s.paused()&&s.pending()&&s.verified()==0&&expired.contains("reason=EXPIRED last_wait=CELLS_MISMATCH")&&expired.contains("sent_age_ms=7000"),"deadline retains the prior rejected branch while refusing even matching pixels");
+  s.observe(next,8300,8300);check(s.report().equals(expired),"later paused observations cannot overwrite the evidence that caused the pause");
+  s.visionReason("reader\n"+"x".repeat(300));String report=s.report();String detail=report.substring(report.indexOf("vision_reason=")+14);
+  check(detail.length()==120&&!detail.contains("\n")&&report.length()<2000,"reader explanation and total metadata stay bounded on one line");
+  s.reset();check(s.report().contains("reason=RESET")&&s.report().contains("observations=0")&&s.report().contains("reason_counts=- vision_reason=none"),"reset starts a new bounded diagnostic session");
+ }
  private static BufferedImage synthetic(){
   BufferedImage im=new BufferedImage(320,640,BufferedImage.TYPE_INT_RGB);var g=im.createGraphics();g.setColor(new java.awt.Color(COLORS[0]));g.fillRect(0,0,320,640);
   for(int row=0;row<3;row++)for(int col=0;col<6-row%2;col++){
@@ -137,5 +167,5 @@ public final class BubbleTest {
    System.out.printf(java.util.Locale.ROOT,"Recorded bubble frame scale=%.2f count=%d x0=%.2f y0=%.2f step=%.2f; cloud JVM acquire=%.2fms cached-p50=%.2fms cached-max=%.2fms policy=%.2fms%n",scale,b.count(),b.x0/scale,b.y0/scale,b.step/scale,coldNs/1e6,elapsed[4]/1e6,elapsed[7]/1e6,policyNs/1e6);
   }
  }
- public static void main(String[] args)throws Exception{geometryAndPolicy();directShotGeometry();session();perception();if(args.length>0)recorded(Path.of(args[0]));System.out.println("Bubble board/policy/feedback: "+checks+" assertions PASS; no physical-device claim");}
+ public static void main(String[] args)throws Exception{geometryAndPolicy();directShotGeometry();session();diagnostics();perception();if(args.length>0)recorded(Path.of(args[0]));System.out.println("Bubble board/policy/feedback: "+checks+" assertions PASS; no physical-device claim");}
 }

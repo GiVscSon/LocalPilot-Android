@@ -9,7 +9,7 @@ public class PilotService extends AccessibilityService {
  public int restoreExamples(byte[] data)throws java.io.IOException{collecting=false;stop("Восстановление: STOP");if(experience==null)throw new java.io.IOException("Хранилище недоступно; исходник сохранён");return experience.restoreEmpty(data);}
  private boolean saveExample(String profile,int[] before,int action,int[] after){if(!collecting)return true;try{if(experience==null)throw new java.io.IOException();experience.append(profile,before,action,after);return true;}catch(ExperienceStore.Full full){collecting=false;uiStats="Хранилище примеров заполнено; сбор выключен, игра продолжается";Toast.makeText(this,uiStats,Toast.LENGTH_LONG).show();update();return true;}catch(java.io.IOException|RuntimeException e){collecting=false;stop("Пример не записан: сбор и ввод остановлены. Экспортируйте данные");return false;}}
  private final StageMetrics metrics=new StageMetrics();
- public String exportMetrics(){stop("Экспорт замеров: STOP");return metrics.report()+"\n"+captureCounters()+"\nLAST_STOP: "+lastStopReason+"\nCAPTURE STARTUP\n"+captureStartup.report()+"\n"+sceneRecovery.report();}
+ public String exportMetrics(){String bubbleReport=bubbleSession.report();stop("Экспорт замеров: STOP");return metrics.report()+"\n"+captureCounters()+"\nLAST_STOP: "+lastStopReason+"\nCAPTURE STARTUP\n"+captureStartup.report()+"\n"+sceneRecovery.report()+"\n"+bubbleReport;}
  private final Handler handler=new Handler(Looper.getMainLooper());private final Handler gestureHandler=new Handler(Looper.getMainLooper());private final ActionGate gate=new ActionGate();
  private final CaptureRetry captureRetry=new CaptureRetry();
  private DisplayGeometry displayGeometry;
@@ -637,6 +637,7 @@ public class PilotService extends AccessibilityService {
    }
    gridResultVisible=false;metrics.attempt(StageMetrics.Stage.READ);long started=SystemClock.elapsedRealtimeNanos();
    BubbleVision.Read read=BubbleVision.read(pixels::getPixel,pixels.getWidth(),pixels.getHeight(),r.left,r.top,r.right,r.bottom,panel.left,panel.top,panel.right,panel.bottom,bubbleGeometry);
+   bubbleSession.visionReason(read.reason());
    captureReads++;metrics.record(StageMetrics.Stage.READ,SystemClock.elapsedRealtimeNanos()-started);
    long frameAt=SystemClock.elapsedRealtime()-Math.max(0,SystemClock.uptimeMillis()-lastShotTimestamp);
    BubbleSession.Status status=bubbleSession.observe(read.board(),frameAt,SystemClock.elapsedRealtime());

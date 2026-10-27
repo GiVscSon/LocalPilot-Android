@@ -9,7 +9,11 @@ public class MainActivity extends Activity {
   DiagnosticRequest(String session,android.graphics.Bitmap frame){this.session=session;this.frame=frame;}
   void close(){if(frame!=null&&!frame.isRecycled())frame.recycle();}
  }
- @Override public void onCreate(Bundle b){super.onCreate(b);Object retained=getLastNonConfigurationInstance();if(retained instanceof DiagnosticRequest)diagnosticRequest=(DiagnosticRequest)retained;LinearLayout box=new LinearLayout(this);box.setOrientation(LinearLayout.VERTICAL);box.setPadding(24,24,24,24);ScrollView scroll=new ScrollView(this);scroll.addView(box);setContentView(scroll);
+ @Override public void onCreate(Bundle b){super.onCreate(b);getWindow().setDecorFitsSystemWindows(false);Object retained=getLastNonConfigurationInstance();if(retained instanceof DiagnosticRequest)diagnosticRequest=(DiagnosticRequest)retained;LinearLayout box=new LinearLayout(this);box.setOrientation(LinearLayout.VERTICAL);box.setPadding(24,24,24,24);ScrollView scroll=new ScrollView(this);scroll.addView(box);
+  // Apply the same explicit inset policy on API30+ and Android35's enforced
+  // edge-to-edge windows. Padding belongs to the viewport, so scrolled controls
+  // cannot first become touchable underneath Home or a display cutout.
+  scroll.setOnApplyWindowInsetsListener((view,insets)->{android.graphics.Insets safe=insets.getInsets(android.view.WindowInsets.Type.systemBars()|android.view.WindowInsets.Type.displayCutout());if(view.getPaddingLeft()!=safe.left||view.getPaddingTop()!=safe.top||view.getPaddingRight()!=safe.right||view.getPaddingBottom()!=safe.bottom)view.setPadding(safe.left,safe.top,safe.right,safe.bottom);return insets;});setContentView(scroll);scroll.requestApplyInsets();
   TextView title=new TextView(this);title.setText("LocalPilot Android"+(getPackageName().endsWith(".dev")?" Dev":"")+" · "+CrashDiagnostics.buildLabel(this)+"\nАркады и головоломки на телефоне");title.setTextSize(24);box.addView(title);
   TextView help=new TextView(this);help.setText("1. Откройте игру и выберите её профиль: «Игра».\n2. Нажмите «Окно» и выберите приложение с игрой.\n3. Нажмите «Старт» и разрешите показ экрана.\n\nSTOP останавливает игру агента. В первый раз включите управление кнопкой ниже.");box.addView(help);
   button(box,"Включить управление",()->startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)));
