@@ -419,6 +419,7 @@ public class PilotService extends AccessibilityService {
   if("FOCUS_CHANGED".equals(reason))return true; // stale callback/plan, never retry its action
   if(!(playingJumper||playing2048||playingGrid||discoveringBoard)||!WindowFocus.transientLoss(reason))return false;
   if(windowFocus.observe(gate.epoch(),reason,SystemClock.elapsedRealtime())!=WindowFocus.State.WAITING)return false;
+  if(WindowFocus.interruptedArcade(playingJumper,arcadePending!=null,jumperAwaitingVerification)||WindowFocus.interrupted2048(playing2048,before2048!=null)){stop("Фокус потерян во время непроверенного жеста · STOP");return true;}
   if(!focusPaused){
    focusPaused=true;gate.pause();boardReadGeneration++;arcadeSceneGeneration++;
    arcadeFeedback.reset();jumperFeedback.reset();arcadeController.nextRound();
@@ -426,7 +427,7 @@ public class PilotService extends AccessibilityService {
    arcadePending=null;arcadeBefore=null;arcadeLastUsable=null;arcadeState=null;jumperState=null;
    captureBusy=false;pendingCapture=++captureCounter;
    if(visionPending&&visionTask!=null){visionTask.cancel(true);visionTask=null;}visionPending=false;visionRequest++;
-   gridSession.reset();bubbleSession.invalidateCandidate();
+   gridSession.invalidateCandidate();bubbleSession.invalidateCandidate();
    note="Фокус временно потерян · ввод приостановлен, захват сохранён";update();
   }
   if(!focusWatch){focusWatch=true;long epoch=gate.epoch(),watch=++focusWatchId;handler.postDelayed(()->watchFocus(epoch,watch),75);}
@@ -743,7 +744,7 @@ public class PilotService extends AccessibilityService {
      gridLearning.recordNoResponse(gridPendingDecision);saveGridLearning();
     }
     gridPendingDecision=null;
-    note="Android завершил жест, но игра не подтвердила ход · ввод приостановлен. Старт — повторить";
+    note=(gridSession.acknowledged()?"Android завершил жест, но игра не подтвердила ход":"Нет подтверждения Android для жеста")+" · ввод приостановлен. Старт — повторить";
     update();return;
    }
    if(status==GridPuzzleSession.Status.CHANGED){

@@ -33,6 +33,21 @@ public final class GridPuzzleSessionTest {
   GridPuzzleSession paused=s;illegal(()->paused.sent(a,4100),"paused controller sent an automatic retry");
   s.reset();check(!s.paused()&&!s.pending()&&s.verifiedChanges()==0&&s.status()==GridPuzzleSession.Status.WAIT_STABLE,"explicit reset clears the session");
 
+  GridPuzzleSession interrupted=ready();interrupted.sent(board(),1200);interrupted.invalidateCandidate();
+  check(interrupted.pending()&&!interrupted.acknowledged()&&interrupted.status()==GridPuzzleSession.Status.WAIT_RESPONSE,"focus loss preserves unresolved gesture without inventing ACK");
+  int[] changed=board();changed[0]=4;interrupted.observe(3,3,changed,1500,1500);
+  check(interrupted.observe(3,3,changed,1600,1600)==GridPuzzleSession.Status.WAIT_RESPONSE,"no ACK after focus loss cannot verify changed field");
+  illegal(()->interrupted.sent(board(),1600),"focus recovery cannot dispatch while response unresolved");
+  check(interrupted.observe(3,3,changed,3700,3700)==GridPuzzleSession.Status.PAUSED,"unresolved gesture still expires");
+  GridPuzzleSession recovered=ready();recovered.invalidateCandidate();
+  illegal(()->recovered.sent(board(),1200),"focus loss invalidates previously stable board");
+  check(recovered.observe(3,3,board(),1300,1300)==GridPuzzleSession.Status.WAIT_STABLE,"recovery requires a new first frame");
+  check(recovered.observe(3,3,board(),1400,1400)==GridPuzzleSession.Status.READY,"two fresh stable frames recover readiness");
+  GridPuzzleSession acknowledged=ready();acknowledged.sent(board(),1200);acknowledged.acknowledge(1250);acknowledged.invalidateCandidate();
+  check(acknowledged.pending()&&acknowledged.acknowledged(),"focus loss retains ACK and pending baseline");
+  acknowledged.observe(3,3,changed,1500,1500);
+  check(acknowledged.observe(3,3,changed,1600,1600)==GridPuzzleSession.Status.CHANGED,"two post-recovery frames can verify acknowledged action");
+
   for(int kind=0;kind<6;kind++){
    s=ready();s.sent(a,1200);s.acknowledge(1240);
    s.observe(3,3,b,1500,1500);

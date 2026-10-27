@@ -20,6 +20,8 @@ public final class GridPuzzleSession {
  public GridPuzzleSession(){this(2500);}
  public GridPuzzleSession(long responseTimeoutMs){if(responseTimeoutMs<1000||responseTimeoutMs>10000)throw new IllegalArgumentException("response timeout outside 1000..10000 ms");this.responseTimeoutMs=responseTimeoutMs;}
  public void reset(){status=Status.WAIT_STABLE;rows=cols=0;candidate=stable=before=null;candidateAt=lastFrameAt=dispatchedAt=completedAt=-1;verifiedChanges=0;partialPending=false;predictedImpact=null;swapFrom=swapTo=-1;}
+ /** Invalidate pre-focus observations without forgetting an unresolved gesture. */
+ public void invalidateCandidate(){clearCandidate();stable=null;if(!paused())status=pending()?Status.WAIT_RESPONSE:Status.WAIT_STABLE;}
  public Status status(){return status;}
  public boolean pending(){return before!=null;}
  public boolean acknowledged(){return pending()&&completedAt>=0;}

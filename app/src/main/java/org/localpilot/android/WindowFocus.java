@@ -15,5 +15,8 @@ public final class WindowFocus {
   if(lostAt<0)lostAt=now;
   return State.WAITING;
  }
+ /** An interrupted arcade gesture cannot be safely recovered by dropping feedback. */
+ public static boolean interruptedArcade(boolean playingArcade,boolean arcadePending,boolean jumperPending){return playingArcade&&(arcadePending||jumperPending);}
+ public static boolean interrupted2048(boolean playing,boolean pending){return playing&&pending;}
  public static boolean transientLoss(String reason){return "TARGET_WINDOW_UNAVAILABLE".equals(reason)||"WINDOW_STATE_UNAVAILABLE".equals(reason)||"TARGET_APP_CHANGED".equals(reason)||"FOCUS_PAUSED".equals(reason);}
 }

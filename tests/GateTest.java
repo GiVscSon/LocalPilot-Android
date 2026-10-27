@@ -5,6 +5,7 @@ public class GateTest {
 
  public static void main(String[] args){
   transientFocus();
+  interruptedArcade();
   unavailableBounds();
   completedGestureFreshness();
   initialBindingAndFreshness();
@@ -14,6 +15,16 @@ public class GateTest {
   diagnosticsDoNotChangeAuthority();
   delayedObservationDoesNotRenewActions();
   System.out.println("PASS "+checks+" gate checks");
+ }
+
+ private static void interruptedArcade(){
+  check(!WindowFocus.interruptedArcade(false,true,true));
+  check(!WindowFocus.interruptedArcade(true,false,false));
+  check(WindowFocus.interruptedArcade(true,true,false));
+  check(WindowFocus.interruptedArcade(true,false,true));
+  check(!WindowFocus.interrupted2048(false,true));
+  check(!WindowFocus.interrupted2048(true,false));
+  check(WindowFocus.interrupted2048(true,true));
  }
 
  private static void transientFocus(){

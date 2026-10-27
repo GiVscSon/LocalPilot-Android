@@ -112,7 +112,10 @@ public final class GridPuzzleVision {
    }
    float[] ring=ring(pixels,l,t,r,b);
    if(ring!=null){rings[index]=ring;reasons[index]=CellReason.RING_NO_MATCH;continue;}
-   samples[index]=describe(pixels,l,t,r,b);reasons[index]=CellReason.COLOR_NO_MATCH;
+   samples[index]=describe(pixels,l,t,r,b);
+   // A flat or visually unsupported cell has no token descriptor. Keep it
+   // UNKNOWN: it may be an absent corner, an obstacle, or an occluded tile.
+   reasons[index]=samples[index]==null?CellReason.NO_SAMPLE:CellReason.COLOR_NO_MATCH;
   }
   List<float[]> prototypes=new ArrayList<>();if(previous!=null)for(float[] d:previous.descriptors)prototypes.add(d.clone());
   int fixed=prototypes.size();int[] counts=new int[MAX_TYPES];

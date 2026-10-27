@@ -138,6 +138,19 @@ public final class BubbleTest {
   for(int[] p:new int[][]{{160,600,1},{90,615,2},{230,615,4}}){g.setColor(new java.awt.Color(COLORS[p[2]]));g.fillOval(p[0]-23,p[1]-23,46,46);}
   g.dispose();return im;
  }
+ private static void reversedStaggerFixture(){
+  BufferedImage im=new BufferedImage(320,640,BufferedImage.TYPE_INT_RGB);var g=im.createGraphics();
+  g.setColor(new java.awt.Color(COLORS[0]));g.fillRect(0,0,320,640);
+  // Like the supplied screenshot, the second row begins half a step left of the first.
+  for(int row=0;row<3;row++)for(int col=0;col<(row%2==0?5:6);col++){
+   int x=50+col*48-(row%2)*24,y=Math.round(80+row*48*.8660254f);
+   g.setColor(new java.awt.Color(COLORS[1+(col+row)%4]));g.fillOval(x-20,y-20,40,40);
+  }
+  g.setColor(new java.awt.Color(COLORS[3]));g.fillOval(140,580,40,40);g.dispose();
+  var read=BubbleVision.read(im::getRGB,320,640,0,0,320,640,0,0,0,0,null);
+  check(!read.usable(),"opposite row staggering must not be silently misread by the current board model");
+  System.out.println("Reversed stagger fixture: "+read.reason());
+ }
  private static void perception(){
   BufferedImage im=synthetic();var r=BubbleVision.read(im::getRGB,320,640,0,0,320,640,0,0,0,0,null);
   check(r.usable(),"ordinary synthetic field: "+r.reason());check(r.board().count()==17&&r.board().loadedColor==1,"reserve and bonus do not become launched bubble");
@@ -189,5 +202,5 @@ public final class BubbleTest {
    System.out.printf(java.util.Locale.ROOT,"Recorded bubble frame scale=%.2f count=%d x0=%.2f y0=%.2f step=%.2f; cloud JVM acquire=%.2fms cached-p50=%.2fms cached-max=%.2fms policy=%.2fms%n",scale,b.count(),b.x0/scale,b.y0/scale,b.step/scale,coldNs/1e6,elapsed[4]/1e6,elapsed[7]/1e6,policyNs/1e6);
   }
  }
- public static void main(String[] args)throws Exception{geometryAndPolicy();singleRemaining();directShotGeometry();session();diagnostics();perception();if(args.length>0)recorded(Path.of(args[0]));System.out.println("Bubble board/policy/feedback: "+checks+" assertions PASS; no physical-device claim");}
+ public static void main(String[] args)throws Exception{geometryAndPolicy();singleRemaining();directShotGeometry();session();diagnostics();perception();reversedStaggerFixture();if(args.length>0)recorded(Path.of(args[0]));System.out.println("Bubble board/policy/feedback: "+checks+" assertions PASS; no physical-device claim");}
 }
