@@ -73,7 +73,7 @@ public final class GridPartialVerifyTest {
     "one partial frame not enough");
   check(session.observePartial(6,6,cells,new BitSet(),1100,1100)==GridPuzzleSession.Status.READY,
     "two stable partial frames authorize candidate consideration");
-  session.sent(cells,1200);session.acknowledge(1250);
+  session.sent(cells,1200,swap);session.acknowledge(1250);
   check(session.verifiedChanges()==0,"ACK is not a learned success");
   int[] onlyOne=cells.clone();onlyOne[0]=9;
   session.observePartial(6,6,onlyOne,new BitSet(),1500,1500);
@@ -83,12 +83,16 @@ public final class GridPartialVerifyTest {
   session.observePartial(6,6,newKnown,new BitSet(),1700,1700);
   check(session.observePartial(6,6,newKnown,new BitSet(),1800,1800)==GridPuzzleSession.Status.WAIT_RESPONSE,
     "UNKNOWN becoming known is not game response");
+  int[] unrelated=cells.clone();unrelated[30]=91;unrelated[31]=92;
+  session.observePartial(6,6,unrelated,new BitSet(),1900,1900);
+  check(session.observePartial(6,6,unrelated,new BitSet(),2000,2000)==GridPuzzleSession.Status.WAIT_RESPONSE,
+    "unrelated two-cell animation must not verify the attempted move");
   int[] after=cells.clone();after[0]=9;after[1]=8;
-  session.observePartial(6,6,after,new BitSet(),1900,1900);
-  check(session.observePartial(6,6,after,new BitSet(),2000,2000)==GridPuzzleSession.Status.CHANGED,
-    "two fresh stable frames with two known-to-known changes verify response");
+  session.observePartial(6,6,after,new BitSet(),2100,2100);
+  check(session.observePartial(6,6,after,new BitSet(),2200,2200)==GridPuzzleSession.Status.CHANGED,
+    "two fresh stable changed frames including move footprint verify response");
   check(session.verifiedChanges()==1&&!session.pending(),"one change counted and no pending retry");
-  check(session.observePartial(6,6,after,new BitSet(),2100,2100)==GridPuzzleSession.Status.READY
+  check(session.observePartial(6,6,after,new BitSet(),2300,2300)==GridPuzzleSession.Status.READY
     &&session.verifiedChanges()==1,"static partial field never earns a second result");
 
   GridPuzzleSession noResponse=new GridPuzzleSession();
