@@ -1245,7 +1245,13 @@ public class PilotService extends AccessibilityService {
   final long waitingEpoch=epoch;
   handler.postDelayed(()->awaitTouchCheck(waitingEpoch,until),100);
  }
- private void startDemo(){if(busy||autoLeft>0||playing2048||playingMini||playingJumper||playingGrid||captureBusy)return;if(!permit.allows(gate.epoch(),SystemClock.elapsedRealtime())){note="Для демо сначала разрешите ввод";update();return;}if(!gate.armed()||!getPackageName().equals(target)){note="Сначала привяжите нашу тестовую игру";update();return;}autoLeft=10;demoVerified=0;deadline=SystemClock.elapsedRealtime()+60000;long epoch=gate.epoch();compact(true);handler.postDelayed(()->{if(epoch==gate.epoch()&&(autoLeft>0||busy)){stop("Демо: лимит 60 секунд; нет завершения серии");compact(false);}},60000);afterPanelLayout(()->demoStep(epoch));}
+ private void startDemo(){if(busy||autoLeft>0||playing2048||playingMini||playingJumper||playingGrid||captureBusy)return;if(!permit.allows(gate.epoch(),SystemClock.elapsedRealtime())){note="Для демо сначала разрешите ввод";update();return;}if(!gate.armed()||!getPackageName().equals(target)){note="Сначала привяжите нашу тестовую игру";update();return;}autoLeft=10;demoVerified=0;deadline=SystemClock.elapsedRealtime()+60000;long epoch=gate.epoch();
+  // Every demo entry point must keep the compact STOP panel away from the
+  // moving test target. The visible DemoActivity button path already docked
+  // the panel; the "Ещё → Демо ×10" path previously skipped that step,
+  // allowing a valid Android ACK on an overlay-covered target.
+  if(layout!=null){layout.x=Math.max(armedBounds.left,armedBounds.right-dp(160));layout.y=armedBounds.top+dp(4);}
+  compact(true);handler.postDelayed(()->{if(epoch==gate.epoch()&&(autoLeft>0||busy)){stop("Демо: лимит 60 секунд; нет завершения серии");compact(false);}},60000);afterPanelLayout(()->demoStep(epoch));}
  private void afterPanelLayout(Runnable action){if(panel==null)return;View view=panel;view.getViewTreeObserver().addOnPreDrawListener(new ViewTreeObserver.OnPreDrawListener(){public boolean onPreDraw(){if(view.getViewTreeObserver().isAlive())view.getViewTreeObserver().removeOnPreDrawListener(this);view.postOnAnimation(()->view.postOnAnimation(()->handler.postDelayed(action,80)));return true;}});view.requestLayout();view.invalidate();}
  private AccessibilityNodeInfo findTarget(AccessibilityNodeInfo n){if(n==null)return null;if("LOCALPILOT_DEMO_TARGET".equals(String.valueOf(n.getContentDescription()))&&n.isVisibleToUser()&&n.isClickable())return n;for(int i=0;i<n.getChildCount();i++){AccessibilityNodeInfo f=findTarget(n.getChild(i));if(f!=null)return f;}return null;}
  private int demoScore(AccessibilityNodeInfo node){
