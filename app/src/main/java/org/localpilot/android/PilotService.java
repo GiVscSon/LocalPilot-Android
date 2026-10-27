@@ -1123,8 +1123,8 @@ public class PilotService extends AccessibilityService {
   final long dispatchedNs=SystemClock.elapsedRealtimeNanos();long epoch=gate.epoch();
   final long flight=gestureFlight.begin(SystemClock.elapsedRealtime());busy=true;note="Отправка";update();
   try{boolean accepted=dispatchGesture(gesture,new GestureResultCallback(){
-   @Override public void onCompleted(GestureDescription g){if(!gestureFlight.complete(flight))return;metrics.record(StageMetrics.Stage.ANDROID_ACK,SystemClock.elapsedRealtimeNanos()-dispatchedNs);busy=false;if((playingJumper||playingGrid)&&epoch==gate.epoch())captureCompleted++;if(!auditAt(SafeJournal.Event.ANDROID_COMPLETED,gestureId,0,epoch)){stop("Ошибка записи ACK");return;}if(epoch!=gate.epoch()){update();return;}String completionRejection=invalidReason(ticket,true);if(completionRejection!=null){if(deferFocus(completionRejection))return;failStage(StageMetrics.Stage.ANDROID_ACK,completionRejection,"Контекст изменился после жеста");return;}note="Android завершил жест; игровой исход не проверен";update();if(done!=null)done.run();}
-   @Override public void onCancelled(GestureDescription g){if(!gestureFlight.complete(flight))return;metrics.cancelled(StageMetrics.Stage.ANDROID_ACK);busy=false;auditAt(SafeJournal.Event.ANDROID_CANCELLED,gestureId,0,epoch);if(epoch==gate.epoch())stop("Android отменил жест");else update();}
+   @Override public void onCompleted(GestureDescription g){if(expireGesture(flight,epoch)||!gestureFlight.complete(flight))return;metrics.record(StageMetrics.Stage.ANDROID_ACK,SystemClock.elapsedRealtimeNanos()-dispatchedNs);busy=false;if((playingJumper||playingGrid)&&epoch==gate.epoch())captureCompleted++;if(!auditAt(SafeJournal.Event.ANDROID_COMPLETED,gestureId,0,epoch)){stop("Ошибка записи ACK");return;}if(epoch!=gate.epoch()){update();return;}String completionRejection=invalidReason(ticket,true);if(completionRejection!=null){if(deferFocus(completionRejection))return;failStage(StageMetrics.Stage.ANDROID_ACK,completionRejection,"Контекст изменился после жеста");return;}note="Android завершил жест; игровой исход не проверен";update();if(done!=null)done.run();}
+   @Override public void onCancelled(GestureDescription g){if(expireGesture(flight,epoch)||!gestureFlight.complete(flight))return;metrics.cancelled(StageMetrics.Stage.ANDROID_ACK);busy=false;auditAt(SafeJournal.Event.ANDROID_CANCELLED,gestureId,0,epoch);if(epoch==gate.epoch())stop("Android отменил жест");else update();}
   // The default callback runs directly on the service main thread. A second
   // Handler hop could put an already delivered ACK behind its watchdog after
   // a slow framework window query. The watchdog still has its own Handler.
@@ -1133,11 +1133,13 @@ public class PilotService extends AccessibilityService {
    dispatchedInputs++;
    if((playingJumper||playingGrid)&&epoch==gate.epoch())captureSent++;
    // Separate handler survives STOP, so a missing callback cannot leave busy=true forever.
-   gestureHandler.postDelayed(()->{if(!gestureFlight.timeout(flight,SystemClock.elapsedRealtime()))return;busy=false;
-    if(epoch==gate.epoch())failStage(StageMetrics.Stage.ANDROID_ACK,"ACK_TIMEOUT","Android не сообщил результат жеста за 3 секунды");else update();
-   },GestureFlight.TIMEOUT_MS);
+   gestureHandler.postDelayed(()->expireGesture(flight,epoch),GestureFlight.TIMEOUT_MS);
   }else{gestureFlight.complete(flight);busy=false;audit(SafeJournal.Event.REJECTED,gestureId,0);failStage(StageMetrics.Stage.ANDROID_ACK,"DISPATCH_REJECTED","Android отклонил жест");}
   }catch(RuntimeException e){gestureFlight.complete(flight);busy=false;failStage(StageMetrics.Stage.ANDROID_ACK,"DISPATCH_FAILED","Ошибка отправки жеста");}
+ }
+ private boolean expireGesture(long flight,long epoch){
+  if(!gestureFlight.timeout(flight,SystemClock.elapsedRealtime()))return false;
+  busy=false;if(epoch==gate.epoch())failStage(StageMetrics.Stage.ANDROID_ACK,"ACK_TIMEOUT","Android не сообщил результат жеста за 3 секунды");else update();return true;
  }
  /** Explicit test button authorizes only the marked target in our own DemoActivity. */
  public void startTouchCheck(){
