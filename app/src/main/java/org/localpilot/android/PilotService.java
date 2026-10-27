@@ -770,9 +770,12 @@ public class PilotService extends AccessibilityService {
      board,gridMode(),gridConfig.minGroup,targetType,gridConfig.rows*gridConfig.cols,
      observation.specialCellsMask(),partialGrid,gridLearning);
    captureDecisions++;metrics.record(StageMetrics.Stage.POLICY,SystemClock.elapsedRealtimeNanos()-policyNs);
-   if(!automatic()){note="Наблюдение: сетка прочитана · "+(action==null?"совпадений не найдено":"найден ход, фишек "+action.expectedCleared);update();scheduleGrid(epoch);return;}
+   // Bent four-cell chains are suggestions only: live gestures currently support straight paths.
+   boolean shadowChain=gridMode()==GridPuzzlePolicy.Mode.TRACE_LINE
+     &&GridChainShadow.findFour(board,observation.specialCellsMask())!=null;
+   if(!automatic()){note="Наблюдение: сетка прочитана · "+(shadowChain?"найдена цепочка из 4 (без ввода)":action==null?"совпадений не найдено":"найден ход, фишек "+action.expectedCleared);update();scheduleGrid(epoch);return;}
    // Incomplete boards remain observational until partial-grid safety is validated.
-   if(partialGrid){note="Частичная сетка · наблюдение без ввода"+(action==null?"":" · найден возможный ход");update();scheduleGrid(epoch);return;}
+   if(partialGrid){note="Частичная сетка · наблюдение без ввода"+(shadowChain?" · найдена цепочка из 4":action==null?"":" · найден возможный ход");update();scheduleGrid(epoch);return;}
    if(action==null){note="Нет проверяемого хода · продолжаю наблюдение"+(partialGrid?" (неизвестные клетки не трогаю)":"");update();scheduleGrid(epoch);return;}
    if(busy||!valid(ticket)||SystemClock.elapsedRealtime()-frameAt>300){note="Жду свежий кадр для хода";update();scheduleGrid(epoch);return;}
    float x=r.left+(action.fromCol+.5f)*r.width()/gridConfig.cols,y=r.top+(action.fromRow+.5f)*r.height()/gridConfig.rows;
