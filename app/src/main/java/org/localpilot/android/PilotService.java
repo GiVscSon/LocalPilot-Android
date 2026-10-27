@@ -344,7 +344,14 @@ public class PilotService extends AccessibilityService {
  private void update(){
   boolean inputReady=gate.armed()&&!gate.paused()&&permit.allows(gate.epoch(),SystemClock.elapsedRealtime());for(Button control:manualControls)control.setEnabled(inputReady&&!busy);
   long renderNow=SystemClock.elapsedRealtime();if(playingJumper&&renderNow-lastPanelRender<100)return;lastPanelRender=renderNow;
-  if(miniState!=null)miniState.setText((playingGrid?gridConfig.rows+"×"+gridConfig.cols+" · READ"+captureReads+" · ввод"+captureSent:playingJumper?captureStartup.label()+" · READ"+captureReads+" · ввод"+captureSent:gate.armed()?"Окно выбрано":"STOP")+"\n"+note);
+  if(miniState!=null){
+   String miniLabel=playingGrid
+     ?(selectedProfile==9?"Шипучка · READ"+captureReads+" · ввод"+captureSent:
+       gridConfig.rows+"×"+gridConfig.cols+" · READ"+captureReads+" · ввод"+captureSent)
+     :playingJumper?captureStartup.label()+" · READ"+captureReads+" · ввод"+captureSent
+     :gate.armed()?"Окно выбрано":"STOP";
+   miniState.setText(miniLabel+"\n"+note);
+  }
   if(state!=null)state.setText(profileLabel()+" · "+(manualVisualRoi?"область вручную":visualRoi!=null?"боковые поля убраны":"область авто")+"\n"+note+"\n"+(gate.armed()?targetLabel+" · "+(inputReady?"ввод включён":"наблюдение"):"Нажмите Старт или выберите Окно")+(captureSession>0||playingGrid?"\n"+captureCounters():"")+(collecting?"\nСбор примеров включён":""));
  }
  private AccessibilityNodeInfo windowRoot(AccessibilityWindowInfo window){return Build.VERSION.SDK_INT>=33?window.getRoot(0):window.getRoot();}
@@ -696,7 +703,7 @@ public class PilotService extends AccessibilityService {
    GridPuzzleSession.Status status=gridSession.observe(gridConfig.rows,gridConfig.cols,observedCells,observation.specialCellsMask(),frameAt,SystemClock.elapsedRealtime());
    if(status==GridPuzzleSession.Status.PAUSED){incrementGridStat("unconfirmed");note="Нет подтверждённого изменения поля · ввод приостановлен. Проверьте режим и область; Старт — повторить";update();return;}
    if(status==GridPuzzleSession.Status.CHANGED){gridVerified++;incrementGridStat("visual_changes");}
-   if(status!=GridPuzzleSession.Status.READY&&status!=GridPuzzleSession.Status.CHANGED){note=observation.usable()?(gridSession.pending()?"Проверяю изменение поля после жеста":"Ожидаю второй устойчивый кадр"):"Не распознано "+unknownGridCells(observation)+" из "+(gridConfig.rows*gridConfig.cols)+" клеток · проверьте область; необычные фишки пока не трогаю";update();scheduleGrid(epoch);return;}
+   if(status!=GridPuzzleSession.Status.READY&&status!=GridPuzzleSession.Status.CHANGED){note=observation.usable()?(gridSession.pending()?"Проверяю изменение поля после жеста":"Ожидаю второй устойчивый кадр"):"Не распознано "+unknownGridCells(observation)+" из "+(gridConfig.rows*gridConfig.cols)+" клеток · "+observation.unknownSummary(3)+" · проверьте область; необычные фишки пока не трогаю";update();scheduleGrid(epoch);return;}
    gridPalette=observation.palette();
    getSharedPreferences("grid-puzzle",MODE_PRIVATE).edit().putString(gridKey()+".palette",gridPalette.encode()).apply();
    metrics.attempt(StageMetrics.Stage.POLICY);long policyNs=SystemClock.elapsedRealtimeNanos();
