@@ -25,6 +25,7 @@ public class PilotService extends AccessibilityService {
  private String lastGestureContext="none";
  private String note="STOP",uiStats="",lastStopReason="Нет остановок";private final InputPermit permit=new InputPermit();private RotatingJournal journal;private final GestureFlight gestureFlight=new GestureFlight();
  private final Color2048Reader.Session colorSession=new Color2048Reader.Session();
+ private Web2048Transfer learned2048;
  private boolean playingMini;private int miniKind,miniAction;private long miniMoves;private int[] miniBefore;private Rect boardRoi;private View picker;private boolean playing2048=false,colored2048=false,captureBusy=false;private long moves2048;private long captureCounter,pendingCapture,lastShotTimestamp=-1;private long mergeTotal;private Board2048 before2048;private int direction2048;private AlertDialog preview,overlayDialog;
  private final CaptureStartup captureStartup=new CaptureStartup();
  private final SceneRecovery sceneRecovery=new SceneRecovery();
@@ -391,7 +392,7 @@ public class PilotService extends AccessibilityService {
   synchronized(jumperFrameLock){Bitmap queued;while((queued=jumperQueuedFrames.poll())!=null)if(!queued.isRecycled())queued.recycle();}
   View calibration=jumperCalibrationOverlay;jumperCalibrationOverlay=null;removeOverlay(calibration);
   if(stopJumper)CaptureCleanup.run(()->stopService(new Intent(this,JumperCaptureService.class)));
-  audit(SafeJournal.Event.STOP,0,0);boardSearch.reset();boardReadMisses=0;boardReadGeneration++;windowFocus.reset();focusPaused=false;focusWatch=false;focusWatchId++;autoLeft=0;playing2048=false;colored2048=false;colorSession.reset();playingMini=false;discoveringBoard=false;boardRoi=null;
+  audit(SafeJournal.Event.STOP,0,0);boardSearch.reset();boardReadMisses=0;boardReadGeneration++;windowFocus.reset();focusPaused=false;focusWatch=false;focusWatchId++;autoLeft=0;playing2048=false;colored2048=false;colorSession.reset();learned2048=null;playingMini=false;discoveringBoard=false;boardRoi=null;
   if(visionPending){visionPending=false;visionRequest++;if(visionTask!=null)visionTask.cancel(true);visionTask=null;metrics.cancelled(StageMetrics.Stage.READ);}
   if(captureBusy){metrics.cancelled(StageMetrics.Stage.CAPTURE);captureBusy=false;pendingCapture=++captureCounter;}
   if(overlayDialog!=null){AlertDialog old=overlayDialog;overlayDialog=null;CaptureCleanup.run(old::dismiss);}
@@ -1506,6 +1507,12 @@ public class PilotService extends AccessibilityService {
  private void start2048(boolean colored){
   if(busy||captureBusy||discoveringBoard||autoLeft>0||playing2048||playingMini||playingJumper||playingGrid||!gate.armed()||boardRoi==null){note=colored?"Цветной 2048: привяжите игру и выберите поле 4×4":"Привязать → Поле 4×4 → Авто2048";update();return;}
   boardReadGeneration++;boardReadMisses=0;colorSession.reset();before2048=null;colored2048=colored;
+  learned2048=null;
+  // An opt-in from the Web 2048 trainer transfers only rated directions.
+  // Malformed/absent data safely falls back to the original heuristic.
+  try{String saved=getSharedPreferences("real-2048-transfer",MODE_PRIVATE).getString("model",null);
+   if(saved!=null)learned2048=Web2048Transfer.decode(saved);
+  }catch(IllegalArgumentException ignored){learned2048=null;}
   if(colored2048){String saved=getSharedPreferences("color-2048",MODE_PRIVATE).getString(color2048PaletteKey(),null);if(saved!=null)try{colorSession.restoreLearned(saved);}catch(IllegalArgumentException invalidPalette){note="Сохранённая цветовая палитра повреждена · начинаю с базовых плиток";}}
   long epoch=gate.epoch(),generation=boardReadGeneration;playing2048=true;compact(true);note=colored2048?"Читаю цветное поле 2048 · изучено цветов "+colorSession.learnedCount():"Читаю поле в памяти…";update();
   afterPanelLayout(()->{
@@ -1516,7 +1523,8 @@ public class PilotService extends AccessibilityService {
     }
     if(epoch==gate.epoch()&&generation==boardReadGeneration&&playing2048&&!focusPaused)postBoardTask(epoch,captureDelay(),()->stable(epoch,(board,t,ms)->{
    StringBuilder text=new StringBuilder("Сверьте все 16 клеток с игрой:\n");for(int i=0;i<16;i++){text.append(board.cells[i]==0?"·":board.cells[i]).append(i%4==3?"\n":"  ");}
-   text.append("До STOP или конца партии. Кадры только в RAM. Это CPU-алгоритм, не обучение.");
+   text.append("До STOP или конца партии. Кадры только в RAM. CPU-планировщик.");
+   if(learned2048!=null)text.append("\\nWeb-обучение: ").append(learned2048.evidence()).append(" оценённых свайпов; слабый приоритет только безопасных направлений.");
    if(automatic()){permit.grantSession(epoch,SystemClock.elapsedRealtime());moves2048=0;mergeTotal=0;before2048=null;uiStats=text.toString();postBoardTask(epoch,captureDelay(),()->round2048(epoch));return;}
    preview=new AlertDialog.Builder(this).setTitle("2048 — начать игру?").setMessage(text.toString()).setPositiveButton("Поле верное, начать",(dialog,which)->{preview=null;if(epoch!=gate.epoch()||generation!=boardReadGeneration||!playing2048||focusPaused)return;permit.grantSession(epoch,SystemClock.elapsedRealtime());moves2048=0;mergeTotal=0;before2048=null;postBoardTask(epoch,captureDelay(),()->round2048(epoch));}).setNegativeButton("Отмена",(d,w)->stop("2048 отменён")).setCancelable(false).create();preview.getWindow().setType(WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY);preview.getWindow().addFlags(WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE);preview.show();
    }));});
@@ -1535,7 +1543,7 @@ public class PilotService extends AccessibilityService {
    if(before2048!=null&&!before2048.verifies(board,direction2048)){Board2048.Verification why=before2048.verification(board,direction2048);note="2048: Android завершил жест · "+(why==Board2048.Verification.UNCHANGED?"поле не изменилось":why==Board2048.Verification.MISSING_SPAWN?"нет ожидаемой новой плитки":"поле отличается от расчёта")+" · наблюдаю без ввода";update();long generation=boardReadGeneration;handler.postDelayed(()->{if(epoch==gate.epoch()&&generation==boardReadGeneration&&playing2048&&!focusPaused)round2048(epoch);},Math.max(1000,captureDelay()));return;}
    if(before2048!=null){if(!saveExample("2048",before2048.cells,direction2048,board.cells))return;mergeTotal+=Verified2048.mergeReward(before2048,direction2048,board);if(!audit(SafeJournal.Event.VERIFIED_2048,0,mergeTotal)){stop("Ошибка журнала результатов");return;}before2048=null;}
    if(board.max()>=2048){stop("2048: распознана плитка 2048; сверить визуально");return;}
-   metrics.attempt(StageMetrics.Stage.POLICY);long policyNs=SystemClock.elapsedRealtimeNanos();long started=SystemClock.elapsedRealtime();int d;try{d=board.choose();}catch(RuntimeException error){failStage(StageMetrics.Stage.POLICY,"POLICY_FAILED","Не удалось выбрать ход");return;}metrics.record(StageMetrics.Stage.POLICY,SystemClock.elapsedRealtimeNanos()-policyNs);long think=SystemClock.elapsedRealtime()-started;if(d<0){stop("2048: допустимых ходов нет");return;}if(!Verified2048.mask(board)[d]){stop("2048: ход вне маски");return;}if(!valid(ticket)){if(deferFocus(invalidReason(ticket)))return;stop("План устарел");return;}
+   metrics.attempt(StageMetrics.Stage.POLICY);long policyNs=SystemClock.elapsedRealtimeNanos();long started=SystemClock.elapsedRealtime();int d;try{d=board.chooseWithBonus(learned2048==null?null:learned2048.bonus());}catch(RuntimeException error){failStage(StageMetrics.Stage.POLICY,"POLICY_FAILED","Не удалось выбрать ход");return;}metrics.record(StageMetrics.Stage.POLICY,SystemClock.elapsedRealtimeNanos()-policyNs);long think=SystemClock.elapsedRealtime()-started;if(d<0){stop("2048: допустимых ходов нет");return;}if(!Verified2048.mask(board)[d]){stop("2048: ход вне маски");return;}if(!valid(ticket)){if(deferFocus(invalidReason(ticket)))return;stop("План устарел");return;}
    Rect r=new Rect(boardRoi);float x=r.exactCenterX(),y=r.exactCenterY(),dx=0,dy=0;switch(d){case Board2048.LEFT:dx=-r.width()*.30f;break;case Board2048.RIGHT:dx=r.width()*.30f;break;case Board2048.UP:dy=-r.height()*.30f;break;case Board2048.DOWN:dy=r.height()*.30f;break;}
    before2048=board;direction2048=d;moves2048++;uiStats="кадр "+captureMs+" мс · CPU "+think+" мс · проверено "+(moves2048-1);note="Ход "+moves2048+" · max "+board.max()+" · кадр "+captureMs+"мс · CPU "+think+"мс";update();
    long sentBefore=dispatchedInputs;
