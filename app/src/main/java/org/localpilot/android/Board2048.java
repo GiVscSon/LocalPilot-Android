@@ -25,12 +25,12 @@ public final class Board2048 {
   * Uses real-game verified experience only to break close legal choices.
   * A fresh/insufficient model gives precisely the old deterministic policy.
   */
- public int choose(LiveGameLearning learned){
+ public int choose(java.util.function.IntToDoubleFunction learned){
   if(max()>=2048)return -1;int best=-1;double score=-Double.MAX_VALUE;
   for(int d=0;d<4;d++){
    Move m=move(d);if(same(m.board))continue;
    double value=m.board.value()+Math.log(1+m.reward);
-   if(learned!=null)value+=learned.bonus2048(d);
+   if(learned!=null)value+=learned.applyAsDouble(d);
    if(value>score){score=value;best=d;}
   }
   return best;
