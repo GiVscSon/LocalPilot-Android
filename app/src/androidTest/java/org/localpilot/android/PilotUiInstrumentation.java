@@ -392,7 +392,11 @@ public final class PilotUiInstrumentation extends Instrumentation {
                 require(Boolean.TRUE.equals(method.invoke(service,"WINDOW_STATE_UNAVAILABLE")),"Interrupted gesture did not handle focus loss");
                 require(!gate().armed()&&!booleanField("playing2048"),"Interrupted 2048 gesture did not stop");return null;});
             addCheck("2048_interrupted_gesture_stops",new JSONObject().put("loss_notification_injected",true));
-            if(onMain(()->booleanField("panelCompact")))click("Развернуть");
+            // STOP is intentionally fail-closed, and the panel may stay compact.
+            // Reopen visible controls before explicitly binding a fresh window;
+            // never auto-resume a ticket from the interrupted session.
+            if(compact())click("Развернуть");
+            await(()->present("Окно"),3_000,"Focus STOP did not expose window selection after expanding panel");
             bindDemoWindow();click("Старт");
             await(()->onMain(()->booleanField("playing2048")),12_000,"2048 did not restart after interruption");
         }else{
@@ -403,6 +407,8 @@ public final class PilotUiInstrumentation extends Instrumentation {
         }
         await(() -> onMain(() -> intField("moves2048")) >= 4, 25_000,
                 "2048 did not produce at least three visually verified swipes");
+        await(() -> onMain(() -> ((LiveGameLearning)field("learning2048")).verifiedCount()>=3),
+                4_000,"Visually verified 2048 moves did not update the real-game learner");
         click("STOP");
         await(() -> !armed() && !onMain(() -> booleanField("busy")), 4_000,
                 "2048 STOP did not settle and revoke input");
@@ -481,6 +487,8 @@ public final class PilotUiInstrumentation extends Instrumentation {
         await(()->onMain(()->booleanField("playingGrid")&&intField("selectedProfile")==9),8_000,"Bubble loop did not start through the visible Start control");
         await(()->markerBounds("LOCALPILOT_BUBBLE_SHOTS_1")!=null,20_000,"No real aim/release reached the independent bubble fixture");
         await(()->onMain(()->((BubbleSession)field("bubbleSession")).verified()>=1),12_000,"Delivered bubble gesture did not yield the predicted visually verified board");
+        await(()->onMain(()->((LiveGameLearning)field("bubbleLearning")).verifiedCount()>=1),3_000,
+                "Bubble gameplay verified the shot but did not teach the real-game learner");
         int verified=onMain(()->((BubbleSession)field("bubbleSession")).verified());
         AtomicReference<String> observedFixture=new AtomicReference<>();
         await(()->{
