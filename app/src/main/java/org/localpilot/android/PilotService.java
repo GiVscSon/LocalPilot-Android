@@ -1466,7 +1466,7 @@ public class PilotService extends AccessibilityService {
    @Override public void onFailure(int error){if(pendingCapture!=requestId)return;captureBusy=false;if(epoch==gate.epoch()&&error==ERROR_TAKE_SCREENSHOT_INTERVAL_TIME_SHORT&&retryCapture(epoch,result,"SCREENSHOT_INTERVAL"))return;if(epoch==gate.epoch())failStage(StageMetrics.Stage.CAPTURE,"ANDROID_SCREENSHOT_ERROR","Захват Android: ошибка "+error+". Проверьте доступ службы");}
   };
   try{takeScreenshot(Display.DEFAULT_DISPLAY,getMainExecutor(),callback);}catch(RuntimeException e){captureBusy=false;failStage(StageMetrics.Stage.CAPTURE,"SCREENSHOT_UNAVAILABLE","Захват недоступен");return;}
-  handler.postDelayed(()->{if(captureBusy&&pendingCapture==requestId&&epoch==gate.epoch()){captureBusy=false;pendingCapture=++captureCounter;failStage(StageMetrics.Stage.CAPTURE,"SCREENSHOT_TIMEOUT","Захват: таймаут без ввода");}},4000);
+  handler.postDelayed(()->{if(captureBusy&&pendingCapture==requestId&&epoch==gate.epoch()){captureBusy=false;pendingCapture=++captureCounter;if(!retryCapture(epoch,result,"SCREENSHOT_TIMEOUT"))failStage(StageMetrics.Stage.CAPTURE,"SCREENSHOT_TIMEOUT","Повтор захвата также завершился таймаутом без ввода");}},4000);
  }
  private long captureDelay(){return Build.VERSION.SDK_INT>=31?400:1100;}
  private void stable(long epoch,BoardResult result){
