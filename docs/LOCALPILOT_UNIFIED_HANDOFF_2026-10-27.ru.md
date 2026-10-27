@@ -186,3 +186,13 @@ P3: авто-dock/авто-профиль только после геометр
 
 ### Статус общего контекста
 Issue #1 Match World; #2 7 unknown; #3 Bubble HUD/ROI; #4 frame pacing/overlay/CPU. Диагностический read-only-to-game fix в ветке `fix/grid-diagnostics-bubble-hud-20261027` устраняет ложную подпись Bubble, добавляет конкретные причины неизвестных клеток, отдельные predecode skip counters и скрывает stale MediaProjection counters в Grid/Bubble. **Это изменения Java-кода только ветки, не установленного APK.** Перед слиянием проверить последний CI на актуальном HEAD и физическое устройство. Основной ПК LocalPilot/JEV не модифицирован. Последние шесть утверждений об APK сами по себе НЕ подтверждают исправления.
+
+
+## 11. Новая CI-матрица API30/API35/API36: FAIL только API30
+
+**Подтверждено реальными GitHub Actions логами, а не физическим телефоном.** В изолированной ветке `fix/grid-diagnostics-bubble-hud-20261027` на коммите `e476aa5`: [device acceptance](https://github.com/GiVscSon/LocalPilot-Android/actions/runs/40485732059) = FAIL при том, что [Build Android debug APK](https://github.com/GiVscSon/LocalPilot-Android/actions/runs/40485731964) = PASS.
+- device API35/default: PASS. device API36/google_apis: PASS. device API30/default: FAIL.
+- Первая проверочная ошибка: `java.lang.AssertionError: The current window dialog has no visible target row` из `PilotUiInstrumentation.bindWindow():688`, вызов `await():1041`.
+- Лог `connected=true registered=true panel=true`, `note=Ожидаю список окон Android…`; найден overlay window id=21 bounds=[0,143][630,739], application window id=23 bounds=[0,0][1080,1920], focused=true. Эмулятор загрузился и Gradle собрал instrumentation успешно. `demo_verified=10` доказывает только встроенное демо в тесте, не Market.
+- Указание в dump `Crashed services` требует проверки отдельного crash-logcat/artifact; не заявлять как доказанную первопричину отсутствия строки диалога.
+- Новый [GitHub Issue #5](https://github.com/GiVscSon/LocalPilot-Android/issues/5) отслеживает проблему. Следующий эксперимент: compare bindWindow/Accessibility overlay UI row API30 vs API35 same state, сохранить реальные window-ID/focus/timing и доказать PASS на всей матрице без обхода ActionGate. Статус на реальном Android телефоне: NOT RUN.
