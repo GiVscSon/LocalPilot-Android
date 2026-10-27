@@ -247,3 +247,10 @@ Issue #1 Match World; #2 7 unknown; #3 Bubble HUD/ROI; #4 frame pacing/overlay/C
 4. На физическом устройстве подтвердить 1 затем 5 подряд post-ACK VERIFIED действий при появляющихся неизвестных и смене палитры. Развести Android ACK / изменение клетки / начисление очков.
 5. Следующий backlog: BubbleSession и Color2048Reader tolerant vision, ограниченное безопасное восстановление из PAUSED и опыт по ВСЕМ игровым профилям. Это пока не реализовано данным патчем.
 
+
+
+## 12. Live-game learning 2048/Шипучка · отдельная инженерная ветка
+
+Пользователь запросил, чтобы обучение влияло на настоящие игры, а не только на встроенный Demo. Исходный код находится в `feat/verified-live-game-learning-20261027` от интеграционной ветки `integration/panel-grid-20261027`. Полная техническая запись, ограничения безопасности и матрица тестов: [VERIFIED_LIVE_GAME_LEARNING_2026-10-27.ru.md](VERIFIED_LIVE_GAME_LEARNING_2026-10-27.ru.md).
+
+**Подтверждение реализации:** `LiveGameLearning` сохраняет только post-ACK VERIFIED результаты; `Board2048.choose` и `BubblePolicy.choose` учитывают bounded bonus только среди уже легальных ходов; UI показывает отдельные счётчики; модели scoped по package/slot/game, old `ExperienceStore` не перезаписывается. Физический POCO e2e **NOT RUN**, машинная точность обучения и победы в Яндекс Маркете **NOT PROVEN**. Не переносить автоматически в PC/JEV; не сливать draft PR без актуальных CI.
