@@ -685,14 +685,17 @@ public final class PilotUiInstrumentation extends Instrumentation {
         String query="@contains:"+pkg;
         // Require the current live dialog, but do not equate decor bounds with
         // accessibility window frames: shadows/insets differ across Android.
-        await(()->onMain(()->{
+        await(()->{
+            traceClick("window-selection "+windowSummary());
+            return onMain(()->{
                 Object object=field("overlayDialog");
                 if(!(object instanceof android.app.Dialog dialog)||!dialog.isShowing())return false;
                 View decor=dialog.getWindow().getDecorView();
                 if(!decor.isLaidOut())return false;
                 Rect row=ownControlBounds(decor,query);
                 return row!=null&&!row.isEmpty();
-            }),3_000,"The current window dialog has no visible target row");
+            });
+        },3_000,"The current window dialog has no visible target row");
         // click() performs a fresh lookup and refreshes the actionable node.
         click(query);
         await(()->onMain(()->gate().armed()&&pkg.equals(field("target"))&&field("overlayDialog")==null),3_000,"Window selection did not commit before the next control");
@@ -967,7 +970,7 @@ public final class PilotUiInstrumentation extends Instrumentation {
             out.append("id=").append(window.getId()).append(" type=").append(window.getType())
                 .append(" focused=").append(window.isFocused()).append(" bounds=").append(bounds.toShortString());
             AccessibilityNodeInfo root=window.getRoot();
-            try{out.append(" root=").append(root==null?"null":root.getPackageName()).append(';');}
+            try{out.append(" root=").append(root==null?"null":root.getPackageName());if(root!=null)out.append(" rootWindow=").append(root.getWindowId());out.append(';');}
             finally{if(root!=null)root.recycle();}
         }
     }
