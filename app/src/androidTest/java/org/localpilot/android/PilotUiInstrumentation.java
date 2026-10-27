@@ -392,6 +392,7 @@ public final class PilotUiInstrumentation extends Instrumentation {
                 require(Boolean.TRUE.equals(method.invoke(service,"WINDOW_STATE_UNAVAILABLE")),"Interrupted gesture did not handle focus loss");
                 require(!gate().armed()&&!booleanField("playing2048"),"Interrupted 2048 gesture did not stop");return null;});
             addCheck("2048_interrupted_gesture_stops",new JSONObject().put("loss_notification_injected",true));
+            if(onMain(()->booleanField("panelCompact")))click("Развернуть");
             bindDemoWindow();click("Старт");
             await(()->onMain(()->booleanField("playing2048")),12_000,"2048 did not restart after interruption");
         }else{
