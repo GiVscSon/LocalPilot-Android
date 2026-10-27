@@ -1,32 +1,83 @@
-# В работе: 0.7.32-dev / code48 — 27 октября 2026
+# Текущий этап: 0.7.32-dev / code48 — 27 октября 2026
 
-Продолжение1ec77ea. Контрольная0.7.31 уже сохранена в
-release/delivery/LocalPilot_Android_0.7.31_dev/ (sourceCommit1ec77ea, dirtyfalse,
-source693020bytes, APK604046bytes, исходнаяDev-подпись, ZIP CRC проверены).
-Backup: /workspace/localpilot-backups/android-before-feedback-0732.bundle.
+Проект: /workspace/LocalPilot-Android. Ветка: sync/localpilot-android-0711.
+Remote: https://github.com/GiVscSon/LocalPilot-Android.git.
+Цель: устойчивый локальный цикл захват → распознавание → жест → визуальное
+подтверждение. На пользовательском телефоне ADB не требуется; CI использует
+отдельные эмуляторы. Сохранять пакет org.localpilot.android.dev, исходную
+Dev-подпись, пользовательские данные и отрицательные проверки безопасности.
 
-MainActivity теперь явно используетedge-to-edge и отступыsystemBars/cutout
-наScrollView; кнопки не должны находиться подHome. Конкретная атрибуция
-прошлогоCI-сбоя остаётся гипотезой до нового нативного результата.
-PilotUiInstrumentation запрещаетfallback-касания внеsafecontent, проверяет
-актуальную геометрию и пишет bounded lifecycle80/click40 trace. Все18 проверок
-сохранены; событиеVIEW_CLICKED диагностическое, не заменяет результат игры.
+## Изменения
 
-BubbleSession добавляет bounded reason/counts/ages/observed-vs-expected
-metadata и последнее120-character сообщениеBubbleVision. Условия300ms,
-100ms/350ms/7000ms, точное поле и ACK+2кадра пока НЕ менялись. Экспорт метрик
-сохраняетbubbleReport доSTOP. Точный1038×1143 source-replay проходит;
-синтетический stale/deadline путь воспроизводитPAUSED, но не доказывает
-причину настоящегоAPI30 отказа. Native следующий шаг обязателен.
+MainActivity явно включает edge-to-edge и отступы systemBars/displayCutout
+для ScrollView. Кнопки длинной страницы располагаются выше системной навигации.
+Нативный координатный fallback исключает системные панели и проверяет центр
+контрола и актуальную геометрию. Trace ограничен 80 событиями lifecycle и 40
+событиями ввода. Предположение о старом попадании по Home не доказано напрямую,
+но риск устранён, а переход к 2048 прошёл в двух новых прогонах API35.
 
-JVM Bubble788 сprivateimage +1341 ricochet PASS; differential50000 операций
-относительно1ec77ea без изменения состояний/исключений; tooling10 PASS.
-Локальный build/lint/compileAndroidTest PASS1m24s, сертификат прежний.
-APK607978bytes, SHA2567fbcc26df97e4749325864350b9d8a2ef402df5c03bd1f9430842a1dcc66a1ec.
-Это диагностическая сборка; нативная матрица ещё не выполнена.
-Задание: docs/IMPROVEMENT_PROMPT_0.7.32.ru.md. Следующийшаг — CI наAPI30/35/36
-с bounded аннотациями UI_TRACE иCAPTURE/READ/ACK, затем исправление доказанной
-причины. Не удлинятьтаймаут/ослаблятьсвежесть по одному предположению.
+BubbleSession сохраняет ограниченные причины, счётчики, возраст кадра и время
+после отправки/ACK, число наблюдаемых/ожидаемых/различающихся клеток и последнее
+сообщение BubbleVision (120 символов). Экспорт сохраняет report перед STOP.
+Условия свежести 300ms, стабильности 100ms, settle 350ms, deadline 7000ms и
+точное сравнение поля НЕ менялись. Локальное сравнение 50 000 операций с 1ec77ea
+не нашло изменения состояний/исключений. Старый API30 PAUSED после READ4 не
+воспроизвёлся; причина каждого исторического таймаута не объявляется исправленной.
+
+## Проверки и поставка
+
+Main-код: 131eca7a9a20c999fde2501c0f5204461257ca89.
+Финальные тесты/config: b14b10936ed40ece1f8b97d80b18a04376ec88eb.
+После 131eca7 файлы app/src/main не менялись.
+Build/lint/compileAndroidTest прошли; включён lint тестов: 0 ошибок/49 предупреждений.
+Первый прогон выявил Rect.inset(IIII), отсутствующий на API30: вызовы заменены
+явной арифметикой. Проверены 282 вызова; UiAutomation.clearCache защищён API34 guard.
+BubbleVerify: 788 проверок с приватным снимком; BubbleBounceTest: 1341 PASS.
+Полный JVM-набор workflow и release-tooling (10 тестов) прошли.
+
+**Нативная матрица пройдена:** CI40455149136 SUCCESS за 7m00s, код b14b109.
+API30/35/36: по 18 сценариев. Проверяются реальные touch/screenshot, ожидаемое
+поле и STOP, ручная область 2048, прямой/рикошетный выстрел в независимую
+тестовую цель, системное согласие MediaProjection, захват/остановка и поворот.
+Это эмуляторы и синтетические цели, а не доказательство очков в настоящем Маркете.
+Build CI40455149093 PASS за 2m07s. Полный отчёт: docs/VALIDATION_0.7.32.txt.
+
+APK: 607978 bytes.
+SHA256: 7fbcc26df97e4749325864350b9d8a2ef402df5c03bd1f9430842a1dcc66a1ec.
+Dev signer: 55626377256dda3a6b5824b7278eb12db75b8a7d1c80baa9d2af4402ccac2684.
+Поставка: release/delivery/LocalPilot_Android_0.7.32_dev/ — APK, source.zip,
+bundle, MANIFEST.json, SHA256SUMS. Итоговый sourceCommit документации — в manifest.
+Устанавливать поверх Dev без удаления данных. Контрольная 0.7.31 также сохранена
+(sourceCommit 1ec77ea, dirty=false, source 693020 bytes, ZIP CRC и ключ проверены).
+Backup до 0.7.32: /workspace/localpilot-backups/android-before-feedback-0732.bundle.
+
+## Ограничения и следующие шаги
+
+1. Проверить на физическом телефоне Main → 2048 и один прямой/рикошетный выстрел.
+   При отказе экспортировать текущую диагностику/метрики без сброса данных:
+   причины и возраст наблюдений теперь сохраняются до STOP.
+2. Если вернётся таймаут API30, различать NULL_SCENE/STALE/UNSTABLE, несовпадение
+   геометрии/клеток и EXPIRED по новым числам. Не удлинять deadline и не освобождать
+   ввод по ACK без доказательства. Точный ROI 1038×1143 есть в BubbleBounceTest.
+3. Затем добавить добивание одного шара и специальные шары. Сейчас есть четыре
+   обычных цвета, прямой путь и один рикошет; бомбы, rainbow, луч, запасной шар
+   и несколько отражений не автоматизированы.
+4. Для Гексона/Котобашни нужны отдельные адаптеры и фактические кадры управления.
+   «Нащупай ход» сохраняет подтверждённый обмен соседей 6×6, а не цепочки из
+   противоречивого пересказа. См. docs/GAME_MECHANICS_REFERENCE.ru.md.
+
+Физический телефон не подключён. Форматы ROI/learning совместимы; поддержка
+всех десяти игр не объявляется. Исходники синхронизируются в прежнюю ветку.
+GitHub upload/API/log hosts запрещены сетевой политикой revision16; сохранённый
+черновик настроек не применён. Release assets не опубликованы, вымышленные URL
+не выдавать. Обычный git push и публичные страницы Actions доступны.
+
+JDK21: /workspace/android-build-tools/jdk-21.0.12.1+1.
+Команды: java tests/BubbleVerify.java [private.jpg];
+java tests/Verify.java tests/legacy_parity.txt.
+Build: python3 build_debug.py --sdk /workspace/android-build-tools/sdk
+ --gradle /workspace/android-build-tools/gradle-8.9/bin/gradle --offline.
+Полный JVM-список: .github/workflows/android.yml; native: tools/run_device_acceptance.py.
 
 # Архивная точка: 0.7.31-dev / code47 — экспериментальная поставка
 
