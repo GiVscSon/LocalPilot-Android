@@ -33,7 +33,7 @@ public class PilotService extends AccessibilityService {
  private final WindowFocus windowFocus=new WindowFocus();
  private volatile boolean focusPaused;private boolean focusWatch;private long focusRecoveredAt,focusWatchId;
  private volatile long captureSession;
- private volatile long captureAcceptedFrames,captureSkippedFrames;
+ private volatile long captureAcceptedFrames,captureSkippedFrames,captureSkippedThrottle,captureSkippedUnwanted,captureSkippedClock;
  private long captureFrames,captureReads,captureDecisions,captureSent,captureCompleted,dispatchedInputs;
  private volatile boolean playingJumper,jumperCaptureReady;
  // The legacy Jumper capture session is shared by all explicit visual arcade profiles.
@@ -340,7 +340,7 @@ public class PilotService extends AccessibilityService {
  private void single(String label,Runnable callback){Button v=new Button(this);v.setText(label);v.setTextSize(12);v.setOnClickListener(x->callback.run());controls.addView(v,new LinearLayout.LayoutParams(-1,dp(40)));}
  private void row(String a,Runnable ar,String b,Runnable br,boolean needsInput){LinearLayout line=new LinearLayout(this);for(int i=0;i<2;i++){Button v=new Button(this);v.setText(i==0?a:b);v.setTextSize(12);Runnable r=i==0?ar:br;v.setOnClickListener(x->r.run());if(needsInput)manualControls.add(v);line.addView(v,new LinearLayout.LayoutParams(0,dp(40),1));}(controls==null?panel:controls).addView(line);}
  public void hidePanel(){try{stop("STOP");}finally{clearPanel();}}
- private String captureCounters(){return "Захват: кадры="+captureFrames+" · READ="+captureReads+" · решения="+captureDecisions+" · ввод="+captureSent+" · ACK="+captureCompleted+" · decode="+captureAcceptedFrames+" · skippedFrames="+captureSkippedFrames;}
+ private String captureCounters(){return "Захват: кадры="+captureFrames+" · READ="+captureReads+" · решения="+captureDecisions+" · ввод="+captureSent+" · ACK="+captureCompleted+" · pacerAccepted="+captureAcceptedFrames+" · skippedFrames="+captureSkippedFrames+" (pacing="+captureSkippedThrottle+", idle="+captureSkippedUnwanted+", clock="+captureSkippedClock+")";}
  private void update(){
   boolean inputReady=gate.armed()&&!gate.paused()&&permit.allows(gate.epoch(),SystemClock.elapsedRealtime());for(Button control:manualControls)control.setEnabled(inputReady&&!busy);
   long renderNow=SystemClock.elapsedRealtime();if(playingJumper&&renderNow-lastPanelRender<100)return;lastPanelRender=renderNow;
@@ -466,7 +466,7 @@ public class PilotService extends AccessibilityService {
   jumperState=null;jumperAwaitingVerification=false;jumperLastActionMs=0;compact(true);positionJumperStopPanel();
   CrashDiagnostics.phase("CAPTURE_CONSENT");
   captureFrames=captureReads=captureDecisions=captureSent=captureCompleted=0;
-  captureAcceptedFrames=captureSkippedFrames=0;
+  captureAcceptedFrames=captureSkippedFrames=captureSkippedThrottle=captureSkippedUnwanted=captureSkippedClock=0;
   captureSession=captureStartup.begin(SystemClock.elapsedRealtime());
   watchCaptureStartup(captureSession);
   note="1/5 · Подтвердите захват всего экрана Android";update();
@@ -829,7 +829,7 @@ public class PilotService extends AccessibilityService {
  public void stopJumperFromNotification(long id){handler.post(()->{if(captureSessionActive(id))stop("STOP из уведомления Android");});}
 
  /** Takes ownership of each frame; frames are discarded immediately when the analyzer is busy. */
- public void onCapturePacing(long id,long accepted,long skipped){if(id>0&&id==captureSession){captureAcceptedFrames=accepted;captureSkippedFrames=skipped;}}
+ public void onCapturePacing(long id,long accepted,long skipped,long throttled,long unwanted,long invalidClock){if(id>0&&id==captureSession){captureAcceptedFrames=accepted;captureSkippedFrames=skipped;captureSkippedThrottle=throttled;captureSkippedUnwanted=unwanted;captureSkippedClock=invalidClock;}}
  public boolean wantsJumperFrame(long id){synchronized(jumperFrameLock){return id>0&&id==captureSession&&playingJumper&&jumperCaptureReady&&!focusPaused&&!jumperVisionPending&&jumperQueuedFrames.isEmpty();}}
  public void onJumperFrame(long id,Bitmap frame,long timestampMs){
   if(frame==null)return;
