@@ -116,6 +116,14 @@ public final class PilotUiInstrumentation extends Instrumentation {
                             if(stack.length()>1500)break;stack.append(frame).append(" | ");
                         }
                         appendTrace(slowMainTrace,20,stack.toString());
+                        for(java.util.Map.Entry<Thread,StackTraceElement[]> entry:Thread.getAllStackTraces().entrySet()){
+                            if(entry.getKey()==android.os.Looper.getMainLooper().getThread())continue;
+                            boolean relevant=false;for(StackTraceElement frame:entry.getValue())if(frame.getClassName().contains("AccessibilityInteractionClient")||frame.getClassName().contains("AccessibilityCache")){relevant=true;break;}
+                            if(!relevant)continue;
+                            StringBuilder other=new StringBuilder("accessibility thread ").append(entry.getKey().getName()).append(": ");
+                            for(StackTraceElement frame:entry.getValue()){if(other.length()>1100)break;other.append(frame).append(" | ");}
+                            appendTrace(slowMainTrace,20,other.toString());
+                        }
                     }
                     SystemClock.sleep(250);
                 }
