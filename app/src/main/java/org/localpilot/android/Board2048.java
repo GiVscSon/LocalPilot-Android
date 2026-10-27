@@ -20,6 +20,20 @@ public final class Board2048 {
  public boolean verifies(Board2048 after,int d){return verification(after,d)==Verification.VERIFIED;}
  public int max(){return Arrays.stream(cells).max().orElse(0);}
  private double value(){double s=0;int empty=0;for(int i=0;i<16;i++){int n=cells[i];if(n==0){empty++;continue;}double a=Math.log(n)/Math.log(2);if(i%4<3&&cells[i+1]>0)s-=Math.abs(a-Math.log(cells[i+1])/Math.log(2));if(i<12&&cells[i+4]>0)s-=Math.abs(a-Math.log(cells[i+4])/Math.log(2));}int m=max();return s+empty*12+((cells[0]==m||cells[3]==m||cells[12]==m||cells[15]==m)?8:0);}
- public int choose(){if(max()>=2048)return -1;int best=-1;double score=-Double.MAX_VALUE;for(int d=0;d<4;d++){Move m=move(d);if(same(m.board))continue;double v=m.board.value()+Math.log(1+m.reward);if(v>score){score=v;best=d;}}return best;}
+ public int choose(){return choose(null);}
+ /**
+  * Uses real-game verified experience only to break close legal choices.
+  * A fresh/insufficient model gives precisely the old deterministic policy.
+  */
+ public int choose(LiveGameLearning learned){
+  if(max()>=2048)return -1;int best=-1;double score=-Double.MAX_VALUE;
+  for(int d=0;d<4;d++){
+   Move m=move(d);if(same(m.board))continue;
+   double value=m.board.value()+Math.log(1+m.reward);
+   if(learned!=null)value+=learned.bonus2048(d);
+   if(value>score){score=value;best=d;}
+  }
+  return best;
+ }
  public static int colorTile(int rgb){int nearest=-1,best=Integer.MAX_VALUE,second=Integer.MAX_VALUE;for(int i=0;i<PALETTE.length;i++){int p=PALETTE[i];int e=Math.max(Math.abs(((rgb>>16)&255)-((p>>16)&255)),Math.max(Math.abs(((rgb>>8)&255)-((p>>8)&255)),Math.abs((rgb&255)-(p&255))));if(e<best){second=best;best=e;nearest=i;}else second=Math.min(second,e);}if(best>8||second-best<5)return -1;return nearest==0?0:1<<nearest;}
 }
