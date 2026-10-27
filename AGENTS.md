@@ -30,3 +30,8 @@
 
 ## АКТУАЛЬНЫЙ КАНДИДАТ 0.7.34-dev (27.10.2026)
 Перед любым изменением кода также читать [шестиступенчатый план 0.7.34](docs/ROADMAP_0.7.34.ru.md) и [описание кандидата](docs/RELEASE_0.7.34.ru.md), [Draft PR #8](https://github.com/GiVscSon/LocalPilot-Android/pull/8), [Issue #7 Android emulator acceptance](https://github.com/GiVscSon/LocalPilot-Android/issues/7). Главный branch проекта `main` не является актуальной Android кодовой базой. RC в `fix/grid-diagnostics-bubble-hud-20261027` имеет `versionCode 50`; физические и некоторые emulator-тесты НЕ пройдены. Защита STOP/ActionGate/ROI обязательна, нельзя отправлять жесты на UNKNOWN и не считать ACK прогрессом.
+
+## ЕДИНАЯ ПЕРЕДАЧА ИЗ ЧАТА В CODEX · 27.10.2026
+Перед выполнением следующей задачи прочитайте [CODEX_TRANSFER_ALL_2026-10-27.ru.md](docs/CODEX_TRANSFER_ALL_2026-10-27.ru.md).
+Документ связывает параллельные PR #6 (0.7.33-dev code49, эксперимент) и PR #8 (0.7.34-dev code50, основной кандидат), инварианты и все 6 этапов плана, а также проверенный FAIL API30 в run 40488378391: «Android screen capture consent did not appear».
+Не черри-пикать PR #6 без сравнения с PanelDocking/post-layout в PR #8 и без теста false-positive от mask-only post-ACK. Физический POCO e2e НЕ проводился; даже успешный Gradle/JVM и эмулятор не дают основания заявить завершение.
