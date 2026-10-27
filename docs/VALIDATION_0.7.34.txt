@@ -1,0 +1,19 @@
+LocalPilot Android 0.7.34-dev / code50, 27 октября 2026
+
+Локально PASS: Verify (legacy parity), GridVerify, BubbleVerify, LearningVerify,
+ProcessExitVerify, AuditVerify, CaptureCleanupVerify, RuntimeVerify, Upgrade726Verify,
+Upgrade727Verify, ResultVerify, UniversalVerify, ControllerVerify, SystemVerify,
+RlVerify, ArcadeVerify, VisionQualityVerify, WebVerify; release tooling 10 тестов.
+CaptureMatrixVerify: сначала FAIL из-за устаревших ожиданий надписи и двух
+таймаутов; после исправления теста PASS: 223 сценария, 464 проверки.
+LearningVerify повторён после последней проверки пустой модели: 49 проверок.
+Синтетические сценарии не подтверждают качество реальной игры.
+
+assembleDebug, lintDebug и компиляция Android-тестов: PASS.
+APK: 611050 байт; SHA-256 03ac949b59783457e0c25a4fedb1f003c185c386b9526ebd24adbb44f619d851.
+Пакет org.localpilot.android.dev; Dev-сертификат SHA-256:
+55626377256dda3a6b5824b7278eb12db75b8a7d1c80baa9d2af4402ccac2684.
+GitHub Actions: ветка fix/audit-0734, код 1e63d9c;
+build 40491263820 — PASS; device API30/35/36 40491263736 — на момент записи выполняется.
+Реальный телефон и настоящая игра: NOT RUN. Снимки и логи пользователя не входят
+в исходники; старые exit reason и задержки не доказывают причину текущих сбоев.

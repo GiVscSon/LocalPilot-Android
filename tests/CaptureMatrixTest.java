@@ -19,7 +19,7 @@ public class CaptureMatrixTest {
   return new Setup(s,id,old);
  }
  private static void row(String group,String stage,String event,String id){rows.add(group+","+stage+","+event+","+id+",PASS");scenarios++;}
- private static String label(int stage){return new String[]{"STOP","1/5 экран","2/5 служба","3/5 кадр","4/5 кадры","5/5 игра"}[stage];}
+ private static String label(int stage){return new String[]{"STOP","Ожидание разрешения захвата…","2/5 служба","3/5 кадр","4/5 кадры","5/5 игра"}[stage];}
  private static void callbacks(){
   for(int stage=0;stage<6;stage++)for(int event=0;event<5;event++)for(int kind=0;kind<3;kind++){
    Setup p=prepare(stage);CaptureStartup s=p.state;long id=kind==0?p.current:kind==1?p.old:0;
@@ -54,7 +54,7 @@ public class CaptureMatrixTest {
  }
  private static void timeouts(){
   for(int stage=0;stage<6;stage++)for(int kind=0;kind<3;kind++){
-   long limit=stage==1?120000:stage==2?10000:stage==3?3000:120000;
+   long limit=stage==1?120000:stage==2||stage==3?15000:120000;
    for(long delta:new long[]{-1,0,limit-1,limit,limit+1,1000000}){
     Setup p=prepare(stage);long id=kind==0?p.current:kind==1?p.old:0;
     String code=p.state.timeout(id,BASE+delta);

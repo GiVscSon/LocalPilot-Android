@@ -196,3 +196,12 @@ Issue #1 Match World; #2 7 unknown; #3 Bubble HUD/ROI; #4 frame pacing/overlay/C
 - Лог `connected=true registered=true panel=true`, `note=Ожидаю список окон Android…`; найден overlay window id=21 bounds=[0,143][630,739], application window id=23 bounds=[0,0][1080,1920], focused=true. Эмулятор загрузился и Gradle собрал instrumentation успешно. `demo_verified=10` доказывает только встроенное демо в тесте, не Market.
 - Указание в dump `Crashed services` требует проверки отдельного crash-logcat/artifact; не заявлять как доказанную первопричину отсутствия строки диалога.
 - Новый [GitHub Issue #5](https://github.com/GiVscSon/LocalPilot-Android/issues/5) отслеживает проблему. Следующий эксперимент: compare bindWindow/Accessibility overlay UI row API30 vs API35 same state, сохранить реальные window-ID/focus/timing и доказать PASS на всей матрице без обхода ActionGate. Статус на реальном Android телефоне: NOT RUN.
+
+
+## 12. Изолированный аудит 0.7.34
+
+Ветка fix/audit-0734 содержит отдельные исправления границ ввода, preview,
+ожидающего ответа сетки и сохранения обучения. Локальная матрица, ограничение
+эвристики и фактические результаты находятся в docs/VALIDATION_0.7.34.txt и
+docs/AUDIT_0.7.34.ru.md. Не считать это исправлением всех известных проблем и
+не приписывать синтетическим тестам проверку на физическом устройстве.
