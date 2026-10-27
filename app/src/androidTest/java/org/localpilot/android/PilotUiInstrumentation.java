@@ -823,8 +823,13 @@ public final class PilotUiInstrumentation extends Instrumentation {
     }
 
     private boolean present(String text) {
+        // The test and PilotService share a process. Prefer the actual visible
+        // own view before asking UiAutomation for a duplicate accessibility
+        // tree; on API 30 that tree can hold the global cache lock while it
+        // waits on the same main looper. External UI still uses UiAutomation.
+        try{if(onMain(()->ownControlBounds(text)!=null))return true;}catch(Exception ignored){}
         AccessibilityNodeInfo node = findText(text);
-        if (node == null)try{return onMain(()->ownControlBounds(text)!=null);}catch(Exception error){return false;}
+        if (node == null)return false;
         node.recycle();
         return true;
     }
