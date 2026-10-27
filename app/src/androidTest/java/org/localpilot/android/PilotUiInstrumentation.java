@@ -384,8 +384,12 @@ public final class PilotUiInstrumentation extends Instrumentation {
         click("Старт");
         await(() -> onMain(() -> booleanField("playing2048")), 12_000,
                 "2048 did not start through its visible profile/start controls");
-        await(()->onMain(()->intField("moves2048")>=2&&!booleanField("busy")&&!booleanField("captureBusy")),20_000,
-                "2048 did not reach its between-read interval before focus injection");
+        // A pending 2048 move is intentionally fail-closed on focus loss:
+        // the Android gesture ACK cannot prove whether the tile was spawned.
+        // Exercise transient recovery only while the game has NO unresolved move,
+        // before the first asynchronous screenshot/gesture has been dispatched.
+        require(onMain(()->field("before2048")==null&&intField("moves2048")==0&&!booleanField("busy")),
+                "2048 focus recovery fixture already has an unresolved move; never bypass fail-closed");
         long boardEpoch=onMain(()->gate().epoch());
         onMain(()->{injectFocusLoss();return null;});
         await(()->onMain(()->!booleanField("focusPaused")),2_000,"2048 focus pause did not settle");
