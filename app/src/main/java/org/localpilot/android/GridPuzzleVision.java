@@ -38,12 +38,12 @@ public final class GridPuzzleVision {
   public final float confidence;
   private final int[] values;
   private final Palette palette;
-  private final boolean usable;
+  private final boolean usable,partialUsable;
   private final java.util.BitSet specialCellsMask;
   private final CellReason[] cellReasons;
-  private Observation(int rows,int cols,long time,int[] cells,Palette palette,float confidence,boolean usable,java.util.BitSet special,CellReason[] reasons){
+  private Observation(int rows,int cols,long time,int[] cells,Palette palette,float confidence,boolean usable,boolean partialUsable,java.util.BitSet special,CellReason[] reasons){
    specialCellsMask=(java.util.BitSet)special.clone();this.rows=rows;this.cols=cols;timestampMs=time;
-   values=cells.clone();this.palette=palette;this.confidence=confidence;this.usable=usable;
+   values=cells.clone();this.palette=palette;this.confidence=confidence;this.usable=usable;this.partialUsable=partialUsable;
    cellReasons=reasons.clone();
   }
   public CellReason reason(int row,int col){
@@ -78,6 +78,11 @@ public final class GridPuzzleVision {
   public Palette palette(){return palette;}
   public boolean complete(){for(int i=0;i<values.length;i++)if(values[i]<1&&!(values[i]==0&&specialCellsMask.get(i)))return false;return true;}
   public boolean usable(){return usable;}
+  /** A geometrically stable incomplete board: unknowns remain -1, and
+   * overlay occlusion is never accepted as partial evidence. The controller
+   * still requires an authenticated target, two fresh frames and post-ACK CV.
+   */
+  public boolean partialUsable(){return partialUsable;}
   /** Depends on dimensions and symbolic cells, never the timestamp or palette serialization. */
   public long signature(){long h=0xcbf29ce484222325L;h=(h^rows)*0x100000001b3L;h=(h^cols)*0x100000001b3L;for(int i=0;i<values.length;i++){h=(h^values[i])*0x100000001b3L;h=(h^(specialCellsMask.get(i)?1:0))*0x100000001b3L;}return h;}
  }
@@ -142,8 +147,20 @@ public final class GridPuzzleVision {
   }
   // A previously learned palette is not evidence that the current picture is a
   // puzzle board. Monochrome textures/menus must abstain even if their colour is known.
-  boolean usable=complete&&distinct.size()>=2&&distinct.size()<=12;
-  return new Observation(rows,cols,timestampMs,cells,new Palette(prototypes),usable?.72f+.23f*quality/samples.length:0,usable,special,reasons);
+  boolean sceneDiverse=distinct.size()>=2&&distinct.size()<=12;
+  boolean usable=complete&&sceneDiverse;
+  int known=0;boolean overlayOccluded=false;
+  for(int i=0;i<cells.length;i++){
+   if(cells[i]>0||cells[i]==0&&special.get(i))known++;
+   if(reasons[i]==CellReason.EXCLUDED_OVERLAY)overlayOccluded=true;
+  }
+  // Incomplete boards need strong, independent evidence. One unknown
+  // is no longer a global stop, but the ROI still must be mostly readable.
+  boolean partialUsable=!complete&&sceneDiverse&&!overlayOccluded
+    &&known>=Math.max(6,(cells.length*72+99)/100);
+  float resultConfidence=usable?.72f+.23f*quality/samples.length:
+    partialUsable?.60f+.20f*quality/samples.length:0f;
+  return new Observation(rows,cols,timestampMs,cells,new Palette(prototypes),resultConfidence,usable,partialUsable,special,reasons);
  }
 
  private static int sample(Pixels pixels,float l,float t,float r,float b,float x,float y){return pixels.get((int)(l+x*(r-l)),(int)(t+y*(b-t)));}
