@@ -713,19 +713,36 @@ public class PilotService extends AccessibilityService {
    long frameAt=SystemClock.elapsedRealtime()-Math.max(0,SystemClock.uptimeMillis()-lastShotTimestamp);
    GridPuzzleVision.Observation observation=GridPuzzleVision.detect(pixels::getPixel,r.left,r.top,r.right,r.bottom,gridConfig.rows,gridConfig.cols,panel.left,panel.top,panel.right,panel.bottom,frameAt,gridPalette,selectedProfile==11);
    captureReads++;metrics.record(StageMetrics.Stage.READ,SystemClock.elapsedRealtimeNanos()-readNs);
-   int[] observedCells=observation.cells();if(!observation.usable())java.util.Arrays.fill(observedCells,-1);
-   GridPuzzleSession.Status status=gridSession.observe(gridConfig.rows,gridConfig.cols,observedCells,observation.specialCellsMask(),frameAt,SystemClock.elapsedRealtime());
+   boolean partialGrid=observation.partialUsable();
+   int[] observedCells=observation.cells();
+   // Keep individually recognized cells; the policy treats every unknown as
+   // an obstacle.  Reject a wrong screen or overlay-covered ROI as a whole.
+   if(!observation.usable()&&!partialGrid)java.util.Arrays.fill(observedCells,-1);
+   GridPuzzleSession.Status status=partialGrid||gridSession.pending()
+     ?gridSession.observePartial(gridConfig.rows,gridConfig.cols,observedCells,observation.specialCellsMask(),frameAt,SystemClock.elapsedRealtime())
+     :gridSession.observe(gridConfig.rows,gridConfig.cols,observedCells,observation.specialCellsMask(),frameAt,SystemClock.elapsedRealtime());
    if(status==GridPuzzleSession.Status.PAUSED){incrementGridStat("unconfirmed");note="Нет подтверждённого изменения поля · ввод приостановлен. Проверьте режим и область; Старт — повторить";update();return;}
    if(status==GridPuzzleSession.Status.CHANGED){gridVerified++;incrementGridStat("visual_changes");}
-   if(status!=GridPuzzleSession.Status.READY&&status!=GridPuzzleSession.Status.CHANGED){note=observation.usable()?(gridSession.pending()?"Проверяю изменение поля после жеста":"Ожидаю второй устойчивый кадр"):"Не распознано "+unknownGridCells(observation)+" из "+(gridConfig.rows*gridConfig.cols)+" клеток · "+observation.unknownSummary(3)+" · проверьте область; необычные фишки пока не трогаю";update();scheduleGrid(epoch);return;}
+   if(status!=GridPuzzleSession.Status.READY&&status!=GridPuzzleSession.Status.CHANGED){
+    note=observation.usable()||partialGrid
+      ?(gridSession.pending()?"Проверяю подтверждённое изменение поля после жеста":"Ожидаю второй устойчивый кадр"+(partialGrid?" · частичная сетка":""))
+      :"Не распознано "+unknownGridCells(observation)+" из "+(gridConfig.rows*gridConfig.cols)+" клеток · "+observation.unknownSummary(3)+" · продолжаю чтение без ввода";
+    update();scheduleGrid(epoch);return;
+   }
    gridPalette=observation.palette();
-   getSharedPreferences("grid-puzzle",MODE_PRIVATE).edit().putString(gridKey()+".palette",gridPalette.encode()).apply();
+   // Only fully verified observations may overwrite a stored game palette.
+   // Partial observations remain session-local until a complete board appears.
+   if(observation.usable())getSharedPreferences("grid-puzzle",MODE_PRIVATE).edit()
+     .putString(gridKey()+".palette",gridPalette.encode()).apply();
    metrics.attempt(StageMetrics.Stage.POLICY);long policyNs=SystemClock.elapsedRealtimeNanos();
    int targetType=GridPuzzleGoal.targetType(gridPalette,gridGoal);
-   GridPuzzlePolicy.Decision action=GridPuzzlePolicy.choose(new GridPuzzle(gridConfig.rows,gridConfig.cols,observation.cells()),gridMode(),gridConfig.minGroup,targetType,gridConfig.rows*gridConfig.cols,observation.specialCellsMask());
+   GridPuzzle board=new GridPuzzle(gridConfig.rows,gridConfig.cols,observation.cells());
+   GridPuzzlePolicy.Decision action=partialGrid
+     ?GridPuzzlePolicy.choosePartial(board,gridMode(),gridConfig.minGroup,targetType,gridConfig.rows*gridConfig.cols,observation.specialCellsMask())
+     :GridPuzzlePolicy.choose(board,gridMode(),gridConfig.minGroup,targetType,gridConfig.rows*gridConfig.cols,observation.specialCellsMask());
    captureDecisions++;metrics.record(StageMetrics.Stage.POLICY,SystemClock.elapsedRealtimeNanos()-policyNs);
    if(!automatic()){note="Наблюдение: сетка прочитана · "+(action==null?"совпадений не найдено":"найден ход, фишек "+action.expectedCleared);update();scheduleGrid(epoch);return;}
-   if(action==null){note="Допустимых ходов не найдено · ожидаю новое поле";update();scheduleGrid(epoch);return;}
+   if(action==null){note="Нет проверяемого хода · продолжаю наблюдение"+(partialGrid?" (неизвестные клетки не трогаю)":"");update();scheduleGrid(epoch);return;}
    if(busy||!valid(ticket)||SystemClock.elapsedRealtime()-frameAt>300){note="Жду свежий кадр для хода";update();scheduleGrid(epoch);return;}
    float x=r.left+(action.fromCol+.5f)*r.width()/gridConfig.cols,y=r.top+(action.fromRow+.5f)*r.height()/gridConfig.rows;
    float ex=r.left+(action.toCol+.5f)*r.width()/gridConfig.cols,ey=r.top+(action.toRow+.5f)*r.height()/gridConfig.rows;
