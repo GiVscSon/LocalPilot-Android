@@ -138,3 +138,12 @@
 - `tests/PanelDockingTest.java` проверяет 5000 случайных раскладок на отсутствие любого пересечения, полноту поиска или безопасный отказ, `tests/PanelDockingVerify.java` включён в workflow. [Build/JVM 40488512182](https://github.com/GiVscSon/LocalPilot-Android/actions/runs/40488512182) зелёный для исходной версии кода до code50; обязательно проверить `0.7.34` head отдельно.
 - Обнаружены **реальные** emulator blockers [Issue #7](https://github.com/GiVscSon/LocalPilot-Android/issues/7): API30 `The current window dialog has no visible target row`, API35 `Visible clickable UI control not found: Показать панель`. Подтверждено чтением workflow job logs. Их нельзя списать только на Gradle или считать исправленными.
 - ВНЕ СКОУПА: полное решение 7/36, ходы на полусетке, угадывание бустеров, Stomp, HexaSort, автонажатие «Играть снова» и обнуление skippedFrames без профилирования. Продолжать строго по roadmap и issue. Физический Android/Яндекс Маркет **NOT RUN**.
+
+
+## Продолжение: панель и API30
+
+Изменения панели, проверка просроченного ACK и фактические результаты
+Android CI находятся в docs/ACCEPTANCE_INVESTIGATION_0.7.34.ru.md.
+Ограничение подписки UiAutomation не устранило блокировку и отменено.
+Стабильный релиз, три успешные матрицы и приёмка физического телефона
+не подтверждены.
