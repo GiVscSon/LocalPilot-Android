@@ -200,7 +200,7 @@ public class PilotService extends AccessibilityService {
   if(SystemClock.elapsedRealtime()>=until){note="Окно не стало активным. Коснитесь игры и выберите окно снова";update();return;}
   note="Коснитесь выбранного окна игры · ожидаю фокус";update();handler.postDelayed(()->awaitChosenWindow(pkg,id,expected,epoch,until),250);
  }
- private void chooseProfile(){stop("Выберите механику игры");overlayMenu("Механика · выбирайте по управлению, не по оформлению",new String[]{ArcadeProfile.ARI.label,ArcadeProfile.PADDLE.label,ArcadeProfile.TRAFFIC.label,ArcadeProfile.FLAPPY.label,"2048","Цветной2048","Мэтч Ворлд · обмен соседей","Фишки · удалить группу","Имя игры · отдельное обучение","Шипучка · обычные шары (эксперимент)","Фишки · провести прямую цепочку","Нащупай ход · обмен, избегать черепов"},i->{if(i==8){nameLearningGame();return;}unsupportedGame=false;if(selectedProfile!=i){visualRoi=null;manualVisualRoi=false;boardRoi=null;}selectedProfile=i;if(i<4)captureProfile=ArcadeProfile.values()[i];getSharedPreferences("panel",MODE_PRIVATE).edit().putInt("profile",i).apply();AccessibilityNodeInfo root=appRoot();try{if(root!=null){String pkg=String.valueOf(root.getPackageName());getSharedPreferences("game-profiles",MODE_PRIVATE).edit().putInt(profileChoiceKey(pkg),i).apply();browserProfileConfirmed=true;confirmedProfileScope=profileChoiceKey(pkg);}}finally{if(root!=null)root.recycle();}note="Выбрано: "+profileLabel()+". Другая графика: Ещё → Настроить распознавание. Затем Старт";update();if(i==9){if(bindSelectedWindow())selectVisualRegion();}else if(i>=6)configureGrid();});}
+ private void chooseProfile(){stop("Выберите механику игры");overlayMenu("Механика · выбирайте по управлению, не по оформлению",new String[]{ArcadeProfile.ARI.label,ArcadeProfile.PADDLE.label,ArcadeProfile.TRAFFIC.label,ArcadeProfile.FLAPPY.label,"2048","Цветной2048","Мэтч Ворлд · обмен соседей","Фишки · удалить группу","Имя игры · отдельное обучение","Шипучка · обычные шары (эксперимент)","Фишки · провести прямую цепочку","Нащупай ход · обмен, избегать черепов","Гексон · пока не поддерживается","Котобашня · пока не поддерживается"},i->{if(i==8){nameLearningGame();return;}if(i>=12){unsupportedGame=true;browserProfileConfirmed=false;note=(i==12?"Гексон":"Котобашня")+": управление пока не реализовано · выберите другую игру";update();return;}unsupportedGame=false;if(selectedProfile!=i){visualRoi=null;manualVisualRoi=false;boardRoi=null;}selectedProfile=i;if(i<4)captureProfile=ArcadeProfile.values()[i];getSharedPreferences("panel",MODE_PRIVATE).edit().putInt("profile",i).apply();AccessibilityNodeInfo root=appRoot();try{if(root!=null){String pkg=String.valueOf(root.getPackageName());getSharedPreferences("game-profiles",MODE_PRIVATE).edit().putInt(profileChoiceKey(pkg),i).apply();browserProfileConfirmed=true;confirmedProfileScope=profileChoiceKey(pkg);}}finally{if(root!=null)root.recycle();}note="Выбрано: "+profileLabel()+". Другая графика: Ещё → Настроить распознавание. Затем Старт";update();if(i==9){if(bindSelectedWindow())selectVisualRegion();}else if(i>=6)configureGrid();});}
  private void nameLearningGame(){
   AccessibilityNodeInfo root=appRoot();if(root==null){note="Сначала откройте приложение с игрой";update();return;}
   final String pkg;try{pkg=String.valueOf(root.getPackageName());}finally{root.recycle();}
@@ -282,14 +282,23 @@ public class PilotService extends AccessibilityService {
   try{wm.addView(overlay,lp);picker=overlay;handler.postDelayed(()->{if(picker==overlay){stop("Время выбора области истекло");compact(false);}},30000);}catch(RuntimeException error){stop("Не удалось открыть выбор области");compact(false);}
  }
  private void moreOptions(){
-  stop("Дополнительные действия · STOP");overlayMenu("Ещё",new String[]{"Диагностика сеанса","Калибровка Ари","Автополе2048","Выбрать установленную игру","Только чтение","Включить автоуправление","Демо ×10","Скрыть панель","Отключить службу","Настроить распознавание","Способ управления","Вернуть стандартное распознавание","Размер сетки фишек","Приоритетный цвет фишек"},i->{switch(i){
+  stop("Дополнительные действия · STOP");overlayMenu("Ещё",new String[]{"Диагностика сеанса","Калибровка Ари","Автополе2048","Выбрать установленную игру","Только чтение","Включить автоуправление","Демо ×10","Скрыть панель","Отключить службу","Настроить распознавание","Способ управления","Вернуть стандартное распознавание","Размер сетки фишек","Приоритетный цвет фишек","Помощь по панели и играм"},i->{switch(i){
    case 0->showServiceDialog(new AlertDialog.Builder(this).setTitle("Последний сеанс").setMessage(lastSessionReport+"\n"+captureStartup.report()).setPositiveButton("Закрыть",null).create());
    case 1->{selectedProfile=0;startVisualArcade(ArcadeProfile.ARI);if(playingJumper)jumperCalibrationPending=true;}
    case 2->startAutomaticGame();case 3->startActivity(new Intent(this,GamePickerActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));case 4->setAutomatic(false);case 5->setAutomatic(true);case 6->{arm();if(gate.armed())startDemo();}case 7->hidePanel();case 8->disableSelf();
    case 9->startCustomCalibration();case 10->chooseControlMode();case 11->resetCustomVision();
    case 12->configureGrid();
    case 13->chooseGridGoal();
+   case 14->showPanelHelp();
   }});
+ }
+
+
+ private void showPanelHelp(){
+  String message="Окно — выберите окно игры. Игра — выберите её механику. Область — отметьте игровое поле, если требуется. Старт — начать выбранный режим. Свернуть — уменьшить панель. STOP — немедленно остановить ввод.\n\n"
+   +"2048 и цветной 2048: свайпы; Мэтч Ворлд и Нащупай ход: обмен соседних фишек; группы и прямые цепочки: отдельные режимы. Шипучка: экспериментально только обычные шары. Прыгун Ари, Карканоид, Маркет Раш и Гошан: отдельные аркадные профили.\n\n"
+   +"Гексон и Котобашня пока не поддерживаются. Для другой игры выбирайте механику по управлению. Успех действий и работа на конкретном телефоне не гарантированы.";
+  showServiceDialog(new AlertDialog.Builder(this).setTitle("Панель и игры").setMessage(message).setPositiveButton("Закрыть",null).create());
  }
 
 

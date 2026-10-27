@@ -241,6 +241,11 @@ public final class PilotUiInstrumentation extends Instrumentation {
 
     private void checkCollapseAndReopen() throws Exception {
         launchDemo();
+        click("Игра");click("Гексон · пока не поддерживается");
+        await(()->onMain(()->booleanField("unsupportedGame")&&!gate().armed()),3_000,"Unsupported game was not safely marked");
+        click("Игра");click(ArcadeProfile.ARI.label);
+        await(()->onMain(()->!booleanField("unsupportedGame")&&field("overlayDialog")==null),3_000,"Supported game did not clear the unsupported selection");
+        addCheck("unsupported_game_selection_disarmed",new JSONObject().put("game","Гексон").put("input_armed",false));
         bindDemoWindow();
         await(this::armed, 2_000, "Overlay did not bind to DemoActivity");
         allowInput();
