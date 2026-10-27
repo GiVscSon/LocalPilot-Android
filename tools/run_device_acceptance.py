@@ -74,6 +74,10 @@ def main():
                     trace = trace[-12:]
                 annotation('notice', 'UI interaction/lifecycle trace:\n'
                            + json.dumps(trace, ensure_ascii=False)[-3500:])
+            slow_main = report.get('slow_main_trace')
+            if slow_main:
+                annotation('notice', 'Slow main-thread dispatches:\n'
+                           + json.dumps(slow_main[-12:], ensure_ascii=False)[-3500:])
             metrics = report.get('metrics')
             if isinstance(metrics, str):
                 selected = [line[:500] for line in metrics.splitlines()

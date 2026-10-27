@@ -60,6 +60,17 @@ public final class PilotUiInstrumentation extends Instrumentation {
     private final Object traceLock=new Object();
     private final ArrayDeque<TraceEntry> lifecycleTrace=new ArrayDeque<>();
     private final ArrayDeque<TraceEntry> clickTrace=new ArrayDeque<>();
+    private final ArrayDeque<TraceEntry> slowMainTrace=new ArrayDeque<>();
+    private long mainDispatchAt;
+    private String mainDispatch="";
+    private final android.util.Printer mainQueueMonitor=message->{
+        if(message.startsWith(">>>>>")){mainDispatchAt=SystemClock.uptimeMillis();mainDispatch=message;}
+        else if(message.startsWith("<<<<<")&&mainDispatchAt>0){
+            long elapsed=SystemClock.uptimeMillis()-mainDispatchAt;
+            if(elapsed>=500)appendTrace(slowMainTrace,20,"main dispatch "+elapsed+"ms "+mainDispatch.substring(0,Math.min(220,mainDispatch.length())));
+            mainDispatchAt=0;
+        }
+    };
     private String lastClickTrace="";
     private long traceSequence;
     private Application tracedApplication;
@@ -91,7 +102,7 @@ public final class PilotUiInstrumentation extends Instrumentation {
         Bundle result = new Bundle();
         boolean passed = false;
         try {
-            onMain(()->{tracedApplication=(Application)getTargetContext().getApplicationContext();tracedApplication.registerActivityLifecycleCallbacks(lifecycleCallbacks);return null;});
+            onMain(()->{tracedApplication=(Application)getTargetContext().getApplicationContext();tracedApplication.registerActivityLifecycleCallbacks(lifecycleCallbacks);android.os.Looper.getMainLooper().setMessageLogging(mainQueueMonitor);return null;});
             automation = getUiAutomation(UiAutomation.FLAG_DONT_SUPPRESS_ACCESSIBILITY_SERVICES);
             android.accessibilityservice.AccessibilityServiceInfo info = automation.getServiceInfo();
             info.flags |= android.accessibilityservice.AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
@@ -137,6 +148,7 @@ public final class PilotUiInstrumentation extends Instrumentation {
                 evidence.put("stack", stack.toString());
                 evidence.put("visible_ui", visibleUi());
                 evidence.put("interaction_trace",interactionTrace());
+                evidence.put("slow_main_trace",slowMainTrace());
                 String fixtureState=bubbleFixtureState();
                 if(service!=null)evidence.put("own_state",onMain(()->"connected="+(PilotService.instance==service)+" registered="+field("panelRegistered")+" panel="+(field("panel")!=null)+" note="+field("note")+" demo_score="+(demo==null?-1:visibleScore(demo.getWindow().getDecorView()))+" demo_verified="+field("demoVerified")+" gesture="+field("lastGestureContext")+bubbleControllerState())+" fixture="+fixtureState);
                 if (service != null) evidence.put("metrics", onMain(() -> service.exportMetrics()));
@@ -151,7 +163,7 @@ public final class PilotUiInstrumentation extends Instrumentation {
             try {
                 evidence.put("interaction_trace",interactionTrace());
                 evidence.put("safe_fallback_touches",safeFallbackTouches);
-                if(tracedApplication!=null)onMain(()->{tracedApplication.unregisterActivityLifecycleCallbacks(lifecycleCallbacks);return null;});
+                if(tracedApplication!=null)onMain(()->{android.os.Looper.getMainLooper().setMessageLogging(null);tracedApplication.unregisterActivityLifecycleCallbacks(lifecycleCallbacks);return null;});
                 evidence.put("result", passed ? "PASS" : "FAIL");
                 evidence.put("duration_ms", SystemClock.uptimeMillis() - started);
                 File folder = getTargetContext().getExternalFilesDir("instrumentation");
@@ -918,9 +930,12 @@ public final class PilotUiInstrumentation extends Instrumentation {
     }
     private JSONArray interactionTrace(){
         synchronized(traceLock){
-            java.util.ArrayList<TraceEntry> entries=new java.util.ArrayList<>(lifecycleTrace);entries.addAll(clickTrace);entries.sort(java.util.Comparator.comparingLong(entry->entry.sequence));
+            java.util.ArrayList<TraceEntry> entries=new java.util.ArrayList<>(lifecycleTrace);entries.addAll(clickTrace);entries.addAll(slowMainTrace);entries.sort(java.util.Comparator.comparingLong(entry->entry.sequence));
             JSONArray result=new JSONArray();for(TraceEntry entry:entries)result.put(entry.at+"ms "+entry.message);return result;
         }
+    }
+    private JSONArray slowMainTrace(){
+        synchronized(traceLock){JSONArray result=new JSONArray();for(TraceEntry entry:slowMainTrace)result.put(entry.at+"ms "+entry.message);return result;}
     }
     private void drag(float x,float y,float endX,float endY)throws Exception{
         long down=SystemClock.uptimeMillis();
