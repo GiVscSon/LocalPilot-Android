@@ -61,8 +61,10 @@ public final class PilotUiInstrumentation extends Instrumentation {
     private final ArrayDeque<TraceEntry> lifecycleTrace=new ArrayDeque<>();
     private final ArrayDeque<TraceEntry> clickTrace=new ArrayDeque<>();
     private final ArrayDeque<TraceEntry> slowMainTrace=new ArrayDeque<>();
-    private long mainDispatchAt;
-    private String mainDispatch="";
+    private volatile long mainDispatchAt;
+    private volatile String mainDispatch="";
+    private volatile boolean samplingMain;
+    private Thread mainSampler;
     private final android.util.Printer mainQueueMonitor=message->{
         if(message.startsWith(">>>>>")){mainDispatchAt=SystemClock.uptimeMillis();mainDispatch=message;}
         else if(message.startsWith("<<<<<")&&mainDispatchAt>0){
@@ -103,6 +105,21 @@ public final class PilotUiInstrumentation extends Instrumentation {
         boolean passed = false;
         try {
             onMain(()->{tracedApplication=(Application)getTargetContext().getApplicationContext();tracedApplication.registerActivityLifecycleCallbacks(lifecycleCallbacks);android.os.Looper.getMainLooper().setMessageLogging(mainQueueMonitor);return null;});
+            samplingMain=true;
+            mainSampler=new Thread(()->{
+                long sampled=0;
+                while(samplingMain){
+                    long at=mainDispatchAt;
+                    if(at>0&&at!=sampled&&SystemClock.uptimeMillis()-at>=1000){
+                        sampled=at;StringBuilder stack=new StringBuilder("main stack: ");
+                        for(StackTraceElement frame:android.os.Looper.getMainLooper().getThread().getStackTrace()){
+                            if(stack.length()>1500)break;stack.append(frame).append(" | ");
+                        }
+                        appendTrace(slowMainTrace,20,stack.toString());
+                    }
+                    SystemClock.sleep(250);
+                }
+            },"acceptance-main-sampler");mainSampler.setDaemon(true);mainSampler.start();
             automation = getUiAutomation(UiAutomation.FLAG_DONT_SUPPRESS_ACCESSIBILITY_SERVICES);
             android.accessibilityservice.AccessibilityServiceInfo info = automation.getServiceInfo();
             info.flags |= android.accessibilityservice.AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
@@ -156,6 +173,7 @@ public final class PilotUiInstrumentation extends Instrumentation {
                 result.putString("cleanup_error", secondary.toString());
             }
         } finally {
+            samplingMain=false;
             try {
                 if (automation != null) automation.setRotation(UiAutomation.ROTATION_UNFREEZE);
                 if (service != null) onMain(() -> { service.hidePanel(); return null; });
