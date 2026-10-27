@@ -54,7 +54,9 @@ public final class LiveGameLearning {
   if(direction<0||direction>3)throw new IllegalArgumentException("direction");
   int n=verified[direction];if(n<3)return 0;
   double mean=(double)qualityTotal[direction]/n, confidence=(double)n/(n+8);
-  return Math.max(-1.5,Math.min(3.0,(mean-2.0)*0.65*confidence));
+  // Stay compatible with the separate Web2048Transfer ranker in PR #10:
+  // combined live/Web evidence must remain bounded when these branches merge.
+  return Math.max(-.4,Math.min(.4,(mean-2.0)*.10*confidence));
  }
  /** Maximum six score points versus a normal bubble clear worth >=100 points. */
  public double bonusBubble(int bounces,int removed,int dropped){
