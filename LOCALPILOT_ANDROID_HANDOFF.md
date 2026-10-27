@@ -1,3 +1,13 @@
+# НОВАЯ ОБЩАЯ ИНЖЕНЕРНАЯ ТОЧКА ПРОДОЛЖЕНИЯ · 27.10.2026
+
+Главный документ для других чатов/Codex с матрицей и ссылками на исходники: [LOCALPILOT_UNIFIED_HANDOFF_2026-10-27.ru.md](docs/LOCALPILOT_UNIFIED_HANDOFF_2026-10-27.ru.md).
+Общий документ основной PC/Android архитектуры: https://docs.google.com/document/d/1d_U4NLmOQTyzvRQ1PdUVMkLGh0-eH_PCwleFPetbFK8/edit
+Приоритетный bug/acceptance: https://github.com/GiVscSon/LocalPilot-Android/issues/1
+
+НОВЫЕ ФАКТЫ: версия 0.7.33-dev/code49 лежит в ЭТОЙ ветке, а main содержит исторический handoff. Match World: PANEL_COVERS_ROI в двух сессиях и 3×Android ACK без подтверждённого изменения в третьей; причина 3 шагов не доказана. GridPuzzleSession: FRESH300/STABLE80/SETTLE180/timeout2500 ms. JumperState.horizontalDistance уже поддерживает wrap. Карканоид требует учёта опускающихся блоков и предполагаемой скрытой линии поражения (механика по сообщению пользователя, не физический e2e). Обязательны единственный исполнитель и STOP/TTL/frame/session guards. Сначала P0 и тест на телефоне, затем новые игровые механики. НЕ считать APK 0.7.33 физически проверенным. До исправления делать бэкап; не записывать фотографии/секреты в Git.
+
+---
+
 # Текущий этап: 0.7.33-dev / code49
 
 Исправлено ожидание при одном оставшемся обычном шаре в экспериментальной

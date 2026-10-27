@@ -1,3 +1,8 @@
+## ВАЖНО: общий handoff для Codex и других чатов · 2026-10-27
+
+Прежде чем менять код, открыть [единый инженерный handoff](docs/LOCALPILOT_UNIFIED_HANDOFF_2026-10-27.ru.md), [основной общий Google Doc](https://docs.google.com/document/d/1d_U4NLmOQTyzvRQ1PdUVMkLGh0-eH_PCwleFPetbFK8/edit) и [P0 issue #1](https://github.com/GiVscSon/LocalPilot-Android/issues/1).
+Актуальный Android код **0.7.33-dev/code49** в ветке **sync/localpilot-android-0711**; main не является исходной базой. Проблемы по скриншотам: перекрывающая игровое поле панель и отсутствие post-ACK подтверждения обмена Match World; механика опускающихся блоков Карканоида требует измерений. Защиты STOP и данные не трогать без тестов и бэкапа. Текущая версия не проверена на физическом телефоне.
+
 ## 0.7.33-dev / code49
 
 Продолжение экспериментальной «Шипучки» при одном оставшемся шаре:
