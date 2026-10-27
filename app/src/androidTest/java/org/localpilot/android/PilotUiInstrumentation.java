@@ -977,7 +977,11 @@ public final class PilotUiInstrumentation extends Instrumentation {
 
     private String visibleUi(){
         StringBuilder text=new StringBuilder();int[] left={120};
-        for(AccessibilityWindowInfo window:automation.getWindows()){
+        java.util.List<AccessibilityWindowInfo> windows=automation.getWindows();
+        // The focused system consent or ANR dialog is the relevant failure
+        // evidence. Status/navigation trees must not consume the bounded dump.
+        for(int pass=0;pass<2;pass++)for(AccessibilityWindowInfo window:windows){
+            if(window.isFocused()!=(pass==0))continue;
             AccessibilityNodeInfo root=window.getRoot();if(root==null)continue;
             try{describe(root,text,0,left);}finally{root.recycle();}
         }
@@ -986,6 +990,7 @@ public final class PilotUiInstrumentation extends Instrumentation {
     private void describe(AccessibilityNodeInfo node,StringBuilder text,int depth,int[] left){
         if(depth>24||--left[0]<0||text.length()>3500)return;
         if(node.isVisibleToUser())text.append(node.getPackageName()).append(' ').append(node.getClassName())
+                .append(" id=").append(node.getViewIdResourceName()).append(" enabled=").append(node.isEnabled())
                 .append(" clickable=").append(node.isClickable()).append(" text=")
                 .append(String.valueOf(node.getText()).substring(0,Math.min(90,String.valueOf(node.getText()).length()))).append('\n');
         for(int i=0;i<node.getChildCount();i++){
