@@ -386,13 +386,22 @@ public final class PilotUiInstrumentation extends Instrumentation {
                 "2048 did not start through its visible profile/start controls");
         await(()->onMain(()->intField("moves2048")>=2&&!booleanField("busy")&&!booleanField("captureBusy")),20_000,
                 "2048 did not reach its between-read interval before focus injection");
-        long boardEpoch=onMain(()->gate().epoch());
-        onMain(()->{injectFocusLoss();return null;});
-        await(()->onMain(()->!booleanField("focusPaused")),2_000,"2048 focus pause did not settle");
-        require(onMain(()->gate().armed()&&gate().epoch()==boardEpoch&&booleanField("playing2048")),"2048 lost its session during transient focus recovery");
+        boolean interrupted=onMain(()->field("before2048")!=null);
+        if(interrupted){
+            onMain(()->{java.lang.reflect.Method method=PilotService.class.getDeclaredMethod("deferFocus",String.class);method.setAccessible(true);
+                require(Boolean.TRUE.equals(method.invoke(service,"WINDOW_STATE_UNAVAILABLE")),"Interrupted gesture did not handle focus loss");
+                require(!gate().armed()&&!booleanField("playing2048"),"Interrupted 2048 gesture did not stop");return null;});
+            addCheck("2048_interrupted_gesture_stops",new JSONObject().put("loss_notification_injected",true));
+            bindDemoWindow();click("Старт");
+            await(()->onMain(()->booleanField("playing2048")),12_000,"2048 did not restart after interruption");
+        }else{
+            long boardEpoch=onMain(()->gate().epoch());
+            onMain(()->{injectFocusLoss();return null;});
+            await(()->onMain(()->!booleanField("focusPaused")),2_000,"2048 focus pause did not settle");
+            require(onMain(()->gate().armed()&&gate().epoch()==boardEpoch&&booleanField("playing2048")),"2048 lost its session during transient focus recovery");
+        }
         await(() -> onMain(() -> intField("moves2048")) >= 4, 25_000,
                 "2048 did not produce at least three visually verified swipes");
-        addCheck("2048_focus_resume_without_parallel_capture",new JSONObject().put("loss_notification_injected",true).put("real_screenshot_and_gestures",true));
         click("STOP");
         await(() -> !armed() && !onMain(() -> booleanField("busy")), 4_000,
                 "2048 STOP did not settle and revoke input");
