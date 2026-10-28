@@ -528,11 +528,17 @@ public final class PilotUiInstrumentation extends Instrumentation {
         if(compact())click("Развернуть");
         click("Старт");
         await(()->onMain(()->booleanField("playingGrid")&&intField("selectedProfile")==9),8_000,"Bubble loop did not start through the visible Start control");
+        final int learnedBefore=onMain(()->((LiveGameLearning)field("bubbleLearning")).verifiedCount());
         await(()->markerBounds("LOCALPILOT_BUBBLE_SHOTS_1")!=null,20_000,"No real aim/release reached the independent bubble fixture");
-        await(()->onMain(()->((BubbleSession)field("bubbleSession")).verified()>=1),12_000,"Delivered bubble gesture did not yield the predicted visually verified board");
-        await(()->onMain(()->((LiveGameLearning)field("bubbleLearning")).verifiedCount()>=1),3_000,
-                "Bubble gameplay verified the shot but did not teach the real-game learner");
-        int verified=onMain(()->((BubbleSession)field("bubbleSession")).verified());
+        // BubbleSession is cleared by STOP; the session-level gridVerified
+        // remains the last strictly VERIFIED count across that teardown.
+        // In a fast autoreplay the controller may start a second shot before
+        // the UI thread samples the transient BubbleSession counter.
+        await(()->onMain(()->intField("gridVerified")>=1),12_000,"Delivered bubble gesture did not yield the predicted visually verified board");
+        await(()->onMain(()->((LiveGameLearning)field("bubbleLearning")).verifiedCount()>learnedBefore),3_000,
+                "Bubble gameplay verified the shot but did not increase THIS fixture's learning evidence");
+        int verified=onMain(()->intField("gridVerified"));
+        require(verified>=1,"Bubble UI evidence lost a verified shot before recording it");
         AtomicReference<String> observedFixture=new AtomicReference<>();
         await(()->{
             String state=bubbleFixtureState();
