@@ -14,6 +14,7 @@ final class GameAreaOverlay extends FrameLayout {
  private final RectF box=new RectF();
  private final int[] origin=new int[2];
  private final int rows,cols;
+ private final boolean requireSquare;
  private final TextView message;
  private final Button confirm;
  private GameViewport.Box candidate;
@@ -21,12 +22,13 @@ final class GameAreaOverlay extends FrameLayout {
  private float cornerX,cornerY;
  private boolean dragging,finished,cornerPending;
 
- GameAreaOverlay(Context c,Rect window,Listener listener){this(c,window,4,4,listener);}
- GameAreaOverlay(Context c,Rect bounds,int rows,int cols,Listener listener){
+ GameAreaOverlay(Context c,Rect window,Listener listener){this(c,window,4,4,false,listener);}
+ GameAreaOverlay(Context c,Rect bounds,int rows,int cols,Listener listener){this(c,bounds,rows,cols,false,listener);}
+ GameAreaOverlay(Context c,Rect bounds,int rows,int cols,boolean requireSquare,Listener listener){
   super(c);if(bounds==null||listener==null)throw new IllegalArgumentException("region editor");
   this.window=new GameViewport.Box(bounds.left,bounds.top,bounds.right,bounds.bottom);
   candidate=rows==1&&cols==1?null:RegionPickerGeometry.initial(window,rows,cols);
-  this.rows=rows;this.cols=cols;this.listener=listener;
+  this.rows=rows;this.cols=cols;this.requireSquare=requireSquare;this.listener=listener;
   setWillNotDraw(false);setContentDescription("Выделение области игры "+rows+" на "+cols);
   LinearLayout header=new LinearLayout(c);header.setOrientation(LinearLayout.VERTICAL);header.setBackgroundColor(0xF0202830);
   header.setPadding(0,dp(24),0,0);
@@ -48,6 +50,10 @@ final class GameAreaOverlay extends FrameLayout {
  private void confirm(){
   if(finished||dragging||candidate==null)return;
   GameViewport.Box selected=GameViewport.selection(window,candidate.left(),candidate.top(),candidate.right(),candidate.bottom());
+  if(requireSquare&&!RegionPickerGeometry.squareBoardAspect(selected,rows,cols)){
+   message.setText("AUTO_BOARD_GEOMETRY: рамка должна охватывать только квадратную сетку. Переместите углы.");
+   return;
+  }
   finished=true;listener.selected(new Rect(selected.left(),selected.top(),selected.right(),selected.bottom()));
  }
  private void drawBox(Canvas canvas,GameViewport.Box screen,int color){
