@@ -7,14 +7,16 @@ public final class CaptureTimingTest {
  public static void main(String[] args){
   CaptureTimingTrace trace=new CaptureTimingTrace();
   trace.request(11,1000);
+  trace.apiReturned(11,1000,1004);
   trace.callback(11,1000,1130,true,true);
-  trace.timeout(11,1000,5001,4000,false);
+  trace.timeout(11,1000,1004,5005,4000,false);
   String healthy=trace.report();
   check(healthy.contains("SUCCESS_ENTER id=11 age_ms=130"),"callback entry latency is monotonic");
   check(healthy.contains("WATCHDOG_RESOLVED id=11"),"a resolved request cannot become a timeout");
 
   trace.request(12,6000);
-  trace.timeout(12,6000,10027,4000,true);
+  trace.apiReturned(12,6000,6000);
+  trace.timeout(12,6000,6000,10027,4000,true);
   String missing=trace.report();
   check(missing.contains("WATCHDOG_NO_MAIN_CALLBACK id=12 age_ms=4027 watchdog_lag_ms=27"),
    "on-time main watchdog identifies absence of main callback, not Binder cause");
@@ -23,10 +25,13 @@ public final class CaptureTimingTest {
    "late platform callback is recorded as ignored, never as proof");
 
   trace.request(13,11000);
-  trace.timeout(13,11000,15801,4000,true);
-  check(trace.report().contains("WATCHDOG_MAIN_QUEUE_LATE id=13 age_ms=4801 watchdog_lag_ms=801"),
+  trace.apiReturned(13,11000,11200);
+  trace.timeout(13,11000,11200,15801,4000,true);
+  check(trace.report().contains("WATCHDOG_MAIN_QUEUE_LATE id=13 age_ms=4801 watchdog_lag_ms=601"),
    "delayed main queue watchdog is differentiated from on-time callback absence");
 
+  check(trace.report().contains("API_RETURN id=13 age_ms=200"),
+   "synchronous takeScreenshot API time is separately measured");
   trace.request(14,20000);
   trace.callback(14,20000,20110,false,true);
   check(trace.report().contains("FAILURE_ENTER id=14 age_ms=110"),
