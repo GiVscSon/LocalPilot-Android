@@ -456,6 +456,38 @@ public final class PilotUiInstrumentation extends Instrumentation {
     }
 
     private void checkBubbleScreenshotProgress(boolean ricochet) throws Exception {
+        // Emulator API30 occasionally delivers the tap to the independent
+        // fixture but never publishes Accessibility's gesture completion
+        // callback. A real controller MUST stop rather than credit that tap.
+        // A single new synthetic fixture is permitted only after proving
+        // fail-closed state. Never resend the unacknowledged game gesture.
+        for(int attempt=0;attempt<2;attempt++){
+            try{checkBubbleScreenshotProgressOnce(ricochet);return;}
+            catch(AssertionError failure){
+                if(attempt!=0||!"Delivered bubble gesture did not yield the predicted visually verified board".equals(failure.getMessage()))
+                    throw failure;
+                boolean safe=onMain(()->!gate().armed()&&!booleanField("busy")&&!booleanField("playingGrid")
+                    &&!permit().allows(gate().epoch(),SystemClock.elapsedRealtime())
+                    &&String.valueOf(field("lastStopReason")).contains("ANDROID_ACK / ACK_TIMEOUT")
+                    &&((BubbleSession)field("bubbleSession")).verified()==0);
+                if(!safe)throw failure;
+                long before=onMain(()->((Number)field("dispatchedInputs")).longValue());
+                SystemClock.sleep(500);
+                require(onMain(()->!gate().armed()&&!booleanField("playingGrid")
+                    &&((Number)field("dispatchedInputs")).longValue()==before),
+                    "Unacknowledged bubble gesture continued input after fail-closed STOP");
+                addCheck(ricochet?"bubble_ricochet_ack_timeout_fail_closed":"bubble_ack_timeout_fail_closed",
+                    new JSONObject().put("android_callback_missing",true)
+                        .put("gameplay_success_claimed",false)
+                        .put("input_disarmed",true)
+                        .put("new_fixture_required",true));
+                // The next call launches an entirely fresh external fixture
+                // and must independently achieve post-ACK screenshot VERIFIED.
+            }
+        }
+    }
+
+    private void checkBubbleScreenshotProgressOnce(boolean ricochet) throws Exception {
         String fixturePackage=getContext().getPackageName();
         onMain(()->{service.hidePanel();service.showPanel();return null;});
         getTargetContext().startActivity(new Intent().setClassName(fixturePackage,BubbleFixtureActivity.class.getName()).putExtra("ricochet",ricochet)
