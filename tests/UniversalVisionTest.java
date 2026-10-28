@@ -6,7 +6,7 @@ public final class UniversalVisionTest {
  private static void check(boolean value,String message){checks++;if(!value)throw new AssertionError(message);}
  private static boolean box(float x,float y,float l,float t,float r,float b){return x>=l&&x<r&&y>=t&&y<b;}
  private static int scene(ArcadeProfile p,float x,float y,int[] c,float shift){
-  if(p==ArcadeProfile.PADDLE){if(box(x,y,.65f,.3f,.70f,.35f))return c[0];if(box(x,y,.25f+shift,.85f,.5f+shift,.9f))return c[1];if(box(x,y,.6f,.1f,.8f,.15f))return c[2];}
+  if(p==ArcadeProfile.PADDLE){if(box(x,y,.65f,.3f+shift,.70f,.35f+shift))return c[0];if(box(x,y,.25f+shift,.85f,.5f+shift,.9f))return c[1];if(box(x,y,.6f,.1f,.8f,.15f))return c[2];}
   if(p==ArcadeProfile.TRAFFIC){if(box(x,y,.44f+shift,.76f,.55f+shift,.89f))return c[0];if(box(x,y,.42f,.35f,.57f,.52f))return c[1];if(box(x,y,.74f,.1f,.85f,.23f))return c[2];}
   if(p==ArcadeProfile.FLAPPY){if(box(x,y,.12f,.45f+shift,.18f,.51f+shift))return c[0];if(box(x,y,.60f,0,.73f,.34f))return c[1];if(box(x,y,.60f,.65f,.73f,1))return c[2];}
   return 0xff202020;
@@ -64,15 +64,25 @@ public final class UniversalVisionTest {
    check(first.usable(),"calibrated detection "+p+" width="+w);
    var second=CustomArcadeVision.detect(p,(x,y)->scene(p,(x-l)/(float)w,(y-t)/(float)h,colors,p==ArcadeProfile.FLAPPY?-.02f:.03f),l,t,l+w,t+h,0,0,0,0,1100,first,conf);
    check(second.usable()&&second.tracked,"fresh calibrated tracking "+p);
-   if(p==ArcadeProfile.PADDLE)check(ArcadePolicy.next(first).action==ArcadePolicy.Action.MOVE_PADDLE,"generic paddle interception");
+   if(p==ArcadeProfile.PADDLE){
+    check(!ArcadePolicy.next(first).sendsInput(),"one calibrated paddle frame is not proof of a ball trajectory");
+    check(second.vy>.02f&&second.tracked,"moving synthetic ball has a measured descending trajectory");
+    check(ArcadePolicy.next(second).action==ArcadePolicy.Action.MOVE_PADDLE,"generic paddle intercepts after tracked ball motion");
+   }
    if(p==ArcadeProfile.TRAFFIC){check(first.obstacles.size()==2,"two colored obstacles");var d=new ArcadeController().decide(first,1000);check(d.action==ArcadePolicy.Action.LEFT,"predictive avoidance works with another palette");}
    if(p==ArcadeProfile.FLAPPY)check(Math.abs(first.gapTop-.34f)<.02f&&Math.abs(first.gapBottom-.65f)<.02f,"pipe gap found without Market colors");
    if(p!=ArcadeProfile.FLAPPY){
-    var decision=new ArcadeController().decide(first,1000);var gesture=ArcadeControls.map(decision,first,p==ArcadeProfile.TRAFFIC?1:0);
-    float shift=gesture.toX()<gesture.fromX()?-.04f:.04f;
-    var response=CustomArcadeVision.detect(p,(x,y)->scene(p,(x-l)/(float)w,(y-t)/(float)h,colors,shift),l,t,l+w,t+h,0,0,0,0,1100,first,conf);
-    var feedback=new ArcadeFeedback();long id=feedback.dispatched(decision,first,1000);feedback.acknowledge(id);
-    check(feedback.observe(response,1100)==ArcadeFeedback.State.READY&&feedback.verified()==1,"pixels → controller → gesture → changed pixels → visual ACK "+p);
+    // PADDLE must observe ball motion BEFORE input. TRAFFIC already has a
+    // verified appearance and does not require a velocity estimate to avoid.
+    var before=p==ArcadeProfile.PADDLE?second:first;
+    long dispatchAt=before.timestampMs;
+    var decision=new ArcadeController().decide(before,dispatchAt);
+    check(decision.sendsInput(),"verified custom arcade scene permits an actionable decision "+p);
+    var gesture=ArcadeControls.map(decision,before,p==ArcadeProfile.TRAFFIC?1:0);
+    float shift=p==ArcadeProfile.PADDLE?.07f:(gesture.toX()<gesture.fromX()?-.04f:.04f);
+    var response=CustomArcadeVision.detect(p,(x,y)->scene(p,(x-l)/(float)w,(y-t)/(float)h,colors,shift),l,t,l+w,t+h,0,0,0,0,dispatchAt+100,before,conf);
+    var feedback=new ArcadeFeedback();long id=feedback.dispatched(decision,before,dispatchAt);feedback.acknowledge(id);
+    check(feedback.observe(response,dispatchAt+100)==ArcadeFeedback.State.READY&&feedback.verified()==1,"pixels → controller → gesture → changed pixels → visual proof "+p);
    }
    var missing=CustomArcadeVision.detect(p,(x,y)->0xff202020,l,t,l+w,t+h,0,0,0,0,1200,second,conf);
    check(!missing.usable()&&!new ArcadeController().decide(missing,1200).sendsInput(),"empty scene cannot issue input");
@@ -98,8 +108,11 @@ public final class UniversalVisionTest {
   check(ArcadeControls.map(left,null,0).fromX()==.25f&&ArcadeControls.map(left,null,0).toX()==.25f,"touch remains stationary");
   check(ArcadeControls.map(left,null,1).fromX()==.5f&&ArcadeControls.map(left,null,1).toX()<.5f,"left swipe");
   check(ArcadeControls.map(right,null,1).toX()>.5f,"right swipe");
-  var observation=CustomArcadeVision.detect(ArcadeProfile.PADDLE,(x,y)->scene(ArcadeProfile.PADDLE,x/320f,y/640f,c,0),0,0,320,640,0,0,0,0,1000,null,config(ArcadeProfile.PADDLE,c));
+  var firstPaddle=CustomArcadeVision.detect(ArcadeProfile.PADDLE,(x,y)->scene(ArcadeProfile.PADDLE,x/320f,y/640f,c,0),0,0,320,640,0,0,0,0,1000,null,config(ArcadeProfile.PADDLE,c));
+  check(!ArcadePolicy.next(firstPaddle).sendsInput(),"custom paddle does not steer before measuring ball motion");
+  var observation=CustomArcadeVision.detect(ArcadeProfile.PADDLE,(x,y)->scene(ArcadeProfile.PADDLE,x/320f,y/640f,c,.03f),0,0,320,640,0,0,0,0,1100,firstPaddle,config(ArcadeProfile.PADDLE,c));
   var move=ArcadePolicy.next(observation);
+  check(move.action==ArcadePolicy.Action.MOVE_PADDLE,"calibrated paddle only moves after observed ball descent");
   check(ArcadeControls.map(move,observation,0).fromX()==observation.control.x(),"drag starts at paddle");
   check(ArcadeControls.map(move,observation,2).fromX()==move.x,"direct paddle tap at target");
   String baseline=VisualGameTarget.modelSlot("same game",0,null),custom=VisualGameTarget.modelSlot("same game",0,conf.encode()),swipe=VisualGameTarget.modelSlot("same game",1,conf.encode());
