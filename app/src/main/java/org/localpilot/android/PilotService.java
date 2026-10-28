@@ -1056,7 +1056,7 @@ public class PilotService extends AccessibilityService {
   ArcadePolicy.Decision predictive=observation!=null&&observation.usable()?arcadeController.decide(observation,now):null;
   if(!sceneRecovery.observe(observation!=null&&observation.usable(),timestampMs)){
    advanceArcadeFeedback(null,now);
-   if(sceneRecovery.selectionRequired()){stop("Сцена не соответствует профилю. Игра → выберите механику; для другой графики: Ещё → Настроить распознавание");compact(false);return;}
+   if(sceneRecovery.selectionRequired()){note="Сцена пока не распознана · продолжаю наблюдение без ввода. Проверьте профиль и область";update();return;}
    String missing=observation==null?"кадр":observation.player==null?(captureProfile==ArcadeProfile.PADDLE?"красный шар":"персонаж"):observation.control==null?"корзина":"поле";
    note=captureProfile.label+" · "+sceneRecovery.status()+(observation!=null&&observation.usable()?"":" · проверяю: "+missing);update();return;
   }
@@ -1144,7 +1144,7 @@ public class PilotService extends AccessibilityService {
   jumperState=state;jumperTracking.observe(state);
   if(!sceneRecovery.observe(state!=null&&state.usable(),timestampMs)){
    advanceJumperFeedback(null,now);
-   if(sceneRecovery.selectionRequired()){stop("Прыгун не распознан. Игра → выберите механику; для другой графики: Ещё → Настроить распознавание");compact(false);return;}
+   if(sceneRecovery.selectionRequired()){note="Ари пока не распознан · продолжаю наблюдение без ввода. Проверьте профиль и область";update();return;}
    note="Ари · "+sceneRecovery.status()+"\nИгрок: "+(state!=null&&state.player!=null?"найден":"не найден")+" · платформы: "+(state==null?0:state.platforms.size())+"\nЕсли область неверна: Область → Выделить";update();return;
   }
   arcadeRoundSeen=true;captureStartup.recognized(captureSession,now);

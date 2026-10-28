@@ -48,6 +48,9 @@ public final class SceneRecoveryTest {
   ari.fill(100,900,220,920,0x824100);ari.fill(560,700,680,720,0x824100);ari.fill(90,500,210,520,0x824100);ari.fill(620,350,740,370,0x824100);ari.fill(320,1100,440,1120,0x824100);ari.fill(440,780,530,825,0x5f1414);ari.fill(370,500,420,560,0x8c6e0a);
   check(!ari.jumper(SceneRecovery.Pass.ORIGINAL).usable(),"dark Ari originally unknown");
   check(ari.jumper(SceneRecovery.Pass.BRIGHTER).usable(),"Ari retries exposure and default palette");
+  r.reset();for(int i=1;i<=1000;i++)check(!r.observe(false,i*120L),"prolonged uncertainty never authorizes an action");
+  check(!r.observe(true,120120)&&r.searching(),"first recovered frame keeps waiting");
+  check(r.observe(true,120240)&&!r.searching(),"scene automatically recovers after a prolonged gap");
   System.out.println("Scene recovery: "+checks+" assertions PASS");
  }
  private static final class Scene implements PixelBoardReader.Pixels{
