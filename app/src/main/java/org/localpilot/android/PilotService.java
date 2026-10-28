@@ -59,7 +59,7 @@ public class PilotService extends AccessibilityService {
  private GridOnlineLearning gridLearning=new GridOnlineLearning();
  private GridPuzzlePolicy.Decision gridPendingDecision;
  // Bounded symbolic counts from the current grid observation; no pixels retained.
- private String gridUnknownReasons="none";
+ private String gridUnknownReasons="none",gridReview="Нет данных: запустите сеточную игру и дождитесь чтения поля.";
  private CustomVisionConfig customVision;
  private boolean customCalibrationPending;
  private View customCalibrationOverlay;
@@ -286,7 +286,7 @@ public class PilotService extends AccessibilityService {
   try{wm.addView(overlay,lp);picker=overlay;handler.postDelayed(()->{if(picker==overlay){stop("Время выбора области истекло");compact(false);}},30000);}catch(RuntimeException error){stop("Не удалось открыть выбор области");compact(false);}
  }
  private void moreOptions(){
-  stop("Дополнительные действия · STOP");overlayMenu("Ещё",new String[]{"Диагностика сеанса","Калибровка Ари","Автополе2048","Выбрать установленную игру","Только чтение","Включить автоуправление","Демо ×10","Скрыть панель","Отключить службу","Настроить распознавание","Способ управления","Вернуть стандартное распознавание","Размер сетки фишек","Приоритетный цвет фишек","Помощь по панели и играм"},i->{switch(i){
+  stop("Дополнительные действия · STOP");overlayMenu("Ещё",new String[]{"Диагностика сеанса","Калибровка Ари","Автополе2048","Выбрать установленную игру","Только чтение","Включить автоуправление","Демо ×10","Скрыть панель","Отключить службу","Настроить распознавание","Способ управления","Вернуть стандартное распознавание","Размер сетки фишек","Приоритетный цвет фишек","Помощь по панели и играм","Неизвестные клетки"},i->{switch(i){
    case 0->showServiceDialog(new AlertDialog.Builder(this).setTitle("Последний сеанс").setMessage(lastSessionReport+"\n"+captureStartup.report()).setPositiveButton("Закрыть",null).create());
    case 1->{selectedProfile=0;startVisualArcade(ArcadeProfile.ARI);if(playingJumper)jumperCalibrationPending=true;}
    case 2->startAutomaticGame();case 3->startActivity(new Intent(this,GamePickerActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));case 4->setAutomatic(false);case 5->setAutomatic(true);case 6->{arm();if(gate.armed())startDemo();}case 7->hidePanel();case 8->disableSelf();
@@ -294,6 +294,7 @@ public class PilotService extends AccessibilityService {
    case 12->configureGrid();
    case 13->chooseGridGoal();
    case 14->showPanelHelp();
+   case 15->showServiceDialog(new AlertDialog.Builder(this).setTitle("Последнее чтение сетки").setMessage(gridReview).setPositiveButton("Закрыть",null).create());
   }});
  }
 
@@ -703,7 +704,7 @@ public class PilotService extends AccessibilityService {
   if(palette!=null)try{gridPalette=GridPuzzleVision.Palette.decode(palette);}catch(IllegalArgumentException error){note="Типы фишек повреждены · Ещё → Вернуть стандартное распознавание";update();return;}
   learningSlot=getSharedPreferences("panel",MODE_PRIVATE).getString("game_slot."+target,"default");
   try{gridGoal=GridPuzzleGoal.Color.valueOf(getSharedPreferences("grid-puzzle",MODE_PRIVATE).getString(gridKey()+".goal","ANY"));}catch(IllegalArgumentException error){gridGoal=GridPuzzleGoal.Color.ANY;}
-  gridSession.reset();gridUnknownReasons="none";gridMoves=gridVerified=0;gridResultVisible=gridSawAction=false;playingGrid=true;clearDiagnosticFrame();captureFrames=captureReads=captureDecisions=captureSent=captureCompleted=0;
+  gridSession.reset();gridUnknownReasons="none";gridReview="Ожидаю чтение текущей сетки.";gridMoves=gridVerified=0;gridResultVisible=gridSawAction=false;playingGrid=true;clearDiagnosticFrame();captureFrames=captureReads=captureDecisions=captureSent=captureCompleted=0;
   gridPendingDecision=null;gridLearning=new GridOnlineLearning();
   String savedLearning=getSharedPreferences("grid-puzzle",MODE_PRIVATE).getString(gridKey()+".online-v1",null);
   if(savedLearning!=null)try{gridLearning=GridOnlineLearning.decode(savedLearning);}
@@ -734,6 +735,8 @@ public class PilotService extends AccessibilityService {
    GridPuzzleVision.Observation observation=GridPuzzleVision.detect(pixels::getPixel,r.left,r.top,r.right,r.bottom,gridConfig.rows,gridConfig.cols,panel.left,panel.top,panel.right,panel.bottom,frameAt,gridPalette,selectedProfile==11);
    captureReads++;metrics.record(StageMetrics.Stage.READ,SystemClock.elapsedRealtimeNanos()-readNs);
    gridUnknownReasons=observation.unknownReasonCounts();if(gridUnknownReasons.isEmpty())gridUnknownReasons="none";
+   int unknownCount=observation.unknownIndices().length;
+   gridReview=profileLabel()+" · "+observation.rows+"×"+observation.cols+"\nНеизвестно: "+unknownCount+"\n"+(unknownCount==0?"Все клетки распознаны.":observation.unknownSummary(observation.rows*observation.cols))+"\n\nЭто последнее чтение, а не текущее поле. Неизвестные клетки не разрешают ввод.";
    boolean partialGrid=observation.partialUsable();
    int[] observedCells=observation.cells();
    // Keep individually recognized cells; the policy treats every unknown as
