@@ -169,6 +169,9 @@ public final class PilotUiInstrumentation extends Instrumentation {
             result.putString("stack", stack.toString());
             try {
                 evidence.put("failure", error.toString());
+                // Collect the metadata-only capture timeline before any Binder
+                // or UI automation query that may stall a sick main thread.
+                if (service != null) evidence.put("capture_timing",service.captureTimingReport());
                 evidence.put("failed_at_ms", SystemClock.uptimeMillis()-started);
                 evidence.put("windows", windowSummary());
                 evidence.put("stack", stack.toString());
@@ -177,7 +180,6 @@ public final class PilotUiInstrumentation extends Instrumentation {
                 evidence.put("slow_main_trace",slowMainTrace());
                 String fixtureState=bubbleFixtureState();
                 if(service!=null)evidence.put("own_state",onMain(()->"connected="+(PilotService.instance==service)+" registered="+field("panelRegistered")+" panel="+(field("panel")!=null)+" note="+field("note")+" demo_score="+(demo==null?-1:visibleScore(demo.getWindow().getDecorView()))+" demo_verified="+field("demoVerified")+" gesture="+field("lastGestureContext")+bubbleControllerState())+" fixture="+fixtureState);
-                if (service != null) evidence.put("capture_timing",service.captureTimingReport());
                 if (service != null) evidence.put("metrics", onMain(() -> service.exportMetrics()));
             } catch (Throwable secondary) {
                 result.putString("cleanup_error", secondary.toString());
