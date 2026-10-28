@@ -838,7 +838,7 @@ public class PilotService extends AccessibilityService {
     View old=customCalibrationOverlay;customCalibrationOverlay=null;removeOverlay(old);update();
    }
    public void cancelled(){stop("Настройка распознавания отменена");compact(false);}
-  });
+  },captureProfile==ArcadeProfile.FLAPPY);
   WindowManager.LayoutParams lp=new WindowManager.LayoutParams(-1,-1,WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE|WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN|WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,PixelFormat.TRANSLUCENT);lp.gravity=Gravity.TOP|Gravity.LEFT;
   try{wm.addView(overlay,lp);customCalibrationOverlay=overlay;compact(true);note="Выберите 3 объекта на замороженном кадре";update();}
   catch(RuntimeException error){if(!frame.isRecycled())frame.recycle();stop("Не удалось открыть настройку объектов");}
