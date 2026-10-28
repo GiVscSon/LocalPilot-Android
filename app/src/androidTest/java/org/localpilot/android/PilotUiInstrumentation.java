@@ -299,6 +299,17 @@ public final class PilotUiInstrumentation extends Instrumentation {
     private void checkStopDuringDemo() throws Exception {
         launchDemo();
         armAndStart();
+        // Ensure the More-menu entry point docked STOP away from the real target.
+        await(() -> {
+            Rect target = markerBounds("LOCALPILOT_DEMO_TARGET");
+            Rect panelRect = onMain(() -> {
+                View panel = (View)field("panel");
+                if(panel == null || !panel.isShown()) return new Rect();
+                int[] p = new int[2];panel.getLocationOnScreen(p);
+                return new Rect(p[0],p[1],p[0]+panel.getWidth(),p[1]+panel.getHeight());
+            });
+            return compact() && target!=null && !panelRect.isEmpty() && !Rect.intersects(target,panelRect);
+        },4_000,"Compact demo STOP panel covers the real touch target");
         await(() -> score() >= 1, 6_000, "Second demo made no move before Stop");
         require(score() < 10, "Second demo completed before Stop could be exercised");
         click("STOP");

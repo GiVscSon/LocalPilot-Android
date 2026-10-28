@@ -30,10 +30,17 @@ public final class Board2048 {
   for(int d=0;d<4;d++){
    Move m=move(d);if(same(m.board))continue;
    double value=m.board.value()+Math.log(1+m.reward);
-   if(learned!=null)value+=learned.applyAsDouble(d);
+   if(learned!=null){double bonus=learned.applyAsDouble(d);if(!Double.isFinite(bonus)||Math.abs(bonus)>0.400001)throw new IllegalArgumentException("unbounded 2048 learned bias");value+=bonus;}
    if(value>score){score=value;best=d;}
   }
   return best;
+ }
+ /** Compatibility for opt-in rated Web lessons; no changes to legal move enumeration. */
+ public int chooseWithBonus(double[] bonus){
+  if(bonus==null)return choose();
+  if(bonus.length!=4)throw new IllegalArgumentException("four directions required");
+  for(double b:bonus)if(!Double.isFinite(b)||Math.abs(b)>0.400001)throw new IllegalArgumentException("unbounded 2048 learned bias");
+  return choose(d->bonus[d]);
  }
  public static int colorTile(int rgb){int nearest=-1,best=Integer.MAX_VALUE,second=Integer.MAX_VALUE;for(int i=0;i<PALETTE.length;i++){int p=PALETTE[i];int e=Math.max(Math.abs(((rgb>>16)&255)-((p>>16)&255)),Math.max(Math.abs(((rgb>>8)&255)-((p>>8)&255)),Math.abs((rgb&255)-(p&255))));if(e<best){second=best;best=e;nearest=i;}else second=Math.min(second,e);}if(best>8||second-best<5)return -1;return nearest==0?0:1<<nearest;}
 }
