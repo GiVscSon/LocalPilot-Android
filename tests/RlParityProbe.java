@@ -4,6 +4,9 @@ import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.security.MessageDigest;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.zip.ZipFile;
 import java.security.NoSuchAlgorithmException;
 import java.util.Locale;
 
@@ -16,6 +19,7 @@ import java.util.Locale;
  */
 public final class RlParityProbe {
  public static final int STEPS=64;
+ public static final int TRAIN_STEPS=1040;
  public static final long SEED=20261028L;
 
  private RlParityProbe(){}
@@ -52,9 +56,31 @@ public final class RlParityProbe {
   }catch(NoSuchAlgorithmException impossible){throw new IllegalStateException(impossible);}
  }
 
+ public static String trainerFingerprint(ArcadeEnv.Genre genre)throws Exception {
+  if(genre==null)throw new IllegalArgumentException("genre");
+  DqnTrainer trainer=new DqnTrainer(genre,SEED+77L+genre.ordinal());
+  for(int i=0;i<TRAIN_STEPS;i++)trainer.step();
+  if(trainer.updates<=0)throw new AssertionError("DQN optimizer did not run");
+  Path dir=Files.createTempDirectory("localpilot-dqn-trace-");
+  Path file=dir.resolve("model.zip");
+  try {
+   trainer.save(file.toFile());
+   try(ZipFile zip=new ZipFile(file.toFile())){
+    var entry=zip.getEntry("state.bin");
+    if(entry==null)throw new IOException("checkpoint missing state.bin");
+    try(var input=zip.getInputStream(entry)){return sha256(input.readAllBytes());}
+   }
+  }finally{
+   Files.deleteIfExists(file);
+   Files.deleteIfExists(dir);
+  }
+ }
+
  public static void main(String[] args)throws Exception {
   if(args.length!=0)throw new IllegalArgumentException("no arguments expected");
   for(ArcadeEnv.Genre genre:ArcadeEnv.Genre.values())
    System.out.println(genre.name()+" "+sha256(trace(genre)));
+  for(ArcadeEnv.Genre genre:ArcadeEnv.Genre.values())
+   System.out.println("TRAINER "+genre.name()+" "+trainerFingerprint(genre));
  }
 }
