@@ -479,8 +479,12 @@ public final class PilotUiInstrumentation extends Instrumentation {
         if(compact())click("Развернуть");
         click("Старт");
         await(()->onMain(()->booleanField("playingGrid")&&intField("selectedProfile")==9),8_000,"Bubble loop did not start through the visible Start control");
-        await(()->markerBounds("LOCALPILOT_BUBBLE_SHOTS_1")!=null,20_000,"No real aim/release reached the independent bubble fixture");
-        await(()->onMain(()->((BubbleSession)field("bubbleSession")).verified()>=1),12_000,"Delivered bubble gesture did not yield the predicted visually verified board");
+        // Avoid polling UiAutomation's accessibility tree while the app is
+        // dispatching: on API 30 concurrent cache refresh can block its main
+        // thread and delay the gesture callback. Verify via the service first;
+        // the independent fixture marker is checked after the shot settles.
+        await(()->onMain(()->((BubbleSession)field("bubbleSession")).verified()>=1),20_000,"Delivered bubble gesture did not yield the predicted visually verified board");
+        await(()->markerBounds("LOCALPILOT_BUBBLE_SHOTS_1")!=null,3_000,"No real aim/release reached the independent bubble fixture");
         int verified=onMain(()->((BubbleSession)field("bubbleSession")).verified());
         AtomicReference<String> observedFixture=new AtomicReference<>();
         await(()->{
