@@ -275,12 +275,18 @@ public class PilotService extends AccessibilityService {
   String initialRejection=windowRejection(null,false,true);if(epoch!=gate.epoch())return;
   if(initialRejection!=null){note="Сначала выберите активное окно игры";update();return;}
   Rect window=new Rect(armedBounds);compact(true);
-  GameAreaOverlay overlay=new GameAreaOverlay(this,window,selectedProfile==9?1:gridSelected()?gridConfig.rows:4,selectedProfile==9?1:gridSelected()?gridConfig.cols:4,new GameAreaOverlay.Listener(){
+  GameAreaOverlay overlay=new GameAreaOverlay(this,window,selectedProfile==9?1:gridSelected()?gridConfig.rows:4,selectedProfile==9?1:gridSelected()?gridConfig.cols:4,
+    selectedProfile==4||selectedProfile==5||(gridSelected()&&gridConfig.rows==gridConfig.cols),new GameAreaOverlay.Listener(){
    public void selected(Rect b){if(epoch!=gate.epoch())return;View old=picker;picker=null;removeOverlay(old);compact(false);
     // Choosing geometry observes the binding; it does not authorize an action.
     // Slow window metadata must not silently discard the user's confirmed area.
     String reason=windowRejection(null,false,true);if(epoch!=gate.epoch())return;if(reason!=null){stop("Область не сохранена: окно изменилось ["+reason+"] · выберите его заново");return;}
     if(b==null||b.isEmpty()||!window.contains(b)||!armedBounds.contains(b)){stop("Область не сохранена: прямоугольник вне выбранного окна");return;}
+    if((selectedProfile==4||selectedProfile==5||gridSelected()&&gridConfig.rows==gridConfig.cols)
+      &&!RegionPickerGeometry.squareBoardAspect(new GameViewport.Box(b.left,b.top,b.right,b.bottom),
+        gridSelected()?gridConfig.rows:4,gridSelected()?gridConfig.cols:4)){
+     note="AUTO_BOARD_GEOMETRY: обведите только квадратную сетку клеток";update();return;
+    }
     visualRoi=new Rect(b);manualVisualRoi=true;boardRoi=selectedProfile>=4?new Rect(b):null;if(selectedProfile==9)saveBubbleRegion(b);else if(gridSelected())saveGridRegion(b);sceneRecovery.reset();clearDiagnosticFrame();note="Область выбрана: "+b.width()+"×"+b.height()+" · нажмите Старт";update();}
    public void cancelled(){if(epoch!=gate.epoch())return;stop("Выбор области отменён");compact(false);}
   });
@@ -702,6 +708,10 @@ public class PilotService extends AccessibilityService {
   if(!VisualGameTarget.allowed(target,getPackageName())){note="Выберите окно сторонней игры";update();return;}
   loadGridConfig();if(!manualVisualRoi||visualRoi==null||!armedBounds.contains(visualRoi)){note="Область → обведите только клетки сетки "+gridConfig.rows+"×"+gridConfig.cols;update();return;}
   if(visualRoi.width()/gridConfig.cols<18||visualRoi.height()/gridConfig.rows<18){note="Клетки слишком малы: проверьте размер и выделение поля";update();return;}
+  if(gridConfig.rows==gridConfig.cols&&!RegionPickerGeometry.squareBoardAspect(
+      new GameViewport.Box(visualRoi.left,visualRoi.top,visualRoi.right,visualRoi.bottom),gridConfig.rows,gridConfig.cols)){
+   note="AUTO_BOARD_GEOMETRY: настройте квадратную область сетки";update();return;
+  }
   boardRoi=new Rect(visualRoi);saveGridRegion(boardRoi);gridPalette=null;
   String palette=getSharedPreferences("grid-puzzle",MODE_PRIVATE).getString(gridKey()+".palette",null);
   if(palette!=null)try{gridPalette=GridPuzzleVision.Palette.decode(palette);}catch(IllegalArgumentException error){note="Типы фишек повреждены · Ещё → Вернуть стандартное распознавание";update();return;}
@@ -1515,6 +1525,9 @@ public class PilotService extends AccessibilityService {
  private void start2048(){start2048(false);}
  private void start2048(boolean colored){
   if(busy||captureBusy||discoveringBoard||autoLeft>0||playing2048||playingMini||playingJumper||playingGrid||!gate.armed()||boardRoi==null){note=colored?"Цветной 2048: привяжите игру и выберите поле 4×4":"Привязать → Поле 4×4 → Авто2048";update();return;}
+  if(!RegionPickerGeometry.squareBoardAspect(new GameViewport.Box(boardRoi.left,boardRoi.top,boardRoi.right,boardRoi.bottom),4,4)){
+   stop("AUTO_BOARD_GEOMETRY: выберите квадратную сетку 2048 размером 4×4");return;
+  }
   boardReadGeneration++;boardReadMisses=0;colorSession.reset();before2048=null;colored2048=colored;
   if(colored2048){String saved=getSharedPreferences("color-2048",MODE_PRIVATE).getString(color2048PaletteKey(),null);if(saved!=null)try{colorSession.restoreLearned(saved);}catch(IllegalArgumentException invalidPalette){note="Сохранённая цветовая палитра повреждена · начинаю с базовых плиток";}}
   long epoch=gate.epoch(),generation=boardReadGeneration;playing2048=true;compact(true);note=colored2048?"Читаю цветное поле 2048 · изучено цветов "+colorSession.learnedCount():"Читаю поле в памяти…";update();
