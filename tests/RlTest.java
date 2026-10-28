@@ -4,6 +4,14 @@ public final class RlTest {
  static int checks;static void ok(boolean condition){checks++;if(!condition)throw new AssertionError("check "+checks);}
  static void rejected(Runnable r){try{r.run();throw new AssertionError("accepted invalid input");}catch(IllegalArgumentException|IllegalStateException expected){checks++;}}
  public static void main(String[] args)throws Exception{
+  // Independent Java invocations can be compared byte-for-byte with the
+  // Python/JPype replay gate. Raw float32 bits include signed zero.
+  for(ArcadeEnv.Genre genre:ArcadeEnv.Genre.values()){
+   byte[] trace=RlParityProbe.trace(genre);
+   ok(trace.length==RlParityProbe.STEPS*(ArcadeEnv.OBS*8+18));
+   ok(Arrays.equals(trace,RlParityProbe.trace(genre)));
+   ok(RlParityProbe.sha256(trace).matches("[0-9a-f]{64}"));
+  }
   for(ArcadeEnv.Genre g:ArcadeEnv.Genre.values()){
    ArcadeEnv a=new ArcadeEnv(g),b=new ArcadeEnv(g);a.reset(123);b.reset(123);ArcadeEnv.Rng rng=new ArcadeEnv.Rng(7);
    for(int i=0;i<2500;i++){
