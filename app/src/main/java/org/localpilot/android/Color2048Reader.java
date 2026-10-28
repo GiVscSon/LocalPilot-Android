@@ -87,7 +87,9 @@ public final class Color2048Reader {
     int[] sample=sample(pixels,left,top,right,bottom,i);int rgb=sample[0],value=known(rgb,colors);
     if(value<0){
      int target=expected==null?0:expected.cells[i];
-     if(target<32||target>2048||sample[1]>24)throw new IllegalArgumentException("unknown or animated colour tile");
+     if(target<32||target>2048||sample[1]>24)throw new IllegalArgumentException(
+      "Неизвестная или анимированная плитка: строка "+(i/4+1)+", столбец "+(i%4+1)
+      +". Ожидайте остановки анимации; плитки 32 и выше изучаются после подтверждённого слияния.");
      int rank=Integer.numberOfTrailingZeros(target);
      // Existing values cannot acquire a new identity from an arbitrary later colour.
      for(int old:before.cells)if(old==target)throw new IllegalArgumentException("unknown pre-existing tile");

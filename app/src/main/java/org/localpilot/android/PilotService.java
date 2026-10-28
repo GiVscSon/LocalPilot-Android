@@ -1438,7 +1438,8 @@ public class PilotService extends AccessibilityService {
   }
   Board2048 board;
   try{board=PipelineRead.read(metrics,()->colored2048?colorSession.read(pixels::getPixel,pixels.getWidth(),pixels.getHeight(),r.left,r.top,r.right,r.bottom,before2048,direction2048,lastShotTimestamp):PixelBoardReader.read(pixels::getPixel,pixels.getWidth(),pixels.getHeight(),r.left,r.top,r.right,r.bottom));}
-  catch(PipelineRead.Failure error){retryBoardRead(epoch,result,"ожидаю распознаваемое поле");return;}
+  catch(PipelineRead.Failure error){String detail=error.getMessage();
+   retryBoardRead(epoch,result,colored2048&&detail!=null&&detail.startsWith("Неизвестная или анимированная плитка:")?detail:"ожидаю распознаваемое поле");return;}
   boardReadMisses=0;result.ready(board,t,ms);
  });}
  private boolean retryCapture(long epoch,ImageResult result,String reason){
