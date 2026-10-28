@@ -252,6 +252,39 @@ public final class BubbleTest {
   BufferedImage emptyGun=synthetic();var reserve=emptyGun.createGraphics();reserve.setColor(new java.awt.Color(COLORS[0]));reserve.fillRect(136,576,48,48);reserve.setColor(new java.awt.Color(COLORS[3]));reserve.fillOval(101,577,46,46);reserve.dispose();
   check(!BubbleVision.read(emptyGun::getRGB,320,640,0,0,320,640,0,0,0,0,null).usable(),"a spare ball near the gun cannot replace the missing loaded ball");
  }
+ private static void specialProjectileFailClosed(){
+  // A dark/white center is a potential bomb or another unsupported loaded
+  // projectile, not a normal candy. Until BulletType has a verified visual
+  // contract, neither initial acquisition nor tracked frames may authorize it.
+  BufferedImage normal=synthetic();
+  BubbleVision.Read known=BubbleVision.read(normal::getRGB,320,640,0,0,320,640,0,0,0,0,null);
+  check(known.usable(),"ordinary launcher establishes a valid baseline");
+  BubbleBoard stable=known.board();
+  for(int marker:new int[]{0x202020,0xffffff,0x3040df}){
+   BufferedImage special=synthetic();
+   var graphics=special.createGraphics();
+   graphics.setColor(new java.awt.Color(marker));
+   if(marker==0x3040df)graphics.fillOval(160-23,600-23,46,46);
+   else graphics.fillOval(160-8,600-8,16,16);
+   graphics.dispose();
+   BubbleVision.Read tracked=BubbleVision.read(special::getRGB,320,640,0,0,320,640,0,0,0,0,stable);
+   BubbleVision.Read cold=BubbleVision.read(special::getRGB,320,640,0,0,320,640,0,0,0,0,null);
+   check(!tracked.usable()&&tracked.board()==null,"special loaded projectile rejects tracked reading: "+Integer.toHexString(marker));
+   check(!cold.usable()&&cold.board()==null,"special loaded projectile cannot reuse reserve on cold acquisition: "+Integer.toHexString(marker));
+   BubbleSession session=new BubbleSession();
+   check(session.observe(stable,1000,1000)==BubbleSession.Status.SEARCHING,"first ordinary frame is not a gesture permit");
+   check(session.observe(stable,1200,1200)==BubbleSession.Status.READY,"ordinary baseline stable");
+   check(session.observe(tracked.board(),1400,1400)==BubbleSession.Status.SEARCHING
+     &&session.observe(tracked.board(),1600,1600)==BubbleSession.Status.SEARCHING
+     &&session.verified()==0&&!session.pending(),
+     "unsupported loaded projectile revokes READY without predicting success");
+   BubbleVision.Read recovered=BubbleVision.read(normal::getRGB,320,640,0,0,320,640,0,0,0,0,stable);
+   check(recovered.usable()&&recovered.board().same(stable),"fresh ordinary launcher remains readable after rejected special");
+   check(session.observe(recovered.board(),1800,1800)==BubbleSession.Status.SEARCHING
+     &&session.observe(recovered.board(),2000,2000)==BubbleSession.Status.READY,
+     "two fresh ordinary frames required before another plan can be considered");
+  }
+ }
  private static void recorded(Path path)throws Exception{
   BufferedImage original=ImageIO.read(path.toFile());if(original==null)throw new IllegalArgumentException("image");
   for(float scale:new float[]{.75f,1f,1.5f}){
@@ -273,5 +306,5 @@ public final class BubbleTest {
    System.out.printf(java.util.Locale.ROOT,"Recorded bubble frame scale=%.2f count=%d x0=%.2f y0=%.2f step=%.2f; cloud JVM acquire=%.2fms cached-p50=%.2fms cached-max=%.2fms policy=%.2fms%n",scale,b.count(),b.x0/scale,b.y0/scale,b.step/scale,coldNs/1e6,elapsed[4]/1e6,elapsed[7]/1e6,policyNs/1e6);
   }
  }
- public static void main(String[] args)throws Exception{geometryAndPolicy();singleRemaining();directShotGeometry();session();lateVerification();diagnostics();perception();reversedStaggerFixture();if(args.length>0)recorded(Path.of(args[0]));System.out.println("Bubble board/policy/feedback: "+checks+" assertions PASS; no physical-device claim");}
+ public static void main(String[] args)throws Exception{geometryAndPolicy();singleRemaining();directShotGeometry();session();lateVerification();diagnostics();perception();specialProjectileFailClosed();reversedStaggerFixture();if(args.length>0)recorded(Path.of(args[0]));System.out.println("Bubble board/policy/feedback: "+checks+" assertions PASS; no physical-device claim");}
 }
