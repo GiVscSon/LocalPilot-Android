@@ -653,7 +653,7 @@ public class PilotService extends AccessibilityService {
     scheduleGrid(epoch);});});
  }
  private void bubbleStep(long epoch){
-  if(epoch!=gate.epoch()||!playingGrid||selectedProfile!=9||bubbleSession.paused()||focusPaused)return;
+  if(epoch!=gate.epoch()||!playingGrid||selectedProfile!=9||focusPaused)return;
   captureImage(epoch,(pixels,ticket,captureMs)->{
    if(epoch!=gate.epoch()||!playingGrid||selectedProfile!=9||focusPaused)return;
    captureFrames++;Rect r=new Rect(boardRoi),panel=panelBounds();
@@ -666,7 +666,7 @@ public class PilotService extends AccessibilityService {
    captureReads++;metrics.record(StageMetrics.Stage.READ,SystemClock.elapsedRealtimeNanos()-started);
    long frameAt=SystemClock.elapsedRealtime()-Math.max(0,SystemClock.uptimeMillis()-lastShotTimestamp);
    BubbleSession.Status status=bubbleSession.observe(read.board(),frameAt,SystemClock.elapsedRealtime());
-   if(status==BubbleSession.Status.PAUSED){note="Шипучка: "+(bubbleSession.acknowledged()?"Android завершил жест; ":"нет подтверждения Android; ")+bubbleWaitMessage(bubbleSession.lastWait())+" · ввод приостановлен. Старт — повторить";update();return;}
+   if(status==BubbleSession.Status.PAUSED){note="Шипучка: "+(bubbleSession.acknowledged()?"Android завершил жест; ":"нет подтверждения Android; ")+bubbleWaitMessage(bubbleSession.lastWait())+" · продолжаю наблюдение без ввода. Старт — повторная проверка";update();scheduleGrid(epoch);return;}
    if(status!=BubbleSession.Status.READY&&status!=BubbleSession.Status.VERIFIED){note=read.usable()?(bubbleSession.pending()?"Шипучка: проверяю попадание":"Шипучка: ожидаю второй устойчивый кадр"):read.reason();update();scheduleGrid(epoch);return;}
    bubbleGeometry=read.board();gridVerified=bubbleSession.verified();
    metrics.attempt(StageMetrics.Stage.POLICY);started=SystemClock.elapsedRealtimeNanos();BubblePolicy.Shot shot=BubblePolicy.choose(bubbleGeometry);
@@ -722,10 +722,10 @@ public class PilotService extends AccessibilityService {
   long generation=boardReadGeneration;
   handler.postDelayed(()->{if(epoch==gate.epoch()&&generation==boardReadGeneration&&!focusPaused)task.run();},delay);
  }
- private void scheduleGrid(long epoch){if(playingGrid&&epoch==gate.epoch()&&!(selectedProfile==9?bubbleSession.paused():gridSession.paused())&&!focusPaused)postBoardTask(epoch,captureDelay(),()->gridStep(epoch));}
+ private void scheduleGrid(long epoch){if(playingGrid&&epoch==gate.epoch()&&!focusPaused)postBoardTask(epoch,(selectedProfile==9?bubbleSession.paused():gridSession.paused())?Math.max(1000,captureDelay()):captureDelay(),()->gridStep(epoch));}
  private void gridStep(long epoch){
   if(selectedProfile==9){bubbleStep(epoch);return;}
-  if(epoch!=gate.epoch()||!playingGrid||gridSession.paused()||focusPaused)return;
+  if(epoch!=gate.epoch()||!playingGrid||focusPaused)return;
   captureImage(epoch,(pixels,ticket,captureMs)->{
    if(epoch!=gate.epoch()||!playingGrid)return;captureFrames++;Rect r=new Rect(boardRoi),panel=panelBounds();long now=SystemClock.elapsedRealtime();
    if(GameOverScreen.detect(pixels::getPixel,armedBounds.left,armedBounds.top,armedBounds.right,armedBounds.bottom,panel.left,panel.top,panel.right,panel.bottom)){
@@ -743,17 +743,18 @@ public class PilotService extends AccessibilityService {
    // Keep individually recognized cells; the policy treats every unknown as
    // an obstacle.  Reject a wrong screen or overlay-covered ROI as a whole.
    if(!observation.usable()&&!partialGrid)java.util.Arrays.fill(observedCells,-1);
+   boolean alreadyPaused=gridSession.paused();
    GridPuzzleSession.Status status=partialGrid||gridSession.pending()
      ?gridSession.observePartial(gridConfig.rows,gridConfig.cols,observedCells,observation.specialCellsMask(),frameAt,SystemClock.elapsedRealtime())
      :gridSession.observe(gridConfig.rows,gridConfig.cols,observedCells,observation.specialCellsMask(),frameAt,SystemClock.elapsedRealtime());
    if(status==GridPuzzleSession.Status.PAUSED){
-    incrementGridStat("unconfirmed");
+    if(!alreadyPaused)incrementGridStat("unconfirmed");
     if(gridPendingDecision!=null&&gridSession.acknowledged()){
      gridLearning.recordNoResponse(gridPendingDecision);saveGridLearning();
     }
     gridPendingDecision=null;
-    note=(gridSession.acknowledged()?"Android завершил жест, но игра не подтвердила ход":"Нет подтверждения Android для жеста")+" · ввод приостановлен. Старт — повторить";
-    update();return;
+    note=(gridSession.acknowledged()?"Android завершил жест, но игра не подтвердила ход":"Нет подтверждения Android для жеста")+" · продолжаю наблюдение без ввода. Старт — повторная проверка";
+    update();scheduleGrid(epoch);return;
    }
    if(status==GridPuzzleSession.Status.CHANGED){
     gridVerified++;incrementGridStat("visual_changes");
