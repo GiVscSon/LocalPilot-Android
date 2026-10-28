@@ -87,6 +87,18 @@ public final class GridPartialVerifyTest {
     0,0,480,480,6,6,0,0,0,0,1000,null);
   check(!vision.usable()&&vision.partialUsable(),"29/36 recognized tokens permit partial observation");
   check(vision.unknownIndices().length==7,"all seven unknowns remain unknown");
+  int[] vision26=fourColors.clone();
+  vision26[30]=vision26[31]=vision26[32]=-1;
+  var visible26=GridPuzzleVision.detect((x,y)->token(x,y,vision26),
+    0,0,480,480,6,6,0,0,0,0,1050,vision.palette());
+  check(visible26.unknownIndices().length==10&&visible26.partialUsable(),
+    "vision also accepts 26/36, matching solver and session");
+  int[] vision25=vision26.clone();vision25[33]=-1;
+  var visible25=GridPuzzleVision.detect((x,y)->token(x,y,vision25),
+    0,0,480,480,6,6,0,0,0,0,1075,vision.palette());
+  check(visible25.unknownIndices().length==11&&!visible25.partialUsable(),
+    "vision rejects 25/36 and cannot grant a live partial permission");
+
   var obstructed=GridPuzzleVision.detect((x,y)->token(x,y,fourColors),
     0,0,480,480,6,6,80,0,160,80,1100,vision.palette());
   check(!obstructed.partialUsable(),"panel overlap cannot authorize partial input");
