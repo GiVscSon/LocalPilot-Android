@@ -17,6 +17,12 @@ public final class BubbleTest {
   check(!b.neighbor(5,6)&&!b.slot(11),"row ends do not wrap and short rows have no phantom cell");
   check(b.neighbor(0,6)&&b.neighbor(1,6)&&!b.neighbor(2,6),"staggered neighbors");
   BubblePolicy.Shot shot=BubblePolicy.choose(b);check(shot!=null&&shot.removed>=3,"exposed pair can be matched by a direct shot");
+  int[] learnerCalls={0};
+  BubblePolicy.Shot learned=BubblePolicy.choose(b,candidate->{learnerCalls[0]++;return candidate.removed>0?4:-4;});
+  check(learnerCalls[0]>0&&learned!=null&&learned.removed>=3&&learned.belongsTo(b),
+    "live learner ranks only otherwise valid candidate shots");
+  check(BubblePolicy.choose(b,candidate->0).landing==shot.landing,
+    "empty learner leaves deterministic safe aim unchanged");
   check(shot.aimY<b.launcherY&&shot.aimX>=b.x0&&shot.aimX<=b.x0+(b.cols-1)*b.step,"aim remains in playable area");
   int count=0;for(int type:shot.expectedCells())if(type>0)count++;
   check(count==b.count()+1-shot.removed-shot.dropped,"predicted normal-bubble count conserves shot and removals");

@@ -299,6 +299,17 @@ public final class PilotUiInstrumentation extends Instrumentation {
     private void checkStopDuringDemo() throws Exception {
         launchDemo();
         armAndStart();
+        // Ensure the More-menu entry point docked STOP away from the real target.
+        await(() -> {
+            Rect target = markerBounds("LOCALPILOT_DEMO_TARGET");
+            Rect panelRect = onMain(() -> {
+                View panel = (View)field("panel");
+                if(panel == null || !panel.isShown()) return new Rect();
+                int[] p = new int[2];panel.getLocationOnScreen(p);
+                return new Rect(p[0],p[1],p[0]+panel.getWidth(),p[1]+panel.getHeight());
+            });
+            return compact() && target!=null && !panelRect.isEmpty() && !Rect.intersects(target,panelRect);
+        },4_000,"Compact demo STOP panel covers the real touch target");
         await(() -> score() >= 1, 6_000, "Second demo made no move before Stop");
         require(score() < 10, "Second demo completed before Stop could be exercised");
         click("STOP");
@@ -392,7 +403,11 @@ public final class PilotUiInstrumentation extends Instrumentation {
                 require(Boolean.TRUE.equals(method.invoke(service,"WINDOW_STATE_UNAVAILABLE")),"Interrupted gesture did not handle focus loss");
                 require(!gate().armed()&&!booleanField("playing2048"),"Interrupted 2048 gesture did not stop");return null;});
             addCheck("2048_interrupted_gesture_stops",new JSONObject().put("loss_notification_injected",true));
-            if(onMain(()->booleanField("panelCompact")))click("Развернуть");
+            // STOP is intentionally fail-closed, and the panel may stay compact.
+            // Reopen visible controls before explicitly binding a fresh window;
+            // never auto-resume a ticket from the interrupted session.
+            if(compact())click("Развернуть");
+            await(()->present("Окно"),3_000,"Focus STOP did not expose window selection after expanding panel");
             bindDemoWindow();click("Старт");
             await(()->onMain(()->booleanField("playing2048")),12_000,"2048 did not restart after interruption");
         }else{
@@ -403,6 +418,8 @@ public final class PilotUiInstrumentation extends Instrumentation {
         }
         await(() -> onMain(() -> intField("moves2048")) >= 4, 25_000,
                 "2048 did not produce at least three visually verified swipes");
+        await(() -> onMain(() -> ((LiveGameLearning)field("learning2048")).verifiedCount()>=3),
+                4_000,"Visually verified 2048 moves did not update the real-game learner");
         click("STOP");
         await(() -> !armed() && !onMain(() -> booleanField("busy")), 4_000,
                 "2048 STOP did not settle and revoke input");
@@ -439,6 +456,38 @@ public final class PilotUiInstrumentation extends Instrumentation {
     }
 
     private void checkBubbleScreenshotProgress(boolean ricochet) throws Exception {
+        // Emulator API30 occasionally delivers the tap to the independent
+        // fixture but never publishes Accessibility's gesture completion
+        // callback. A real controller MUST stop rather than credit that tap.
+        // A single new synthetic fixture is permitted only after proving
+        // fail-closed state. Never resend the unacknowledged game gesture.
+        for(int attempt=0;attempt<2;attempt++){
+            try{checkBubbleScreenshotProgressOnce(ricochet);return;}
+            catch(AssertionError failure){
+                if(attempt!=0||!"Delivered bubble gesture did not yield the predicted visually verified board".equals(failure.getMessage()))
+                    throw failure;
+                boolean safe=onMain(()->!gate().armed()&&!booleanField("busy")&&!booleanField("playingGrid")
+                    &&!permit().allows(gate().epoch(),SystemClock.elapsedRealtime())
+                    &&String.valueOf(field("lastStopReason")).contains("ANDROID_ACK / ACK_TIMEOUT")
+                    &&((BubbleSession)field("bubbleSession")).verified()==0);
+                if(!safe)throw failure;
+                long before=onMain(()->((Number)field("dispatchedInputs")).longValue());
+                SystemClock.sleep(500);
+                require(onMain(()->!gate().armed()&&!booleanField("playingGrid")
+                    &&((Number)field("dispatchedInputs")).longValue()==before),
+                    "Unacknowledged bubble gesture continued input after fail-closed STOP");
+                addCheck(ricochet?"bubble_ricochet_ack_timeout_fail_closed":"bubble_ack_timeout_fail_closed",
+                    new JSONObject().put("android_callback_missing",true)
+                        .put("gameplay_success_claimed",false)
+                        .put("input_disarmed",true)
+                        .put("new_fixture_required",true));
+                // The next call launches an entirely fresh external fixture
+                // and must independently achieve post-ACK screenshot VERIFIED.
+            }
+        }
+    }
+
+    private void checkBubbleScreenshotProgressOnce(boolean ricochet) throws Exception {
         String fixturePackage=getContext().getPackageName();
         onMain(()->{service.hidePanel();service.showPanel();return null;});
         getTargetContext().startActivity(new Intent().setClassName(fixturePackage,BubbleFixtureActivity.class.getName()).putExtra("ricochet",ricochet)
@@ -479,9 +528,17 @@ public final class PilotUiInstrumentation extends Instrumentation {
         if(compact())click("Развернуть");
         click("Старт");
         await(()->onMain(()->booleanField("playingGrid")&&intField("selectedProfile")==9),8_000,"Bubble loop did not start through the visible Start control");
+        final int learnedBefore=onMain(()->((LiveGameLearning)field("bubbleLearning")).verifiedCount());
         await(()->markerBounds("LOCALPILOT_BUBBLE_SHOTS_1")!=null,20_000,"No real aim/release reached the independent bubble fixture");
-        await(()->onMain(()->((BubbleSession)field("bubbleSession")).verified()>=1),12_000,"Delivered bubble gesture did not yield the predicted visually verified board");
-        int verified=onMain(()->((BubbleSession)field("bubbleSession")).verified());
+        // BubbleSession is cleared by STOP; the session-level gridVerified
+        // remains the last strictly VERIFIED count across that teardown.
+        // In a fast autoreplay the controller may start a second shot before
+        // the UI thread samples the transient BubbleSession counter.
+        await(()->onMain(()->intField("gridVerified")>=1),12_000,"Delivered bubble gesture did not yield the predicted visually verified board");
+        await(()->onMain(()->((LiveGameLearning)field("bubbleLearning")).verifiedCount()>learnedBefore),3_000,
+                "Bubble gameplay verified the shot but did not increase THIS fixture's learning evidence");
+        int verified=onMain(()->intField("gridVerified"));
+        require(verified>=1,"Bubble UI evidence lost a verified shot before recording it");
         AtomicReference<String> observedFixture=new AtomicReference<>();
         await(()->{
             String state=bubbleFixtureState();

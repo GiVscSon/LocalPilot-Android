@@ -78,7 +78,7 @@ public final class WebLearningActivity extends Activity {
    help.setText("1. «Настроить API»: HTTPS, ключ и vision-модель.\n2. «Подсказка» отправит снимок игровой области провайдеру.\n3. Проверьте ответ и нажмите «Применить». Быстрая аркада может измениться до ответа.");
    button(controls,"Настроить API",this::configure);button(controls,"Подсказка",this::teacher);button(controls,"Применить",this::applySuggestion);
   }
-  if(mode<2){LinearLayout outcomes=new LinearLayout(this);modeBox.addView(outcomes);button(outcomes,"Оценка / цель ▾",this::outcomeMenu);}
+  if(mode<2){LinearLayout outcomes=new LinearLayout(this);modeBox.addView(outcomes);button(outcomes,"Оценка / цель ▾",this::outcomeMenu);button(outcomes,"В реальный 2048",this::transfer2048);}
  }
  private void say(String text){status.setText(text+"\nИгра: "+(selectedProfile.isEmpty()?"не выбрана":selectedProfile)+(lesson==null?"":" · примеры "+lesson.size()+"/"+WebLesson.MAX_ROWS+"\n"+lesson.outcomeSummary()));}
  private void stop(String reason){
@@ -253,6 +253,38 @@ public final class WebLearningActivity extends Activity {
   if(pending!=null){say("Дождитесь кадра результата текущего действия, затем нажмите Обучить");return;}
   stop("Подготавливаю модель по примерам");if(lesson==null||!lesson.identified()){say("Сначала выберите профиль через «Игра ▾»");return;}WebLesson data=lesson.copy();int token=generation;long revision=outcomeRevision;
   io.execute(()->{try{String report=data.trainReport();ui(()->{if(token==generation&&revision==outcomeRevision){model=data;say(report);}});}catch(RuntimeException e){ui(()->{if(token==generation)say("Нужно минимум 10 примеров. Для оценки нужна отдельная сессия записи");});}});
+ }
+ /** Explicit opt-in. Full Web imitation never drives external Android apps. */
+ private void transfer2048(){
+  if(model==null||lesson==null||!model.identified()
+    ||!model.game.equals(lesson.game)||!model.profileId.equals(lesson.profileId)){
+   new AlertDialog.Builder(this).setTitle("Обучение для обычного 2048")
+     .setMessage("Для переноса сначала выберите профиль 2048, оцените действия и нажмите «Обучить». Существующий перенос можно отключить без очистки данных.")
+     .setNegativeButton("Закрыть",null)
+     .setNeutralButton("Отключить перенос",(d,w)->disable2048Transfer()).show();
+   return;
+  }
+  final Web2048Transfer transfer;
+  try{transfer=Web2048Transfer.fromLesson(model);}
+  catch(IllegalArgumentException error){
+   new AlertDialog.Builder(this).setTitle("Недостаточно совместимого опыта")
+     .setMessage("Нужен именованный профиль «2048» и минимум 10 оценённых направленных свайпов, среди них 5 успешных. Чужие игры и неоценённые жесты не используются.")
+     .setNegativeButton("Закрыть",null)
+     .setNeutralButton("Отключить перенос",(d,w)->disable2048Transfer()).show();
+   return;
+  }
+  new AlertDialog.Builder(this).setTitle("Передать опыт обычному 2048?")
+    .setMessage("Перенести "+transfer.evidence()+" оценённых свайпов? Они дадут небольшой бонус выбора среди допустимых направлений. Снимки и касания не копируются. Реальные ходы по-прежнему подтверждаются по экрану.")
+    .setNegativeButton("Отмена",null)
+    .setNeutralButton("Отключить перенос",(d,w)->disable2048Transfer())
+    .setPositiveButton("Использовать",(d,w)->{
+     getSharedPreferences("real-2048-transfer",MODE_PRIVATE).edit().putString("model",transfer.encode()).apply();
+     say("Опыт 2048 подключён к настоящему CPU-планировщику: "+transfer.evidence()+" оценённых направлений, бонус только среди допустимых ходов.");
+    }).show();
+ }
+ private void disable2048Transfer(){
+  getSharedPreferences("real-2048-transfer",MODE_PRIVATE).edit().remove("model").apply();
+  say("Перенос опыта в настоящий 2048 отключён. Исходные уроки не удалены. Текущий запущенный игровой сеанс надо перезапустить.");
  }
  private void autoplay(){stop("Подготовка игры по примерам");if(!ready()||model==null||!model.game.equals(lesson.game)||!model.profileId.equals(lesson.profileId)){say("Откройте игру, запишите/импортируйте примеры и нажмите «Обучить»");return;}playing=true;lastAuto=0;say("Локальная модель включена. STOP или ручное касание выключает управление");}
  private void inject(WebLesson.Action action){
