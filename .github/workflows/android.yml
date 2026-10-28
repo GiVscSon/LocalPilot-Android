@@ -29,6 +29,7 @@ jobs:
       set -euo pipefail
       java tests/Verify.java tests/legacy_parity.txt
       java tests/GridVerify.java
+      java tests/CalibrationVerify.java
       java tests/PanelDockingVerify.java
       java tests/BubbleVerify.java
       java tests/LearningVerify.java

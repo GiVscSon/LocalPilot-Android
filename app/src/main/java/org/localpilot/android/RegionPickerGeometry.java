@@ -3,6 +3,18 @@ package org.localpilot.android;
 /** Screen/local coordinates for the explicit region editor. Never authorizes input. */
 public final class RegionPickerGeometry {
  private RegionPickerGeometry(){}
+ /**
+  * Strict aspect guard only for square-cell grids (4x4, 6x6, 7x7 etc.).
+  * Does not constrain PADDLE, TRAFFIC, FLAPPY, Bubble or non-square boards.
+  * This checks framing geometry, not the visual identity of a game.
+  */
+ public static boolean squareBoardAspect(GameViewport.Box region,int rows,int cols){
+  if(region==null||region.width()<=0||region.height()<=0||rows<1||cols<1)
+   throw new IllegalArgumentException("invalid board geometry");
+  if(rows!=cols)return true;
+  double aspect=region.width()/(double)region.height();
+  return aspect>=.82&&aspect<=1.18;
+ }
  private static void window(GameViewport.Box window){
   if(window==null||window.left()<0||window.top()<0||(long)window.right()-window.left()<1
     ||(long)window.bottom()-window.top()<1)throw new IllegalArgumentException("region window");
