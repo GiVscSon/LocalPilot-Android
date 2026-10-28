@@ -24,13 +24,18 @@ public final class CaptureTimingTrace {
       :(current?"FAILURE_ENTER":"STALE_FAILURE_ENTER"),
       id,elapsed(atRequestMs,atMs),0,current?"current":"ignored");
  }
+ public synchronized void apiReturned(long id,long atRequestMs,long atMs){
+  add("API_RETURN",id,elapsed(atRequestMs,atMs),0,"returned_to_main");
+ }
  public synchronized void unavailable(long id,long atRequestMs,long atMs){
   add("SYNCHRONOUS_FAILURE",id,elapsed(atRequestMs,atMs),0,"no_input");
  }
- public synchronized void timeout(long id,long atRequestMs,long atMs,long deadlineMs,
-                                  boolean stillPending){
+ public synchronized void timeout(long id,long atRequestMs,long scheduledAtMs,long atMs,
+                                  long deadlineMs,boolean stillPending){
   long duration=elapsed(atRequestMs,atMs);
-  long dispatchLag=Math.max(0,duration-deadlineMs);
+  // The watchdog timer is armed AFTER takeScreenshot returns. Excluding the
+  // synchronous API call avoids a false diagnosis of a blocked main queue.
+  long dispatchLag=Math.max(0,elapsed(scheduledAtMs,atMs)-deadlineMs);
   String kind;
   if(!stillPending)kind="WATCHDOG_RESOLVED";
   else if(dispatchLag>=500)kind="WATCHDOG_MAIN_QUEUE_LATE";
