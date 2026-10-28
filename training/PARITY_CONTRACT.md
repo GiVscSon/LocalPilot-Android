@@ -18,9 +18,13 @@ The Python check builds `training/build/localpilot-arcade-core.jar` using
 `javac --release 17`. It compares SHA-256 over **raw IEEE-754 binary32 bits**
 from an independent Java process and a Python/JPype replay of all 64 observation
 slots, action, reward, progress, terminal/truncated flags and duration for 64
-deterministically selected actions per genre. It also decodes an ephemeral real
-checkpoint in Python and verifies the byte order, manifest, entry list and
-SHA256SUMS integrity. It does not touch a user's checkpoint.
+deterministically selected actions per genre. A second gate runs 1040
+deterministic training steps per genre, crossing the replay warmup threshold
+and updating Double-DQN/Adam weights. It compares the entire binary
+`state.bin` payload (network, optimizer, replay, RNG, environment and
+counters) across separate Java and JPype processes. The Python side also
+checks checkpoint byte order, manifest, entry list and SHA256SUMS integrity.
+It does not touch a user's checkpoint.
 
 `tests/RlVerify.java` compiles with strict `--release 17`, runs the existing
 DQN regressions and prints the same deterministic per-genre trace hashes.
