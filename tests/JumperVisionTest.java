@@ -13,6 +13,9 @@ public final class JumperVisionTest {
         scene.fill(370, 500, 420, 560, 0xffd000);
         JumperState first = detect(scene, null, 1000, 0, 0, 0, 0);
         check(first.usable());
+        JumperTracking tracking=new JumperTracking();tracking.observe(first);tracking.observe(null);
+        check(tracking.previous(1200)==first);check(tracking.previous(1651)==null);
+        check(tracking.previous(999)==null);tracking.reset();check(tracking.previous(1200)==null);
         check(first.platforms.size() == 5);
         check(first.hazards.size() == 1);
         near(395, first.player.centerX(), 2);
@@ -64,7 +67,7 @@ public final class JumperVisionTest {
         check(detect(body,null,1000,0,0,0,0).player==null);
         edgeContinuation();
         badGeometry();
-        if (checks != 51) throw new AssertionError("expected 51 checks, got " + checks);
+        if (checks != 55) throw new AssertionError("expected 55 checks, got " + checks);
         System.out.println("PASS " + checks + " jumper-vision assertions");
     }
 

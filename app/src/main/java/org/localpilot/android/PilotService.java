@@ -71,7 +71,7 @@ public class PilotService extends AccessibilityService {
  private volatile boolean jumperVisionPending;
  private boolean jumperConsentPending,jumperAwaitingVerification;
  private boolean jumperCalibrationPending;private long jumperLastFrameMs,jumperLastActionMs,jumperPendingActionMs;private float jumperPendingStartX;
- private JumperPolicy.Action jumperPendingAction=JumperPolicy.Action.WAIT;private JumperState jumperState;
+ private JumperPolicy.Action jumperPendingAction=JumperPolicy.Action.WAIT;private JumperState jumperState;private final JumperTracking jumperTracking=new JumperTracking();
  private int jumperResponseFailures;private boolean jumperResponsePaused;
  private JumperVision.ColorProfile jumperColorProfile;private JumperCalibrationOverlay jumperCalibrationOverlay;
  private int jumperDisplayWidth,jumperDisplayHeight;private JumperFrameGeometry jumperFrameGeometry;
@@ -154,7 +154,7 @@ public class PilotService extends AccessibilityService {
    visualRoi=null;manualVisualRoi=false;visualOwner=target;visualWindow=root.getWindowId();visualWindowBounds=new Rect(armedBounds);
    // Never carry a screenshot or scene geometry from the previous app into a
    // newly bound game.  The next capture must establish a fresh ROI/profile.
-   boardRoi=null;clearDiagnosticFrame();sceneRecovery.reset();jumperState=null;
+   boardRoi=null;clearDiagnosticFrame();sceneRecovery.reset();jumperState=null;jumperTracking.reset();
    arcadeLastUsable=null;arcadeState=null;arcadeBefore=null;arcadePending=null;arcadeAck=false;
    arcadeController.reset();arcadeFeedback.reset();arcadeRoundSeen=false;
   }
@@ -170,7 +170,7 @@ public class PilotService extends AccessibilityService {
   GameViewport.Box found=GameViewport.detect(frame::getPixel,original,new GameViewport.Box(g.toFrameX(p.left),g.toFrameY(p.top),g.toFrameX(p.right),g.toFrameY(p.bottom)));
   if(!found.equals(original)){
    Rect next=new Rect(Math.max(b.left,(int)Math.ceil(g.toScreenX(found.left()))),b.top,Math.min(b.right,(int)Math.floor(g.toScreenX(found.right()))),b.bottom);
-   if(!next.equals(visualRoi)){visualRoi=next;sceneRecovery.reset();jumperState=null;arcadeState=null;}
+   if(!next.equals(visualRoi)){visualRoi=next;sceneRecovery.reset();jumperState=null;jumperTracking.reset();arcadeState=null;}
   }
  }
  private void overlayMenu(String title,String[] labels,java.util.function.IntConsumer select){
@@ -386,7 +386,7 @@ public class PilotService extends AccessibilityService {
   playingGrid=false;gridSession.reset();gridPalette=null;gridPendingDecision=null;gridUnknownReasons="none";bubbleSession.reset();bubbleGeometry=null;
   arcadeLastUsable=null;arcadeController.reset();arcadeFeedback.reset();jumperFeedback.reset();arcadeState=null;arcadeBefore=null;arcadePending=null;arcadeAck=false;
   boolean stopJumper=playingJumper||jumperCaptureReady||jumperConsentPending;
-  playingJumper=false;jumperCaptureReady=false;jumperConsentPending=false;jumperVisionPending=false;jumperAwaitingVerification=false;jumperCalibrationPending=false;jumperState=null;
+  playingJumper=false;jumperCaptureReady=false;jumperConsentPending=false;jumperVisionPending=false;jumperAwaitingVerification=false;jumperCalibrationPending=false;jumperState=null;jumperTracking.reset();
   if(stoppedGame)browserProfileConfirmed=false;
   customCalibrationPending=false;View custom=customCalibrationOverlay;customCalibrationOverlay=null;removeOverlay(custom);
   synchronized(jumperFrameLock){Bitmap queued;while((queued=jumperQueuedFrames.poll())!=null)if(!queued.isRecycled())queued.recycle();}
@@ -427,7 +427,7 @@ public class PilotService extends AccessibilityService {
    focusPaused=true;gate.pause();boardReadGeneration++;arcadeSceneGeneration++;
    arcadeFeedback.reset();jumperFeedback.reset();arcadeController.nextRound();
    jumperAwaitingVerification=false;jumperResponsePaused=false;jumperResponseFailures=0;
-   arcadePending=null;arcadeBefore=null;arcadeLastUsable=null;arcadeState=null;jumperState=null;
+   arcadePending=null;arcadeBefore=null;arcadeLastUsable=null;arcadeState=null;jumperState=null;jumperTracking.reset();
    captureBusy=false;pendingCapture=++captureCounter;
    if(visionPending&&visionTask!=null){visionTask.cancel(true);visionTask=null;}visionPending=false;visionRequest++;
    gridSession.invalidateCandidate();bubbleSession.invalidateCandidate();
@@ -478,7 +478,7 @@ public class PilotService extends AccessibilityService {
   roundOutcome.reset();
   jumperColorProfile=profile==ArcadeProfile.ARI?loadJumperColors(target):null;
   playingJumper=true;jumperConsentPending=true;jumperCaptureReady=false;
-  jumperState=null;jumperAwaitingVerification=false;jumperLastActionMs=0;compact(true);positionJumperStopPanel();
+  jumperState=null;jumperTracking.reset();jumperAwaitingVerification=false;jumperLastActionMs=0;compact(true);positionJumperStopPanel();
   CrashDiagnostics.phase("CAPTURE_CONSENT");
   captureFrames=captureReads=captureDecisions=captureSent=captureCompleted=0;
   captureAcceptedFrames=captureSkippedFrames=captureSkippedThrottle=captureSkippedUnwanted=captureSkippedClock=0;
@@ -866,7 +866,7 @@ public class PilotService extends AccessibilityService {
     String prefix=VisualGameTarget.key(target,learningSlot,ArcadeProfile.ARI)+".";
     getSharedPreferences("jumper-vision",MODE_PRIVATE).edit().putInt(prefix+"player",player)
       .putInt(prefix+"platform",platform).putInt(prefix+"hazard",hazard).apply();
-    sceneRecovery.reset();jumperState=null;jumperAwaitingVerification=false;
+    sceneRecovery.reset();jumperState=null;jumperTracking.reset();jumperAwaitingVerification=false;
     jumperLastActionMs=SystemClock.elapsedRealtime();
     if(automatic())permit.grantSession(gate.epoch(),SystemClock.elapsedRealtime());
     note="Калибровка сохранена локально · проверяю распознавание";update();
@@ -943,7 +943,7 @@ public class PilotService extends AccessibilityService {
    JumperFrameGeometry geometry=jumperFrameGeometry;Rect excludedScreen=panelBounds();
    int excludedLeft=geometry.toFrameX(excludedScreen.left),excludedTop=geometry.toFrameY(excludedScreen.top);
    int excludedRight=geometry.toFrameX(excludedScreen.right),excludedBottom=geometry.toFrameY(excludedScreen.bottom);
-   JumperState previous=jumperState!=null&&jumperState.usable()?jumperState:null;SceneRecovery.Pass recoveryPass=sceneRecovery.pass();JumperVision.ColorProfile colors=jumperColorProfile;jumperVisionPending=true;long started=SystemClock.elapsedRealtimeNanos();
+   JumperState previous=jumperTracking.previous(timestampMs);SceneRecovery.Pass recoveryPass=sceneRecovery.pass();JumperVision.ColorProfile colors=jumperColorProfile;jumperVisionPending=true;long started=SystemClock.elapsedRealtimeNanos();
    try{visionTask=visionWorker.submit(()->{
     JumperState detected=null;RuntimeException failure=null;
     try{int width=frame.getWidth();int[] pixels=visionPixels(frame);
@@ -972,7 +972,7 @@ public class PilotService extends AccessibilityService {
   if(roundOutcome.result(timestamp))persistArcadeModel(true);
   arcadeSceneGeneration++;jumperVisionPending=false;
   arcadeController.nextRound();arcadeFeedback.reset();arcadeLastUsable=null;arcadeState=null;arcadePending=null;arcadeBefore=null;arcadeAck=false;
-  jumperState=null;jumperFeedback.reset();jumperAwaitingVerification=false;jumperResponsePaused=false;jumperResponseFailures=0;sceneRecovery.reset();arcadeRoundSeen=false;
+  jumperState=null;jumperTracking.reset();jumperFeedback.reset();jumperAwaitingVerification=false;jumperResponsePaused=false;jumperResponseFailures=0;sceneRecovery.reset();arcadeRoundSeen=false;
   note="Экран результата · нажмите Играть снова. Захват и модель сохранены";update();return true;
  }
 
@@ -1140,7 +1140,7 @@ public class PilotService extends AccessibilityService {
    stop("Окно игры изменилось — STOP");return;
   }
   jumperConsentPending=false;
-  jumperState=state;
+  jumperState=state;jumperTracking.observe(state);
   if(!sceneRecovery.observe(state!=null&&state.usable(),timestampMs)){
    advanceJumperFeedback(null,now);
    if(sceneRecovery.selectionRequired()){stop("Прыгун не распознан. Игра → выберите механику; для другой графики: Ещё → Настроить распознавание");compact(false);return;}
