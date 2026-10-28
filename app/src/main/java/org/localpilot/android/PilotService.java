@@ -1506,7 +1506,8 @@ public class PilotService extends AccessibilityService {
    @Override public void onFailure(int error){captureTiming.callback(requestId,request,SystemClock.elapsedRealtime(),false,pendingCapture==requestId);if(pendingCapture!=requestId)return;captureBusy=false;if(epoch==gate.epoch()&&error==ERROR_TAKE_SCREENSHOT_INTERVAL_TIME_SHORT&&retryCapture(epoch,result,"SCREENSHOT_INTERVAL"))return;if(epoch==gate.epoch())failStage(StageMetrics.Stage.CAPTURE,"ANDROID_SCREENSHOT_ERROR","Захват Android: ошибка "+error+". Проверьте доступ службы");}
   };
   try{takeScreenshot(Display.DEFAULT_DISPLAY,getMainExecutor(),callback);}catch(RuntimeException e){captureTiming.unavailable(requestId,request,SystemClock.elapsedRealtime());captureBusy=false;failStage(StageMetrics.Stage.CAPTURE,"SCREENSHOT_UNAVAILABLE","Захват недоступен");return;}
-  handler.postDelayed(()->{boolean stillPending=captureBusy&&pendingCapture==requestId&&epoch==gate.epoch();captureTiming.timeout(requestId,request,SystemClock.elapsedRealtime(),4000,stillPending);if(stillPending){captureBusy=false;pendingCapture=++captureCounter;failStage(StageMetrics.Stage.CAPTURE,"SCREENSHOT_TIMEOUT","Захват: таймаут без ввода");}},4000);
+  final long watchdogScheduledAt=SystemClock.elapsedRealtime();captureTiming.apiReturned(requestId,request,watchdogScheduledAt);
+  handler.postDelayed(()->{boolean stillPending=captureBusy&&pendingCapture==requestId&&epoch==gate.epoch();captureTiming.timeout(requestId,request,watchdogScheduledAt,SystemClock.elapsedRealtime(),4000,stillPending);if(stillPending){captureBusy=false;pendingCapture=++captureCounter;failStage(StageMetrics.Stage.CAPTURE,"SCREENSHOT_TIMEOUT","Захват: таймаут без ввода");}},4000);
  }
  private long captureDelay(){return Build.VERSION.SDK_INT>=31?400:1100;}
  private void stable(long epoch,BoardResult result){
