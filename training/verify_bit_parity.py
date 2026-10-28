@@ -29,6 +29,7 @@ from build_core import build
 ROOT = Path(__file__).resolve().parents[1]
 SEED = 20261028
 STEPS = 64
+TRAIN_STEPS = 1040
 GENRES = ("JUMPER", "PLATFORMER", "LANES", "JETPACK")
 
 
@@ -49,10 +50,21 @@ def native_vectors(jar: Path, output: Path) -> dict[str, str]:
          "org.localpilot.android.rl.RlParityProbe"],
         cwd=ROOT, text=True,
     )
-    lines = [line.split() for line in out.strip().splitlines()]
-    values = {name: sha for name, sha in lines}
-    if tuple(values) != GENRES or any(len(sha) != 64 for sha in values.values()):
-        raise AssertionError(f"Unexpected Java probe output: {out!r}")
+    values: dict[str, str] = {}
+    for line in out.strip().splitlines():
+        parts = line.split()
+        if len(parts) == 2:
+            name, sha = parts
+        elif len(parts) == 3 and parts[0] == "TRAINER":
+            name, sha = f"TRAINER:{parts[1]}", parts[2]
+        else:
+            raise AssertionError(f"Unexpected Java probe output: {line!r}")
+        if name in values or len(sha) != 64:
+            raise AssertionError(f"Invalid or repeated Java fingerprint: {line!r}")
+        values[name] = sha
+    expected = set(GENRES) | {f"TRAINER:{genre}" for genre in GENRES}
+    if set(values) != expected:
+        raise AssertionError(f"Missing/unexpected Java fingerprints: {values!r}")
     return values
 
 
@@ -101,13 +113,18 @@ def jpype_vectors(jar: Path, output: Path) -> dict[str, str]:
             # Python independently checks the real checkpoint's byte order,
             # three-entry contract and checksums without modifying any user file.
             checkpoint = Path(tmp) / f"{name}.zip"
-            trainer = trainer_cls(genre, SEED)
+            trainer = trainer_cls(genre, SEED + 77 + ordinal)
+            for _ in range(TRAIN_STEPS):
+                trainer.step()
+            if int(trainer.updates) <= 0:
+                raise AssertionError(f"{name}: Double DQN optimizer did not update")
             trainer.save(java_file(str(checkpoint)))
             with zipfile.ZipFile(checkpoint) as archive:
                 expected = {"manifest.json", "state.bin", "SHA256SUMS"}
                 if set(archive.namelist()) != expected:
                     raise AssertionError(f"{name}: checkpoint entries differ from v1 contract")
                 state = archive.read("state.bin")
+                result[f"TRAINER:{name}"] = hashlib.sha256(state).hexdigest()
                 metadata = archive.read("manifest.json")
                 sums = archive.read("SHA256SUMS").decode("utf-8")
                 valid = (hashlib.sha256(state).hexdigest() + "  state.bin\n"
@@ -132,13 +149,15 @@ def main() -> None:
         native = native_vectors(jar, Path(tmp))
         python = jpype_vectors(jar, Path(tmp))
     for genre in GENRES:
-        if native[genre] != python[genre]:
-            raise SystemExit(
-                f"BIT-EXACT PARITY FAILED: {genre}: Java={native[genre]} "
-                f"Python/JPype={python[genre]}"
-            )
+        for key in (genre, f"TRAINER:{genre}"):
+            if native[key] != python[key]:
+                raise SystemExit(
+                    f"BIT-EXACT PARITY FAILED: {key}: Java={native[key]} "
+                    f"Python/JPype={python[key]}"
+                )
         print(f"PASS {genre} raw-float32-sha256={native[genre]}")
-    print("PASS: exact Java/JVM and Python/JPype traces and v1 checkpoint format")
+        print(f"PASS {genre} trained-state-sha256={native[f'TRAINER:{genre}']}")
+    print("PASS: exact Java/JVM and Python/JPype simulator, Double-DQN training state and checkpoint v1")
     print("NOTE: physical Android runtime and real-game action parity NOT tested")
 
 
