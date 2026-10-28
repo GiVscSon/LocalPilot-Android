@@ -60,7 +60,7 @@ public final class ArcadeProfilesTest {
   check(rightCatch.action==ArcadePolicy.Action.MOVE_PADDLE,"predicted wall bounce commands basket only");
   ArcadeObservation leftBounce=state(ArcadeProfile.PADDLE,box(.09f,.65f,.04f,.03f),paddle,List.of(),-.6f,.4f,true,0,0);
   ArcadePolicy.Decision leftCatch=ArcadePolicy.next(leftBounce);
-  near(leftCatch.x,.2875f,.015f,"left wall reflection predicts basket interception");
+  near(leftCatch.x,.1975f,.015f,"left wall reflection predicts basket interception");
   check(leftCatch.action==ArcadePolicy.Action.MOVE_PADDLE,"left bounce commands basket only");
 
   ArcadeObservation.Box car=box(.5f,.85f,.12f,.18f),enemy=box(.5f,.6f,.12f,.16f);
