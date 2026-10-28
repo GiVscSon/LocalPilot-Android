@@ -24,15 +24,23 @@ public final class ArcadePolicy {
   }
  }
  private static Decision paddle(ArcadeObservation s){
+  // Single-frame detections and invalid velocity estimates are not evidence
+  // of ball motion. In particular, never chase a wood-coloured false ball.
+  if(!s.tracked||!Float.isFinite(s.vx)||!Float.isFinite(s.vy))
+   return waitFor("Ожидаю подтверждённую траекторию мяча");
   // A tracked stationary ball touching the basket is waiting for a serve.
-  if(s.tracked&&Math.abs(s.vx)<.01f&&Math.abs(s.vy)<.01f
+  if(Math.abs(s.vx)<.01f&&Math.abs(s.vy)<.01f
       &&Math.abs(s.player.bottom-s.control.top)<.035f
       &&s.player.x()>s.control.left&&s.player.x()<s.control.right)
    return new Decision(Action.LAUNCH,s.control.x(),s.control.y(),"Запускаю шар с корзины");
+  if(Math.abs(s.vy)<.03f)return waitFor("Мяч неподвижен: жду наблюдение");
   float target=s.player.x();
-  // Only extrapolate a descending ball with a recent measured trajectory.
-  if(s.tracked&&s.vy>.03f){
-   float time=Math.max(0,Math.min(.8f,(s.control.top-s.player.bottom)/s.vy));
+  // Predict only a descending ball still above the paddle contact line.
+  // A crossing that is already behind us cannot justify a new gesture.
+  if(s.vy>.03f){
+   float separation=s.control.top-s.player.bottom;
+   if(separation<=0)return waitFor("Мяч прошёл линию перехвата");
+   float time=Math.min(.8f,separation/s.vy);
    target=reflect(s.player.x()+s.vx*time,s.left+s.player.width()/2,s.right-s.player.width()/2);
   }
   target=clamp(target,s.left+s.control.width()/2,s.right-s.control.width()/2);

@@ -44,6 +44,24 @@ public final class ArcadeProfilesTest {
   check(!ArcadePolicy.next(state(ArcadeProfile.PADDLE,box(.5f,.65f,.04f,.03f),paddle,List.of(),0,1,true,0,0)).sendsInput(),"aligned paddle waits");
   check(ArcadePolicy.response(move,s,state(ArcadeProfile.PADDLE,ball,box(.62f,.85f,.24f,.04f),List.of(),0,1,true,0,0)),"paddle motion confirmed");
   check(!ArcadePolicy.response(move,s,s),"unchanged paddle not confirmed");
+  // Physical contact prediction is only meaningful from a tracked finite
+  // trajectory, and only while the ball is above the interception plane.
+  ArcadeObservation untrackedBall=state(ArcadeProfile.PADDLE,ball,paddle,List.of(),.5f,1,false,0,0);
+  check(!ArcadePolicy.next(untrackedBall).sendsInput(),"one untracked frame cannot move paddle");
+  ArcadeObservation invalidVelocity=state(ArcadeProfile.PADDLE,ball,paddle,List.of(),Float.NaN,1,true,0,0);
+  check(!ArcadePolicy.next(invalidVelocity).sendsInput(),"NaN velocity cannot authorize paddle motion");
+  ArcadeObservation belowPaddle=state(ArcadeProfile.PADDLE,box(.78f,.89f,.04f,.03f),paddle,List.of(),.5f,.4f,true,0,0);
+  check(!ArcadePolicy.next(belowPaddle).sendsInput(),"ball already behind catch line cannot be intercepted by gesture");
+  ArcadeObservation stationaryAway=state(ArcadeProfile.PADDLE,box(.7f,.5f,.04f,.03f),paddle,List.of(),0,0,true,0,0);
+  check(!ArcadePolicy.next(stationaryAway).sendsInput(),"stationary ball away from basket must not be chased");
+  ArcadeObservation rightBounce=state(ArcadeProfile.PADDLE,box(.91f,.65f,.04f,.03f),paddle,List.of(),.6f,.4f,true,0,0);
+  ArcadePolicy.Decision rightCatch=ArcadePolicy.next(rightBounce);
+  near(rightCatch.x,.8025f,.015f,"right wall reflection predicts basket interception");
+  check(rightCatch.action==ArcadePolicy.Action.MOVE_PADDLE,"predicted wall bounce commands basket only");
+  ArcadeObservation leftBounce=state(ArcadeProfile.PADDLE,box(.09f,.65f,.04f,.03f),paddle,List.of(),-.6f,.4f,true,0,0);
+  ArcadePolicy.Decision leftCatch=ArcadePolicy.next(leftBounce);
+  near(leftCatch.x,.1975f,.015f,"left wall reflection predicts basket interception");
+  check(leftCatch.action==ArcadePolicy.Action.MOVE_PADDLE,"left bounce commands basket only");
 
   ArcadeObservation.Box car=box(.5f,.85f,.12f,.18f),enemy=box(.5f,.6f,.12f,.16f);
   ArcadeObservation traffic=state(ArcadeProfile.TRAFFIC,car,car,List.of(enemy),0,0,true,0,0);
