@@ -55,7 +55,8 @@ public final class GridPuzzlePolicy {
   // Second gate, independent of scene classification by GridPuzzleVision.
   if(partialAllowed){
    int known=0;for(int cell:board.cells())if(cell>=0)known++;
-   if(known<Math.max(6,(board.rows*board.cols*2+2)/3))return null;
+   // Match the vision gate: ceil(72% of the board), not the old 2/3 floor.
+   if(known<Math.max(6,(board.rows*board.cols*72+99)/100))return null;
   }
   int[] cells=board.cells();Decision best=null;
   if(mode==Mode.TAP_GROUP){

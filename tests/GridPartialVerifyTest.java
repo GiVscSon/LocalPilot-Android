@@ -53,6 +53,29 @@ public final class GridPartialVerifyTest {
   check(split==null||!Arrays.stream(split.clearedCells()).anyMatch(i->i==1),
     "protected item is not used as a bridge");
 
+  // Vision, direct solver and session must agree on the SAME 72% coverage gate.
+  // 26/36 is the first admissible partial 6x6 field; 25/36 must abstain.
+  int[] threshold=scene();threshold[30]=threshold[31]=threshold[32]=-1;
+  check(Arrays.stream(threshold).filter(v->v>=0).count()==26,
+    "coverage fixture has exactly 26 of 36 known cells");
+  check(GridPuzzlePolicy.choosePartial(new GridPuzzle(6,6,threshold),
+    GridPuzzlePolicy.Mode.SWAP_MATCH3,2,0,0,new BitSet())!=null,
+    "26/36 known cells pass the 72 percent solver gate");
+  GridPuzzleSession thresholdSession=new GridPuzzleSession();
+  check(thresholdSession.observePartial(6,6,threshold,new BitSet(),1000,1000)==GridPuzzleSession.Status.WAIT_STABLE
+    &&thresholdSession.observePartial(6,6,threshold,new BitSet(),1100,1100)==GridPuzzleSession.Status.READY,
+    "26/36 known cells can become a stable session candidate");
+  int[] belowThreshold=threshold.clone();belowThreshold[33]=-1;
+  check(Arrays.stream(belowThreshold).filter(v->v>=0).count()==25,
+    "below-threshold fixture has exactly 25 known cells");
+  check(GridPuzzlePolicy.choosePartial(new GridPuzzle(6,6,belowThreshold),
+    GridPuzzlePolicy.Mode.SWAP_MATCH3,2,0,0,new BitSet())==null,
+    "25/36 known cells cannot bypass 72 percent gate via direct solver");
+  GridPuzzleSession lowCoverageSession=new GridPuzzleSession();
+  check(lowCoverageSession.observePartial(6,6,belowThreshold,new BitSet(),1000,1000)==GridPuzzleSession.Status.WAIT_STABLE
+    &&lowCoverageSession.observePartial(6,6,belowThreshold,new BitSet(),1100,1100)==GridPuzzleSession.Status.WAIT_STABLE,
+    "25/36 known cells cannot become READY by bypassing vision");
+
   int[] allUnknown=new int[36];Arrays.fill(allUnknown,-1);
   check(GridPuzzlePolicy.choosePartial(new GridPuzzle(6,6,allUnknown),
     GridPuzzlePolicy.Mode.SWAP_MATCH3,2,0,0,new BitSet())==null,
@@ -64,6 +87,18 @@ public final class GridPartialVerifyTest {
     0,0,480,480,6,6,0,0,0,0,1000,null);
   check(!vision.usable()&&vision.partialUsable(),"29/36 recognized tokens permit partial observation");
   check(vision.unknownIndices().length==7,"all seven unknowns remain unknown");
+  int[] vision26=fourColors.clone();
+  vision26[30]=vision26[31]=vision26[32]=-1;
+  var visible26=GridPuzzleVision.detect((x,y)->token(x,y,vision26),
+    0,0,480,480,6,6,0,0,0,0,1050,vision.palette());
+  check(visible26.unknownIndices().length==10&&visible26.partialUsable(),
+    "vision also accepts 26/36, matching solver and session");
+  int[] vision25=vision26.clone();vision25[33]=-1;
+  var visible25=GridPuzzleVision.detect((x,y)->token(x,y,vision25),
+    0,0,480,480,6,6,0,0,0,0,1075,vision.palette());
+  check(visible25.unknownIndices().length==11&&!visible25.partialUsable(),
+    "vision rejects 25/36 and cannot grant a live partial permission");
+
   var obstructed=GridPuzzleVision.detect((x,y)->token(x,y,fourColors),
     0,0,480,480,6,6,80,0,160,80,1100,vision.palette());
   check(!obstructed.partialUsable(),"panel overlap cannot authorize partial input");
@@ -101,6 +136,32 @@ public final class GridPartialVerifyTest {
   check(fullMove!=null,"complete board has a move");
   full.observe(6,6,complete,1000,1000);full.observe(6,6,complete,1100,1100);
   full.sent(complete,1200,fullMove);full.acknowledge(1250);
+  // An apparent bomb/rocket marker at the expected match location is not by
+  // itself proof of action causality. A pixel effect or old overlay may have
+  // changed the special bit while every ordinary token stayed in place.
+  GridPuzzleSession markerOnly=new GridPuzzleSession();
+  markerOnly.observe(6,6,complete,1000,1000);
+  markerOnly.observe(6,6,complete,1100,1100);
+  markerOnly.sent(complete,1200,fullMove);
+  markerOnly.acknowledge(1250);
+  int mark=fullMove.clearedCells()[0];
+  BitSet appeared=new BitSet(36);appeared.set(mark);
+  markerOnly.observe(6,6,complete,appeared,1500,1500);
+  check(markerOnly.observe(6,6,complete,appeared,1600,1600)==GridPuzzleSession.Status.WAIT_RESPONSE
+    &&markerOnly.verifiedChanges()==0,
+    "a new special mask alone after ACK does not prove a matched cascade");
+  // An endpoint-only animation plus a new special marker also cannot certify
+  // the third changed cell expected from a genuine match-3 cascade.
+  int[] endpointOnly=complete.clone();
+  int endpointFrom=fullMove.fromRow*6+fullMove.fromCol;
+  int endpointTo=fullMove.toRow*6+fullMove.toCol;
+  endpointOnly[endpointFrom]=complete[endpointTo];
+  endpointOnly[endpointTo]=complete[endpointFrom];
+  markerOnly.observe(6,6,endpointOnly,appeared,1700,1700);
+  check(markerOnly.observe(6,6,endpointOnly,appeared,1800,1800)==GridPuzzleSession.Status.WAIT_RESPONSE
+    &&markerOnly.verifiedChanges()==0,
+    "special marker with only two swapped endpoints cannot confirm an action");
+
   int[] unrelatedFull=complete.clone();unrelatedFull[30]=91;unrelatedFull[31]=92;
   full.observe(6,6,unrelatedFull,1500,1500);
   check(full.observe(6,6,unrelatedFull,1600,1600)==GridPuzzleSession.Status.WAIT_RESPONSE,"complete board unrelated changes do not verify action");
