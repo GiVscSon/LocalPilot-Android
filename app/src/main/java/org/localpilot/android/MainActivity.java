@@ -19,11 +19,11 @@ public class MainActivity extends Activity {
   button(box,"Включить управление",()->startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)));
   button(box,"Показать панель",()->{PilotService pilot=PilotService.instance;if(pilot==null){toast(CrashDiagnostics.connectionHint(this));return;}pilot.recoverPanel();status.setText(CrashDiagnostics.connectionHint(this));});
   TextView panelHelp=new TextView(this);panelHelp.setText("Панель можно свернуть. STOP всегда остаётся доступным.");box.addView(panelHelp);
-  button(box,"Web · варианты обучения",()->startActivity(new Intent(this,WebLearningActivity.class)));
-  button(box,"Аркады · обучать нейросеть",()->startActivity(new Intent(this,TrainingActivity.class)));
+  button(box,"Обучение по примерам · внешний API",()->startActivity(new Intent(this,WebLearningActivity.class)));
+  button(box,"Нейросеть · учебный симулятор",()->startActivity(new Intent(this,TrainingActivity.class)));
   automatic=new Switch(this);automatic.setText("Автоуправление выбранной игрой");automatic.setChecked(getSharedPreferences(PREF,MODE_PRIVATE).getBoolean("auto_control",true));automatic.setOnCheckedChangeListener((v,on)->{getSharedPreferences(PREF,MODE_PRIVATE).edit().putBoolean("auto_control",on).apply();if(PilotService.instance!=null)PilotService.instance.setAutomatic(on);});box.addView(automatic);
   button(box,"Выбрать игру или браузер",()->startActivity(new Intent(this,GamePickerActivity.class)));
-  TextView autoHelp=new TextView(this);autoHelp.setText("Для сетки фишек: Игра → Фишки · обмен соседей или удалить группу → выберите 6×6, 7×7 либо другой размер → обведите клетки → Старт. Настройки и типы фишек сохраняются. Поддерживаются различимые цветные фишки без специальных эффектов; цели уровня и усилители пока не распознаются. Для аркад другого оформления: Ещё → Настроить распознавание. Для разных игр одного браузера: Игра → Имя игры. STOP всегда останавливает ввод.");box.addView(autoHelp);
+  TextView autoHelp=new TextView(this);autoHelp.setText("Для сетки фишек: Игра → Мэтч Ворлд · обмен соседей или Фишки · удалить группу → выберите 6×6, 7×7 либо другой размер → обведите клетки → Старт. Настройки и типы фишек сохраняются. Поддерживаются различимые цветные фишки без специальных эффектов; цели уровня и усилители пока не распознаются. Для аркад другого оформления: Ещё → Настроить распознавание. Для разных игр одного браузера: Игра → Имя игры. STOP всегда останавливает ввод.");box.addView(autoHelp);
   button(box,"Открыть 2048",()->openGame(new Intent(this,Game2048Activity.class),"2048"));
   button(box,"Крестики-нолики",()->openGame(new Intent(this,MiniGamesActivity.class).putExtra("kind",0),"Крестики-нолики"));
   button(box,"Погаси свет",()->openGame(new Intent(this,MiniGamesActivity.class).putExtra("kind",1),"Погаси свет"));

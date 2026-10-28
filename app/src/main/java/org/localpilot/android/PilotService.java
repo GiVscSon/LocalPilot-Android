@@ -286,10 +286,11 @@ public class PilotService extends AccessibilityService {
   try{wm.addView(overlay,lp);picker=overlay;handler.postDelayed(()->{if(picker==overlay){stop("Время выбора области истекло");compact(false);}},30000);}catch(RuntimeException error){stop("Не удалось открыть выбор области");compact(false);}
  }
  private void moreOptions(){
-  stop("Дополнительные действия · STOP");overlayMenu("Ещё",new String[]{"Диагностика сеанса","Калибровка Ари","Автополе2048","Выбрать установленную игру","Только чтение","Включить автоуправление","Демо ×10","Скрыть панель","Отключить службу","Настроить распознавание","Способ управления","Вернуть стандартное распознавание","Размер сетки фишек","Приоритетный цвет фишек","Помощь по панели и играм","Неизвестные клетки"},i->{switch(i){
+  stop("Дополнительные действия · STOP");
+  final int[] actions={0,3,4,5,7,8,9,10,11,12,13,14,15};
+  overlayMenu("Ещё",new String[]{"Диагностика сеанса","Выбрать установленную игру","Только чтение","Включить автоуправление","Скрыть панель","Отключить службу","Настроить распознавание","Способ управления","Вернуть стандартное распознавание","Размер сетки фишек","Приоритетный цвет фишек","Помощь по панели и играм","Неизвестные клетки"},i->{switch(actions[i]){
    case 0->showServiceDialog(new AlertDialog.Builder(this).setTitle("Последний сеанс").setMessage(lastSessionReport+"\n"+captureStartup.report()).setPositiveButton("Закрыть",null).create());
-   case 1->{selectedProfile=0;startVisualArcade(ArcadeProfile.ARI);if(playingJumper)jumperCalibrationPending=true;}
-   case 2->startAutomaticGame();case 3->startActivity(new Intent(this,GamePickerActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));case 4->setAutomatic(false);case 5->setAutomatic(true);case 6->{arm();if(gate.armed())startDemo();}case 7->hidePanel();case 8->disableSelf();
+   case 3->startActivity(new Intent(this,GamePickerActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));case 4->setAutomatic(false);case 5->setAutomatic(true);case 7->hidePanel();case 8->disableSelf();
    case 9->startCustomCalibration();case 10->chooseControlMode();case 11->resetCustomVision();
    case 12->configureGrid();
    case 13->chooseGridGoal();
@@ -302,7 +303,7 @@ public class PilotService extends AccessibilityService {
  private void showPanelHelp(){
   String message="Окно — выберите окно игры. Игра — выберите её механику. Область — отметьте игровое поле, если требуется. Старт — начать выбранный режим. Ещё — настройки и диагностика; открытие останавливает игру. Свернуть — уменьшить панель. STOP — немедленно остановить ввод.\n\n"
    +"Для сетки: откройте игру → Окно → Игра → выберите механику → Область → обведите поле → Старт. Размер сетки задаётся в «Ещё». Неизвестные клетки: только наблюдение. 2048: обведите плитки 4×4; Шипучка: обведите ряды шаров до пушки. Шипучка: экспериментально только обычные шары. Прыгун Ари, Карканоид, Маркет Раш и Гошан: отдельные аркадные профили.\n\n"
-   +"Гексон и Котобашня пока не поддерживаются. Для другой игры выбирайте механику по управлению. Успех действий и работа на конкретном телефоне не гарантированы.";
+   +"Для другой игры выбирайте механику по её правилам. Неподдерживаемые специальные элементы требуют отдельной проверки.";
   showServiceDialog(new AlertDialog.Builder(this).setTitle("Панель и игры").setMessage(message).setPositiveButton("Закрыть",null).create());
  }
 
