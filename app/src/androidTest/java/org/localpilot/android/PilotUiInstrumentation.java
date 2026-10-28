@@ -730,7 +730,7 @@ public final class PilotUiInstrumentation extends Instrumentation {
         bindDemoWindow();
         await(this::armed, 2_000, "Demo binding failed");
         allowInput();
-        click("Ещё");click("Демо ×10");
+        click("Начать проверку ×10");
     }
 
     private void bindDemoWindow() throws Exception {bindWindow(getTargetContext().getPackageName());}
