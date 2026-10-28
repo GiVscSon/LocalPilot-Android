@@ -46,6 +46,17 @@ public final class GridOnlineLearningTest {
   GridOnlineLearning avoiding=new GridOnlineLearning();BitSet none=new BitSet();
   var preferred=GridPuzzlePolicy.chooseAdaptive(alternatives,GridPuzzlePolicy.Mode.TAP_GROUP,2,0,0,none,false,avoiding);
   check(preferred!=null&&preferred.fromRow==0,"fixture chooses first of two equal groups");
+  GridPuzzleSession timed=new GridPuzzleSession(1000,4000);int[] baseline=alternatives.cells();
+  timed.observe(3,3,baseline,none,1000,1000);timed.observe(3,3,baseline,none,1100,1100);
+  timed.sent(baseline,1200,preferred);timed.acknowledge(1250);
+  check(timed.observe(3,3,baseline,none,2200,2200)==GridPuzzleSession.Status.PAUSED&&timed.awaitingLateVerification(),"first deadline pauses without rejection");
+  timed.observe(3,3,baseline,none,4100,4100);
+  check(timed.observe(3,3,baseline,none,5200,5200)==GridPuzzleSession.Status.PAUSED&&timed.unchangedAtTimeout(),"two stable unchanged frames prove final timeout");
+  GridOnlineLearning lifecycle=new GridOnlineLearning();
+  check(lifecycle.avoidUnchangedMove(alternatives,alternatives,none,none,preferred),"final evidence enables transient exclusion");
+  timed.reset();timed.observe(3,3,baseline,none,5300,5300);timed.observe(3,3,baseline,none,5400,5400);
+  var resumed=GridPuzzlePolicy.chooseAdaptive(alternatives,GridPuzzlePolicy.Mode.TAP_GROUP,2,0,0,none,false,lifecycle);
+  check(resumed!=null&&resumed.fromRow!=preferred.fromRow,"same board chooses another legal move after restart");
   String unchangedEncoding=avoiding.encode();
   check(avoiding.avoidUnchangedMove(alternatives,alternatives,none,none,preferred),"stable unchanged full board may exclude an exact move");
   check(avoiding.encode().equals(unchangedEncoding)&&avoiding.notConfirmedCount()==0,"transient exclusion neither changes checkpoint nor double-counts evidence");

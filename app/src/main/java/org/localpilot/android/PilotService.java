@@ -58,6 +58,8 @@ public class PilotService extends AccessibilityService {
  private long gridMoves,gridVerified;
  private GridOnlineLearning gridLearning=new GridOnlineLearning();
  private GridPuzzlePolicy.Decision gridPendingDecision;
+ private GridPuzzle gridPendingBoard;private java.util.BitSet gridPendingSpecial;
+ private String gridAvoidScope="",gridPendingScope="";
  // Bounded symbolic counts from the current grid observation; no pixels retained.
  private String gridUnknownReasons="none",gridReview="Нет данных: запустите сеточную игру и дождитесь чтения поля.";
  private CustomVisionConfig customVision;
@@ -706,10 +708,14 @@ public class PilotService extends AccessibilityService {
   learningSlot=getSharedPreferences("panel",MODE_PRIVATE).getString("game_slot."+target,"default");
   try{gridGoal=GridPuzzleGoal.Color.valueOf(getSharedPreferences("grid-puzzle",MODE_PRIVATE).getString(gridKey()+".goal","ANY"));}catch(IllegalArgumentException error){gridGoal=GridPuzzleGoal.Color.ANY;}
   gridSession.reset();gridUnknownReasons="none";gridReview="Ожидаю чтение текущей сетки.";gridMoves=gridVerified=0;gridResultVisible=gridSawAction=false;playingGrid=true;clearDiagnosticFrame();captureFrames=captureReads=captureDecisions=captureSent=captureCompleted=0;
-  gridPendingDecision=null;gridLearning=new GridOnlineLearning();
+  gridPendingDecision=null;gridPendingBoard=null;gridPendingSpecial=null;
+  GridOnlineLearning previousLearning=gridLearning;gridLearning=new GridOnlineLearning();
   String savedLearning=getSharedPreferences("grid-puzzle",MODE_PRIVATE).getString(gridKey()+".online-v1",null);
   if(savedLearning!=null)try{gridLearning=GridOnlineLearning.decode(savedLearning);}
   catch(IllegalArgumentException invalid){note="Статистика ходов повреждена: использую безопасную базовую стратегию";}
+  String currentScope=gridKey()+"|"+gridConfig.encode()+"|"+(palette==null?"":palette);
+  if(palette!=null&&currentScope.equals(gridAvoidScope))gridLearning.copyAvoidedMovesFrom(previousLearning);
+  else gridAvoidScope="";
   if(automatic())permit.grantSession(gate.epoch(),SystemClock.elapsedRealtime());
   compact(true);note="Проверяю устойчивую сетку "+gridConfig.rows+"×"+gridConfig.cols;update();long epoch=gate.epoch(),generation=boardReadGeneration;
   afterPanelLayout(()->{if(epoch!=gate.epoch()||generation!=boardReadGeneration||!playingGrid||focusPaused)return;if(!movePanelAway(boardRoi)){stop("Панель STOP закрывает сетку: безопасного места нет");return;}
@@ -753,8 +759,10 @@ public class PilotService extends AccessibilityService {
     if(gridPendingDecision!=null)incrementGridStat("unconfirmed");
     if(gridPendingDecision!=null&&gridSession.acknowledged()){
      gridLearning.recordNoResponse(gridPendingDecision);saveGridLearning();
+     if(gridSession.unchangedAtTimeout()&&gridPendingBoard!=null&&gridPendingSpecial!=null
+       &&gridLearning.avoidUnchangedMove(gridPendingBoard,new GridPuzzle(gridConfig.rows,gridConfig.cols,observedCells),gridPendingSpecial,observation.specialCellsMask(),gridPendingDecision))gridAvoidScope=gridPendingScope;
     }
-    gridPendingDecision=null;
+    gridPendingDecision=null;gridPendingBoard=null;gridPendingSpecial=null;
     note=(gridSession.acknowledged()?"Android завершил жест, но игра не подтвердила ход":"Нет подтверждения Android для жеста")+" · продолжаю наблюдение без ввода. Старт — повторная проверка";
     update();scheduleGrid(epoch);return;
    }
@@ -795,7 +803,7 @@ public class PilotService extends AccessibilityService {
    long sentBefore=captureSent;gridSession.sent(observation.cells(),SystemClock.elapsedRealtime(),action);
    sendObserved(x,y,ex,ey,ticket,()->{gridSession.acknowledge(SystemClock.elapsedRealtime());note="Жест доставлен · проверяю поле";update();scheduleGrid(epoch);},frameAt,action.mode==GridPuzzlePolicy.Mode.TAP_GROUP?55:160);
    if(captureSent>sentBefore){
-    gridPendingDecision=action;gridMoves++;gridSawAction=true;incrementGridStat("dispatched");
+    gridPendingDecision=action;gridPendingBoard=board;gridPendingSpecial=observation.specialCellsMask();gridPendingScope=gridKey()+"|"+gridConfig.encode()+"|"+gridPalette.encode();gridMoves++;gridSawAction=true;incrementGridStat("dispatched");
     note="Ход "+gridMoves+" · ожидается фишек "+action.expectedCleared+" · подтверждено "+gridVerified
       +" · обучение "+gridLearning.verifiedCount()+" / "+gridLearning.notConfirmedCount();
     update();
