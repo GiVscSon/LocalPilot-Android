@@ -50,6 +50,7 @@ public final class GridPuzzlePolicy {
   if(board==null||mode==null||minGroup<2||minGroup>100||targetType<0||targetRemaining<0)throw new IllegalArgumentException("puzzle policy context");
   if(special==null||special.length()>board.rows*board.cols)throw new IllegalArgumentException("special mask outside board");
   special=(java.util.BitSet)special.clone();
+  if(learning!=null)learning.prepareBoard(board,special);
   if(!partialAllowed&&!board.known())return null;
   // Second gate, independent of scene classification by GridPuzzleVision.
   if(partialAllowed){
@@ -76,7 +77,7 @@ public final class GridPuzzlePolicy {
     if(containsSpecial)continue;
     int[] group=Arrays.copyOf(queue,tail);Arrays.sort(group);
     Decision candidate=decision(mode,start,start,board.cols,cells,group,0,targetType,targetRemaining,special);
-    if(better(candidate,best,learning))best=candidate;
+    if((learning==null||!learning.avoids(board,special,candidate))&&better(candidate,best,learning))best=candidate;
    }
   }else if(mode==Mode.TRACE_LINE){
    // A single straight swipe can safely select horizontal, vertical or
@@ -95,7 +96,7 @@ public final class GridPuzzlePolicy {
      for(int i=0;i<length;i++){chain[i]=nr*board.cols+nc;if(special.get(chain[i]))containsSpecial=true;nr+=dr;nc+=dc;}
      if(containsSpecial)continue;
      Decision candidate=decision(mode,chain[0],chain[length-1],board.cols,cells,chain,0,targetType,targetRemaining,special);
-     if(better(candidate,best,learning))best=candidate;
+     if((learning==null||!learning.avoids(board,special,candidate))&&better(candidate,best,learning))best=candidate;
     }
    }
   }else{
@@ -116,7 +117,7 @@ public final class GridPuzzlePolicy {
       if(!containsSpecial)candidate=decision(mode,from,to,board.cols,cells,cleared,bonus,targetType,targetRemaining,special);
      }
      swap(cells,from,to);
-     if(candidate!=null&&better(candidate,best,learning))best=candidate;
+     if(candidate!=null&&(learning==null||!learning.avoids(board,special,candidate))&&better(candidate,best,learning))best=candidate;
     }
    }
   }

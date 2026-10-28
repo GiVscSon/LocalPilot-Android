@@ -49,12 +49,12 @@ public class PilotService extends AccessibilityService {
  private String learningSlot="default";
  private String modelSlot="default";
  private boolean playingGrid,gridResultVisible,gridSawAction; // Shared screenshot loop for grid and bubble puzzles.
- private final BubbleSession bubbleSession=new BubbleSession();
+ private final BubbleSession bubbleSession=new BubbleSession(7000,12000);
  private BubbleBoard bubbleGeometry;
  private GridPuzzleConfig gridConfig=new GridPuzzleConfig(6,6,2);
  private GridPuzzleVision.Palette gridPalette;
  private GridPuzzleGoal.Color gridGoal=GridPuzzleGoal.Color.ANY;
- private final GridPuzzleSession gridSession=new GridPuzzleSession(Build.VERSION.SDK_INT>=31?3000:4500);
+ private final GridPuzzleSession gridSession=new GridPuzzleSession(Build.VERSION.SDK_INT>=31?3000:4500,Build.VERSION.SDK_INT>=31?8000:9500);
  private long gridMoves,gridVerified;
  private GridOnlineLearning gridLearning=new GridOnlineLearning();
  private GridPuzzlePolicy.Decision gridPendingDecision;
@@ -743,12 +743,14 @@ public class PilotService extends AccessibilityService {
    // Keep individually recognized cells; the policy treats every unknown as
    // an obstacle.  Reject a wrong screen or overlay-covered ROI as a whole.
    if(!observation.usable()&&!partialGrid)java.util.Arrays.fill(observedCells,-1);
-   boolean alreadyPaused=gridSession.paused();
    GridPuzzleSession.Status status=partialGrid||gridSession.pending()
      ?gridSession.observePartial(gridConfig.rows,gridConfig.cols,observedCells,observation.specialCellsMask(),frameAt,SystemClock.elapsedRealtime())
      :gridSession.observe(gridConfig.rows,gridConfig.cols,observedCells,observation.specialCellsMask(),frameAt,SystemClock.elapsedRealtime());
    if(status==GridPuzzleSession.Status.PAUSED){
-    if(!alreadyPaused)incrementGridStat("unconfirmed");
+    if(gridSession.awaitingLateVerification()){
+     note="Ожидаю завершения анимации · наблюдение без ввода";update();scheduleGrid(epoch);return;
+    }
+    if(gridPendingDecision!=null)incrementGridStat("unconfirmed");
     if(gridPendingDecision!=null&&gridSession.acknowledged()){
      gridLearning.recordNoResponse(gridPendingDecision);saveGridLearning();
     }

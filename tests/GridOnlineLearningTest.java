@@ -42,6 +42,41 @@ public final class GridOnlineLearningTest {
     2,0,0,new BitSet(),true,restored);
   check(partialChoice!=null&&partial[partialChoice.fromRow*3+partialChoice.fromCol]>0
     &&partial[partialChoice.toRow*3+partialChoice.toCol]>0,"partial route only uses known cells");
+  GridPuzzle alternatives=new GridPuzzle(3,3,new int[]{1,1,3,4,5,6,2,2,7});
+  GridOnlineLearning avoiding=new GridOnlineLearning();BitSet none=new BitSet();
+  var preferred=GridPuzzlePolicy.chooseAdaptive(alternatives,GridPuzzlePolicy.Mode.TAP_GROUP,2,0,0,none,false,avoiding);
+  check(preferred!=null&&preferred.fromRow==0,"fixture chooses first of two equal groups");
+  String unchangedEncoding=avoiding.encode();
+  check(avoiding.avoidUnchangedMove(alternatives,alternatives,none,none,preferred),"stable unchanged full board may exclude an exact move");
+  check(avoiding.encode().equals(unchangedEncoding)&&avoiding.notConfirmedCount()==0,"transient exclusion neither changes checkpoint nor double-counts evidence");
+  var alternative=GridPuzzlePolicy.chooseAdaptive(alternatives,GridPuzzlePolicy.Mode.TAP_GROUP,2,0,0,none,false,avoiding);
+  check(alternative!=null&&alternative.fromRow==2,"planner chooses independent legal alternative on same board");
+  check(GridPuzzlePolicy.choose(alternatives,GridPuzzlePolicy.Mode.TAP_GROUP).fromRow==0,"legacy planning does not use opt-in exclusions");
+  GridOnlineLearning decoded=GridOnlineLearning.decode(avoiding.encode());
+  check(!decoded.avoids(alternatives,none,preferred),"process restart never restores unproven board identity");
+  int[] changed=alternatives.cells();changed[8]=8;GridPuzzle otherBoard=new GridPuzzle(3,3,changed);
+  check(!avoiding.avoidUnchangedMove(alternatives,otherBoard,none,none,preferred),"changed board is not no-response proof");
+  var afterChange=GridPuzzlePolicy.chooseAdaptive(otherBoard,GridPuzzlePolicy.Mode.TAP_GROUP,2,0,0,none,false,avoiding);
+  check(afterChange!=null&&afterChange.fromRow==0&&!avoiding.avoids(alternatives,none,preferred),"new board clears old coordinate exclusions");
+  check(avoiding.avoidUnchangedMove(alternatives,alternatives,none,none,preferred),"can record another current-board exclusion");
+  BitSet changedMask=new BitSet();changedMask.set(8);
+  check(!avoiding.avoidUnchangedMove(alternatives,alternatives,none,changedMask,preferred),"changed mask is not unchanged evidence");
+  GridPuzzlePolicy.chooseAdaptive(alternatives,GridPuzzlePolicy.Mode.TAP_GROUP,2,0,0,changedMask,false,avoiding);
+  check(!avoiding.avoids(alternatives,none,preferred),"new mask clears exclusions even when cell IDs match");
+  int[] hidden=alternatives.cells();hidden[8]=-1;GridPuzzle hiddenBoard=new GridPuzzle(3,3,hidden);
+  check(!avoiding.avoidUnchangedMove(hiddenBoard,hiddenBoard,none,none,preferred),"unknown cells can hide a response and cannot blacklist a move");
+  check(avoiding.avoidUnchangedMove(alternatives,alternatives,none,none,preferred),"current board can be recorded after clear");
+  GridOnlineLearning copied=GridOnlineLearning.decode(avoiding.encode());copied.copyAvoidedMovesFrom(avoiding);
+  check(copied.avoids(alternatives,none,preferred),"explicit same-scope RAM transfer preserves board exclusions");
+  avoiding.clearAvoidedMoves();check(!avoiding.avoids(alternatives,none,preferred),"explicit scope reset removes exclusions");
+  check(copied.avoids(alternatives,none,preferred),"clearing source does not clear independent RAM transfer");
+  int[] manyCells=new int[100];for(int i=0;i<100;i++)manyCells[i]=1+i/10;
+  GridPuzzle many=new GridPuzzle(10,10,manyCells);GridOnlineLearning bounded=new GridOnlineLearning();
+  for(int i=0;i<20;i++){
+   var next=GridPuzzlePolicy.chooseAdaptive(many,GridPuzzlePolicy.Mode.TAP_GROUP,2,0,0,none,false,bounded);
+   check(next!=null&&bounded.avoidUnchangedMove(many,many,none,none,next),"bounded exclusions keep independent legal alternatives available");
+  }
+  check(bounded.encode().equals(unchangedEncoding),"exclusion ring never leaks into persistent model");
   for(String invalid:new String[]{"","v0","v1;1,2","v1;NaN","v1;999999,0",
     saved.replace("v1","v2"),saved.replaceFirst("10,0","-1,0"),saved+";0,0"})rejected(invalid);
   System.out.println("Grid online learning: "+checks+" assertions PASS (symbolic only)");

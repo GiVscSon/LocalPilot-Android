@@ -143,6 +143,19 @@ public final class GridPartialVerifyTest {
   check(traceSession.observePartial(6,6,trace,new BitSet(),1100,1100)==GridPuzzleSession.Status.READY,"29 known cells become stable for observation");
   check(GridPuzzlePolicy.choosePartial(new GridPuzzle(6,6,trace),GridPuzzlePolicy.Mode.TRACE_LINE,3,0,0,new BitSet())!=null,"seven unknown cells do not block a known straight trace proposal");
 
+  GridPuzzleSession late=new GridPuzzleSession(1000,4000);
+  late.observe(6,6,complete,1000,1000);late.observe(6,6,complete,1100,1100);
+  late.sent(complete,1200,fullMove);late.acknowledge(1250);
+  check(late.observe(6,6,complete,2200,2200)==GridPuzzleSession.Status.PAUSED&&late.awaitingLateVerification(),"primary deadline pauses input");
+  late.observe(6,6,relevantFull,2300,2300);
+  check(late.observe(6,6,relevantFull,2400,2400)==GridPuzzleSession.Status.CHANGED&&!late.pending(),"two stable late frames confirm local response");
+  GridPuzzleSession expired=new GridPuzzleSession(1000,4000);
+  expired.observe(6,6,complete,1000,1000);expired.observe(6,6,complete,1100,1100);expired.sent(complete,1200,fullMove);expired.acknowledge(1250);
+  expired.observe(6,6,complete,2200,2200);expired.observe(6,6,relevantFull,5100,5100);
+  check(expired.observe(6,6,relevantFull,5200,5200)==GridPuzzleSession.Status.PAUSED&&expired.finalPaused(),"final deadline cannot be extended");
+  GridPuzzleSession focus=new GridPuzzleSession(1000,4000);
+  focus.observe(6,6,complete,1000,1000);focus.observe(6,6,complete,1100,1100);focus.sent(complete,1200,fullMove);focus.acknowledge(1250);focus.invalidateCandidate();
+  check(focus.observe(6,6,relevantFull,2200,2200)==GridPuzzleSession.Status.PAUSED&&focus.finalPaused(),"focus interruption revokes late recovery");
   GridPuzzleSession noResponse=new GridPuzzleSession();
   noResponse.observePartial(6,6,cells,new BitSet(),1000,1000);
   noResponse.observePartial(6,6,cells,new BitSet(),1100,1100);

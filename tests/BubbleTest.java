@@ -76,6 +76,59 @@ public final class BubbleTest {
   BubbleBoard reloaded=after(b,b.cells());s.observe(reloaded,3800,3800);s.observe(reloaded,4100,4100);
   check(s.pending()&&s.verified()==0,"a different loaded color without board impact is not success");
  }
+ private static BubbleSession latePending(BubbleBoard b,BubblePolicy.Shot shot){
+  BubbleSession s=new BubbleSession(1000,5000);s.observe(b,1000,1000);s.observe(b,1100,1100);s.sent(b,shot,1200);return s;
+ }
+ private static void lateVerification(){
+  BubbleBoard b=board(1);BubblePolicy.Shot shot=BubblePolicy.choose(b);BubbleBoard next=after(b,shot.expectedCells());
+  BubbleSession s=latePending(b,shot);s.acknowledge(1250);
+  s.observe(next,2100,2100);
+  check(s.observe(next,2200,2200)==BubbleSession.Status.PAUSED&&s.awaitingLateVerification()&&!s.finalPaused(),"primary expiry enters bounded visual-only pause");
+  check(s.verified()==0&&s.pending()&&s.acknowledged(),"soft expiry preserves one unresolved acknowledged shot");
+  s.observe(next,2300,2300);
+  check(s.observe(next,2300,2350)==BubbleSession.Status.PAUSED&&s.verified()==0,"duplicate late frame cannot verify");
+  s.observe(next,2400,2400);
+  check(s.observe(next,2500,2500)==BubbleSession.Status.VERIFIED&&s.verified()==1&&!s.pending()&&!s.awaitingLateVerification(),"two fresh late frames exactly matching prediction verify once");
+  check(s.observe(next,2600,2600)==BubbleSession.Status.READY&&s.verified()==1,"late result cannot be counted again");
+
+  s=latePending(b,shot);s.acknowledge(1250);s.observe(null,2200,2200);
+  int[] wrong=shot.expectedCells();wrong[2]=wrong[2]==3?4:3;BubbleBoard unrelated=after(b,wrong);
+  s.observe(unrelated,2300,2300);
+  check(s.observe(unrelated,2400,2400)==BubbleSession.Status.PAUSED&&s.lastWait()==BubbleSession.Reason.CELLS_MISMATCH,"unrelated late stable board remains paused");
+  BubbleBoard shifted=new BubbleBoard(b.width,b.height,b.cols,b.rows,b.x0,b.y0+6,b.step,b.launcherX,b.launcherY,2,shot.expectedCells());
+  s.observe(shifted,2500,2500);
+  check(s.observe(shifted,2600,2600)==BubbleSession.Status.PAUSED&&s.lastWait()==BubbleSession.Reason.GEOMETRY_MISMATCH,"late geometry changes cannot verify");
+  s.observe(next,2700,3101);
+  check(s.verified()==0&&s.lastWait()==BubbleSession.Reason.STALE,"late stale frame remains rejected");
+  s.observe(next,6100,6100);s.acknowledge(6150);
+  check(s.observe(next,6200,6200)==BubbleSession.Status.PAUSED&&s.finalPaused()&&!s.awaitingLateVerification(),"absolute final dispatch deadline wins over a matching frame and duplicate ACK");
+  String expired=s.report();s.observe(next,6300,6300);s.acknowledge(6400);
+  check(s.report().equals(expired)&&s.verified()==0,"final pause is immutable and cannot reopen");
+
+  s=latePending(b,shot);s.observe(next,2100,2100);
+  check(s.observe(next,2200,2200)==BubbleSession.Status.PAUSED&&s.finalPaused(),"missing Android ACK has no late recovery window");
+  s.acknowledge(2300);s.observe(next,2400,2400);s.observe(next,2500,2500);
+  check(!s.acknowledged()&&s.verified()==0&&s.finalPaused(),"late ACK cannot reopen unacknowledged expiry");
+
+  s=latePending(b,shot);s.acknowledge(2200);
+  check(!s.acknowledged()&&s.observe(next,2300,2300)==BubbleSession.Status.PAUSED&&s.finalPaused(),"late ACK cannot open recovery when no frame observed primary expiry");
+
+  s=latePending(b,shot);s.acknowledge(1250);s.observe(null,2200,2200);s.reset();
+  check(!s.pending()&&!s.paused()&&!s.awaitingLateVerification()&&!s.acknowledged()&&s.verified()==0,"STOP/reset clears late state and prediction");
+  s.acknowledge(2300);s.observe(next,2400,2400);s.observe(next,2500,2500);
+  check(s.verified()==0&&!s.pending(),"old completion and old prediction cannot verify after reset");
+  s=latePending(b,shot);s.acknowledge(1250);s.observe(null,2200,2200);s.invalidateCandidate();
+  check(s.finalPaused()&&!s.awaitingLateVerification()&&s.pending(),"context invalidation revokes an active late window without losing the pending shot");
+  s.observe(next,2300,2300);s.observe(next,2400,2400);
+  check(s.verified()==0&&s.report().contains("CONTEXT_INVALIDATED"),"old expected board cannot resume after context invalidation");
+  s=latePending(b,shot);s.acknowledge(1250);s.invalidateCandidate();
+  check(s.observe(null,2200,2200)==BubbleSession.Status.PAUSED&&s.finalPaused(),"context invalidation before primary prevents opening late recovery");
+  s=latePending(b,shot);s.acknowledge(1250);s.invalidateCandidate();s.observe(next,1600,1600);
+  check(s.observe(next,1700,1700)==BubbleSession.Status.VERIFIED,"legacy fresh ordinary verification before primary survives candidate invalidation");
+  for(long[] limits:new long[][]{{999,5000},{10001,11000},{2000,1999},{1000,15001},{-1,-1}}){
+   try{new BubbleSession(limits[0],limits[1]);throw new AssertionError("invalid response deadlines accepted");}catch(IllegalArgumentException expected){checks++;}
+  }
+ }
  private static void directShotGeometry(){
   var random=new java.util.Random(730);
   for(int scene=0;scene<24;scene++){
@@ -220,5 +273,5 @@ public final class BubbleTest {
    System.out.printf(java.util.Locale.ROOT,"Recorded bubble frame scale=%.2f count=%d x0=%.2f y0=%.2f step=%.2f; cloud JVM acquire=%.2fms cached-p50=%.2fms cached-max=%.2fms policy=%.2fms%n",scale,b.count(),b.x0/scale,b.y0/scale,b.step/scale,coldNs/1e6,elapsed[4]/1e6,elapsed[7]/1e6,policyNs/1e6);
   }
  }
- public static void main(String[] args)throws Exception{geometryAndPolicy();singleRemaining();directShotGeometry();session();diagnostics();perception();reversedStaggerFixture();if(args.length>0)recorded(Path.of(args[0]));System.out.println("Bubble board/policy/feedback: "+checks+" assertions PASS; no physical-device claim");}
+ public static void main(String[] args)throws Exception{geometryAndPolicy();singleRemaining();directShotGeometry();session();lateVerification();diagnostics();perception();reversedStaggerFixture();if(args.length>0)recorded(Path.of(args[0]));System.out.println("Bubble board/policy/feedback: "+checks+" assertions PASS; no physical-device claim");}
 }
