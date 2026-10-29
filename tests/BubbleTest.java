@@ -331,6 +331,33 @@ public final class BubbleTest {
   var again=BubbleVision.read(original::getRGB,320,640,0,0,320,640,0,0,0,0,geometry);
   check(again.usable()&&again.board().same(geometry),"rejected shapes and colours do not contaminate the next frame cache");
  }
+ private static void reacquisition(){
+  BufferedImage original=synthetic();var initial=BubbleVision.read(original::getRGB,320,640,0,0,320,640,0,0,0,0,null);
+  check(initial.usable(),"recovery fixture is acquired");var before=initial.board();
+  for(float[] transform:new float[][]{{1,6,14},{1.02f,2,0},{.98f,5,12}}){
+   var image=new BufferedImage(320,640,BufferedImage.TYPE_INT_RGB);var g=image.createGraphics();g.setColor(new java.awt.Color(COLORS[0]));g.fillRect(0,0,320,640);
+   g.translate(transform[1],transform[2]);g.scale(transform[0],transform[0]);g.drawImage(original,0,0,null);g.dispose();
+   var read=BubbleVision.read(image::getRGB,320,640,0,0,320,640,0,0,0,0,before);
+   check(read.usable(),"changed picture reacquires geometry "+Arrays.toString(transform)+": "+read.reason());
+   var b=read.board();check(b.count()==17&&b.loadedColor==1,"recovery preserves objects and loaded type");
+   check(Math.abs(b.launcherX-(160*transform[0]+transform[1]))<4&&Math.abs(b.launcherY-(600*transform[0]+transform[2]))<4,"recovery uses current launcher coordinates");
+   var session=new BubbleSession();session.observe(before,1000,1000);session.observe(before,1200,1200);
+   check(session.observe(b,1400,1400)==BubbleSession.Status.SEARCHING,"changed geometry revokes previous readiness");
+   check(session.observe(b,1600,1600)==BubbleSession.Status.READY&&session.verified()==0,"two fresh recovered frames open readiness without invented success");
+   BubblePolicy.Shot shot=BubblePolicy.choose(before);var pending=pending(before,shot);pending.acknowledge(1250);
+   var predictedAtNewGeometry=new BubbleBoard(b.width,b.height,b.cols,b.rows,b.x0,b.y0,b.step,b.launcherX,b.launcherY,2,shot.expectedCells(),b.shortRowParity);
+   pending.observe(predictedAtNewGeometry,1700,1700);pending.observe(predictedAtNewGeometry,1900,1900);
+   check(pending.pending()&&pending.verified()==0&&pending.lastWait()==BubbleSession.Reason.GEOMETRY_MISMATCH,"reacquisition cannot verify a pending shot on another geometry");
+  }
+  var covered=synthetic();var brush=covered.createGraphics();brush.setColor(java.awt.Color.BLACK);brush.fillRect(0,40,320,170);brush.dispose();
+  var lost=BubbleVision.read(covered::getRGB,320,640,0,0,320,640,0,0,0,0,before);
+  check(!lost.usable(),"opaque obstruction cannot authorize a recovered board");
+  var restored=BubbleVision.read(original::getRGB,320,640,0,0,320,640,0,0,0,0,before);
+  check(restored.usable()&&restored.board().same(before),"original objects recover after a temporary obstruction");
+  int[] reads={0};var special=synthetic();brush=special.createGraphics();brush.setColor(java.awt.Color.BLUE);brush.fillOval(3,57,46,46);brush.dispose();
+  var unknown=BubbleVision.read((x,y)->{reads[0]++;return special.getRGB(x,y);},320,640,0,0,320,640,0,0,0,0,before);
+  check(!unknown.usable()&&unknown.failure()==BubbleVision.Failure.UNRECOGNIZED&&reads[0]<12000,"unknown round class does not trigger full reacquisition or disappear");
+ }
  private static void recorded(Path path)throws Exception{
   BufferedImage original=ImageIO.read(path.toFile());if(original==null)throw new IllegalArgumentException("image");
   for(float scale:new float[]{.75f,1f,1.5f}){
@@ -352,5 +379,5 @@ public final class BubbleTest {
    System.out.printf(java.util.Locale.ROOT,"Recorded bubble frame scale=%.2f count=%d x0=%.2f y0=%.2f step=%.2f; cloud JVM acquire=%.2fms cached-p50=%.2fms cached-max=%.2fms policy=%.2fms%n",scale,b.count(),b.x0/scale,b.y0/scale,b.step/scale,coldNs/1e6,elapsed[4]/1e6,elapsed[7]/1e6,policyNs/1e6);
   }
  }
- public static void main(String[] args)throws Exception{geometryAndPolicy();singleRemaining();directShotGeometry();session();unsentKeepsProof();lateVerification();diagnostics();perception();objectsBeforeColor();texturedLauncher();reversedStaggerFixture();if(args.length>0)recorded(Path.of(args[0]));System.out.println("Bubble board/policy/feedback: "+checks+" assertions PASS; no physical-device claim");}
+ public static void main(String[] args)throws Exception{geometryAndPolicy();singleRemaining();directShotGeometry();session();unsentKeepsProof();lateVerification();diagnostics();perception();objectsBeforeColor();reacquisition();texturedLauncher();reversedStaggerFixture();if(args.length>0)recorded(Path.of(args[0]));System.out.println("Bubble board/policy/feedback: "+checks+" assertions PASS; no physical-device claim");}
 }

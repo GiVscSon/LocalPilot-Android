@@ -7,7 +7,11 @@ import java.util.List;
 /** Bounded reader for the four ordinary candy colors and staggered rows in Shipuchka. */
 public final class BubbleVision {
  public interface Pixels {int get(int x,int y);}
- public record Read(BubbleBoard board,String reason){public boolean usable(){return board!=null;}}
+ public enum Failure { NONE, GEOMETRY, UNRECOGNIZED }
+ public record Read(BubbleBoard board,String reason,Failure failure){
+  public Read(BubbleBoard board,String reason){this(board,reason,board==null?Failure.UNRECOGNIZED:Failure.NONE);}
+  public boolean usable(){return board!=null;}
+ }
  private static final class Scratch implements BubbleObjectVision.Pixels {
   final int[] rgb=new int[240*480],stamp=new int[240*480];
   final byte[] color=new byte[240*480];
@@ -29,6 +33,15 @@ public final class BubbleVision {
  private BubbleVision(){}
  public static Read read(Pixels pixels,int width,int height,int left,int top,int right,int bottom,
    int excludedLeft,int excludedTop,int excludedRight,int excludedBottom,BubbleBoard previous){
+  Read tracked=readGeometry(pixels,width,height,left,top,right,bottom,excludedLeft,excludedTop,excludedRight,excludedBottom,previous);
+  if(previous==null||tracked.usable()||tracked.failure()!=Failure.GEOMETRY)return tracked;
+  // At most one bounded acquisition per frame. This supplies observation only;
+  // BubbleSession still requires new stable frames and exact pending-shot geometry.
+  Read acquired=readGeometry(pixels,width,height,left,top,right,bottom,excludedLeft,excludedTop,excludedRight,excludedBottom,null);
+  return acquired.usable()?new Read(acquired.board(),"Геометрия восстановлена · "+acquired.reason()):new Read(null,tracked.reason()+" · повторный поиск: "+acquired.reason(),acquired.failure());
+ }
+ private static Read readGeometry(Pixels pixels,int width,int height,int left,int top,int right,int bottom,
+   int excludedLeft,int excludedTop,int excludedRight,int excludedBottom,BubbleBoard previous){
   if(pixels==null||width<1||height<1||width>16_384||height>16_384||left<0||top<0||right>width||bottom>height||right-left<80||bottom-top<120)
    throw new IllegalArgumentException("bubble image bounds");
   if(excludedLeft<right&&excludedRight>left&&excludedTop<bottom&&excludedBottom>top)
@@ -40,11 +53,11 @@ public final class BubbleVision {
   // Geometry reads original RGB lazily; hue classes never propose locations.
   float x0,y0,step,lx,ly;int cols,rows,loaded,shortParity;
   if(previous!=null){
-   if(previous.width!=rw||previous.height!=rh)return new Read(null,"Геометрия области изменилась");
+   if(previous.width!=rw||previous.height!=rh)return new Read(null,"Геометрия области изменилась",Failure.GEOMETRY);
    x0=previous.x0/scale;y0=previous.y0/scale;step=previous.step/scale;
    lx=previous.launcherX/scale;ly=previous.launcherY/scale;cols=previous.cols;rows=previous.rows;shortParity=previous.shortRowParity;
    loaded=circle(work,w,h,lx,ly,step*.5f,true);
-   if(loaded<=0)return new Read(null,"Ожидаю обычный шар в пушке");
+   if(loaded<=0)return new Read(null,"Ожидаю обычный шар в пушке",work.lastObjectKind==BubbleObjectVision.Kind.BALL?Failure.UNRECOGNIZED:Failure.GEOMETRY);
   }else{
    var guns=BubbleObjectVision.find(work,w,h,(int)(w*.42f),(int)(h*.68f),(int)(w*.58f),(int)(h*.98f),Math.max(3,w*.025f),w*.075f,true);
    BubbleObjectVision.Circle launcher=null;float score=Float.POSITIVE_INFINITY,second=Float.POSITIVE_INFINITY;
@@ -84,7 +97,7 @@ public final class BubbleVision {
    int occupied=0;
    for(int col=0;col<cols-(row%2==shortParity?1:0);col++){
     int type=circle(work,w,h,x0+(col+(row%2==shortParity?.5f:0f))*step,y0+row*step*.8660254f,step*.5f);
-    if(type<0)return new Read(null,"Пушка: "+ordinaryColorName(loaded)+" · "+(work.lastObjectKind==BubbleObjectVision.Kind.BALL?"круглый объект без класса":"неопределённый объект")+" R"+(row+1)+"C"+(col+1));
+    if(type<0)return new Read(null,"Пушка: "+ordinaryColorName(loaded)+" · "+(work.lastObjectKind==BubbleObjectVision.Kind.BALL?"круглый объект без класса":"неопределённый объект")+" R"+(row+1)+"C"+(col+1),work.lastObjectKind==BubbleObjectVision.Kind.BALL?Failure.UNRECOGNIZED:Failure.GEOMETRY);
     cells[row*cols+col]=type;if(type>0){occupied++;count++;}
    }
    emptyRows=occupied==0?emptyRows+1:0;
