@@ -131,6 +131,9 @@ public class PilotService extends AccessibilityService {
        :stoppedDiagnosticFrame!=null&&!stoppedDiagnosticFrame.isRecycled()
         &&stoppedDiagnosticFrameAt>=0&&now-stoppedDiagnosticFrameAt<=STOPPED_REPORT_FRAME_TTL_MS
            ?stoppedDiagnosticFrame:null;
+   if(source==null&&stoppedDiagnosticFrame!=null
+      &&now-stoppedDiagnosticFrameAt>STOPPED_REPORT_FRAME_TTL_MS)
+    clearStoppedReportFrame();
    return source==null?null:source.copy(Bitmap.Config.ARGB_8888,false);
   }catch(RuntimeException|OutOfMemoryError error){return null;}
  }
@@ -443,7 +446,19 @@ public class PilotService extends AccessibilityService {
   if(captureBusy){metrics.cancelled(StageMetrics.Stage.CAPTURE);captureBusy=false;pendingCapture=++captureCounter;}
   if(overlayDialog!=null){AlertDialog old=overlayDialog;overlayDialog=null;CaptureCleanup.run(old::dismiss);}
   if(preview!=null){AlertDialog old=preview;preview=null;CaptureCleanup.run(old::dismiss);}View oldPicker=picker;picker=null;removeOverlay(oldPicker);
-  handler.removeCallbacksAndMessages(null);note=reason;restoreConsentPanel();update();
+  handler.removeCallbacksAndMessages(null);
+  // Do not retain the previous game image after the user's brief manual
+  // reporting window. This cache cannot be used by CV or gesture dispatch.
+  if(stoppedDiagnosticFrame!=null){
+   long frameAt=stoppedDiagnosticFrameAt;
+   long remaining=Math.max(0,STOPPED_REPORT_FRAME_TTL_MS-
+       (SystemClock.elapsedRealtime()-frameAt));
+   handler.postDelayed(()->{
+    if(stoppedDiagnosticFrameAt==frameAt&&SystemClock.elapsedRealtime()-frameAt>=STOPPED_REPORT_FRAME_TTL_MS)
+     clearStoppedReportFrame();
+   },remaining+1000);
+  }
+  note=reason;restoreConsentPanel();update();
  }
  private void failStage(StageMetrics.Stage stage,String code,String message){metrics.failure(stage,code);stop(stage+" / "+code+": "+message);compact(false);}
  private String invalidReason(ActionGate.Ticket t){return invalidReason(t,false);}
