@@ -691,7 +691,7 @@ public class PilotService extends AccessibilityService {
     bubbleSession.acknowledge(SystemClock.elapsedRealtime());note="Android завершил жест · проверяю поле";update();scheduleGrid(epoch);
    },frameAt,220);
    if(captureSent>sentBefore){gridMoves++;gridSawAction=true;note=(shot.bounces==0?"Прямой выстрел ":"Один рикошет ")+gridMoves+" · ожидается удалений "+shot.removed+", падений "+shot.dropped;update();}
-   else if(playingGrid){bubbleSession.reset();scheduleGrid(epoch);}
+   else if(playingGrid){bubbleSession.cancelUnsent();scheduleGrid(epoch);}
   });
  }
  private String bubbleWaitMessage(BubbleSession.Reason reason){

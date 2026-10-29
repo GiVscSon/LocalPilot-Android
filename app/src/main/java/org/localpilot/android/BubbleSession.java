@@ -6,7 +6,7 @@ import java.util.Arrays;
 public final class BubbleSession {
  public enum Status { SEARCHING, READY, WAIT_RESPONSE, VERIFIED, PAUSED }
  /** Fixed-size metadata; reasons describe the branch actually taken, never a guessed game outcome. */
- public enum Reason { RESET, SENT, ANDROID_ACK, NULL_SCENE, STALE, BEFORE_ACK, SETTLING, UNSTABLE, GEOMETRY_MISMATCH, CELLS_MISMATCH, EXPIRED, READY, VERIFIED, CONTEXT_INVALIDATED }
+ public enum Reason { RESET, SENT, ANDROID_ACK, NULL_SCENE, STALE, BEFORE_ACK, SETTLING, UNSTABLE, GEOMETRY_MISMATCH, CELLS_MISMATCH, EXPIRED, READY, VERIFIED, CONTEXT_INVALIDATED, DISPATCH_NOT_SENT }
  private static final int VISION_REASON_LIMIT=120;
  private final long responseTimeoutMs,finalTimeoutMs;
  private boolean lateWaiting,lateRecoveryRevoked;
@@ -81,6 +81,16 @@ public final class BubbleSession {
    throw new IllegalStateException("fresh stable bubble board required");
   before=board;expected=shot.expectedCells();lateWaiting=lateRecoveryRevoked=false;sentAt=now;ackAt=-1;clearCandidate();status=Status.WAIT_RESPONSE;
   expectedCells=0;for(int color:expected)if(color>0)expectedCells++;reason=Reason.SENT;ages(lastFrame,now);mismatchedCells=-1;
+ }
+ /** Caller must prove Android dispatch was not accepted before cancelling this pending plan.
+  * Keep completed visual outcomes; only a new reset starts a new verification counter.
+  * No cached candidate survives: another shot requires two fresh stable observations.
+  */
+ public void cancelUnsent(){
+  if(!pending()||ackAt>=0)throw new IllegalStateException("unacknowledged unsent bubble plan required");
+  before=null;expected=null;sentAt=ackAt=-1;lateWaiting=lateRecoveryRevoked=false;clearCandidate();
+  expectedCells=mismatchedCells=-1;sentAge=ackAge=candidateAge=-1;
+  observed(Status.SEARCHING,Reason.DISPATCH_NOT_SENT);
  }
  public void acknowledge(long now){if(!pending()||paused())return;if(now<sentAt)throw new IllegalArgumentException("ACK before shot");if(now-sentAt>=responseTimeoutMs)return;if(ackAt<0){ackAt=now;clearCandidate();reason=Reason.ANDROID_ACK;ages(lastFrame,now);}}
  public String report(){
