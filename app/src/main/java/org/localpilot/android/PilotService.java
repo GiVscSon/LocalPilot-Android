@@ -78,7 +78,7 @@ public class PilotService extends AccessibilityService {
  private JumperPolicy.Action jumperPendingAction=JumperPolicy.Action.WAIT;private JumperState jumperState;private final JumperTracking jumperTracking=new JumperTracking();
  private int jumperResponseFailures;private boolean jumperResponsePaused;
  private JumperVision.ColorProfile jumperColorProfile;private JumperCalibrationOverlay jumperCalibrationOverlay;
- private int jumperDisplayWidth,jumperDisplayHeight;private JumperFrameGeometry jumperFrameGeometry;
+ private int jumperDisplayWidth,jumperDisplayHeight,jumperMirrorWidth,jumperMirrorHeight;private JumperFrameGeometry jumperFrameGeometry;
  private final Object jumperFrameLock=new Object();
  private final java.util.ArrayDeque<Bitmap> jumperQueuedFrames=new java.util.ArrayDeque<>();
  private Bitmap diagnosticFrame;private long diagnosticFrameAt=-1;
@@ -109,6 +109,8 @@ public class PilotService extends AccessibilityService {
     .append("\nprofile=").append(captureProfile).append(" selected_profile=").append(profileLabel()).append(" target=").append(target).append(" bound=").append(gate.armed())
     .append("\nvisual_roi=").append(visualBounds().toShortString()).append(" manual_roi=").append(manualVisualRoi)
     .append("\nbounds=").append(armedBounds.toShortString()).append(" display=").append(jumperDisplayWidth).append('x').append(jumperDisplayHeight)
+    .append(" mirror=").append(jumperMirrorWidth).append('x').append(jumperMirrorHeight)
+    .append(" smallest_width_dp=").append(getResources().getConfiguration().smallestScreenWidthDp)
     .append("\nplaying=").append(playingJumper||playingGrid).append(" capture_ready=").append(playingGrid||jumperCaptureReady).append(" busy=").append(busy)
     .append("\nstatus=").append(note).append("\nLAST_STOP=").append(lastStopReason).append("\nlast_gesture=").append(lastGestureContext).append('\n').append(captureCounters()).append('\n').append(captureTiming.report())
     .append("\nframe_age_ms=").append(diagnosticFrameAt<0?-1:Math.max(0,now-diagnosticFrameAt)).append('\n').append(diagnosticFrameGeometry)
@@ -918,11 +920,13 @@ public class PilotService extends AccessibilityService {
   if(error!=null){onCaptureStartupError(id,"Захват не запустился. Нажмите профиль игры для повторной попытки",error);return;}
   note="Ожидание разрешения захвата / готовности первого кадра…";update();watchCaptureStartup(id);
  },500);}
- public void onJumperCaptureReady(long id,int width,int height){Runnable ready=()->{
+ public void onJumperCaptureReady(long id,int width,int height){onJumperCaptureReady(id,width,height,0,0);}
+ public void onJumperCaptureReady(long id,int width,int height,int mirrorWidth,int mirrorHeight){Runnable ready=()->{
   if(!captureStartup.move(id,CaptureStartup.Stage.SERVICE,CaptureStartup.Stage.FIRST_FRAME,SystemClock.elapsedRealtime()))return;
   if(!playingJumper){stopService(new Intent(this,JumperCaptureService.class));return;}
   CrashDiagnostics.phase("CAPTURE_READY");
   jumperDisplayWidth=width;jumperDisplayHeight=height;
+  jumperMirrorWidth=mirrorWidth;jumperMirrorHeight=mirrorHeight;
   jumperConsentPending=true;jumperCaptureReady=true;jumperLastFrameMs=SystemClock.elapsedRealtime();
   arcadeCaptureReadyAt=jumperLastFrameMs;
 
