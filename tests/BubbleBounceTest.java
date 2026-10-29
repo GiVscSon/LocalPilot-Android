@@ -98,7 +98,7 @@ public final class BubbleBounceTest {
   brush.setColor(new java.awt.Color(rgb[loaded]));brush.fill(new java.awt.geom.Ellipse2D.Float(width*.5f-step*.46f,height*.88f-step*.46f,step*.92f,step*.92f));brush.dispose();return image;
  }
  private static void renderedFixture(){
-  for(int width:new int[]{320,480,672,1036})for(float aspect:new float[]{1.2f,1.3f,1.7f,2f}){
+  for(int width:new int[]{320,480,672,1036,1038})for(float aspect:new float[]{1.2f,1.3f,1479f/1038,1.7f,2f}){
    int height=Math.round(width*aspect);var image=fixtureImage(width,height);
    var observed=BubbleVision.read(image::getRGB,width,height,0,0,width,height,0,0,0,0,null);
    check(observed.usable(),"Native fixture geometry is recognizable width="+width+" aspect="+aspect+": "+observed.reason());

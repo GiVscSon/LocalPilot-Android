@@ -50,6 +50,24 @@ public final class BubbleTest {
   check(BubblePolicy.choose(wrong)==null,"unknown next color cannot justify a mismatched shot at the final candy");
   Arrays.fill(cells,0);check(BubblePolicy.choose(new BubbleBoard(320,640,6,12,32,80,50,160,600,1,cells))==null,"empty board never authorizes input");
  }
+ private static void unsentKeepsProof(){
+  BubbleBoard b=board(1);BubblePolicy.Shot shot=BubblePolicy.choose(b);BubbleBoard next=after(b,shot.expectedCells());
+  BubbleSession s=new BubbleSession();s.observe(b,1000,1000);s.observe(b,1200,1200);s.sent(b,shot,1200);s.acknowledge(1400);
+  s.observe(next,1800,1800);s.observe(next,2000,2000);
+  check(s.verified()==1,"setup has exact post-ACK visual proof");
+  BubblePolicy.Shot proposal=BubblePolicy.choose(next);check(proposal!=null,"next proposal exists");
+  s.sent(next,proposal,2000);
+  // Executor may reject after journal/fsync makes the source frame stale.
+  s.discardUnsent();
+  check(s.verified()==1&&!s.pending()&&!s.acknowledged(),"undispatched proposal preserves prior proof and clears only pending action");
+  try{s.sent(next,proposal,2050);throw new AssertionError("reused stale stable state");}catch(IllegalStateException expected){checks++;}
+  check(s.observe(next,2200,2200)==BubbleSession.Status.SEARCHING,"discard requires first new frame");
+  check(s.observe(next,2400,2400)==BubbleSession.Status.READY,"two new frames restore readiness");
+  s.sent(next,proposal,2400);s.acknowledge(2500);
+  try{s.discardUnsent();throw new AssertionError("discarded delivered shot");}catch(IllegalStateException expected){checks++;}
+  check(s.pending()&&s.acknowledged()&&s.verified()==1,"acknowledged proposal still requires visual verification");
+  s.reset();check(s.verified()==0&&!s.pending(),"explicit new session still resets totals");
+ }
  private static void session(){
   BubbleBoard b=board(1);BubblePolicy.Shot shot=BubblePolicy.choose(b);BubbleBoard next=after(b,shot.expectedCells());
   BubbleSession s=new BubbleSession();check(s.observe(b,1000,1000)==BubbleSession.Status.SEARCHING,"first frame is not enough");
@@ -273,5 +291,5 @@ public final class BubbleTest {
    System.out.printf(java.util.Locale.ROOT,"Recorded bubble frame scale=%.2f count=%d x0=%.2f y0=%.2f step=%.2f; cloud JVM acquire=%.2fms cached-p50=%.2fms cached-max=%.2fms policy=%.2fms%n",scale,b.count(),b.x0/scale,b.y0/scale,b.step/scale,coldNs/1e6,elapsed[4]/1e6,elapsed[7]/1e6,policyNs/1e6);
   }
  }
- public static void main(String[] args)throws Exception{geometryAndPolicy();singleRemaining();directShotGeometry();session();lateVerification();diagnostics();perception();reversedStaggerFixture();if(args.length>0)recorded(Path.of(args[0]));System.out.println("Bubble board/policy/feedback: "+checks+" assertions PASS; no physical-device claim");}
+ public static void main(String[] args)throws Exception{geometryAndPolicy();singleRemaining();directShotGeometry();session();unsentKeepsProof();lateVerification();diagnostics();perception();reversedStaggerFixture();if(args.length>0)recorded(Path.of(args[0]));System.out.println("Bubble board/policy/feedback: "+checks+" assertions PASS; no physical-device claim");}
 }
