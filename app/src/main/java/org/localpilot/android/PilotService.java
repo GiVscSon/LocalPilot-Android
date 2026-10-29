@@ -81,10 +81,30 @@ public class PilotService extends AccessibilityService {
  private int jumperDisplayWidth,jumperDisplayHeight,jumperMirrorWidth,jumperMirrorHeight;private JumperFrameGeometry jumperFrameGeometry;
  private final Object jumperFrameLock=new Object();
  private final java.util.ArrayDeque<Bitmap> jumperQueuedFrames=new java.util.ArrayDeque<>();
- private Bitmap diagnosticFrame;private long diagnosticFrameAt=-1;
+ private Bitmap diagnosticFrame,stoppedDiagnosticFrame;
+ private long diagnosticFrameAt=-1,stoppedDiagnosticFrameAt=-1;
+ private static final long STOPPED_REPORT_FRAME_TTL_MS=45_000;
  private String diagnosticFrameGeometry="No game frame retained",lastSessionReport="No recorded game session";
 
  private void clearDiagnosticFrame(){if(diagnosticFrame!=null&&!diagnosticFrame.isRecycled())diagnosticFrame.recycle();diagnosticFrame=null;diagnosticFrameAt=-1;diagnosticFrameGeometry="No game frame retained";}
+ /**
+  * Preserve the last trusted game-ROI crop for an EXPLICIT user report.
+  * This image is RAM-only, never offered to vision or ActionGate, and expires.
+  * Moving ownership avoids another bitmap allocation on a constrained tablet.
+  */
+ private void retainFrameForManualReport(){
+  long now=SystemClock.elapsedRealtime();
+  if(diagnosticFrame==null||diagnosticFrame.isRecycled()
+      ||diagnosticFrameAt<0||now-diagnosticFrameAt>5_000)return;
+  clearStoppedReportFrame();
+  stoppedDiagnosticFrame=diagnosticFrame;
+  stoppedDiagnosticFrameAt=diagnosticFrameAt;
+  diagnosticFrame=null;diagnosticFrameAt=-1;
+ }
+ private void clearStoppedReportFrame(){
+  if(stoppedDiagnosticFrame!=null&&!stoppedDiagnosticFrame.isRecycled())stoppedDiagnosticFrame.recycle();
+  stoppedDiagnosticFrame=null;stoppedDiagnosticFrameAt=-1;
+ }
  /** A single RAM-only crop, sampled at most once a second while the bound game is focused. */
  private void rememberDiagnosticFrame(Bitmap frame,long timestamp){
   long now=SystemClock.elapsedRealtime();
@@ -96,13 +116,24 @@ public class PilotService extends AccessibilityService {
    copy=Bitmap.createBitmap(g.right-g.left,g.bottom-g.top,Bitmap.Config.ARGB_8888);
    new Canvas(copy).drawBitmap(frame,new Rect(g.left,g.top,g.right,g.bottom),new Rect(0,0,copy.getWidth(),copy.getHeight()),null);
    if(diagnosticFrame!=null&&!diagnosticFrame.isRecycled())diagnosticFrame.recycle();
+   clearStoppedReportFrame();
    diagnosticFrame=copy;copy=null;diagnosticFrameAt=timestamp;
    diagnosticFrameGeometry="frame_elapsed_ms="+timestamp+" crop="+diagnosticFrame.getWidth()+"x"+diagnosticFrame.getHeight()
       +" screen_bounds="+armedBounds.toShortString()+" display="+jumperDisplayWidth+"x"+jumperDisplayHeight+" profile="+profileLabel();
   }catch(RuntimeException|OutOfMemoryError error){/* Reporting must not interrupt gameplay. */}
   finally{if(copy!=null&&!copy.isRecycled())copy.recycle();}
  }
- public Bitmap copyDiagnosticFrame(){try{return diagnosticFrame==null||diagnosticFrame.isRecycled()||SystemClock.elapsedRealtime()-diagnosticFrameAt>5000?null:diagnosticFrame.copy(Bitmap.Config.ARGB_8888,false);}catch(RuntimeException|OutOfMemoryError error){return null;}}
+ public Bitmap copyDiagnosticFrame(){
+  try{
+   long now=SystemClock.elapsedRealtime();
+   Bitmap source=diagnosticFrame!=null&&!diagnosticFrame.isRecycled()
+       &&diagnosticFrameAt>=0&&now-diagnosticFrameAt<=5_000?diagnosticFrame
+       :stoppedDiagnosticFrame!=null&&!stoppedDiagnosticFrame.isRecycled()
+        &&stoppedDiagnosticFrameAt>=0&&now-stoppedDiagnosticFrameAt<=STOPPED_REPORT_FRAME_TTL_MS
+           ?stoppedDiagnosticFrame:null;
+   return source==null?null:source.copy(Bitmap.Config.ARGB_8888,false);
+  }catch(RuntimeException|OutOfMemoryError error){return null;}
+ }
  private String diagnosticState(){
   long now=SystemClock.elapsedRealtime();
   StringBuilder out=new StringBuilder("LocalPilot game-session-v1\nelapsed_ms=").append(now)
@@ -384,7 +415,7 @@ public class PilotService extends AccessibilityService {
  private AccessibilityNodeInfo windowRoot(AccessibilityWindowInfo window){return Build.VERSION.SDK_INT>=33?window.getRoot(0):window.getRoot();}
  private AccessibilityNodeInfo appRoot(){for(AccessibilityWindowInfo w:getWindows())if(w.getType()==AccessibilityWindowInfo.TYPE_APPLICATION&&w.isFocused()){AccessibilityNodeInfo r=windowRoot(w);if(r!=null){if(r.getWindowId()==w.getId())return r;r.recycle();}}return null;}
  private boolean unlocked(){return ((PowerManager)getSystemService(POWER_SERVICE)).isInteractive()&&!((KeyguardManager)getSystemService(KEYGUARD_SERVICE)).isKeyguardLocked();}
- private void arm(){stop("Привязка");if(busy){note="Дождитесь завершения жеста";update();return;}AccessibilityNodeInfo r=appRoot();try{if(r==null||!unlocked()){note="Нет активного приложения";update();return;}target=String.valueOf(r.getPackageName());targetLabel=applicationLabel(target);targetIsBrowser=browserTarget();armedBounds=windowBounds(r);if(armedBounds.isEmpty()){note="Нет границ окна";update();return;}retainVisualScope(r);gate.arm(target,r.getWindowId(),armedBounds.width(),armedBounds.height());if(automatic())permit.grantSession(gate.epoch(),SystemClock.elapsedRealtime());note=automatic()?"Окно выбрано · нажмите Старт":"Только наблюдение";update();}finally{if(r!=null)r.recycle();}}
+ private void arm(){stop("Привязка");clearStoppedReportFrame();if(busy){note="Дождитесь завершения жеста";update();return;}AccessibilityNodeInfo r=appRoot();try{if(r==null||!unlocked()){note="Нет активного приложения";update();return;}target=String.valueOf(r.getPackageName());targetLabel=applicationLabel(target);targetIsBrowser=browserTarget();armedBounds=windowBounds(r);if(armedBounds.isEmpty()){note="Нет границ окна";update();return;}retainVisualScope(r);gate.arm(target,r.getWindowId(),armedBounds.width(),armedBounds.height());if(automatic())permit.grantSession(gate.epoch(),SystemClock.elapsedRealtime());note=automatic()?"Окно выбрано · нажмите Старт":"Только наблюдение";update();}finally{if(r!=null)r.recycle();}}
  private String applicationLabel(String packageName){try{return String.valueOf(getPackageManager().getApplicationLabel(getPackageManager().getApplicationInfo(packageName,0)));}catch(Exception e){return packageName;}}
  private void stop(String reason){
   boolean stoppedGame=playingJumper||playingGrid||playing2048||playingMini;
@@ -395,7 +426,9 @@ public class PilotService extends AccessibilityService {
   // Save measured physics before reset, including measurements made while no
   // gesture was needed. Stopping a session is not a new round loss.
   if(playingJumper&&jumperCaptureReady)CaptureCleanup.run(()->persistArcadeModel(false));
-  captureStartup.stop(SystemClock.elapsedRealtime());clearDiagnosticFrame();arcadeSceneGeneration++;
+  captureStartup.stop(SystemClock.elapsedRealtime());
+  if(stoppedGame)retainFrameForManualReport();
+  clearDiagnosticFrame();arcadeSceneGeneration++;
   playingGrid=false;gridSession.reset();gridPalette=null;gridPendingDecision=null;gridUnknownReasons="none";bubbleSession.reset();bubbleGeometry=null;
   arcadeLastUsable=null;arcadeController.reset();arcadeFeedback.reset();jumperFeedback.reset();arcadeState=null;arcadeBefore=null;arcadePending=null;arcadeAck=false;
   boolean stopJumper=playingJumper||jumperCaptureReady||jumperConsentPending;
