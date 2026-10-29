@@ -300,6 +300,32 @@ public final class BubbleTest {
   BufferedImage emptyGun=synthetic();var reserve=emptyGun.createGraphics();reserve.setColor(new java.awt.Color(COLORS[0]));reserve.fillRect(136,576,48,48);reserve.setColor(new java.awt.Color(COLORS[3]));reserve.fillOval(101,577,46,46);reserve.dispose();
   check(!BubbleVision.read(emptyGun::getRGB,320,640,0,0,320,640,0,0,0,0,null).usable(),"a spare ball near the gun cannot replace the missing loaded ball");
  }
+ private static void objectsBeforeColor(){
+  BufferedImage original=synthetic();var initial=BubbleVision.read(original::getRGB,320,640,0,0,320,640,0,0,0,0,null);
+  check(initial.usable(),"object fixture has stable initial geometry");BubbleBoard geometry=initial.board();
+  for(int color=1;color<=4;color++){
+   BufferedImage im=synthetic();var g=im.createGraphics();g.setColor(new java.awt.Color(COLORS[color]));g.fillOval(3,57,46,46);g.dispose();
+   var read=BubbleVision.read(im::getRGB,320,640,0,0,320,640,0,0,0,0,geometry);
+   check(read.usable()&&read.board().count()==17&&read.board().color(0)==color,"same object keeps occupancy when its colour attribute changes");
+  }
+  for(int color:new int[]{0x808080,0x918077,0x3040df,0x202020,0xffffff}){
+   BufferedImage im=synthetic();var g=im.createGraphics();g.setColor(new java.awt.Color(color));g.fillOval(3,57,46,46);g.dispose();
+   var read=BubbleVision.read(im::getRGB,320,640,0,0,320,640,0,0,0,0,geometry);
+   check(!read.usable()&&read.reason().contains("круглый объект без класса"),"unsupported round object remains occupied/unknown, never a cleared cell: "+Integer.toHexString(color)+" "+read.reason());
+  }
+  for(int shape=0;shape<3;shape++){
+   BufferedImage im=synthetic();var g=im.createGraphics();g.setColor(new java.awt.Color(COLORS[0]));g.fillRect(2,56,48,48);g.setColor(new java.awt.Color(COLORS[1]));
+   if(shape==0)g.fillRect(3,57,46,46);
+   else if(shape==1)g.fillPolygon(new int[]{26,50,2},new int[]{56,104,104},3);
+   else{g.fillRect(2,74,48,12);g.fillRect(20,56,12,48);}g.dispose();
+   check(!BubbleVision.read(im::getRGB,320,640,0,0,320,640,0,0,0,0,geometry).usable(),"a red non-round obstacle is not an ordinary red ball or empty slot: "+shape);
+  }
+  BufferedImage squareGun=synthetic();var g=squareGun.createGraphics();g.setColor(new java.awt.Color(COLORS[1]));g.fillRect(137,577,46,46);g.dispose();
+  check(!BubbleVision.read(squareGun::getRGB,320,640,0,0,320,640,0,0,0,0,null).usable(),"square in the gun position cannot acquire a launcher by colour");
+  check(!BubbleVision.read(squareGun::getRGB,320,640,0,0,320,640,0,0,0,0,geometry).usable(),"tracked gun must still have a circular boundary");
+  var again=BubbleVision.read(original::getRGB,320,640,0,0,320,640,0,0,0,0,geometry);
+  check(again.usable()&&again.board().same(geometry),"rejected shapes and colours do not contaminate the next frame cache");
+ }
  private static void recorded(Path path)throws Exception{
   BufferedImage original=ImageIO.read(path.toFile());if(original==null)throw new IllegalArgumentException("image");
   for(float scale:new float[]{.75f,1f,1.5f}){
@@ -321,5 +347,5 @@ public final class BubbleTest {
    System.out.printf(java.util.Locale.ROOT,"Recorded bubble frame scale=%.2f count=%d x0=%.2f y0=%.2f step=%.2f; cloud JVM acquire=%.2fms cached-p50=%.2fms cached-max=%.2fms policy=%.2fms%n",scale,b.count(),b.x0/scale,b.y0/scale,b.step/scale,coldNs/1e6,elapsed[4]/1e6,elapsed[7]/1e6,policyNs/1e6);
   }
  }
- public static void main(String[] args)throws Exception{geometryAndPolicy();singleRemaining();directShotGeometry();session();unsentKeepsProof();lateVerification();diagnostics();perception();texturedLauncher();reversedStaggerFixture();if(args.length>0)recorded(Path.of(args[0]));System.out.println("Bubble board/policy/feedback: "+checks+" assertions PASS; no physical-device claim");}
+ public static void main(String[] args)throws Exception{geometryAndPolicy();singleRemaining();directShotGeometry();session();unsentKeepsProof();lateVerification();diagnostics();perception();objectsBeforeColor();texturedLauncher();reversedStaggerFixture();if(args.length>0)recorded(Path.of(args[0]));System.out.println("Bubble board/policy/feedback: "+checks+" assertions PASS; no physical-device claim");}
 }

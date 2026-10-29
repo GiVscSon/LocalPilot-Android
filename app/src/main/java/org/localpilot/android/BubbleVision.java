@@ -8,18 +8,20 @@ import java.util.List;
 public final class BubbleVision {
  public interface Pixels {int get(int x,int y);}
  public record Read(BubbleBoard board,String reason){public boolean usable(){return board!=null;}}
- private static final class Scratch {
+ private static final class Scratch implements BubbleObjectVision.Pixels {
   final int[] rgb=new int[240*480],queue=new int[240*480],stamp=new int[240*480];
   final byte[] strong=new byte[240*480],color=new byte[240*480];
   final byte[] launcherDilated=new byte[240*480],launcherClosed=new byte[240*480];
   final boolean[] seen=new boolean[240*480];
   Pixels pixels;int sampleWidth,left,top,scale,generation;
+  BubbleObjectVision.Kind lastObjectKind=BubbleObjectVision.Kind.UNKNOWN;
   void begin(Pixels pixels,int sampleWidth,int left,int top,int scale){
    this.pixels=pixels;this.sampleWidth=sampleWidth;this.left=left;this.top=top;this.scale=scale;
    if(generation==Integer.MAX_VALUE){Arrays.fill(stamp,0);generation=1;}else generation++;
   }
   void sample(int at){if(stamp[at]==generation)return;int c=pixels.get(left+(at%sampleWidth)*scale,top+(at/sampleWidth)*scale);
    rgb[at]=c;color[at]=(byte)color(c,false);strong[at]=(byte)color(c,true);stamp[at]=generation;}
+  @Override public int get(int x,int y){int at=y*sampleWidth+x;sample(at);return rgb[at];}
  }
  private static final ThreadLocal<Scratch> WORK=ThreadLocal.withInitial(Scratch::new);
  private record Blob(int l,int t,int r,int b,int count,int color){
@@ -50,29 +52,28 @@ public final class BubbleVision {
    if(loaded<=0)return new Read(null,"Ожидаю обычный шар в пушке");
   }else{
    List<Blob> blobs=blobs(work,w,h);if(blobs==null)return new Read(null,"Слишком много цветовых объектов");
-   Blob launcher=null;float score=Float.POSITIVE_INFINITY,second=Float.POSITIVE_INFINITY;
+   Blob launcher=null;float launcherRadius=0,score=Float.POSITIVE_INFINITY,second=Float.POSITIVE_INFINITY;
    // This skin's ordinary loaded ball is centered. The reserve sits only
    // ~15% of the arena width to its left and must never replace a missing gun.
    for(int pass=0;pass<2&&launcher==null;pass++){
     List<Blob> candidates=pass==0?blobs:closedLauncherBlobs(work,w,h);
     if(candidates==null)return new Read(null,"Слишком много объектов в области пушки");
     for(Blob b:candidates)if(b.color<=4&&b.round()&&b.width()>w*.045f&&b.width()<w*.15f&&b.x()>w*.42f&&b.x()<w*.58f&&b.y()>h*.68f&&b.y()<h*.98f){
+     float radius=launcherObjectRadius(work,w,h,b);if(radius<=0)continue;
      float s=Math.abs(b.x()-w*.5f)/w+(h-b.y())/h*.2f;
-     if(s<score){second=score;score=s;launcher=b;}else second=Math.min(second,s);
+     if(s<score){second=score;score=s;launcher=b;launcherRadius=radius;}else second=Math.min(second,s);
     }
    }
    if(launcher==null||second-score<.035f)return new Read(null,"Не найдена отдельная пушка: включите её в область");
-   lx=launcher.x();ly=launcher.y();float diameter=(launcher.width()+launcher.height())*.5f;
-   loaded=circle(work,w,h,lx,ly,diameter*.47f,true);
+   lx=launcher.x();ly=launcher.y();float diameter=launcherRadius*2;
+   loaded=circle(work,w,h,lx,ly,diameter*.5f,true);
    if(loaded<=0)return new Read(null,"Бонус/неизвестный шар в пушке");
    List<Blob> anchors=new ArrayList<>();
    for(Blob b:blobs)if(b.color<=4&&b.round()&&b.y()<ly-diameter*3&&b.width()>diameter*.80f&&b.width()<diameter*1.18f
-     &&b.height()>diameter*.80f&&b.height()<diameter*1.18f)anchors.add(b);
+     &&b.height()>diameter*.80f&&b.height()<diameter*1.18f
+     &&BubbleObjectVision.inspect(work,w,h,b.x(),b.y(),(b.width()+b.height())*.25f).kind()==BubbleObjectVision.Kind.BALL)anchors.add(b);
    if(anchors.size()<3)return new Read(null,"Нужны хотя бы три различимых круглых шара в рядах");
-   int first=-1;
-   for(int y=0;y<ly-diameter*3;y++){int count=0;for(int x=0;x<w;x++)if(work.strong[y*w+x]>0)count++;
-    if(count>w*.12f){first=y;break;}}
-   if(first<0)return new Read(null,"Не найдена верхняя граница рядов");
+   int first=h;for(Blob b:anchors)first=Math.min(first,b.t);
    float best=Float.POSITIVE_INFINITY;float[] fit=null;
    for(int parity=0;parity<2;parity++)for(float d=diameter*.86f;d<=diameter*1.12f;d+=.25f){
     for(float oy=first+d*.30f;oy<first+d*.68f;oy+=.5f)for(float ox=d*.40f;ox<d*.90f;ox+=.5f){
@@ -99,7 +100,7 @@ public final class BubbleVision {
    int occupied=0;
    for(int col=0;col<cols-(row%2==shortParity?1:0);col++){
     int type=circle(work,w,h,x0+(col+(row%2==shortParity?.5f:0f))*step,y0+row*step*.8660254f,step*.5f);
-    if(type<0)return new Read(null,"Пушка распознана: "+ordinaryColorName(loaded)+" · неизвестная область R"+(row+1)+"C"+(col+1));
+    if(type<0)return new Read(null,"Пушка: "+ordinaryColorName(loaded)+" · "+(work.lastObjectKind==BubbleObjectVision.Kind.BALL?"круглый объект без класса":"неопределённый объект")+" R"+(row+1)+"C"+(col+1));
     cells[row*cols+col]=type;if(type>0){occupied++;count++;}
    }
    emptyRows=occupied==0?emptyRows+1:0;
@@ -128,8 +129,34 @@ public final class BubbleVision {
  private static int circle(Scratch s,int w,int h,float cx,float cy,float radius){
   return circle(s,w,h,cx,cy,radius,false);
  }
+ /** A colour component only proposes a location. The isolated loaded ball
+  * needs a mostly visible circular boundary in the original pixels. Allow a
+  * small radius correction because highlights truncate the proposal's box. */
+ private static float launcherObjectRadius(Scratch s,int w,int h,Blob b){
+  float seed=(b.width()+b.height())*.25f;
+  for(int i=0;i<3;i++){
+   float radius=seed*(1+i*.08f);
+   BubbleObjectVision.Probe object=BubbleObjectVision.inspect(s,w,h,b.x(),b.y(),radius);
+   if(object.kind()==BubbleObjectVision.Kind.BALL&&object.confidence()>=.65f)return radius;
+  }
+  return -1;
+ }
  private static int circle(Scratch s,int w,int h,float cx,float cy,float radius,boolean launcher){
-  if(cx-radius<0||cx+radius>=w||cy-radius<0||cy+radius>=h)return -1;
+  s.lastObjectKind=BubbleObjectVision.Kind.UNKNOWN;
+  if(radius<3||cx-radius<0||cx+radius>=w||cy-radius<0||cy+radius>=h)return -1;
+  // Locate an object before asking which ordinary candy colour it has.
+  // Candidate lattice positions alone are not evidence that a ball exists.
+  BubbleObjectVision.Probe object=BubbleObjectVision.inspect(s,w,h,cx,cy,radius);
+  s.lastObjectKind=object.kind();
+  if(object.kind()==BubbleObjectVision.Kind.UNKNOWN)return -1;
+  if(launcher&&object.kind()!=BubbleObjectVision.Kind.BALL)return -1;
+  if(!launcher){
+   if(object.kind()==BubbleObjectVision.Kind.EMPTY){
+    int center=s.get(Math.round(cx),Math.round(cy)),r=center>>16&255,g=center>>8&255,b=center&255;
+    // A neutral opaque card/blackout is not evidence of a cleared game board.
+    return Math.max(r,Math.max(g,b))<75||Math.min(r,Math.min(g,b))>235?-1:0;
+   }
+  }
   int a=0,b=0,c=0,d=0,total=0,unknown=0;
   for(int yy=-2;yy<=2;yy++)for(int xx=-2;xx<=2;xx++)if(xx*xx+yy*yy<=5){
    int x=Math.round(cx+xx*radius*.33f),y=Math.round(cy+yy*radius*.33f),i=y*w+x;s.sample(i);int type=s.color[i];
@@ -145,21 +172,9 @@ public final class BubbleVision {
   // The gun's independently acquired round contour can contain pale spiral
   // highlights. Keep stronger rejection of competing foreground colours there.
   if(best>=total*(launcher?.35f:.57f)&&known-best<=total*(launcher?.09f:.18f))return best==a?1:best==b?2:best==c?3:4;
-  // Broad cloud gradients can span a larger RGB range than a candy. Only
-  // recognized foreground colors or a compact radial boundary establish an
-  // object here; RGB range alone must not fabricate an unknown bubble.
-  if(known>total*.12f)return -1;
-  // Unknown compact, saturated objects must not be treated as clear sky.
-  int contrast=0,samples=0;
-  for(int i=0;i<8;i++){
-   double angle=i*Math.PI/4;int x=Math.max(0,Math.min(w-1,Math.round(cx+(float)Math.cos(angle)*radius*1.18f)));
-   int y=Math.max(0,Math.min(h-1,Math.round(cy+(float)Math.sin(angle)*radius*1.18f))),at=y*w+x;
-   s.sample(at);
-   if(s.color[at]>0)continue;samples++;int rgb=s.rgb[at];
-   int dr=(center>>16&255)-(rgb>>16&255),dg=(center>>8&255)-(rgb>>8&255),db=(center&255)-(rgb&255);
-   if(dr*dr+dg*dg+db*db>75*75)contrast++;
-  }
-  return samples>=4&&contrast>=samples*.75f?-1:0;
+  // A geometrically present ball without an ordinary class is occupied but
+  // unknown. Neither a new skin nor a faded symbol can become empty space.
+  return -1;
  }
  private static List<Blob> blobs(Scratch s,int w,int h){
   return blobs(s,w,h,s.strong);
