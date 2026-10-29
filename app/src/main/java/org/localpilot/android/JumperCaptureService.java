@@ -92,7 +92,7 @@ public final class JumperCaptureService extends Service {
             projection.registerCallback(projectionCallback, worker);
             createDisplay();
             PilotService pilot = PilotService.instance;
-            if (pilot != null) pilot.onJumperCaptureReady(session,screenWidth,screenHeight);
+            if (pilot != null) pilot.onJumperCaptureReady(session,screenWidth,screenHeight,width,height);
             // Publish readiness before the worker can hand over the first frame.
             reader.setOnImageAvailableListener(this::onImage, worker);
             worker.post(() -> { ImageReader current=reader; if(!closing&&current!=null)onImage(current); });
