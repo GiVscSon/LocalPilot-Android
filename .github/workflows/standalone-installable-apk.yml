@@ -1,0 +1,134 @@
+name: Publish conflict-free LocalPilot Standalone APK
+on:
+  push:
+    branches: ['install/standalone-0.7.34-20261029']
+
+permissions:
+  contents: write
+
+concurrency:
+  group: localpilot-standalone-install1029
+  cancel-in-progress: false
+
+jobs:
+  signed-standalone:
+    name: verify, install alongside old APK, publish
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      GH_TOKEN: ${{ github.token }}
+      STANDALONE_PACKAGE: org.localpilot.android.dev.install1029
+      PREVIOUS_PACKAGE: org.localpilot.android.dev
+      TAG: v0.7.34-dev-install1029
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Install official Android SDK packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-35' 'build-tools;35.0.0'
+      - name: Fail-closed release tooling checks
+        run: python3 -m unittest discover -s tests -p test_release_tools.py -v
+      - name: Run pure Java regressions under JDK 17 contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          java tests/Verify.java tests/legacy_parity.txt
+          java tests/GridVerify.java
+          java tests/CalibrationVerify.java
+          java tests/CaptureTimingVerify.java
+          java tests/CaptureMatrixVerify.java
+          java tests/PanelDockingVerify.java
+          java tests/BubbleVerify.java
+          java tests/LearningVerify.java
+          java tests/ProcessExitVerify.java
+          java tests/AuditVerify.java
+          java tests/CaptureCleanupVerify.java
+          java tests/RuntimeVerify.java
+          java tests/Upgrade726Verify.java
+          java tests/Upgrade727Verify.java
+          java tests/ResultVerify.java
+          java tests/UniversalVerify.java
+          java tests/ControllerVerify.java
+          java tests/SystemVerify.java
+          java tests/RlVerify.java
+      - name: Build complete debug APK, verify package and signer, and package
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 build_debug.py --gradle gradle
+          python3 tools/package_release.py
+          mkdir -p dist
+          cp app/build/outputs/apk/debug/app-debug.apk dist/LocalPilot_Standalone_0.7.34.apk
+          sha256sum dist/LocalPilot_Standalone_0.7.34.apk > dist/SHA256SUMS.txt
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs dist/LocalPilot_Standalone_0.7.34.apk
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging dist/LocalPilot_Standalone_0.7.34.apk | grep "^package: name='$STANDALONE_PACKAGE' versionCode='50' versionName='0.7.34-dev-install1029'"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: LocalPilot-Standalone-${{ github.sha }}
+          path: |
+            dist/LocalPilot_Standalone_0.7.34.apk
+            dist/SHA256SUMS.txt
+          if-no-files-found: error
+      - name: Obtain previous signed Dev APK for a real side-by-side installer test
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p previous
+          gh release download v0.7.34-dev.1 --pattern '*.apk' --dir previous --repo "$GITHUB_REPOSITORY"
+          OLD=""
+          for candidate in previous/*.apk; do
+            if "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$candidate" | grep -q "^package: name='$PREVIOUS_PACKAGE' "; then
+              OLD="$candidate"
+              break
+            fi
+          done
+          test -n "$OLD"
+          cp "$OLD" previous/LocalPilot_Previous_Dev.apk
+      - name: Enable hosted KVM
+        run: |
+          test -c /dev/kvm
+          sudo chmod 666 /dev/kvm
+      - name: Confirm BOTH packages install and Standalone launches on Android 15
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: default
+          profile: pixel_2
+          disable-animations: true
+          emulator-boot-timeout: 300
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
+          script: |
+            set -eu
+            adb install previous/LocalPilot_Previous_Dev.apk
+            adb install dist/LocalPilot_Standalone_0.7.34.apk
+            adb shell pm path "$PREVIOUS_PACKAGE" | grep -q 'package:'
+            adb shell pm path "$STANDALONE_PACKAGE" | grep -q 'package:'
+            adb shell am start -W -n "$STANDALONE_PACKAGE/org.localpilot.android.MainActivity"
+            adb shell pidof "$STANDALONE_PACKAGE"
+            echo "PASS: old and new apps coexist; Standalone launches and preserves old installation"
+      - name: Publish directly-installable APK as an isolated prerelease
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "::error::Standalone release already exists; not overwriting published APK or signer"
+            exit 1
+          fi
+          gh release create "$TAG" \
+            dist/LocalPilot_Standalone_0.7.34.apk \
+            dist/SHA256SUMS.txt \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "LocalPilot Android 0.7.34 Standalone (parallel install)" \
+            --notes-file docs/STANDALONE_INSTALL_2026-10-29.ru.md \
+            --prerelease
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json tagName,assets,url

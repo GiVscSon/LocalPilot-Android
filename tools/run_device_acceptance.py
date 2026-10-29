@@ -5,6 +5,10 @@ import subprocess
 import sys
 import time
 
+from release_common import configuration
+
+PACKAGE = configuration(Path(__file__).resolve().parents[1])['package']
+
 OUT = Path('device-evidence')
 
 
@@ -40,7 +44,7 @@ def main():
         command(['adb', 'shell', 'settings', 'put', 'secure', 'accessibility_enabled', '0'])
         with (OUT / 'instrumentation.txt').open('w', encoding='utf-8') as log:
             with subprocess.Popen(['adb', 'shell', 'am', 'instrument', '-w',
-                                   'org.localpilot.android.dev.test/org.localpilot.android.PilotUiInstrumentation'],
+                                   PACKAGE + '.test/org.localpilot.android.PilotUiInstrumentation'],
                                   stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT) as process:
                 try:
                     deadline=time.monotonic()+20
@@ -51,7 +55,7 @@ def main():
                             raise RuntimeError('Instrumentation did not attach UiAutomation\n'+(OUT/'instrumentation.txt').read_text()[-2500:])
                         time.sleep(.2)
                     command(['adb', 'shell', 'settings', 'put', 'secure', 'enabled_accessibility_services',
-                             'org.localpilot.android.dev/org.localpilot.android.PilotService'])
+                             PACKAGE + '/org.localpilot.android.PilotService'])
                     command(['adb', 'shell', 'settings', 'put', 'secure', 'accessibility_enabled', '1'])
                     process.wait(timeout=300)
                     if process.returncode:raise RuntimeError('Instrumentation process failed\n'+(OUT/'instrumentation.txt').read_text()[-2500:])
