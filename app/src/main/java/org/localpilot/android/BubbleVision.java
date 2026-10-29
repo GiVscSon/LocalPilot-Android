@@ -11,6 +11,7 @@ public final class BubbleVision {
  private static final class Scratch {
   final int[] rgb=new int[240*480],queue=new int[240*480],stamp=new int[240*480];
   final byte[] strong=new byte[240*480],color=new byte[240*480];
+  final byte[] launcherDilated=new byte[240*480],launcherClosed=new byte[240*480];
   final boolean[] seen=new boolean[240*480];
   Pixels pixels;int sampleWidth,left,top,scale,generation;
   void begin(Pixels pixels,int sampleWidth,int left,int top,int scale){
@@ -45,20 +46,24 @@ public final class BubbleVision {
    if(previous.width!=rw||previous.height!=rh)return new Read(null,"Геометрия области изменилась");
    x0=previous.x0/scale;y0=previous.y0/scale;step=previous.step/scale;
    lx=previous.launcherX/scale;ly=previous.launcherY/scale;cols=previous.cols;rows=previous.rows;shortParity=previous.shortRowParity;
-   loaded=circle(work,w,h,lx,ly,step*.5f);
+   loaded=circle(work,w,h,lx,ly,step*.5f,true);
    if(loaded<=0)return new Read(null,"Ожидаю обычный шар в пушке");
   }else{
    List<Blob> blobs=blobs(work,w,h);if(blobs==null)return new Read(null,"Слишком много цветовых объектов");
    Blob launcher=null;float score=Float.POSITIVE_INFINITY,second=Float.POSITIVE_INFINITY;
    // This skin's ordinary loaded ball is centered. The reserve sits only
    // ~15% of the arena width to its left and must never replace a missing gun.
-   for(Blob b:blobs)if(b.color<=4&&b.round()&&b.width()>w*.045f&&b.width()<w*.15f&&b.x()>w*.42f&&b.x()<w*.58f&&b.y()>h*.68f&&b.y()<h*.98f){
-    float s=Math.abs(b.x()-w*.5f)/w+(h-b.y())/h*.2f;
-    if(s<score){second=score;score=s;launcher=b;}else second=Math.min(second,s);
+   for(int pass=0;pass<2&&launcher==null;pass++){
+    List<Blob> candidates=pass==0?blobs:closedLauncherBlobs(work,w,h);
+    if(candidates==null)return new Read(null,"Слишком много объектов в области пушки");
+    for(Blob b:candidates)if(b.color<=4&&b.round()&&b.width()>w*.045f&&b.width()<w*.15f&&b.x()>w*.42f&&b.x()<w*.58f&&b.y()>h*.68f&&b.y()<h*.98f){
+     float s=Math.abs(b.x()-w*.5f)/w+(h-b.y())/h*.2f;
+     if(s<score){second=score;score=s;launcher=b;}else second=Math.min(second,s);
+    }
    }
    if(launcher==null||second-score<.035f)return new Read(null,"Не найдена отдельная пушка: включите её в область");
    lx=launcher.x();ly=launcher.y();float diameter=(launcher.width()+launcher.height())*.5f;
-   loaded=circle(work,w,h,lx,ly,diameter*.47f);
+   loaded=circle(work,w,h,lx,ly,diameter*.47f,true);
    if(loaded<=0)return new Read(null,"Бонус/неизвестный шар в пушке");
    List<Blob> anchors=new ArrayList<>();
    for(Blob b:blobs)if(b.color<=4&&b.round()&&b.y()<ly-diameter*3&&b.width()>diameter*.80f&&b.width()<diameter*1.18f
@@ -94,7 +99,7 @@ public final class BubbleVision {
    int occupied=0;
    for(int col=0;col<cols-(row%2==shortParity?1:0);col++){
     int type=circle(work,w,h,x0+(col+(row%2==shortParity?.5f:0f))*step,y0+row*step*.8660254f,step*.5f);
-    if(type<0)return new Read(null,"Анимация, бонус или неразличимый шар в ряду "+(row+1));
+    if(type<0)return new Read(null,"Пушка распознана: "+ordinaryColorName(loaded)+" · неизвестная область R"+(row+1)+"C"+(col+1));
     cells[row*cols+col]=type;if(type>0){occupied++;count++;}
    }
    emptyRows=occupied==0?emptyRows+1:0;
@@ -117,7 +122,13 @@ public final class BubbleVision {
   if(hue<14||hue>342)return 1;if(hue<38)return 2;if(hue<72)return 3;if(hue>=75&&hue<155)return 4;
   if(hue>220&&hue<335&&d/(float)hi>.5f)return 5;return 0;
  }
+ private static String ordinaryColorName(int color){
+  return switch(color){case 1->"красный";case 2->"оранжевый";case 3->"жёлтый";case 4->"зелёный";default->"неизвестный";};
+ }
  private static int circle(Scratch s,int w,int h,float cx,float cy,float radius){
+  return circle(s,w,h,cx,cy,radius,false);
+ }
+ private static int circle(Scratch s,int w,int h,float cx,float cy,float radius,boolean launcher){
   if(cx-radius<0||cx+radius>=w||cy-radius<0||cy+radius>=h)return -1;
   int a=0,b=0,c=0,d=0,total=0,unknown=0;
   for(int yy=-2;yy<=2;yy++)for(int xx=-2;xx<=2;xx++)if(xx*xx+yy*yy<=5){
@@ -131,7 +142,9 @@ public final class BubbleVision {
   // The observed ordinary candy centers are chromatic. A dark bomb or a
   // white special symbol cannot inherit the surrounding ring's normal color.
   if(Math.max(cr,Math.max(cg,cb))<75||Math.min(cr,Math.min(cg,cb))>235)return -1;
-  if(best>=total*.57f&&known-best<=total*.18f)return best==a?1:best==b?2:best==c?3:4;
+  // The gun's independently acquired round contour can contain pale spiral
+  // highlights. Keep stronger rejection of competing foreground colours there.
+  if(best>=total*(launcher?.35f:.57f)&&known-best<=total*(launcher?.09f:.18f))return best==a?1:best==b?2:best==c?3:4;
   // Broad cloud gradients can span a larger RGB range than a candy. Only
   // recognized foreground colors or a compact radial boundary establish an
   // object here; RGB range alone must not fabricate an unknown bubble.
@@ -149,14 +162,39 @@ public final class BubbleVision {
   return samples>=4&&contrast>=samples*.75f?-1:0;
  }
  private static List<Blob> blobs(Scratch s,int w,int h){
+  return blobs(s,w,h,s.strong);
+ }
+ /** Join one-sample highlights only in the bottom-centre launcher search area.
+  * Each colour closes independently. Shape candidates never replace original
+  * pixel probes: white/dark centres, mixed colours and missing guns still fail. */
+ private static List<Blob> closedLauncherBlobs(Scratch s,int w,int h){
+  Arrays.fill(s.launcherDilated,0,w*h,(byte)0);Arrays.fill(s.launcherClosed,0,w*h,(byte)0);
+  int left=Math.max(2,(int)(w*.34f)),right=Math.min(w-2,(int)(w*.66f)+1);
+  int top=Math.max(2,(int)(h*.64f)),bottom=Math.min(h-2,(int)(h*.99f)+1);
+  for(int y=top-1;y<=bottom;y++)for(int x=left-1;x<=right;x++){
+   int bits=0;
+   for(int yy=y-1;yy<=y+1;yy++)for(int xx=x-1;xx<=x+1;xx++){
+    int c=s.strong[yy*w+xx];if(c>=1&&c<=4)bits|=1<<(c-1);
+   }
+   s.launcherDilated[y*w+x]=(byte)bits;
+  }
+  for(int y=top;y<bottom;y++)for(int x=left;x<right;x++){
+   int bits=15;
+   for(int yy=y-1;yy<=y+1;yy++)for(int xx=x-1;xx<=x+1;xx++)bits&=s.launcherDilated[yy*w+xx];
+   // Overlapping colour closures are ambiguous, not a new ordinary candy.
+   if(Integer.bitCount(bits)==1)s.launcherClosed[y*w+x]=(byte)(Integer.numberOfTrailingZeros(bits)+1);
+  }
+  return blobs(s,w,h,s.launcherClosed);
+ }
+ private static List<Blob> blobs(Scratch s,int w,int h,byte[] colors){
   Arrays.fill(s.seen,0,w*h,false);List<Blob> out=new ArrayList<>();
   for(int start=0;start<w*h;start++){
-   int color=s.strong[start];if(color==0||s.seen[start])continue;
+   int color=colors[start];if(color==0||s.seen[start])continue;
    int head=0,tail=1,l=start%w,r=l,t=start/w,b=t;s.queue[0]=start;s.seen[start]=true;
    while(head<tail){int at=s.queue[head++],x=at%w,y=at/w;l=Math.min(l,x);r=Math.max(r,x);t=Math.min(t,y);b=Math.max(b,y);
     for(int direction=0;direction<4;direction++){int nx=x+(direction==0?-1:direction==1?1:0),ny=y+(direction==2?-1:direction==3?1:0);
      if(nx<0||nx>=w||ny<0||ny>=h)continue;int next=ny*w+nx;
-     if(!s.seen[next]&&s.strong[next]==color){s.seen[next]=true;s.queue[tail++]=next;}}
+     if(!s.seen[next]&&colors[next]==color){s.seen[next]=true;s.queue[tail++]=next;}}
    }
    if(tail>=12){out.add(new Blob(l,t,r,b,tail,color));if(out.size()>512)return null;}
   }

@@ -240,6 +240,36 @@ public final class BubbleTest {
   check(!BubbleVision.read(ambiguous::getRGB,320,640,0,0,320,640,0,0,0,0,null).usable(),"one observed row phase cannot infer alternating lattice");
   System.out.println("Reversed stagger fixture: "+read.reason());
  }
+ private static void texturedLauncher(){
+  for(float scale:new float[]{.75f,1f,1.5f}){
+   BufferedImage original=synthetic();var brush=original.createGraphics();
+   brush.setColor(new java.awt.Color(COLORS[4]));brush.fillOval(137,577,46,46);
+   brush.setColor(new java.awt.Color(0xe8f5e0));brush.setStroke(new java.awt.BasicStroke(2f));
+   var spiral=new java.awt.geom.Path2D.Float();
+   for(int i=0;i<=180;i++){
+    double angle=i*Math.PI/30,radius=3+i*.10;
+    float x=160+(float)Math.cos(angle)*(float)radius,y=600+(float)Math.sin(angle)*(float)radius;
+    if(i==0)spiral.moveTo(x,y);else spiral.lineTo(x,y);
+   }
+   brush.draw(spiral);brush.dispose();
+   BufferedImage im=new BufferedImage(Math.round(320*scale),Math.round(640*scale),BufferedImage.TYPE_INT_RGB);
+   var g=im.createGraphics();g.setRenderingHint(RenderingHints.KEY_INTERPOLATION,RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+   g.drawImage(original,0,0,im.getWidth(),im.getHeight(),null);g.dispose();
+   var seen=BubbleVision.read(im::getRGB,im.getWidth(),im.getHeight(),0,0,im.getWidth(),im.getHeight(),0,0,0,0,null);
+   check(seen.usable()&&seen.board().loadedColor==4,"pale spiral does not erase the bottom-centre green launcher at scale "+scale+": "+seen.reason());
+   var cached=BubbleVision.read(im::getRGB,im.getWidth(),im.getHeight(),0,0,im.getWidth(),im.getHeight(),0,0,0,0,seen.board());
+   check(cached.usable()&&cached.board().same(seen.board()),"textured launcher keeps the original-pixel cached read");
+   for(int special:new int[]{0x202020,0xffffff}){
+    var symbol=new BufferedImage(im.getWidth(),im.getHeight(),BufferedImage.TYPE_INT_RGB);var ink=symbol.createGraphics();
+    ink.drawImage(im,0,0,null);ink.setColor(new java.awt.Color(special));
+    ink.fillOval(Math.round(153*scale),Math.round(593*scale),Math.round(14*scale),Math.round(14*scale));ink.dispose();
+    check(!BubbleVision.read(symbol::getRGB,symbol.getWidth(),symbol.getHeight(),0,0,symbol.getWidth(),symbol.getHeight(),0,0,0,0,null).usable(),"white/dark centre symbol cannot become a textured ordinary gun");
+   }
+   g=im.createGraphics();g.setColor(new java.awt.Color(COLORS[0]));g.fillRect(Math.round(134*scale),Math.round(574*scale),Math.round(52*scale),Math.round(52*scale));g.dispose();
+   check(!BubbleVision.read(im::getRGB,im.getWidth(),im.getHeight(),0,0,im.getWidth(),im.getHeight(),0,0,0,0,null).usable(),"closing cannot replace a missing launcher with the spare or scenery");
+   check(!BubbleVision.read(im::getRGB,im.getWidth(),im.getHeight(),0,0,im.getWidth(),im.getHeight(),0,0,0,0,seen.board()).usable(),"cached highlighted launcher also disappears when its original pixels disappear");
+  }
+ }
  private static void perception(){
   BufferedImage im=synthetic();var r=BubbleVision.read(im::getRGB,320,640,0,0,320,640,0,0,0,0,null);
   check(r.usable(),"ordinary synthetic field: "+r.reason());check(r.board().count()==17&&r.board().loadedColor==1,"reserve and bonus do not become launched bubble");
@@ -291,5 +321,5 @@ public final class BubbleTest {
    System.out.printf(java.util.Locale.ROOT,"Recorded bubble frame scale=%.2f count=%d x0=%.2f y0=%.2f step=%.2f; cloud JVM acquire=%.2fms cached-p50=%.2fms cached-max=%.2fms policy=%.2fms%n",scale,b.count(),b.x0/scale,b.y0/scale,b.step/scale,coldNs/1e6,elapsed[4]/1e6,elapsed[7]/1e6,policyNs/1e6);
   }
  }
- public static void main(String[] args)throws Exception{geometryAndPolicy();singleRemaining();directShotGeometry();session();unsentKeepsProof();lateVerification();diagnostics();perception();reversedStaggerFixture();if(args.length>0)recorded(Path.of(args[0]));System.out.println("Bubble board/policy/feedback: "+checks+" assertions PASS; no physical-device claim");}
+ public static void main(String[] args)throws Exception{geometryAndPolicy();singleRemaining();directShotGeometry();session();unsentKeepsProof();lateVerification();diagnostics();perception();texturedLauncher();reversedStaggerFixture();if(args.length>0)recorded(Path.of(args[0]));System.out.println("Bubble board/policy/feedback: "+checks+" assertions PASS; no physical-device claim");}
 }
