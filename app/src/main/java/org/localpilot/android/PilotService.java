@@ -20,7 +20,7 @@ public class PilotService extends AccessibilityService {
  private final java.util.concurrent.ExecutorService visionWorker=java.util.concurrent.Executors.newSingleThreadExecutor();
  // Accessed only by visionWorker; reuse the bounded mirror copy between jobs.
  private int[] arcadePixelBuffer;
- private int[] visionPixels(Bitmap frame){int width=frame.getWidth(),height=frame.getHeight(),count=Math.multiplyExact(width,height);if(count>480*720)throw new IllegalArgumentException("capture pixel bound");if(arcadePixelBuffer==null||arcadePixelBuffer.length<count)arcadePixelBuffer=new int[count];frame.getPixels(arcadePixelBuffer,0,width,0,0,width,height);return arcadePixelBuffer;}
+ private int[] visionPixels(Bitmap frame){int width=frame.getWidth(),height=frame.getHeight(),count=Math.multiplyExact(width,height);if(count>CaptureResolution.MAX_PIXELS)throw new IllegalArgumentException("capture pixel bound");if(arcadePixelBuffer==null||arcadePixelBuffer.length<count)arcadePixelBuffer=new int[count];frame.getPixels(arcadePixelBuffer,0,width,0,0,width,height);return arcadePixelBuffer;}
  private java.util.concurrent.Future<?> visionTask;private long visionRequest;private boolean visionPending;
  private boolean busy=false;private int autoLeft=0;private long deadline;private int demoVerified;private String target="";private Rect armedBounds=new Rect();private int nx=50,ny=65;
  private long lastPanelRender;
