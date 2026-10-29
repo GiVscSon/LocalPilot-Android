@@ -4,8 +4,10 @@ from pathlib import Path
 import subprocess
 import sys
 import time
+from release_common import configuration
 
 OUT = Path('device-evidence')
+ROOT = Path(__file__).resolve().parents[1]
 
 
 def command(arguments, timeout=45):
@@ -25,6 +27,9 @@ def main():
     OUT.mkdir(exist_ok=True)
     isolated_emulator=False
     try:
+        package = configuration(ROOT)['package']
+        instrumentation = package + '.test/org.localpilot.android.PilotUiInstrumentation'
+        service = package + '/org.localpilot.android.PilotService'
         qemu=command(['adb','shell','getprop','ro.kernel.qemu']).strip()
         boot_qemu=command(['adb','shell','getprop','ro.boot.qemu']).strip()
         if qemu!='1' and boot_qemu!='1':
@@ -40,7 +45,7 @@ def main():
         command(['adb', 'shell', 'settings', 'put', 'secure', 'accessibility_enabled', '0'])
         with (OUT / 'instrumentation.txt').open('w', encoding='utf-8') as log:
             with subprocess.Popen(['adb', 'shell', 'am', 'instrument', '-w',
-                                   'org.localpilot.android.dev.test/org.localpilot.android.PilotUiInstrumentation'],
+                                   instrumentation],
                                   stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT) as process:
                 try:
                     deadline=time.monotonic()+20
@@ -51,7 +56,7 @@ def main():
                             raise RuntimeError('Instrumentation did not attach UiAutomation\n'+(OUT/'instrumentation.txt').read_text()[-2500:])
                         time.sleep(.2)
                     command(['adb', 'shell', 'settings', 'put', 'secure', 'enabled_accessibility_services',
-                             'org.localpilot.android.dev/org.localpilot.android.PilotService'])
+                             service])
                     command(['adb', 'shell', 'settings', 'put', 'secure', 'accessibility_enabled', '1'])
                     process.wait(timeout=300)
                     if process.returncode:raise RuntimeError('Instrumentation process failed\n'+(OUT/'instrumentation.txt').read_text()[-2500:])

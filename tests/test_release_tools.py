@@ -43,9 +43,12 @@ class ReleaseToolsTest(unittest.TestCase):
     def test_version_is_read_from_gradle(self):
         path = self.root / 'app/build.gradle'
         source = re.sub(r"versionName\s+'[^']+'", "versionName '8.9.10'", path.read_text())
+        source = re.sub(r"versionNameSuffix\s+'[^']+'", "versionNameSuffix '-fixture'", source)
+        source = re.sub(r"applicationIdSuffix\s+'[^']+'", "applicationIdSuffix '.fixture'", source)
         path.write_text(re.sub(r'versionCode\s+\d+', 'versionCode 987', source))
         config = common.configuration(self.root)
-        self.assertEqual(('8.9.10-dev', 987), (config['version'], config['versionCode']))
+        self.assertEqual(('8.9.10-fixture', 987), (config['version'], config['versionCode']))
+        self.assertEqual('org.localpilot.android.fixture', config['package'])
 
     def test_missing_or_ambiguous_version_fails(self):
         path = self.root / 'app/build.gradle'
