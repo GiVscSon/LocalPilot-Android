@@ -5,15 +5,20 @@ import java.util.*;
 public final class CustomArcadeVision {
  public interface Pixels {int get(int x,int y);}
  private static final class Scratch {
-  final int[] rgb=new int[160*240],queue=new int[160*240];
-  final boolean[] excluded=new boolean[160*240],seen=new boolean[160*240];
+  // One reusable, bounded workspace. Tablet-detail mirrors need a little
+  // more spatial resolution to preserve small calibrated objects.
+  final int[] rgb=new int[192*300],queue=new int[192*300];
+  final boolean[] excluded=new boolean[192*300],seen=new boolean[192*300];
  }
  private static final ThreadLocal<Scratch> WORK=ThreadLocal.withInitial(Scratch::new);
  private CustomArcadeVision(){}
  public static ArcadeObservation detect(ArcadeProfile profile,Pixels pixels,int left,int top,int right,int bottom,
     int el,int et,int er,int eb,long time,ArcadeObservation previous,CustomVisionConfig config){
   if(profile==null||profile==ArcadeProfile.ARI||pixels==null||config==null||left<0||top<0||right-left<40||bottom-top<40||time<0)throw new IllegalArgumentException("custom vision context");
-  int w=Math.min(160,right-left),h=Math.min(240,bottom-top),n=w*h;Scratch work=WORK.get();int[] rgb=work.rgb;boolean[] excluded=work.excluded;
+  boolean tabletDetail=right-left>=400&&bottom-top>=600;
+  int w=Math.min(tabletDetail?192:160,right-left),
+      h=Math.min(tabletDetail?300:240,bottom-top),n=w*h;
+  Scratch work=WORK.get();int[] rgb=work.rgb;boolean[] excluded=work.excluded;
   for(int yy=0;yy<h;yy++)for(int xx=0;xx<w;xx++){int x=left+xx*(right-left)/w,y=top+yy*(bottom-top)/h,i=yy*w+xx;excluded[i]=x>=el&&x<er&&y>=et&&y<eb;rgb[i]=pixels.get(x,y);}
   // Old scenes and other mechanics cannot attract the tracker to unrelated colours.
   boolean freshPrevious=previous!=null&&previous.profile==profile&&previous.usable()
