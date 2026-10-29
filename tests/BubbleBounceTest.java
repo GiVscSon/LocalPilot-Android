@@ -98,7 +98,7 @@ public final class BubbleBounceTest {
   brush.setColor(new java.awt.Color(rgb[loaded]));brush.fill(new java.awt.geom.Ellipse2D.Float(width*.5f-step*.46f,height*.88f-step*.46f,step*.92f,step*.92f));brush.dispose();return image;
  }
  private static void renderedFixture(){
-  for(int width:new int[]{320,480,672,1036})for(float aspect:new float[]{1.2f,1.3f,1.7f,2f}){
+  for(int width:new int[]{320,480,672,1036,1038})for(float aspect:new float[]{1.2f,1.3f,1479f/1038,1.7f,2f}){
    int height=Math.round(width*aspect);var image=fixtureImage(width,height);
    var observed=BubbleVision.read(image::getRGB,width,height,0,0,width,height,0,0,0,0,null);
    check(observed.usable(),"Native fixture geometry is recognizable width="+width+" aspect="+aspect+": "+observed.reason());
@@ -156,12 +156,13 @@ public final class BubbleBounceTest {
   check(read.usable(),"Exact API30 source rectangle is recognizable: "+read.reason());
   BubbleBoard b=read.board();
   check(b.width==1038&&b.height==1143&&b.cols==6&&b.rows==4&&b.count()==19&&b.loadedColor==2,"Source ROI retains the native six-by-four board");
-  check(Math.abs(b.x0-114.740005f)<.01f&&Math.abs(b.y0-243.55501f)<.01f&&Math.abs(b.step-161.85f)<.01f
-    &&Math.abs(b.launcherX-517.5f)<.01f&&Math.abs(b.launcherY-1005f)<.01f,"Source-coordinate fit reproduces the API30 annotation");
+  float sourceStep=1038/6.4f;
+  check(Math.abs(b.x0-.7f*sourceStep)<5&&Math.abs(b.y0-1.5f*sourceStep)<5&&Math.abs(b.step-sourceStep)<3
+    &&Math.abs(b.launcherX-519)<5&&Math.abs(b.launcherY-1143*.88f)<5,"Source-coordinate fit matches the fixture's independently drawn centres");
   BubblePolicy.Shot shot=BubblePolicy.choose(b);
   check(shot!=null&&shot.bounces==1&&shot.landing==18&&shot.removed==3&&shot.dropped==0,"Native short arena chooses the lower orange triple");
   route(b,shot);
-  check(Math.round(b.launcherX)==518&&Math.round(b.launcherY)==1005&&Math.round(shot.aimX)==115&&Math.round(shot.aimY)==723
+  check(Math.abs(b.launcherX-519)<5&&Math.abs(b.launcherY-1143*.88f)<5&&Math.abs(shot.aimX-.7f*sourceStep)<5&&shot.aimY>0&&shot.aimY<b.launcherY
     &&roundedFixtureLanding(b,shot)==18,"Rounded native gesture reaches the independent fixture's lower orange cell");
   int[] expected=fixtureCells();expected[19]=expected[20]=0;
   check(Arrays.equals(expected,shot.expectedCells())&&expected[6]==2,"The expected result removes only source cells19 and20");

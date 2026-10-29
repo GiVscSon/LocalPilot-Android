@@ -83,6 +83,14 @@ public final class BubbleSession {
   expectedCells=0;for(int color:expected)if(color>0)expectedCells++;reason=Reason.SENT;ages(lastFrame,now);mismatchedCells=-1;
  }
  public void acknowledge(long now){if(!pending()||paused())return;if(now<sentAt)throw new IllegalArgumentException("ACK before shot");if(now-sentAt>=responseTimeoutMs)return;if(ackAt<0){ackAt=now;clearCandidate();reason=Reason.ANDROID_ACK;ages(lastFrame,now);}}
+ /** Caller must have proved dispatchGesture did not accept this proposal.
+  * Keep completed visual evidence; require two new frames for another proposal. */
+ public void discardUnsent(){
+  if(ackAt>=0)throw new IllegalStateException("cannot discard acknowledged shot");
+  before=null;expected=null;sentAt=ackAt=-1;lateWaiting=lateRecoveryRevoked=false;
+  clearCandidate();status=Status.SEARCHING;reason=Reason.RESET;
+  observedCells=expectedCells=mismatchedCells=-1;
+ }
  public String report(){
   StringBuilder out=new StringBuilder("BUBBLE_SESSION: status=").append(status).append(" pending=").append(pending()).append(" android_ack=").append(ackAt>=0).append(" verified_shots=").append(verified).append(" late_waiting=").append(lateWaiting).append(" late_recovery_revoked=").append(lateRecoveryRevoked).append(" final_paused=").append(finalPaused()).append(" response_timeout_ms=").append(responseTimeoutMs).append(" final_timeout_ms=").append(finalTimeoutMs)
    .append(" reason=").append(reason).append(" last_wait=").append(lastWait).append(" frame_age_ms=").append(frameAge).append(" sent_age_ms=").append(sentAge).append(" ack_age_ms=").append(ackAge).append(" candidate_age_ms=").append(candidateAge)

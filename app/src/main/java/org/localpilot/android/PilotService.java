@@ -672,6 +672,9 @@ public class PilotService extends AccessibilityService {
    }
    gridResultVisible=false;metrics.attempt(StageMetrics.Stage.READ);long started=SystemClock.elapsedRealtimeNanos();
    BubbleVision.Read read=BubbleVision.read(pixels::getPixel,pixels.getWidth(),pixels.getHeight(),r.left,r.top,r.right,r.bottom,panel.left,panel.top,panel.right,panel.bottom,bubbleGeometry);
+   // A slow acquisition may seed geometry, never freshness or action evidence.
+   // The next frame re-reads every cell and gun through the existing session gates.
+   if(read.usable())bubbleGeometry=read.board();
    bubbleSession.visionReason(read.reason());
    captureReads++;metrics.record(StageMetrics.Stage.READ,SystemClock.elapsedRealtimeNanos()-started);
    long frameAt=SystemClock.elapsedRealtime()-Math.max(0,SystemClock.uptimeMillis()-lastShotTimestamp);
@@ -691,7 +694,7 @@ public class PilotService extends AccessibilityService {
     bubbleSession.acknowledge(SystemClock.elapsedRealtime());note="Android завершил жест · проверяю поле";update();scheduleGrid(epoch);
    },frameAt,220);
    if(captureSent>sentBefore){gridMoves++;gridSawAction=true;note=(shot.bounces==0?"Прямой выстрел ":"Один рикошет ")+gridMoves+" · ожидается удалений "+shot.removed+", падений "+shot.dropped;update();}
-   else if(playingGrid){bubbleSession.reset();scheduleGrid(epoch);}
+   else if(playingGrid){bubbleSession.discardUnsent();scheduleGrid(epoch);}
   });
  }
  private String bubbleWaitMessage(BubbleSession.Reason reason){

@@ -50,6 +50,24 @@ public final class BubbleTest {
   check(BubblePolicy.choose(wrong)==null,"unknown next color cannot justify a mismatched shot at the final candy");
   Arrays.fill(cells,0);check(BubblePolicy.choose(new BubbleBoard(320,640,6,12,32,80,50,160,600,1,cells))==null,"empty board never authorizes input");
  }
+ private static void unsentKeepsProof(){
+  BubbleBoard b=board(1);BubblePolicy.Shot shot=BubblePolicy.choose(b);BubbleBoard next=after(b,shot.expectedCells());
+  BubbleSession s=new BubbleSession();s.observe(b,1000,1000);s.observe(b,1200,1200);s.sent(b,shot,1200);s.acknowledge(1400);
+  s.observe(next,1800,1800);s.observe(next,2000,2000);
+  check(s.verified()==1,"setup has exact post-ACK visual proof");
+  BubblePolicy.Shot proposal=BubblePolicy.choose(next);check(proposal!=null,"next proposal exists");
+  s.sent(next,proposal,2000);
+  // Executor may reject after journal/fsync makes the source frame stale.
+  s.discardUnsent();
+  check(s.verified()==1&&!s.pending()&&!s.acknowledged(),"undispatched proposal preserves prior proof and clears only pending action");
+  try{s.sent(next,proposal,2050);throw new AssertionError("reused stale stable state");}catch(IllegalStateException expected){checks++;}
+  check(s.observe(next,2200,2200)==BubbleSession.Status.SEARCHING,"discard requires first new frame");
+  check(s.observe(next,2400,2400)==BubbleSession.Status.READY,"two new frames restore readiness");
+  s.sent(next,proposal,2400);s.acknowledge(2500);
+  try{s.discardUnsent();throw new AssertionError("discarded delivered shot");}catch(IllegalStateException expected){checks++;}
+  check(s.pending()&&s.acknowledged()&&s.verified()==1,"acknowledged proposal still requires visual verification");
+  s.reset();check(s.verified()==0&&!s.pending(),"explicit new session still resets totals");
+ }
  private static void session(){
   BubbleBoard b=board(1);BubblePolicy.Shot shot=BubblePolicy.choose(b);BubbleBoard next=after(b,shot.expectedCells());
   BubbleSession s=new BubbleSession();check(s.observe(b,1000,1000)==BubbleSession.Status.SEARCHING,"first frame is not enough");
@@ -222,6 +240,36 @@ public final class BubbleTest {
   check(!BubbleVision.read(ambiguous::getRGB,320,640,0,0,320,640,0,0,0,0,null).usable(),"one observed row phase cannot infer alternating lattice");
   System.out.println("Reversed stagger fixture: "+read.reason());
  }
+ private static void texturedLauncher(){
+  for(float scale:new float[]{.75f,1f,1.5f}){
+   BufferedImage original=synthetic();var brush=original.createGraphics();
+   brush.setColor(new java.awt.Color(COLORS[4]));brush.fillOval(137,577,46,46);
+   brush.setColor(new java.awt.Color(0xe8f5e0));brush.setStroke(new java.awt.BasicStroke(2f));
+   var spiral=new java.awt.geom.Path2D.Float();
+   for(int i=0;i<=180;i++){
+    double angle=i*Math.PI/30,radius=3+i*.10;
+    float x=160+(float)Math.cos(angle)*(float)radius,y=600+(float)Math.sin(angle)*(float)radius;
+    if(i==0)spiral.moveTo(x,y);else spiral.lineTo(x,y);
+   }
+   brush.draw(spiral);brush.dispose();
+   BufferedImage im=new BufferedImage(Math.round(320*scale),Math.round(640*scale),BufferedImage.TYPE_INT_RGB);
+   var g=im.createGraphics();g.setRenderingHint(RenderingHints.KEY_INTERPOLATION,RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+   g.drawImage(original,0,0,im.getWidth(),im.getHeight(),null);g.dispose();
+   var seen=BubbleVision.read(im::getRGB,im.getWidth(),im.getHeight(),0,0,im.getWidth(),im.getHeight(),0,0,0,0,null);
+   check(seen.usable()&&seen.board().loadedColor==4,"pale spiral does not erase the bottom-centre green launcher at scale "+scale+": "+seen.reason());
+   var cached=BubbleVision.read(im::getRGB,im.getWidth(),im.getHeight(),0,0,im.getWidth(),im.getHeight(),0,0,0,0,seen.board());
+   check(cached.usable()&&cached.board().same(seen.board()),"textured launcher keeps the original-pixel cached read");
+   for(int special:new int[]{0x202020,0xffffff}){
+    var symbol=new BufferedImage(im.getWidth(),im.getHeight(),BufferedImage.TYPE_INT_RGB);var ink=symbol.createGraphics();
+    ink.drawImage(im,0,0,null);ink.setColor(new java.awt.Color(special));
+    ink.fillOval(Math.round(153*scale),Math.round(593*scale),Math.round(14*scale),Math.round(14*scale));ink.dispose();
+    check(!BubbleVision.read(symbol::getRGB,symbol.getWidth(),symbol.getHeight(),0,0,symbol.getWidth(),symbol.getHeight(),0,0,0,0,null).usable(),"white/dark centre symbol cannot become a textured ordinary gun");
+   }
+   g=im.createGraphics();g.setColor(new java.awt.Color(COLORS[0]));g.fillRect(Math.round(134*scale),Math.round(574*scale),Math.round(52*scale),Math.round(52*scale));g.dispose();
+   check(!BubbleVision.read(im::getRGB,im.getWidth(),im.getHeight(),0,0,im.getWidth(),im.getHeight(),0,0,0,0,null).usable(),"closing cannot replace a missing launcher with the spare or scenery");
+   check(!BubbleVision.read(im::getRGB,im.getWidth(),im.getHeight(),0,0,im.getWidth(),im.getHeight(),0,0,0,0,seen.board()).usable(),"cached highlighted launcher also disappears when its original pixels disappear");
+  }
+ }
  private static void perception(){
   BufferedImage im=synthetic();var r=BubbleVision.read(im::getRGB,320,640,0,0,320,640,0,0,0,0,null);
   check(r.usable(),"ordinary synthetic field: "+r.reason());check(r.board().count()==17&&r.board().loadedColor==1,"reserve and bonus do not become launched bubble");
@@ -252,6 +300,37 @@ public final class BubbleTest {
   BufferedImage emptyGun=synthetic();var reserve=emptyGun.createGraphics();reserve.setColor(new java.awt.Color(COLORS[0]));reserve.fillRect(136,576,48,48);reserve.setColor(new java.awt.Color(COLORS[3]));reserve.fillOval(101,577,46,46);reserve.dispose();
   check(!BubbleVision.read(emptyGun::getRGB,320,640,0,0,320,640,0,0,0,0,null).usable(),"a spare ball near the gun cannot replace the missing loaded ball");
  }
+ private static void objectsBeforeColor(){
+  BufferedImage original=synthetic();var initial=BubbleVision.read(original::getRGB,320,640,0,0,320,640,0,0,0,0,null);
+  check(initial.usable(),"object fixture has stable initial geometry");BubbleBoard geometry=initial.board();
+  for(int color=1;color<=4;color++){
+   BufferedImage im=synthetic();var g=im.createGraphics();g.setColor(new java.awt.Color(COLORS[color]));g.fillOval(3,57,46,46);g.dispose();
+   var read=BubbleVision.read(im::getRGB,320,640,0,0,320,640,0,0,0,0,geometry);
+   check(read.usable()&&read.board().count()==17&&read.board().color(0)==color,"same object keeps occupancy when its colour attribute changes");
+  }
+  for(int color:new int[]{0x808080,0x918077,0x3040df,0x202020,0xffffff}){
+   BufferedImage im=synthetic();var g=im.createGraphics();g.setColor(new java.awt.Color(color));g.fillOval(3,57,46,46);g.dispose();
+   var read=BubbleVision.read(im::getRGB,320,640,0,0,320,640,0,0,0,0,geometry);
+   check(!read.usable()&&read.reason().contains("круглый объект без класса"),"unsupported round object remains occupied/unknown, never a cleared cell: "+Integer.toHexString(color)+" "+read.reason());
+  }
+  for(int shape=0;shape<3;shape++){
+   BufferedImage im=synthetic();var g=im.createGraphics();g.setColor(new java.awt.Color(COLORS[0]));g.fillRect(2,56,48,48);g.setColor(new java.awt.Color(COLORS[1]));
+   if(shape==0)g.fillRect(3,57,46,46);
+   else if(shape==1)g.fillPolygon(new int[]{26,50,2},new int[]{56,104,104},3);
+   else{g.fillRect(2,74,48,12);g.fillRect(20,56,12,48);}g.dispose();
+   check(!BubbleVision.read(im::getRGB,320,640,0,0,320,640,0,0,0,0,geometry).usable(),"a red non-round obstacle is not an ordinary red ball or empty slot: "+shape);
+  }
+  BufferedImage squareGun=synthetic();var g=squareGun.createGraphics();g.setColor(new java.awt.Color(COLORS[1]));g.fillRect(137,577,46,46);g.dispose();
+  check(!BubbleVision.read(squareGun::getRGB,320,640,0,0,320,640,0,0,0,0,null).usable(),"square in the gun position cannot acquire a launcher by colour");
+  check(!BubbleVision.read(squareGun::getRGB,320,640,0,0,320,640,0,0,0,0,geometry).usable(),"tracked gun must still have a circular boundary");
+  BubbleSession freshSession=new BubbleSession();
+  check(freshSession.observe(geometry,1000,2000)==BubbleSession.Status.SEARCHING,"slow initial acquisition is not action evidence");
+  var fresh=BubbleVision.read(original::getRGB,320,640,0,0,320,640,0,0,0,0,geometry);
+  check(fresh.usable()&&freshSession.observe(fresh.board(),2100,2100)==BubbleSession.Status.SEARCHING,"cached geometry still needs a first fresh frame");
+  check(freshSession.observe(fresh.board(),2300,2300)==BubbleSession.Status.READY&&freshSession.verified()==0,"two fresh reads authorize readiness without inventing verification");
+  var again=BubbleVision.read(original::getRGB,320,640,0,0,320,640,0,0,0,0,geometry);
+  check(again.usable()&&again.board().same(geometry),"rejected shapes and colours do not contaminate the next frame cache");
+ }
  private static void recorded(Path path)throws Exception{
   BufferedImage original=ImageIO.read(path.toFile());if(original==null)throw new IllegalArgumentException("image");
   for(float scale:new float[]{.75f,1f,1.5f}){
@@ -273,5 +352,5 @@ public final class BubbleTest {
    System.out.printf(java.util.Locale.ROOT,"Recorded bubble frame scale=%.2f count=%d x0=%.2f y0=%.2f step=%.2f; cloud JVM acquire=%.2fms cached-p50=%.2fms cached-max=%.2fms policy=%.2fms%n",scale,b.count(),b.x0/scale,b.y0/scale,b.step/scale,coldNs/1e6,elapsed[4]/1e6,elapsed[7]/1e6,policyNs/1e6);
   }
  }
- public static void main(String[] args)throws Exception{geometryAndPolicy();singleRemaining();directShotGeometry();session();lateVerification();diagnostics();perception();reversedStaggerFixture();if(args.length>0)recorded(Path.of(args[0]));System.out.println("Bubble board/policy/feedback: "+checks+" assertions PASS; no physical-device claim");}
+ public static void main(String[] args)throws Exception{geometryAndPolicy();singleRemaining();directShotGeometry();session();unsentKeepsProof();lateVerification();diagnostics();perception();objectsBeforeColor();texturedLauncher();reversedStaggerFixture();if(args.length>0)recorded(Path.of(args[0]));System.out.println("Bubble board/policy/feedback: "+checks+" assertions PASS; no physical-device claim");}
 }
