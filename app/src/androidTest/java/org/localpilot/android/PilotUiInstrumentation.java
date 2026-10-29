@@ -587,19 +587,19 @@ public final class PilotUiInstrumentation extends Instrumentation {
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK));
         await(() -> markerBounds("LOCALPILOT_CAPTURE_FIXTURE") != null, 8_000, "Projection fixture marker did not become visible after its single launch");
         onMain(()->{service.selectInstalledTarget(fixturePackage,"Capture acceptance");return null;});
-        await(()->present(ArcadeProfile.ARI.label),6_000,"New external app reused the previous 2048 profile instead of requesting its mechanic");
-        click(ArcadeProfile.ARI.label);
+        awaitCaptureMechanicMenu();
+        require(touchOwnControl(ArcadeProfile.ARI.label),"Capture mechanic menu could not receive a real tap");
         awaitBrowserMechanic();
         require(onMain(()->booleanField("targetIsBrowser")),"Isolated VIEW/HTTPS fixture was not classified as a browser context");
         onMain(()->{service.selectInstalledTarget(fixturePackage,"Capture acceptance");return null;});
-        await(()->present(ArcadeProfile.ARI.label),6_000,"Reopening a browser before gameplay retained an old mechanic confirmation");
-        click(ArcadeProfile.ARI.label);
+        awaitCaptureMechanicMenu();
+        require(touchOwnControl(ArcadeProfile.ARI.label),"Reopened capture mechanic menu could not receive a real tap");
         awaitBrowserMechanic();
         bindWindow(fixturePackage);
         long previous = -1;
         for(int cycle=0;cycle<2;cycle++) {
             if(compact())click("Развернуть");
-            if(cycle>0){click("Старт");await(()->present(ArcadeProfile.ARI.label),5_000,"A new browser capture reused mechanic confirmation after STOP");click(ArcadeProfile.ARI.label);awaitBrowserMechanic();}
+            if(cycle>0){click("Старт");awaitCaptureMechanicMenu();require(touchOwnControl(ArcadeProfile.ARI.label),"New capture mechanic menu could not receive a real tap");awaitBrowserMechanic();}
             click("Старт");
             await(this::acceptProjectionDialog, 8_000, "Android screen capture consent did not appear");
             await(() -> onMain(() -> booleanField("jumperCaptureReady") && ((Number)field("captureFrames")).longValue() >= 2),
@@ -625,6 +625,18 @@ public final class PilotUiInstrumentation extends Instrumentation {
         require(automation.setRotation(UiAutomation.ROTATION_FREEZE_0), "Cannot restore portrait after projection");
         addCheck("projection_consent_restart_frames_stop_rotation", new JSONObject().put("decoded_frames_per_session", 2)
                 .put("sessions", 2).put("isolated_test_apk", true).put("gameplay_claim", false));
+    }
+
+    private void awaitCaptureMechanicMenu() throws Exception {
+        // selectInstalledTarget may wait up to 10 seconds for a stable window.
+        // Poll the live dialog on its own looper, without a duplicate Binder
+        // accessibility lookup that can contend with that window acquisition.
+        // The extra second is only for test-side layout, not a gameplay deadline.
+        await(()->onMain(()->{
+            Object object=field("overlayDialog");
+            if(!(object instanceof android.app.Dialog dialog)||!dialog.isShowing()||dialog.getWindow()==null)return false;
+            return ownControlBounds(dialog.getWindow().getDecorView(),ArcadeProfile.ARI.label)!=null;
+        }),11_000,"Capture mechanic menu was not visibly ready after stable-window acquisition");
     }
 
     /** Inject the loss notification, but use real window queries, timer, gate and projection. */
