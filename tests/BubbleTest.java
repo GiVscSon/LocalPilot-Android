@@ -323,6 +323,11 @@ public final class BubbleTest {
   BufferedImage squareGun=synthetic();var g=squareGun.createGraphics();g.setColor(new java.awt.Color(COLORS[1]));g.fillRect(137,577,46,46);g.dispose();
   check(!BubbleVision.read(squareGun::getRGB,320,640,0,0,320,640,0,0,0,0,null).usable(),"square in the gun position cannot acquire a launcher by colour");
   check(!BubbleVision.read(squareGun::getRGB,320,640,0,0,320,640,0,0,0,0,geometry).usable(),"tracked gun must still have a circular boundary");
+  BubbleSession freshSession=new BubbleSession();
+  check(freshSession.observe(geometry,1000,2000)==BubbleSession.Status.SEARCHING,"slow initial acquisition is not action evidence");
+  var fresh=BubbleVision.read(original::getRGB,320,640,0,0,320,640,0,0,0,0,geometry);
+  check(fresh.usable()&&freshSession.observe(fresh.board(),2100,2100)==BubbleSession.Status.SEARCHING,"cached geometry still needs a first fresh frame");
+  check(freshSession.observe(fresh.board(),2300,2300)==BubbleSession.Status.READY&&freshSession.verified()==0,"two fresh reads authorize readiness without inventing verification");
   var again=BubbleVision.read(original::getRGB,320,640,0,0,320,640,0,0,0,0,geometry);
   check(again.usable()&&again.board().same(geometry),"rejected shapes and colours do not contaminate the next frame cache");
  }

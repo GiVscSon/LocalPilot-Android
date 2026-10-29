@@ -33,6 +33,11 @@ public final class BubbleObjectVisionTest {
     check(p.kind()==BubbleObjectVision.Kind.UNKNOWN,"compact non-ball obstacle is not ordinary candy or empty space: shape="+shape+" scale="+scale+" "+p);
    }
   }
+  for(int color:new int[]{0xe52c32,0xf08016,0xf0cf20,0x4ab63b,0x3040df,0x101010,0xffffff,0x808080}){
+   var im=scene(color,1,0);var found=BubbleObjectVision.find(im::getRGB,180,200,60,60,120,120,18,24);
+   check(found.size()==1&&Math.hypot(found.get(0).x()-90,found.get(0).y()-90)<3,"acquisition without hue labels "+Integer.toHexString(color)+" "+found);
+  }
+  for(int shape:new int[]{1,2,3}){var im=scene(0xe52c32,1,shape);check(BubbleObjectVision.find(im::getRGB,180,200,60,60,120,120,18,24).isEmpty(),"non-circular shape cannot acquire an object "+shape);}
   for(int background:new int[]{0x87ceeb,0xe3adbf,0x909090}){
    var p=BubbleObjectVision.inspect((x,y)->background,180,200,90,90,22);
    check(p.kind()==BubbleObjectVision.Kind.EMPTY,"uniform background is not an object, independent of its hue");

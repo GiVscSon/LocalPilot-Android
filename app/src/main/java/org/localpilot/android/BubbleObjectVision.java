@@ -3,6 +3,50 @@ package org.localpilot.android;
 /** Colour-agnostic object geometry at a proposed bubble position.
  * Hue labels and game actions deliberately do not enter this detector. */
 public final class BubbleObjectVision {
+ public record Circle(float x,float y,float radius,float support){}
+ /** Bounded geometric proposals. RGB differences measure edges, never hue classes. */
+ public static java.util.List<Circle> find(Pixels pixels,int width,int height,int left,int top,int right,int bottom,float minRadius,float maxRadius){
+  return find(pixels,width,height,left,top,right,bottom,minRadius,maxRadius,false);
+ }
+ public static java.util.List<Circle> find(Pixels pixels,int width,int height,int left,int top,int right,int bottom,float minRadius,float maxRadius,boolean isolated){
+  if(pixels==null||width<1||height<1||width>240||height>480||!Float.isFinite(minRadius)||!Float.isFinite(maxRadius)||left<0||top<0||right>width||bottom>height||left>=right||top>=bottom||minRadius<3||maxRadius<minRadius||maxRadius>width*.2f)throw new IllegalArgumentException("search bounds");
+  var proposals=new java.util.ArrayList<Circle>();
+  for(float radius=minRadius;radius<=maxRadius;radius+=1)for(int y=top;y<bottom;y+=2)for(int x=left;x<right;x+=2){
+   Probe p=inspect(pixels,width,height,x,y,radius);
+   if(p.kind==Kind.BALL&&p.confidence>=(isolated?.72f:.50f)){Circle fitted=fit(pixels,width,height,x,y,radius,isolated);if(fitted!=null)proposals.add(fitted);if(proposals.size()>8192)return java.util.List.of();}
+  }
+  proposals.sort(java.util.Comparator.comparingDouble((Circle c)->-c.support));
+  var found=new java.util.ArrayList<Circle>();
+  for(Circle c:proposals){
+   boolean duplicate=false;for(Circle other:found)if(Math.hypot(c.x-other.x,c.y-other.y)<Math.max(c.radius,other.radius)*.9f){duplicate=true;break;}
+   if(duplicate)continue;
+   float x=0,y=0,r=0,weight=0;
+   for(Circle near:proposals)if(Math.hypot(c.x-near.x,c.y-near.y)<=c.radius*.3f&&Math.abs(c.radius-near.radius)<=1){float w=near.support;weight+=w;x+=near.x*w;y+=near.y*w;r+=near.radius*w;}
+   found.add(new Circle(x/weight,y/weight,r/weight,c.support));if(found.size()>512)return java.util.List.of();
+  }
+  return found;
+ }
+ private static Circle fit(Pixels pixels,int width,int height,float x,float y,float radius,boolean isolated){
+  double[][] m=new double[3][4];int n=0;double[] xx=new double[18],yy=new double[18];
+  for(int direction=0;direction<24;direction++){
+   if(direction%4==0)continue;float dx=DX[direction],dy=DY[direction];int best=0;float atBest=0;int previous=0;boolean have=false;
+   for(int step=0;step<=8;step++){
+    float at=.65f+step*.1f;int px=Math.round(x+dx*radius*at),py=Math.round(y+dy*radius*at);
+    if(px<0||px>=width||py<0||py>=height){have=false;break;}
+    int current=pixels.get(px,py);if(have){int delta=distanceSquared(previous,current);if(isolated?delta>=32*32:delta>best){best=delta;atBest=at-.05f;}}previous=current;have=true;
+   }
+   if(!have||best<32*32)continue;
+   double a=dx*radius*atBest,b=dy*radius*atBest,q=a*a+b*b;xx[n]=a;yy[n++]=b;
+   double[] v={a,b,1};for(int i=0;i<3;i++){for(int j=0;j<3;j++)m[i][j]+=v[i]*v[j];m[i][3]+=v[i]*q;}
+  }
+  if(n<10)return null;
+  for(int k=0;k<3;k++){int pivot=k;for(int i=k+1;i<3;i++)if(Math.abs(m[i][k])>Math.abs(m[pivot][k]))pivot=i;double[] swap=m[k];m[k]=m[pivot];m[pivot]=swap;if(Math.abs(m[k][k])<1e-6)return null;double divisor=m[k][k];for(int j=k;j<4;j++)m[k][j]/=divisor;for(int i=0;i<3;i++)if(i!=k){double factor=m[i][k];for(int j=k;j<4;j++)m[i][j]-=factor*m[k][j];}}
+  double cx=m[0][3]/2,cy=m[1][3]/2,r=Math.sqrt(m[2][3]+cx*cx+cy*cy),error=0;
+  if(!Double.isFinite(r)||r<radius*.8||r>radius*1.2||Math.hypot(cx,cy)>radius*.4)return null;
+  for(int i=0;i<n;i++){double e=Math.hypot(xx[i]-cx,yy[i]-cy)-r;error+=e*e;}
+  error=Math.sqrt(error/n)/r;if(error>.075)return null;
+  return new Circle(x+(float)cx,y+(float)cy,(float)r,(float)(1-error));
+ }
  public interface Pixels {int get(int x,int y);}
  public enum Kind { BALL, EMPTY, UNKNOWN }
  public record Probe(Kind kind,float confidence,int visibleArcs,int circularArcs){}
