@@ -78,6 +78,12 @@ def main():
             if slow_main:
                 annotation('notice', 'Slow main-thread dispatches:\n'
                            + json.dumps(slow_main[-12:], ensure_ascii=False)[-3500:])
+            timing = report.get('capture_timing')
+            if isinstance(timing, str):
+                # Bounded metadata only: request ID, monotonic age and main
+                # watchdog queue lag. No frame pixels, screenshots or game IDs.
+                annotation('notice', 'Screenshot callback timing:\n'
+                           + '\n'.join(timing.splitlines()[-14:])[-3200:])
             metrics = report.get('metrics')
             if isinstance(metrics, str):
                 selected = [line[:500] for line in metrics.splitlines()

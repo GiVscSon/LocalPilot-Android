@@ -179,6 +179,34 @@ public final class BubbleBounceTest {
   check(session.observe(next,9050,9100)==BubbleSession.Status.PAUSED&&session.pending()&&session.verified()==0
     &&session.report().contains("android_ack=true"),"Expired native verification preserves pending Android ACK without asserting a game response");
  }
+ /** Exact API36 arena: a stale preparation of shot two must not erase shot one's proof. */
+ private static void staleNextShotRetainsVerification(){
+  int width=1038,height=1479;var image=fixtureImage(width,height);
+  var initial=BubbleVision.read(image::getRGB,width,height,0,0,width,height,0,0,0,0,null);
+  check(initial.usable(),"API36 source arena is recognizable");BubbleBoard before=initial.board();
+  BubblePolicy.Shot first=BubblePolicy.choose(before);
+  check(first!=null&&first.landing==13&&first.removed==4&&first.dropped==0,"API36 source chooses the fixture's independently resolved orange match");
+  var nextImage=fixtureImage(width,height,first.expectedCells(),3);
+  var read=BubbleVision.read(nextImage::getRGB,width,height,0,0,width,height,0,0,0,0,before);
+  check(read.usable()&&read.board().count()==16,"API36 visible result contains sixteen source cells");BubbleBoard next=read.board();
+  BubbleSession session=new BubbleSession(7000,12000);session.observe(before,1000,1000);session.observe(before,1200,1200);
+  session.sent(before,first,1200);session.acknowledge(1420);session.observe(next,1800,1800);
+  check(session.observe(next,2000,2000)==BubbleSession.Status.VERIFIED&&session.verified()==1,"Exact fresh post-ACK frames verify the orange shot");
+  BubblePolicy.Shot second=BubblePolicy.choose(next);int count=0;for(int cell:second.expectedCells())if(cell>0)count++;
+  check(Math.round(second.aimX)==177&&Math.round(second.aimY)==392&&count==8,"Failure metadata identifies the next yellow shot, not a mispredicted orange impact");
+  session.sent(next,second,2000);
+  // sendObserved rejected this prepared shot because its source frame expired.
+  session.cancelUnsent();
+  check(session.verified()==1&&!session.pending()&&!session.acknowledged()&&session.report().contains("reason=DISPATCH_NOT_SENT"),"Unsent preparation preserves earlier visual success without fabricating an ACK");
+  check(session.observe(next,2000,2000)==BubbleSession.Status.SEARCHING,"An already consumed source frame cannot reauthorize input");
+  check(session.observe(next,2301,2301)==BubbleSession.Status.SEARCHING&&session.observe(next,2501,2501)==BubbleSession.Status.READY,"Two new stable frames are required after an unsent preparation");
+  session.sent(next,second,2501);session.acknowledge(2721);
+  try{session.cancelUnsent();throw new AssertionError("acknowledged shot was cancelled");}catch(IllegalStateException expected){checks++;}
+  check(session.pending()&&session.acknowledged()&&session.verified()==1,"Cancellation cannot erase an acknowledged in-flight shot");
+  session.observe(next,3000,3000);session.observe(next,3200,3200);
+  check(session.verified()==1&&session.pending()&&session.lastWait()==BubbleSession.Reason.CELLS_MISMATCH,"An unchanged fixture never verifies the second shot");
+  session.reset();check(session.verified()==0,"Explicit new session reset still clears the verification count");
+ }
  private static void uncertainWalls(){
   int[] cells=new int[72];System.arraycopy(new int[]{1,2,1,3,4,4},0,cells,0,6);
   BubbleBoard loose=new BubbleBoard(640,640,6,12,192,80,50,320,600,1,cells);
@@ -190,5 +218,5 @@ public final class BubbleBounceTest {
   BubbleBoard blocked=board(cells,1);int[] packed=blocked.cells();for(int row=1;row<12;row++)for(int col=0;col<6-row%2;col++)packed[row*6+col]=2;
   check(BubblePolicy.choose(board(packed,1))==null,"A launcher overlapping the board cannot escape by reflection");
  }
- public static void main(String[] args){seededScenes();profitableRicochets();renderedFixture();shortArena();nativeSourceCoordinates();uncertainWalls();System.out.println("Bubble ricochet oracle: "+checks+" assertions PASS; physical Market walls unverified");}
+ public static void main(String[] args){seededScenes();profitableRicochets();renderedFixture();shortArena();nativeSourceCoordinates();staleNextShotRetainsVerification();uncertainWalls();System.out.println("Bubble ricochet oracle: "+checks+" assertions PASS; physical Market walls unverified");}
 }

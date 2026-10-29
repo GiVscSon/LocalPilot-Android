@@ -156,6 +156,7 @@ public final class PilotUiInstrumentation extends Instrumentation {
             // service configuration can arrive before Activity recreation ends.
             checkRotationStopsInput();
             checkProjectionLifecycle();
+            evidence.put("capture_timing",service.captureTimingReport());
             evidence.put("metrics", onMain(() -> service.exportMetrics()));
             passed = true;
             result.putString("result", "PASS");
@@ -168,6 +169,9 @@ public final class PilotUiInstrumentation extends Instrumentation {
             result.putString("stack", stack.toString());
             try {
                 evidence.put("failure", error.toString());
+                // Collect the metadata-only capture timeline before any Binder
+                // or UI automation query that may stall a sick main thread.
+                if (service != null) evidence.put("capture_timing",service.captureTimingReport());
                 evidence.put("failed_at_ms", SystemClock.uptimeMillis()-started);
                 evidence.put("windows", windowSummary());
                 evidence.put("stack", stack.toString());
