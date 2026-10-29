@@ -1,0 +1,35 @@
+name: Publish verified 0.7.34 Dev1 artifact
+on:
+  push:
+    branches: ['ops/publish-0734-dev1']
+    paths: ['.github/workflows/publish-verified-dev1.yml', 'ops/publish_verified_dev1.py', 'ops/verified-dev1/**']
+permissions:
+  actions: read
+  contents: write
+concurrency:
+  group: publish-localpilot-0734-dev1
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: github.repository == 'GiVscSon/LocalPilot-Android'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Download the already built and tested artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: LocalPilot-Android-9d977d852e1ccb70a162abcf93b7dc3dd185980a
+          run-id: 40937714357
+          github-token: ${{ github.token }}
+          path: verified-artifact
+      - name: Install signature verification tool
+        run: '"$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "build-tools;35.0.0"'
+      - name: Verify identity, upload matching assets, publish Dev prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 ops/publish_verified_dev1.py --download verified-artifact --output release-assets --sdk "$ANDROID_HOME" --publish

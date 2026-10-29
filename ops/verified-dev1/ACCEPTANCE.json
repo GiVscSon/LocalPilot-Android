@@ -1,0 +1,112 @@
+{
+  "source_sha": "9d977d852e1ccb70a162abcf93b7dc3dd185980a",
+  "exact_sha_matrices": [
+    {
+      "id": 40937714200,
+      "name": "Android device acceptance",
+      "event": "push",
+      "head_sha": "9d977d852e1ccb70a162abcf93b7dc3dd185980a",
+      "run_attempt": 1,
+      "status": "completed",
+      "conclusion": "success",
+      "jobs": [
+        {
+          "id": 123672571025,
+          "name": "device (30, default)",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 123672571277,
+          "name": "device (36, google_apis)",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 123672571496,
+          "name": "device (35, default)",
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "id": 40937878368,
+      "name": "Android device acceptance",
+      "event": "workflow_dispatch",
+      "head_sha": "9d977d852e1ccb70a162abcf93b7dc3dd185980a",
+      "run_attempt": 1,
+      "status": "completed",
+      "conclusion": "success",
+      "jobs": [
+        {
+          "id": 123673155484,
+          "name": "device (30, default)",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 123673155890,
+          "name": "device (35, default)",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 123673156002,
+          "name": "device (36, google_apis)",
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "id": 40938378702,
+      "name": "Android device acceptance",
+      "event": "workflow_dispatch",
+      "head_sha": "9d977d852e1ccb70a162abcf93b7dc3dd185980a",
+      "run_attempt": 1,
+      "status": "completed",
+      "conclusion": "success",
+      "jobs": [
+        {
+          "id": 123674887866,
+          "name": "device (36, google_apis)",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 123674888422,
+          "name": "device (35, default)",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 123674888543,
+          "name": "device (30, default)",
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ]
+    }
+  ],
+  "exact_sha_pass_count": 3,
+  "bonus_pr_run": 40937722882,
+  "bonus_pr_checkout_sha": "65438277da112cf55878768414143d18413fc94a",
+  "bonus_pr_tree_identical": true,
+  "physical_device": "NOT RUN",
+  "push_metrics_summary": "push-evidence-summary.json",
+  "local_checks": {
+    "jvm_runners": 22,
+    "jvm_result": "PASS",
+    "release_tool_tests": 10,
+    "release_tool_result": "PASS",
+    "compile_java17": "PASS",
+    "assembleDebug": "PASS",
+    "lintDebug": "PASS (0 errors, 50 warnings)",
+    "compileDebugAndroidTestJavaWithJavac": "PASS"
+  },
+  "apk_sha256": "c79ce6293d1f3f89f0c3c94fe7f6749361de4c3f9ec3fec6aa63bd4ba91536af",
+  "certificate_sha256": "010a04cb0888a4627b095def584f131b5161cff81c4d74c1513cbb932bfafcde",
+  "installed_certificate_parity": "NOT VERIFIED",
+  "known_open_issue": "SCREENSHOT_TIMEOUT: https://github.com/GiVscSon/LocalPilot-Android/issues/24"
+}
