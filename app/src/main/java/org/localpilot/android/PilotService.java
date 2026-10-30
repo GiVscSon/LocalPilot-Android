@@ -11,7 +11,7 @@ public class PilotService extends AccessibilityService {
  private final StageMetrics metrics=new StageMetrics();
  private final CaptureTimingTrace captureTiming=new CaptureTimingTrace();
  public String captureTimingReport(){return captureTiming.report();}
- public String exportMetrics(){String bubbleReport=bubbleSession.report();Runtime runtime=Runtime.getRuntime();long total=runtime.totalMemory(),free=runtime.freeMemory(),max=runtime.maxMemory(),pss=-1;stop("Экспорт замеров: STOP");try{pss=android.os.Debug.getPss();}catch(RuntimeException|LinkageError ignored){}String memory=StageMetrics.memorySnapshot(total,free,max,pss);return metrics.report()+"\n"+memory+"\n"+captureTiming.report()+"\n"+captureCounters()+"\nLAST_STOP: "+lastStopReason+"\nCAPTURE STARTUP\n"+captureStartup.report()+"\n"+sceneRecovery.report()+"\n"+bubbleReport;}
+ public String exportMetrics(){String bubbleReport=bubbleSession.report();Runtime runtime=Runtime.getRuntime();long total=runtime.totalMemory(),free=runtime.freeMemory(),max=runtime.maxMemory(),pss=-1;stop("Экспорт замеров: STOP");try{pss=android.os.Debug.getPss();}catch(RuntimeException|LinkageError ignored){}String memory=StageMetrics.memorySnapshot(total,free,max,pss);return metrics.report()+"\n"+memory+"\n"+captureTiming.report()+"\n"+captureCounters()+"\nLAST_STOP: "+lastStopReason+"\nCAPTURE STARTUP\n"+captureStartup.report()+"\n"+windowRootDiagnostics.report()+"\n"+sceneRecovery.report()+"\n"+bubbleReport;}
  private final Handler handler=new Handler(Looper.getMainLooper());private final Handler gestureHandler=new Handler(Looper.getMainLooper());private final ActionGate gate=new ActionGate();
  private final CaptureRetry captureRetry=new CaptureRetry();
  private DisplayGeometry displayGeometry;
@@ -33,6 +33,7 @@ public class PilotService extends AccessibilityService {
  private final PixelBoardLocator.Stability boardSearch=new PixelBoardLocator.Stability();
  private int boardReadMisses;private long boardReadGeneration;
  private final WindowFocus windowFocus=new WindowFocus();
+ private final WindowRootDiagnostics windowRootDiagnostics=new WindowRootDiagnostics();
  private volatile boolean focusPaused;private boolean focusWatch;private long focusRecoveredAt,focusWatchId;
  private volatile long captureSession;
  private volatile long captureAcceptedFrames,captureSkippedFrames,captureSkippedThrottle,captureSkippedUnwanted,captureSkippedClock;
@@ -112,7 +113,7 @@ public class PilotService extends AccessibilityService {
     .append("\nplaying=").append(playingJumper||playingGrid).append(" capture_ready=").append(playingGrid||jumperCaptureReady).append(" busy=").append(busy)
     .append("\nstatus=").append(note).append("\nLAST_STOP=").append(lastStopReason).append("\nlast_gesture=").append(lastGestureContext).append('\n').append(captureCounters()).append('\n').append(captureTiming.report())
     .append("\nframe_age_ms=").append(diagnosticFrameAt<0?-1:Math.max(0,now-diagnosticFrameAt)).append('\n').append(diagnosticFrameGeometry)
-    .append('\n').append(gestureFlight.report(now)).append('\n').append(sceneRecovery.report())
+    .append('\n').append(gestureFlight.report(now)).append('\n').append(windowRootDiagnostics.report()).append('\n').append(sceneRecovery.report())
     .append('\n').append(arcadeFeedback.report()).append('\n').append(jumperFeedback.report()).append("\nMOTION MODEL: ").append(arcadeController.model())
     .append('\n').append(roundOutcome.report()).append("\nLEARNING: ").append(learningStatus)
     .append(" scope=").append(target).append('/').append(learningSlot)
@@ -380,9 +381,9 @@ public class PilotService extends AccessibilityService {
   if(state!=null)state.setText(profileLabel()+" · "+(manualVisualRoi?"область вручную":visualRoi!=null?"боковые поля убраны":"область авто")+"\n"+note+"\n"+(gate.armed()?targetLabel+" · "+(inputReady?"ввод включён":"наблюдение"):"Нажмите Старт или выберите Окно")+(captureSession>0||playingGrid?"\n"+captureCounters():"")+(collecting?"\nСбор примеров включён":""));
  }
  private AccessibilityNodeInfo windowRoot(AccessibilityWindowInfo window){return Build.VERSION.SDK_INT>=33?window.getRoot(0):window.getRoot();}
- private AccessibilityNodeInfo appRoot(){for(AccessibilityWindowInfo w:getWindows())if(w.getType()==AccessibilityWindowInfo.TYPE_APPLICATION&&w.isFocused()){AccessibilityNodeInfo r=windowRoot(w);if(r!=null){if(r.getWindowId()==w.getId())return r;r.recycle();}}return null;}
+ private AccessibilityNodeInfo appRoot(){int applications=0,focused=0,missing=0,mismatched=0;for(AccessibilityWindowInfo w:getWindows())if(w.getType()==AccessibilityWindowInfo.TYPE_APPLICATION){applications++;if(!w.isFocused())continue;focused++;AccessibilityNodeInfo r=windowRoot(w);if(r==null){missing++;continue;}if(r.getWindowId()==w.getId()){windowRootDiagnostics.record(applications,focused,missing,mismatched,true);return r;}mismatched++;r.recycle();}windowRootDiagnostics.record(applications,focused,missing,mismatched,false);return null;}
  private boolean unlocked(){return ((PowerManager)getSystemService(POWER_SERVICE)).isInteractive()&&!((KeyguardManager)getSystemService(KEYGUARD_SERVICE)).isKeyguardLocked();}
- private void arm(){stop("Привязка");if(busy){note="Дождитесь завершения жеста";update();return;}AccessibilityNodeInfo r=appRoot();try{if(r==null||!unlocked()){note="Нет активного приложения";update();return;}target=String.valueOf(r.getPackageName());targetLabel=applicationLabel(target);targetIsBrowser=browserTarget();armedBounds=windowBounds(r);if(armedBounds.isEmpty()){note="Нет границ окна";update();return;}retainVisualScope(r);gate.arm(target,r.getWindowId(),armedBounds.width(),armedBounds.height());if(automatic())permit.grantSession(gate.epoch(),SystemClock.elapsedRealtime());note=automatic()?"Окно выбрано · нажмите Старт":"Только наблюдение";update();}finally{if(r!=null)r.recycle();}}
+ private void arm(){stop("Привязка");windowRootDiagnostics.reset();if(busy){note="Дождитесь завершения жеста";update();return;}AccessibilityNodeInfo r=appRoot();try{if(r==null||!unlocked()){note="Нет активного приложения";update();return;}target=String.valueOf(r.getPackageName());targetLabel=applicationLabel(target);targetIsBrowser=browserTarget();armedBounds=windowBounds(r);if(armedBounds.isEmpty()){note="Нет границ окна";update();return;}retainVisualScope(r);gate.arm(target,r.getWindowId(),armedBounds.width(),armedBounds.height());if(automatic())permit.grantSession(gate.epoch(),SystemClock.elapsedRealtime());note=automatic()?"Окно выбрано · нажмите Старт":"Только наблюдение";update();}finally{if(r!=null)r.recycle();}}
  private String applicationLabel(String packageName){try{return String.valueOf(getPackageManager().getApplicationLabel(getPackageManager().getApplicationInfo(packageName,0)));}catch(Exception e){return packageName;}}
  private void stop(String reason){
   boolean stoppedGame=playingJumper||playingGrid||playing2048||playingMini;
