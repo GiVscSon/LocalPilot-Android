@@ -239,7 +239,10 @@ public final class GridPuzzleVision {
    int red=color>>16&255,green=color>>8&255,blue=color&255;
    if(red>=150&&green<95&&blue<75&&red>green*1.8f)body++;
   }
-  if(body<40)return false;
+  // A 4-pixel ROI shift still retains 38 characteristic core samples.
+  // Two recorded boards with 25 shifts had no false positives at this bound.
+  // This offline calibration is not a real-device gameplay guarantee.
+  if(body<38)return false;
   int fuse=0;
   for(int yy=0;yy<9;yy++)for(int xx=0;xx<9;xx++){
    int color=sample(pixels,l,t,r,b,.48f+xx*.44f/8,.05f+yy*.36f/8);
