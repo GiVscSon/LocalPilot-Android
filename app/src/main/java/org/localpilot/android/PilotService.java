@@ -1534,7 +1534,13 @@ public class PilotService extends AccessibilityService {
   };
   try{takeScreenshot(Display.DEFAULT_DISPLAY,getMainExecutor(),callback);}catch(RuntimeException e){captureTiming.unavailable(requestId,request,SystemClock.elapsedRealtime());captureBusy=false;failStage(StageMetrics.Stage.CAPTURE,"SCREENSHOT_UNAVAILABLE","Захват недоступен");return;}
   final long watchdogScheduledAt=SystemClock.elapsedRealtime();captureTiming.apiReturned(requestId,request,watchdogScheduledAt);
-  handler.postDelayed(()->{boolean stillPending=captureBusy&&pendingCapture==requestId&&epoch==gate.epoch();captureTiming.timeout(requestId,request,watchdogScheduledAt,SystemClock.elapsedRealtime(),4000,stillPending);if(stillPending){captureBusy=false;pendingCapture=++captureCounter;failStage(StageMetrics.Stage.CAPTURE,"SCREENSHOT_TIMEOUT","Захват: таймаут без ввода");}},4000);
+  handler.postDelayed(()->{boolean stillPending=captureBusy&&pendingCapture==requestId&&epoch==gate.epoch();captureTiming.timeout(requestId,request,watchdogScheduledAt,SystemClock.elapsedRealtime(),4000,stillPending);if(stillPending){
+   // Revoke the timed-out request ID BEFORE scheduling any retry. A late
+   // callback is discarded, never interpreted as a fresh gameplay frame.
+   captureBusy=false;pendingCapture=++captureCounter;
+   if(!retryCapture(epoch,result,"SCREENSHOT_TIMEOUT"))
+    failStage(StageMetrics.Stage.CAPTURE,"SCREENSHOT_TIMEOUT","Захват: повторный таймаут, STOP без ввода");
+  }},4000);
  }
  private long captureDelay(){return Build.VERSION.SDK_INT>=31?400:1100;}
  private void stable(long epoch,BoardResult result){
