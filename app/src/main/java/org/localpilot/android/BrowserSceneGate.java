@@ -17,7 +17,7 @@ public final class BrowserSceneGate {
  public void changed(long atMs) {
   if(atMs<0)throw new IllegalArgumentException("negative transition time");
   quarantined=true;eventAt=atMs;lastFrameAt=-1;consecutive=0;
-  transitions=Math.min(Long.MAX_VALUE,transitions+1);
+  if(transitions<Long.MAX_VALUE)transitions++;
  }
  public boolean observe(long frameAtMs,boolean confirmedGame) {
   if(!quarantined)return true;
