@@ -143,8 +143,10 @@ public final class Color2048Reader {
 
  private static int classify(int r,int g,int b,int row,int col){
   int low=Math.min(r,Math.min(g,b)),high=Math.max(r,Math.max(g,b));
-  // Empty cells in this skin are pale, low-saturation glass over the scene.
-  if(high-low<=42&&r>=195&&g>=175&&b>=185)return 0;
+  // Actual Market 2048 glass cells are translucent; sampled empty cells
+  // include (189,174,193) and (253,222,210). Their low chroma differs
+  // from vivid numbered tiles. Do not broaden admission of foreign colors.
+  if(low>=150&&high-low<=90)return 0;
 
   int best=-1,bestDistance=Integer.MAX_VALUE,secondDistance=Integer.MAX_VALUE;
   for(int i=0;i<COLORS.length;i++){
