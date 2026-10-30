@@ -756,7 +756,7 @@ public class PilotService extends AccessibilityService {
    captureReads++;metrics.record(StageMetrics.Stage.READ,SystemClock.elapsedRealtimeNanos()-readNs);
    gridUnknownReasons=observation.unknownReasonCounts();if(gridUnknownReasons.isEmpty())gridUnknownReasons="none";
    int unknownCount=observation.unknownIndices().length;
-   gridReview=profileLabel()+" · "+observation.rows+"×"+observation.cols+"\nНеизвестно: "+unknownCount+"\n"+(unknownCount==0?"Все клетки распознаны.":observation.unknownSummary(observation.rows*observation.cols))+"\n\nЭто последнее чтение, а не текущее поле. Неизвестные клетки не разрешают ввод.";
+   gridReview=profileLabel()+" · "+observation.rows+"×"+observation.cols+"\nНеизвестно: "+unknownCount+"\n"+(unknownCount==0?"Все клетки распознаны.":observation.unknownSummary(observation.rows*observation.cols))+"\n\nЭто последнее чтение, а не текущее поле. Неизвестные клетки нельзя пересекать; только стабильная прямая линия из известных обычных фишек допускает ввод.";
    boolean partialGrid=observation.partialUsable();
    int[] observedCells=observation.cells();
    // Keep individually recognized cells; the policy treats every unknown as
@@ -808,18 +808,28 @@ public class PilotService extends AccessibilityService {
    boolean shadowChain=gridMode()==GridPuzzlePolicy.Mode.TRACE_LINE
      &&GridChainShadow.findFour(board,observation.specialCellsMask())!=null;
    if(!automatic()){note="Наблюдение: сетка прочитана · "+(shadowChain?"найдена цепочка из 4 (без ввода)":action==null?"совпадений не найдено":"найден ход, фишек "+action.expectedCleared);update();scheduleGrid(epoch);return;}
-   // Incomplete boards remain observational until partial-grid safety is validated.
-   if(partialGrid){note="Частичная сетка · наблюдение без ввода"+(shadowChain?" · найдена цепочка из 4":action==null?"":" · найден возможный ход");update();scheduleGrid(epoch);return;}
+   // Partial live input is limited to a known-only straight TRACE_LINE.
+   // Vision requires >=72% stable coverage; the session requires two fresh
+   // matching frames. Other mechanics and uncertain paths remain read-only.
+   if(partialGrid&&!GridPartialActionGate.allows(board,gridMode(),
+       observation.specialCellsMask(),action,true,
+       status==GridPuzzleSession.Status.READY||status==GridPuzzleSession.Status.CHANGED)){
+    note="Частичная сетка · неизвестные и опасные клетки не трогаю"
+       +(shadowChain?" · изогнутая цепочка только для наблюдения":"");
+    update();scheduleGrid(epoch);return;
+   }
    if(action==null){note="Нет проверяемого хода · продолжаю наблюдение"+(partialGrid?" (неизвестные клетки не трогаю)":"");update();scheduleGrid(epoch);return;}
    if(busy||!valid(ticket)||SystemClock.elapsedRealtime()-frameAt>300){note="Жду свежий кадр для хода";update();scheduleGrid(epoch);return;}
    float x=r.left+(action.fromCol+.5f)*r.width()/gridConfig.cols,y=r.top+(action.fromRow+.5f)*r.height()/gridConfig.rows;
    float ex=r.left+(action.toCol+.5f)*r.width()/gridConfig.cols,ey=r.top+(action.toRow+.5f)*r.height()/gridConfig.rows;
    long sentBefore=captureSent;gridSession.sent(observation.cells(),SystemClock.elapsedRealtime(),action);
-   sendObserved(x,y,ex,ey,ticket,()->{gridSession.acknowledge(SystemClock.elapsedRealtime());note="Жест доставлен · проверяю поле";update();scheduleGrid(epoch);},frameAt,action.mode==GridPuzzlePolicy.Mode.TAP_GROUP?55:160);
+   sendObserved(x,y,ex,ey,ticket,()->{gridSession.acknowledge(SystemClock.elapsedRealtime());note="Жест доставлен · проверяю поле";update();scheduleGrid(epoch);},frameAt,action.mode==GridPuzzlePolicy.Mode.TAP_GROUP?55:
+     action.mode==GridPuzzlePolicy.Mode.TRACE_LINE
+       ?Math.min(450,Math.max(160,action.expectedCleared*45)):160);
    if(captureSent>sentBefore){
     metrics.attempt(StageMetrics.Stage.GRID_VISUAL_RESPONSE);
     gridPendingDecision=action;gridPendingBoard=board;gridPendingSpecial=observation.specialCellsMask();gridPendingScope=gridKey()+"|"+gridConfig.encode()+"|"+gridPalette.encode();gridMoves++;gridSawAction=true;incrementGridStat("dispatched");
-    note="Ход "+gridMoves+" · ожидается фишек "+action.expectedCleared+" · подтверждено "+gridVerified
+    note=(partialGrid?"Частичная прямая линия ":"Ход ")+gridMoves+" · ожидается фишек "+action.expectedCleared+" · подтверждено "+gridVerified
       +" · обучение "+gridLearning.verifiedCount()+" / "+gridLearning.notConfirmedCount();
     update();
    }
