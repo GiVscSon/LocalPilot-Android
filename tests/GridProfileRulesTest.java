@@ -8,11 +8,11 @@ public final class GridProfileRulesTest {
   check(GridProfileRules.mode(6)==GridPuzzlePolicy.Mode.SWAP_MATCH3,"Match World stays a SWAP_MATCH3 puzzle");
   check(GridProfileRules.mode(7)==GridPuzzlePolicy.Mode.TAP_GROUP,"groups stay TAP_GROUP");
   check(GridProfileRules.mode(10)==GridPuzzlePolicy.Mode.TRACE_LINE,"normal straight-line profile");
-  check(GridProfileRules.mode(11)==GridPuzzlePolicy.Mode.TRACE_LINE,"Naщупай ход must be TRACE_LINE, not swap");
+  check(GridProfileRules.mode(11)==GridPuzzlePolicy.Mode.SWAP_MATCH3,"Naщупай ход uses documented protected neighbour SWAP; never infer line gestures from screenshots");
   check(GridProfileRules.protectSkulls(11),"skulls protected for named puzzle");
   check(!GridProfileRules.protectSkulls(10),"normal trace profile does not silently label skulls");
-  check(GridProfileRules.minimum(11)==3&&GridProfileRules.minimum(10)==3,
-     "line profile requires at least 3 identical objects");
+  check(GridProfileRules.minimum(11)==2&&GridProfileRules.minimum(10)==3,
+     "protected swap uses default 2; only generic line requires 3");
   check(GridProfileRules.minimum(6)==2&&GridProfileRules.minimum(7)==2,
      "legacy match and group profiles retain original minimum defaults");
   for(int invalid:new int[]{-1,0,4,5,9,12}){
