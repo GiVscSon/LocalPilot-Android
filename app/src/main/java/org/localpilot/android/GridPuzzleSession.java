@@ -14,6 +14,7 @@ public final class GridPuzzleSession {
  private java.util.BitSet candidateSpecial;
  private int[] candidate,stable,before;
  private long candidateAt=-1,lastFrameAt=-1,dispatchedAt=-1,completedAt=-1;
+ private long verifiedResponseMs=-1;
  private int verifiedChanges;
  private boolean partialPending;
  private java.util.BitSet predictedImpact;
@@ -26,7 +27,7 @@ public final class GridPuzzleSession {
   if(responseTimeoutMs<1000||responseTimeoutMs>10000||finalTimeoutMs<responseTimeoutMs||finalTimeoutMs>15000)throw new IllegalArgumentException("response timeout outside 1000..10000 ms or invalid final deadline");
   this.responseTimeoutMs=responseTimeoutMs;this.finalTimeoutMs=finalTimeoutMs;
  }
- public void reset(){status=Status.WAIT_STABLE;rows=cols=0;candidate=stable=before=null;candidateAt=lastFrameAt=dispatchedAt=completedAt=-1;verifiedChanges=0;partialPending=false;predictedImpact=null;swapFrom=swapTo=-1;lateWaiting=lateRecoveryRevoked=unchangedFailure=false;beforeSpecial=null;}
+ public void reset(){status=Status.WAIT_STABLE;rows=cols=0;candidate=stable=before=null;candidateAt=lastFrameAt=dispatchedAt=completedAt=-1;verifiedResponseMs=-1;verifiedChanges=0;partialPending=false;predictedImpact=null;swapFrom=swapTo=-1;lateWaiting=lateRecoveryRevoked=unchangedFailure=false;beforeSpecial=null;}
  /** Invalidate pre-focus observations without forgetting an unresolved gesture. */
  public void invalidateCandidate(){clearCandidate();stable=null;if(pending())lateRecoveryRevoked=true;
   if(lateWaiting){lateWaiting=false;status=Status.PAUSED;}
@@ -35,6 +36,8 @@ public final class GridPuzzleSession {
  public Status status(){return status;}
  public boolean pending(){return before!=null;}
  public boolean acknowledged(){return pending()&&completedAt>=0;}
+ /** Available only for a verified board transition, never for Android ACK alone. */
+ public long verifiedResponseMs(){return status==Status.CHANGED?verifiedResponseMs:-1;}
  public boolean paused(){return status==Status.PAUSED||lateWaiting;}
  public boolean awaitingLateVerification(){return lateWaiting;}
  public boolean finalPaused(){return paused()&&!lateWaiting;}
@@ -93,7 +96,7 @@ public final class GridPuzzleSession {
      status=waitingStatus();return status;
     }
    }
-   lateWaiting=false;unchangedFailure=false;beforeSpecial=null;stable=cells.clone();before=null;partialPending=false;predictedImpact=null;swapFrom=swapTo=-1;dispatchedAt=completedAt=-1;verifiedChanges++;status=Status.CHANGED;return status;
+   verifiedResponseMs=now-completedAt;lateWaiting=false;unchangedFailure=false;beforeSpecial=null;stable=cells.clone();before=null;partialPending=false;predictedImpact=null;swapFrom=swapTo=-1;dispatchedAt=completedAt=-1;verifiedChanges++;status=Status.CHANGED;return status;
   }
   stable=cells.clone();status=Status.READY;return status;
  }
@@ -123,7 +126,7 @@ public final class GridPuzzleSession {
   before=stable.clone();beforeSpecial=candidateSpecial==null?new java.util.BitSet():(java.util.BitSet)candidateSpecial.clone();partialPending=hasUnknown(stable);predictedImpact=impact;lateWaiting=lateRecoveryRevoked=unchangedFailure=false;
   swapFrom=action!=null&&action.mode==GridPuzzlePolicy.Mode.SWAP_MATCH3?action.fromRow*cols+action.fromCol:-1;
   swapTo=action!=null&&action.mode==GridPuzzlePolicy.Mode.SWAP_MATCH3?action.toRow*cols+action.toCol:-1;
-  dispatchedAt=at;completedAt=-1;clearCandidate();status=Status.WAIT_RESPONSE;
+  dispatchedAt=at;completedAt=-1;verifiedResponseMs=-1;clearCandidate();status=Status.WAIT_RESPONSE;
  }
  /** Android completion only opens response observation; it never counts a success. */
  public void acknowledge(long at){

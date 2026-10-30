@@ -9,7 +9,7 @@ import java.util.TreeMap;
 
 /** Bounded metadata only; independent windows per stage, never a training reward. */
 public final class StageMetrics {
- public enum Stage { CAPTURE, READ, POLICY, ANDROID_ACK }
+ public enum Stage { CAPTURE, READ, POLICY, ANDROID_ACK, GRID_VISUAL_RESPONSE, BUBBLE_VISUAL_RESPONSE }
  private static final int LIMIT=128;
  private static final int MAX_CODE_LENGTH=32;
  private static final int MAX_ERROR_CODES=32;
@@ -21,6 +21,13 @@ public final class StageMetrics {
  private final long[] errorOverflow=new long[counts.length];
 
  public StageMetrics(){for(Stage stage:Stage.values())errorCounts.put(stage,new TreeMap<>());}
+
+ /** One explicit-export snapshot, not a continuously sampled peak or GC metric. */
+ public static String memorySnapshot(long total,long free,long max,long pssKiB){
+  String used=total>=0&&free>=0&&free<=total?Long.toString(total-free):"unavailable";
+  return "MEMORY_SNAPSHOT java_used_bytes="+used+" java_max_bytes="+(max>0?Long.toString(max):"unavailable")
+    +" process_pss_kib="+(pssKiB>0?Long.toString(pssKiB):"unavailable")+" (single sample before export STOP; not a peak)";
+ }
 
  /** Explicit stage entry; successful duration samples are recorded separately. */
  public synchronized void attempt(Stage stage){int i=index(stage);attempts[i]=increment(attempts[i]);}
@@ -51,7 +58,7 @@ public final class StageMetrics {
  }
 
  public synchronized String report(){
-  StringBuilder s=new StringBuilder("LocalPilot stage-metrics-v1\nRAM only; n is the last 128 successful duration samples per stage.\nIndependent windows; not end-to-end latency or gameplay success.\nScheduled animation waits, failures and Stop are excluded from duration percentiles.\nAttempts, errors and cancelled are independent explicit counters for this service lifetime, saturating at Long.MAX_VALUE.\nlast_error is only the latest stable failure code, not a breakdown of all errors; retained after success or cancellation; '-' means none.\nerror_counts retains the first 32 distinct codes per stage, sorted alphabetically.\nerror_overflow counts failures whose codes were not retained after that limit; all histogram counters saturate at Long.MAX_VALUE.\n");
+  StringBuilder s=new StringBuilder("LocalPilot stage-metrics-v1\nRAM only; n is the last 128 successful duration samples per stage.\nIndependent windows; not end-to-end latency or gameplay success.\nFor GRID_VISUAL_RESPONSE and BUBBLE_VISUAL_RESPONSE, duration is from Android ACK to observation of a verified board, including animation and frame waits; only verified responses contribute samples. Attempts count dispatched gestures; failures and incomplete attempts do not contribute duration samples.\nScheduled animation waits, failures and Stop are excluded from other duration percentiles.\nAttempts, errors and cancelled are independent explicit counters for this service lifetime, saturating at Long.MAX_VALUE.\nlast_error is only the latest stable failure code, not a breakdown of all errors; retained after success or cancellation; '-' means none.\nerror_counts retains the first 32 distinct codes per stage, sorted alphabetically.\nerror_overflow counts failures whose codes were not retained after that limit; all histogram counters saturate at Long.MAX_VALUE.\n");
   for(Stage stage:Stage.values()){
    int i=stage.ordinal(),n=counts[i];
    s.append(stage).append(" n=").append(n);

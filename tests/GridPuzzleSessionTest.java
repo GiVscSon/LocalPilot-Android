@@ -13,12 +13,12 @@ public final class GridPuzzleSessionTest {
   check(s.observe(3,3,a,1080,1080)==GridPuzzleSession.Status.READY,"80ms stable interval accepted");
   s.sent(a,1100);check(s.pending()&&s.verifiedChanges()==0,"dispatch is not game progress");
   check(s.observe(3,3,b,1400,1400)==GridPuzzleSession.Status.WAIT_RESPONSE,"changed frame before Android completion is not accepted");
-  s.acknowledge(1450);check(s.verifiedChanges()==0,"Android ACK never counts a win or board response");
+  s.acknowledge(1450);check(s.verifiedChanges()==0&&s.verifiedResponseMs()==-1,"Android ACK never counts a win or a visual latency sample");
   check(s.observe(3,3,b,1440,1450)==GridPuzzleSession.Status.WAIT_RESPONSE,"pre-ACK frame rejected");
   check(s.observe(3,3,b,1500,1500)==GridPuzzleSession.Status.WAIT_RESPONSE,"one post-ACK changed frame is insufficient");
   check(s.observe(3,3,b,1580,1580)==GridPuzzleSession.Status.CHANGED,"two stable changed frames confirm a board response");
-  check(!s.pending()&&s.verifiedChanges()==1,"response clears pending and counts once");
-  check(s.observe(3,3,b,1680,1680)==GridPuzzleSession.Status.READY&&s.verifiedChanges()==1,"static changed board never counts twice");
+  check(!s.pending()&&s.verifiedChanges()==1&&s.verifiedResponseMs()==130,"response clears pending and measures from ACK to confirmation");
+  check(s.observe(3,3,b,1680,1680)==GridPuzzleSession.Status.READY&&s.verifiedChanges()==1&&s.verifiedResponseMs()==-1,"static changed board never counts twice");
   s.sent(b,1700);s.acknowledge(1740);
   check(s.observe(3,3,a,1800,1800)==GridPuzzleSession.Status.WAIT_RESPONSE,"settling period applies even after fast ACK");
   check(s.observe(3,3,a,1880,1880)==GridPuzzleSession.Status.WAIT_RESPONSE,"first frame after settle restarts stable candidate");
@@ -31,7 +31,7 @@ public final class GridPuzzleSessionTest {
   check(s.paused()&&s.pending(),"paused action remains unresolved in diagnostics");
   check(s.observe(3,3,b,4000,4000)==GridPuzzleSession.Status.PAUSED&&s.verifiedChanges()==0,"later changes cannot resume automatically");
   GridPuzzleSession paused=s;illegal(()->paused.sent(a,4100),"paused controller sent an automatic retry");
-  s.reset();check(!s.paused()&&!s.pending()&&s.verifiedChanges()==0&&s.status()==GridPuzzleSession.Status.WAIT_STABLE,"explicit reset clears the session");
+  s.reset();check(!s.paused()&&!s.pending()&&s.verifiedChanges()==0&&s.verifiedResponseMs()==-1&&s.status()==GridPuzzleSession.Status.WAIT_STABLE,"explicit reset clears the session and its measurement");
 
   GridPuzzleSession interrupted=ready();interrupted.sent(board(),1200);interrupted.invalidateCandidate();
   check(interrupted.pending()&&!interrupted.acknowledged()&&interrupted.status()==GridPuzzleSession.Status.WAIT_RESPONSE,"focus loss preserves unresolved gesture without inventing ACK");

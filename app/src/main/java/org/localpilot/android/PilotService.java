@@ -11,7 +11,7 @@ public class PilotService extends AccessibilityService {
  private final StageMetrics metrics=new StageMetrics();
  private final CaptureTimingTrace captureTiming=new CaptureTimingTrace();
  public String captureTimingReport(){return captureTiming.report();}
- public String exportMetrics(){String bubbleReport=bubbleSession.report();stop("Экспорт замеров: STOP");return metrics.report()+"\n"+captureTiming.report()+"\n"+captureCounters()+"\nLAST_STOP: "+lastStopReason+"\nCAPTURE STARTUP\n"+captureStartup.report()+"\n"+sceneRecovery.report()+"\n"+bubbleReport;}
+ public String exportMetrics(){String bubbleReport=bubbleSession.report();Runtime runtime=Runtime.getRuntime();long total=runtime.totalMemory(),free=runtime.freeMemory(),max=runtime.maxMemory(),pss=-1;stop("Экспорт замеров: STOP");try{pss=android.os.Debug.getPss();}catch(RuntimeException|LinkageError ignored){}String memory=StageMetrics.memorySnapshot(total,free,max,pss);return metrics.report()+"\n"+memory+"\n"+captureTiming.report()+"\n"+captureCounters()+"\nLAST_STOP: "+lastStopReason+"\nCAPTURE STARTUP\n"+captureStartup.report()+"\n"+sceneRecovery.report()+"\n"+bubbleReport;}
  private final Handler handler=new Handler(Looper.getMainLooper());private final Handler gestureHandler=new Handler(Looper.getMainLooper());private final ActionGate gate=new ActionGate();
  private final CaptureRetry captureRetry=new CaptureRetry();
  private DisplayGeometry displayGeometry;
@@ -676,6 +676,7 @@ public class PilotService extends AccessibilityService {
    captureReads++;metrics.record(StageMetrics.Stage.READ,SystemClock.elapsedRealtimeNanos()-started);
    long frameAt=SystemClock.elapsedRealtime()-Math.max(0,SystemClock.uptimeMillis()-lastShotTimestamp);
    BubbleSession.Status status=bubbleSession.observe(read.board(),frameAt,SystemClock.elapsedRealtime());
+   if(status==BubbleSession.Status.VERIFIED&&bubbleSession.verifiedResponseMs()>=0)metrics.record(StageMetrics.Stage.BUBBLE_VISUAL_RESPONSE,bubbleSession.verifiedResponseMs()*1000000L);
    if(status==BubbleSession.Status.PAUSED){note="Шипучка: "+(bubbleSession.acknowledged()?"Android завершил жест; ":"нет подтверждения Android; ")+bubbleWaitMessage(bubbleSession.lastWait())+" · продолжаю наблюдение без ввода. Старт — повторная проверка";update();scheduleGrid(epoch);return;}
    if(status!=BubbleSession.Status.READY&&status!=BubbleSession.Status.VERIFIED){note=read.usable()?(bubbleSession.pending()?"Шипучка: проверяю попадание":"Шипучка: ожидаю второй устойчивый кадр"):read.reason();update();scheduleGrid(epoch);return;}
    bubbleGeometry=read.board();gridVerified=bubbleSession.verified();
@@ -690,7 +691,7 @@ public class PilotService extends AccessibilityService {
     if(epoch!=gate.epoch()||!playingGrid||selectedProfile!=9)return;
     bubbleSession.acknowledge(SystemClock.elapsedRealtime());note="Android завершил жест · проверяю поле";update();scheduleGrid(epoch);
    },frameAt,220);
-   if(captureSent>sentBefore){gridMoves++;gridSawAction=true;note=(shot.bounces==0?"Прямой выстрел ":"Один рикошет ")+gridMoves+" · ожидается удалений "+shot.removed+", падений "+shot.dropped;update();}
+   if(captureSent>sentBefore){metrics.attempt(StageMetrics.Stage.BUBBLE_VISUAL_RESPONSE);gridMoves++;gridSawAction=true;note=(shot.bounces==0?"Прямой выстрел ":"Один рикошет ")+gridMoves+" · ожидается удалений "+shot.removed+", падений "+shot.dropped;update();}
    else if(playingGrid){bubbleSession.cancelUnsent();scheduleGrid(epoch);}
   });
  }
@@ -779,6 +780,7 @@ public class PilotService extends AccessibilityService {
     update();scheduleGrid(epoch);return;
    }
    if(status==GridPuzzleSession.Status.CHANGED){
+    if(gridSession.verifiedResponseMs()>=0)metrics.record(StageMetrics.Stage.GRID_VISUAL_RESPONSE,gridSession.verifiedResponseMs()*1000000L);
     gridVerified++;incrementGridStat("visual_changes");
     if(gridPendingDecision!=null){
      gridLearning.recordVerified(gridPendingDecision);saveGridLearning();gridPendingDecision=null;
@@ -815,6 +817,7 @@ public class PilotService extends AccessibilityService {
    long sentBefore=captureSent;gridSession.sent(observation.cells(),SystemClock.elapsedRealtime(),action);
    sendObserved(x,y,ex,ey,ticket,()->{gridSession.acknowledge(SystemClock.elapsedRealtime());note="Жест доставлен · проверяю поле";update();scheduleGrid(epoch);},frameAt,action.mode==GridPuzzlePolicy.Mode.TAP_GROUP?55:160);
    if(captureSent>sentBefore){
+    metrics.attempt(StageMetrics.Stage.GRID_VISUAL_RESPONSE);
     gridPendingDecision=action;gridPendingBoard=board;gridPendingSpecial=observation.specialCellsMask();gridPendingScope=gridKey()+"|"+gridConfig.encode()+"|"+gridPalette.encode();gridMoves++;gridSawAction=true;incrementGridStat("dispatched");
     note="Ход "+gridMoves+" · ожидается фишек "+action.expectedCleared+" · подтверждено "+gridVerified
       +" · обучение "+gridLearning.verifiedCount()+" / "+gridLearning.notConfirmedCount();

@@ -55,11 +55,11 @@ public final class BubbleTest {
   BubbleSession s=new BubbleSession();check(s.observe(b,1000,1000)==BubbleSession.Status.SEARCHING,"first frame is not enough");
   check(s.observe(b,1200,1200)==BubbleSession.Status.READY,"two distinct stable frames open policy");s.sent(b,shot,1200);
   s.observe(next,1700,1700);s.observe(next,1900,1900);check(s.verified()==0,"image changes before Android completion cannot release pending shot");
-  s.acknowledge(1901);check(s.verified()==0,"ACK alone never counts a shot");
-  s.observe(next,2100,2100);check(s.observe(next,2300,2300)==BubbleSession.Status.VERIFIED&&s.verified()==1,"two predicted post-ACK frames verify one shot");
-  s.reset();s.observe(b,1000,1000);s.observe(b,1200,1200);s.sent(b,shot,1200);s.acknowledge(1400);
+  s.acknowledge(1901);check(s.verified()==0&&s.verifiedResponseMs()==-1,"ACK alone never counts a shot or visual latency");
+  s.observe(next,2100,2100);check(s.observe(next,2300,2300)==BubbleSession.Status.VERIFIED&&s.verified()==1&&s.verifiedResponseMs()==399,"two predicted post-ACK frames verify one shot and measure response");
+  s.reset();check(s.verifiedResponseMs()==-1,"reset discards last response latency");s.observe(b,1000,1000);s.observe(b,1200,1200);s.sent(b,shot,1200);s.acknowledge(1400);
   int[] wrong=b.cells();wrong[8]=3;BubbleBoard unrelated=after(b,wrong);
-  s.observe(unrelated,1800,1800);s.observe(unrelated,2200,2200);check(s.verified()==0&&s.pending(),"unrelated board change is not the predicted impact");
+  s.observe(unrelated,1800,1800);s.observe(unrelated,2200,2200);check(s.verified()==0&&s.pending()&&s.verifiedResponseMs()==-1,"unrelated board change is not the predicted impact or a latency sample");
   s.invalidateCandidate();s.observe(next,2600,2600);check(s.observe(next,2600,2800)!=BubbleSession.Status.VERIFIED,"repeated capture after focus loss cannot count twice");
   check(s.observe(null,8300,8300)==BubbleSession.Status.PAUSED,"deadline also applies to missing scene");
   s.reset();check(s.observe(b,1000,1400)==BubbleSession.Status.SEARCHING,"old screenshot does not enter stable state");

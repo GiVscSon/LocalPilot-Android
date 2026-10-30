@@ -35,6 +35,8 @@ public final class BubbleSession {
  public boolean awaitingLateVerification(){return paused()&&lateWaiting;}
  public boolean finalPaused(){return paused()&&!lateWaiting;}
  public boolean acknowledged(){return pending()&&ackAt>=0;}
+ /** Duration at the latest verified observation only; never set by ACK. */
+ public long verifiedResponseMs(){return reason==Reason.VERIFIED?ackAge:-1;}
  public Reason lastWait(){return lastWait;}
  public int verified(){return verified;}
  /** Only the bounded reader's explanation is retained; no frame, pixels or board array enters the report. */

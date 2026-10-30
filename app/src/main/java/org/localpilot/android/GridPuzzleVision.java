@@ -134,6 +134,15 @@ public final class GridPuzzleVision {
    if(distance>MATCH){if(prototypes.size()<MAX_TYPES){counts[prototypes.size()]=1;prototypes.add(sample.clone());}}
    else if(nearest>=fixed){int count=++counts[nearest];float[] p=prototypes.get(nearest);for(int n=0;n<FEATURES;n++)p[n]+=(sample[n]-p[n])/count;}
   }
+  // Once a palette is established, a lone previously unseen descriptor can be
+  // an animation, hand, obstacle or bonus rather than a new ordinary token.
+  // Do not learn it as a stable type or hand it back in the candidate palette.
+  // Existing palette entries remain valid even when they occur only once.
+  if(fixed>0)for(int n=prototypes.size()-1;n>=fixed;n--)if(counts[n]<2){
+   prototypes.remove(n);
+   for(int j=n;j<prototypes.size();j++)counts[j]=counts[j+1];
+   counts[prototypes.size()]=0;
+  }
   Set<Integer> distinct=new HashSet<>();float quality=0;boolean complete=true;
   for(int index=0;index<samples.length;index++){
    if(cells[index]==0&&special.get(index)){quality+=1;continue;}

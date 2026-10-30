@@ -16,7 +16,25 @@ public class MetricsTest {
   rejectedInputs();
   counterSaturation();
   histogramSaturation();
+  visualResponseMetrics();
+  memorySnapshot();
   System.out.println("PASS "+checks+" metrics assertions");
+ }
+
+ private static void memorySnapshot(){
+  check(StageMetrics.memorySnapshot(900,400,2000,55).contains("java_used_bytes=500 java_max_bytes=2000 process_pss_kib=55"));
+  check(StageMetrics.memorySnapshot(2,3,0,-1).contains("java_used_bytes=unavailable java_max_bytes=unavailable process_pss_kib=unavailable"));
+  check(StageMetrics.memorySnapshot(2,1,2,0).contains("process_pss_kib=unavailable"));
+ }
+
+ private static void visualResponseMetrics(){
+  StageMetrics m=new StageMetrics();
+  m.attempt(StageMetrics.Stage.GRID_VISUAL_RESPONSE);
+  m.record(StageMetrics.Stage.GRID_VISUAL_RESPONSE,130_000_000L);
+  m.attempt(StageMetrics.Stage.BUBBLE_VISUAL_RESPONSE);
+  check(line(m,StageMetrics.Stage.GRID_VISUAL_RESPONSE).startsWith("GRID_VISUAL_RESPONSE n=1 p50_ms=130.000 "));
+  check(line(m,StageMetrics.Stage.BUBBLE_VISUAL_RESPONSE).equals("BUBBLE_VISUAL_RESPONSE n=0 attempts=1 errors=0 cancelled=0 last_error=-"));
+  check(m.report().contains("from Android ACK to observation of a verified board"));
  }
 
  private static void mixedFailureCodes(){
