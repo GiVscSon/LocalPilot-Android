@@ -64,7 +64,7 @@ public final class Color2048Reader {
     if(value.length()!=6)throw new IllegalArgumentException("invalid learned color");int rgb=0;
     for(int i=0;i<6;i++){int digit=Character.digit(value.charAt(i),16);if(digit<0)throw new IllegalArgumentException("invalid learned color");rgb=(rgb<<4)|digit;}
     int low=Math.min(rgb>>16&255,Math.min(rgb>>8&255,rgb&255)),high=Math.max(rgb>>16&255,Math.max(rgb>>8&255,rgb&255));
-    if(high-low<60||high<70)throw new IllegalArgumentException("invalid learned color");
+    if((high-low<60||high<70)&&!darkNeutral(rgb))throw new IllegalArgumentException("invalid learned color");
     for(int[] base:COLORS)if(distance(rgb,(base[0]<<16)|(base[1]<<8)|base[2])<110*110)throw new IllegalArgumentException("learned color conflicts with base palette");
     for(int rank=5;rank<5+n;rank++)if(restored[rank]>=0&&distance(rgb,restored[rank])<110*110)throw new IllegalArgumentException("learned colors conflict");
     restored[5+n]=rgb;
@@ -99,12 +99,23 @@ public final class Color2048Reader {
      for(int j=5;j<=11;j++)if(colors[j]>=0&&distance(rgb,colors[j])<110*110)
       throw new IllegalArgumentException("merged colour conflicts with learned palette");
      int low=Math.min(rgb>>16&255,Math.min(rgb>>8&255,rgb&255)),high=Math.max(rgb>>16&255,Math.max(rgb>>8&255,rgb&255));
-     if(high-low<60||high<70)throw new IllegalArgumentException("background cannot teach a tile");
+     if(high-low<60||high<70){
+      // A dark grey numbered tile (e.g. 32) is distinct from the pale empty
+      // cells of this skin, but a plain dark patch can also be an obstruction.
+      // Only consider it after the deterministic merge and with visible light
+      // glyph pixels, then retain the normal two-frame and transition checks.
+      if(!darkNeutral(rgb)||!hasLightGlyph(pixels,left,top,right,bottom,i))
+       throw new IllegalArgumentException("background cannot teach a tile");
+     }
      colors[rank]=rgb;value=target;added=true;
     }
     // Newly inferred tiles must be homogeneous at every occurrence in this frame.
     if(value>=32&&learned[Integer.numberOfTrailingZeros(value)]<0&&sample[1]>24)
      throw new IllegalArgumentException("animated merged tile");
+    // A learnt dark colour alone is insufficient: an overlay can cover a
+    // cell with the same shade, including after palette restoration.
+    if(value>=32&&darkNeutral(rgb)&&(sample[1]>24||!hasLightGlyph(pixels,left,top,right,bottom,i)))
+     throw new IllegalArgumentException("unknown or obscured dark tile");
     values[i]=value;
    }
    Board2048 board=new Board2048(values);
@@ -130,6 +141,20 @@ public final class Color2048Reader {
    return result;
   }
   private static int distance(int a,int b){int r=(a>>16&255)-(b>>16&255),g=(a>>8&255)-(b>>8&255),v=(a&255)-(b&255);return r*r+g*g+v*v;}
+  private static boolean darkNeutral(int rgb){
+   int r=rgb>>16&255,g=rgb>>8&255,b=rgb&255;
+   int low=Math.min(r,Math.min(g,b)),high=Math.max(r,Math.max(g,b));
+   return low>=25&&high<=100&&high-low<=18;
+  }
+  private static boolean hasLightGlyph(PixelBoardReader.Pixels pixels,int l,int t,int r,int b,int cell){
+   int light=0;
+   for(int y=0;y<5;y++)for(int x=0;x<5;x++){
+    int rgb=pixels.rgb(l+(int)((cell%4+.34+x*.08)*(r-l)/4),t+(int)((cell/4+.34+y*.08)*(b-t)/4));
+    int red=rgb>>16&255,green=rgb>>8&255,blue=rgb&255;
+    if(red>=210&&green>=210&&blue>=210)light++;
+   }
+   return light>=2&&light<=20;
+  }
   private static int[] sample(PixelBoardReader.Pixels pixels,int l,int t,int r,int b,int cell){
    int sr=0,sg=0,sb=0;int[] min={255,255,255},max={0,0,0};
    for(int y=0;y<3;y++)for(int x=0;x<3;x++){
@@ -145,6 +170,10 @@ public final class Color2048Reader {
   int low=Math.min(r,Math.min(g,b)),high=Math.max(r,Math.max(g,b));
   // Empty cells in this skin are pale, low-saturation glass over the scene.
   if(high-low<=42&&r>=195&&g>=175&&b>=185)return 0;
+  // Without this guard a dark grey tile can be close enough in RGB to the
+  // blue 16 prototype and would silently be read as 16.
+  if(high-low<=18&&high<=100)
+   throw new IllegalArgumentException("Неизвестная тёмная плитка в клетке "+(row+1)+","+(col+1));
 
   int best=-1,bestDistance=Integer.MAX_VALUE,secondDistance=Integer.MAX_VALUE;
   for(int i=0;i<COLORS.length;i++){

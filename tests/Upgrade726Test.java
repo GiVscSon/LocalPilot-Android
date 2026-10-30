@@ -54,6 +54,32 @@ public final class Upgrade726Test {
   try{read(session,after,shifted,before,0,1600);}catch(IllegalArgumentException ignored){}
   try{session.confirm(after);}catch(IllegalStateException expected){}
   check(session.learnedCount()==0,"unstable colour cannot confirm across frames");
+  int[] dark=c.clone();dark[5]=0x1a1a1a;
+  PixelBoardReader.Pixels darkBase=image(after,dark);
+  PixelBoardReader.Pixels numbered=(x,y)->x<80&&y<80&&x>=27&&x<60&&y>=27&&y<60&&((x/6+y/6)%3==0)?0xffffff:darkBase.rgb(x,y);
+  var darkSession=new Color2048Reader.Session();
+  rejects(()->darkSession.read(numbered,320,320,0,0,320,320,null,0,2000),"dark pre-existing 32 is not guessed");
+  rejects(()->darkSession.read(darkBase,320,320,0,0,320,320,before,0,2100),"plain dark obstruction cannot teach a tile");
+  int[] nearBlue=dark.clone();nearBlue[5]=0x404040;
+  rejects(()->read(darkSession,after,nearBlue,null,0,2150),"gray tile is never silently read as blue 16");
+  rejects(()->read(darkSession,new Board2048(wrong),dark,before,0,2170),"dark tile cannot teach from an invalid transition");
+  PixelBoardReader.Pixels nearBlueNumbered=(x,y)->x<80&&y<80&&x>=27&&x<60&&y>=27&&y<60&&((x/6+y/6)%3==0)?0xffffff:image(after,nearBlue).rgb(x,y);
+  rejects(()->darkSession.read(nearBlueNumbered,320,320,0,0,320,320,before,0,2180),"numbered gray near blue remains unknown");
+  rejects(()->darkSession.read((x,y)->x<24&&y<24&&x%2==0?0xffffff:numbered.rgb(x,y),320,320,0,0,320,320,before,0,2190),"animated dark tile rejected");
+  check(darkSession.read(numbered,320,320,0,0,320,320,before,0,2200).same(after),"dark numbered merge recognized");
+  rejects(()->darkSession.confirm(after),"dark merge needs two stable frames");
+  rejects(()->darkSession.read(darkBase,320,320,0,0,320,320,before,0,2250),"missing glyph invalidates pending merge");
+  darkSession.confirm(after);check(darkSession.learnedCount()==0,"invalid frame discards pending color");
+  darkSession.read(numbered,320,320,0,0,320,320,before,0,2260);
+  darkSession.read(numbered,320,320,0,0,320,320,before,0,2360);darkSession.confirm(after);
+  check(darkSession.learnedCount()==1&&darkSession.read(numbered,320,320,0,0,320,320,null,0,2400).same(after),"dark merged tile learned");
+  rejects(()->darkSession.read(darkBase,320,320,0,0,320,320,null,0,2450),"flat dark obstruction rejected after learning");
+  var darkRestored=new Color2048Reader.Session();darkRestored.restoreLearned(darkSession.encodeLearned());
+  check(darkRestored.read(numbered,320,320,0,0,320,320,null,0,2500).same(after),"dark palette restores");
+  rejects(()->darkRestored.read(darkBase,320,320,0,0,320,320,null,0,2550),"flat dark obstruction rejected after restore");
+  rejects(()->darkRestored.restoreLearned("v1;dddddd;-;-;-;-;-;-"),"pale background cannot be restored as a tile");
+  rejects(()->darkRestored.restoreLearned("v1;404040;-;-;-;-;-;-"),"gray too close to blue cannot be restored");
+  check(darkRestored.read(numbered,320,320,0,0,320,320,null,0,2600).same(after),"invalid restore does not alter prior palette");
   rejects(()->Verified2048.beforeSpawn(new Board2048(new int[]{2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}),0),"no-op cannot infer new colors");
  }
  private static void pacing(){
