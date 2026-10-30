@@ -143,8 +143,12 @@ public final class Color2048Reader {
 
  private static int classify(int r,int g,int b,int row,int col){
   int low=Math.min(r,Math.min(g,b)),high=Math.max(r,Math.max(g,b));
-  // Empty cells in this skin are pale, low-saturation glass over the scene.
-  if(high-low<=42&&r>=195&&g>=175&&b>=185)return 0;
+  // The real Market 2048 glass cells are translucent: at one location
+  // the scene behind an empty tile is (189,174,193), elsewhere (253,222,210).
+  // Neither passes the old near-white test. Accept only low-chroma, reasonably
+  // bright glass; actual orange/pink/rose/blue tiles have a much stronger
+  // chromatic component. Never infer a tile from an arbitrary vivid background.
+  if(low>=150&&high-low<=90)return 0;
 
   int best=-1,bestDistance=Integer.MAX_VALUE,secondDistance=Integer.MAX_VALUE;
   for(int i=0;i<COLORS.length;i++){
