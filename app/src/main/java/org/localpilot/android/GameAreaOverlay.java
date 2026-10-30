@@ -14,7 +14,7 @@ final class GameAreaOverlay extends FrameLayout {
  private final RectF box=new RectF();
  private final int[] origin=new int[2];
  private final int rows,cols;
- private final boolean requireSquare;
+ private final boolean requireSquare,require2048;
  private final TextView message;
  private final Button confirm;
  private GameViewport.Box candidate;
@@ -25,10 +25,13 @@ final class GameAreaOverlay extends FrameLayout {
  GameAreaOverlay(Context c,Rect window,Listener listener){this(c,window,4,4,false,listener);}
  GameAreaOverlay(Context c,Rect bounds,int rows,int cols,Listener listener){this(c,bounds,rows,cols,false,listener);}
  GameAreaOverlay(Context c,Rect bounds,int rows,int cols,boolean requireSquare,Listener listener){
+  this(c,bounds,rows,cols,requireSquare,false,listener);
+ }
+ GameAreaOverlay(Context c,Rect bounds,int rows,int cols,boolean requireSquare,boolean require2048,Listener listener){
   super(c);if(bounds==null||listener==null)throw new IllegalArgumentException("region editor");
   this.window=new GameViewport.Box(bounds.left,bounds.top,bounds.right,bounds.bottom);
   candidate=rows==1&&cols==1?null:RegionPickerGeometry.initial(window,rows,cols);
-  this.rows=rows;this.cols=cols;this.requireSquare=requireSquare;this.listener=listener;
+  this.rows=rows;this.cols=cols;this.requireSquare=requireSquare;this.require2048=require2048;this.listener=listener;
   setWillNotDraw(false);setContentDescription("Выделение области игры "+rows+" на "+cols);
   LinearLayout header=new LinearLayout(c);header.setOrientation(LinearLayout.VERTICAL);header.setBackgroundColor(0xF0202830);
   header.setPadding(0,dp(24),0,0);
@@ -52,6 +55,10 @@ final class GameAreaOverlay extends FrameLayout {
   GameViewport.Box selected=GameViewport.selection(window,candidate.left(),candidate.top(),candidate.right(),candidate.bottom());
   if(requireSquare&&!RegionPickerGeometry.squareBoardAspect(selected,rows,cols)){
    message.setText("AUTO_BOARD_GEOMETRY: рамка должна охватывать только квадратную сетку. Переместите углы.");
+   return;
+  }
+  if(require2048&&!RegionPickerGeometry.readable2048(selected)){
+   message.setText("2048: выделите квадратную сетку 4×4 без рамки, не менее 160 пикселей. Отклонение сторон не более 8%.");
    return;
   }
   finished=true;listener.selected(new Rect(selected.left(),selected.top(),selected.right(),selected.bottom()));

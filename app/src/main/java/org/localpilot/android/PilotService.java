@@ -14,13 +14,14 @@ public class PilotService extends AccessibilityService {
  public String exportMetrics(){String bubbleReport=bubbleSession.report();stop("Экспорт замеров: STOP");return metrics.report()+"\n"+captureTiming.report()+"\n"+captureCounters()+"\nLAST_STOP: "+lastStopReason+"\nCAPTURE STARTUP\n"+captureStartup.report()+"\n"+sceneRecovery.report()+"\n"+bubbleReport;}
  private final Handler handler=new Handler(Looper.getMainLooper());private final Handler gestureHandler=new Handler(Looper.getMainLooper());private final ActionGate gate=new ActionGate();
  private final CaptureRetry captureRetry=new CaptureRetry();
+ private final BrowserSceneGate browserSceneGate=new BrowserSceneGate();
  private DisplayGeometry displayGeometry;
  private WindowManager wm;private LinearLayout panel,controls,miniBar;private TextView miniState;private TextView state;private Button collapseButton;private boolean panelCompact,discoveringBoard;private WindowManager.LayoutParams layout;
  private final java.util.List<Button> manualControls=new java.util.ArrayList<>();
  private final java.util.concurrent.ExecutorService visionWorker=java.util.concurrent.Executors.newSingleThreadExecutor();
  // Accessed only by visionWorker; reuse the bounded mirror copy between jobs.
  private int[] arcadePixelBuffer;
- private int[] visionPixels(Bitmap frame){int width=frame.getWidth(),height=frame.getHeight(),count=Math.multiplyExact(width,height);if(count>480*720)throw new IllegalArgumentException("capture pixel bound");if(arcadePixelBuffer==null||arcadePixelBuffer.length<count)arcadePixelBuffer=new int[count];frame.getPixels(arcadePixelBuffer,0,width,0,0,width,height);return arcadePixelBuffer;}
+ private int[] visionPixels(Bitmap frame){int width=frame.getWidth(),height=frame.getHeight(),count=Math.multiplyExact(width,height);if(count>CaptureResolution.MAX_PIXELS)throw new IllegalArgumentException("capture pixel bound");if(arcadePixelBuffer==null||arcadePixelBuffer.length<count)arcadePixelBuffer=new int[count];frame.getPixels(arcadePixelBuffer,0,width,0,0,width,height);return arcadePixelBuffer;}
  private java.util.concurrent.Future<?> visionTask;private long visionRequest;private boolean visionPending;
  private boolean busy=false;private int autoLeft=0;private long deadline;private int demoVerified;private String target="";private Rect armedBounds=new Rect();private int nx=50,ny=65;
  private long lastPanelRender;
@@ -64,7 +65,7 @@ public class PilotService extends AccessibilityService {
  private String gridAvoidScope="",gridPendingScope="";
  // Bounded symbolic counts from the current grid observation; no pixels retained.
  private String gridUnknownReasons="none",gridReview="Нет данных: запустите сеточную игру и дождитесь чтения поля.";
- private CustomVisionConfig customVision;
+ private CustomVisionConfig customVision;private String customVisionRoiScope;
  private boolean customCalibrationPending;
  private View customCalibrationOverlay;
  private int controlMode;
@@ -149,6 +150,12 @@ public class PilotService extends AccessibilityService {
  private boolean browserTarget(){try{return getPackageManager().resolveActivity(new Intent(Intent.ACTION_VIEW,android.net.Uri.parse("https://localpilot.invalid")).setPackage(target),android.content.pm.PackageManager.MATCH_DEFAULT_ONLY)!=null;}catch(RuntimeException ignored){return true;}}
  private boolean explicitWindow;
  private Rect visualBounds(){return visualRoi!=null&&armedBounds.contains(visualRoi)?new Rect(visualRoi):new Rect(armedBounds);}
+ private String arcadeCalibrationGeometry(){
+  Rect region=visualBounds();
+  return CalibrationGeometryScope.id(armedBounds.width(),armedBounds.height(),
+    region.left-armedBounds.left,region.top-armedBounds.top,
+    region.right-armedBounds.left,region.bottom-armedBounds.top);
+ }
  private Rect windowBounds(AccessibilityNodeInfo root){
   if(root!=null)for(AccessibilityWindowInfo w:getWindows())if(w.getType()==AccessibilityWindowInfo.TYPE_APPLICATION&&w.getId()==root.getWindowId()){Rect b=new Rect();w.getBoundsInScreen(b);return b;}
   return new Rect();
@@ -208,7 +215,7 @@ public class PilotService extends AccessibilityService {
   if(SystemClock.elapsedRealtime()>=until){note="Окно не стало активным. Коснитесь игры и выберите окно снова";update();return;}
   note="Коснитесь выбранного окна игры · ожидаю фокус";update();handler.postDelayed(()->awaitChosenWindow(pkg,id,expected,epoch,until),250);
  }
- private void chooseProfile(){stop("Выберите механику игры");overlayMenu("Механика · выбирайте по управлению, не по оформлению",new String[]{ArcadeProfile.ARI.label,ArcadeProfile.PADDLE.label,ArcadeProfile.TRAFFIC.label,ArcadeProfile.FLAPPY.label,"2048","Цветной2048","Мэтч Ворлд · обмен соседей","Фишки · удалить группу","Имя игры · отдельное обучение","Шипучка · обычные шары (эксперимент)","Фишки · провести прямую цепочку","Нащупай ход · обмен, избегать черепов"},i->{if(i==8){nameLearningGame();return;}unsupportedGame=false;if(selectedProfile!=i){visualRoi=null;manualVisualRoi=false;boardRoi=null;}selectedProfile=i;if(i<4)captureProfile=ArcadeProfile.values()[i];getSharedPreferences("panel",MODE_PRIVATE).edit().putInt("profile",i).apply();AccessibilityNodeInfo root=appRoot();try{if(root!=null){String pkg=String.valueOf(root.getPackageName());getSharedPreferences("game-profiles",MODE_PRIVATE).edit().putInt(profileChoiceKey(pkg),i).apply();browserProfileConfirmed=true;confirmedProfileScope=profileChoiceKey(pkg);}}finally{if(root!=null)root.recycle();}note="Выбрано: "+profileLabel()+". Другая графика: Ещё → Настроить распознавание. Затем Старт";update();if(i==9){if(bindSelectedWindow())selectVisualRegion();}else if(i>=6)configureGrid();});}
+ private void chooseProfile(){stop("Выберите механику игры");overlayMenu("Механика · выбирайте по управлению, не по оформлению",new String[]{ArcadeProfile.ARI.label,ArcadeProfile.PADDLE.label,ArcadeProfile.TRAFFIC.label,ArcadeProfile.FLAPPY.label,"2048","Цветной2048","Мэтч Ворлд · обмен соседей","Фишки · удалить группу","Имя игры · отдельное обучение","Шипучка · обычные шары (эксперимент)","Фишки · провести прямую цепочку","Нащупай ход · обмен соседей, защита черепов"},i->{if(i==8){nameLearningGame();return;}unsupportedGame=false;if(selectedProfile!=i){visualRoi=null;manualVisualRoi=false;boardRoi=null;}selectedProfile=i;if(i<4)captureProfile=ArcadeProfile.values()[i];getSharedPreferences("panel",MODE_PRIVATE).edit().putInt("profile",i).apply();AccessibilityNodeInfo root=appRoot();try{if(root!=null){String pkg=String.valueOf(root.getPackageName());getSharedPreferences("game-profiles",MODE_PRIVATE).edit().putInt(profileChoiceKey(pkg),i).apply();browserProfileConfirmed=true;confirmedProfileScope=profileChoiceKey(pkg);}}finally{if(root!=null)root.recycle();}note="Выбрано: "+profileLabel()+". Другая графика: Ещё → Настроить распознавание. Затем Старт";update();if(i==9){if(bindSelectedWindow())selectVisualRegion();}else if(i>=6)configureGrid();});}
  private void nameLearningGame(){
   AccessibilityNodeInfo root=appRoot();if(root==null){note="Сначала откройте приложение с игрой";update();return;}
   final String pkg;try{pkg=String.valueOf(root.getPackageName());}finally{root.recycle();}
@@ -278,7 +285,8 @@ public class PilotService extends AccessibilityService {
   if(initialRejection!=null){note="Сначала выберите активное окно игры";update();return;}
   Rect window=new Rect(armedBounds);compact(true);
   GameAreaOverlay overlay=new GameAreaOverlay(this,window,selectedProfile==9?1:gridSelected()?gridConfig.rows:4,selectedProfile==9?1:gridSelected()?gridConfig.cols:4,
-    selectedProfile==4||selectedProfile==5||(gridSelected()&&gridConfig.rows==gridConfig.cols),new GameAreaOverlay.Listener(){
+    selectedProfile==4||selectedProfile==5||(gridSelected()&&gridConfig.rows==gridConfig.cols),
+    selectedProfile==4||selectedProfile==5,new GameAreaOverlay.Listener(){
    public void selected(Rect b){if(epoch!=gate.epoch())return;View old=picker;picker=null;removeOverlay(old);compact(false);
     // Choosing geometry observes the binding; it does not authorize an action.
     // Slow window metadata must not silently discard the user's confirmed area.
@@ -289,6 +297,7 @@ public class PilotService extends AccessibilityService {
         gridSelected()?gridConfig.rows:4,gridSelected()?gridConfig.cols:4)){
      note="AUTO_BOARD_GEOMETRY: обведите только квадратную сетку клеток";update();return;
     }
+    if((selectedProfile==4||selectedProfile==5)&&!RegionPickerGeometry.readable2048(new GameViewport.Box(b.left,b.top,b.right,b.bottom))){note="2048: область 4×4 должна иметь разницу сторон не больше 8%";update();return;}
     visualRoi=new Rect(b);manualVisualRoi=true;boardRoi=selectedProfile>=4?new Rect(b):null;if(selectedProfile==9)saveBubbleRegion(b);else if(gridSelected())saveGridRegion(b);sceneRecovery.reset();clearDiagnosticFrame();note="Область выбрана: "+b.width()+"×"+b.height()+" · нажмите Старт";update();}
    public void cancelled(){if(epoch!=gate.epoch())return;stop("Выбор области отменён");compact(false);}
   });
@@ -386,7 +395,7 @@ public class PilotService extends AccessibilityService {
  private String applicationLabel(String packageName){try{return String.valueOf(getPackageManager().getApplicationLabel(getPackageManager().getApplicationInfo(packageName,0)));}catch(Exception e){return packageName;}}
  private void stop(String reason){
   boolean stoppedGame=playingJumper||playingGrid||playing2048||playingMini;
-  boolean wasArmed=gate.armed();permit.revoke();gate.stop();
+  boolean wasArmed=gate.armed();permit.revoke();gate.stop();browserSceneGate.reset();
   if(!reason.startsWith("Экспорт"))lastStopReason=reason;
   if(playingJumper||playingGrid||wasArmed||autoLeft>0)try{lastSessionReport=diagnosticState();}catch(RuntimeException|OutOfMemoryError ignored){lastSessionReport="Сеанс остановлен; метаданные недоступны";}
   if(playingJumper)CrashDiagnostics.captureStopped();
@@ -480,8 +489,11 @@ public class PilotService extends AccessibilityService {
   learningSlot=getSharedPreferences("panel",MODE_PRIVATE).getString("game_slot."+target,"default");JumperPolicy.reset();
   String scope=VisualGameTarget.key(target,learningSlot,profile);
   controlMode=Math.max(0,Math.min(2,getSharedPreferences("controls",MODE_PRIVATE).getInt(scope,0)));
-  customVision=null;String savedVision=getSharedPreferences("custom-vision",MODE_PRIVATE).getString(scope,null);
-  if(savedVision!=null)try{customVision=CustomVisionConfig.decode(savedVision);}catch(IllegalArgumentException ignored){note="Калибровка повреждена · восстановите стандартное распознавание через Ещё";update();return;}
+  customVision=null;customVisionRoiScope=null;String savedVision=getSharedPreferences("custom-vision",MODE_PRIVATE).getString(scope,null);
+  if(savedVision!=null)try{
+   customVision=CustomVisionConfig.decode(savedVision);
+   customVisionRoiScope=getSharedPreferences("custom-vision",MODE_PRIVATE).getString(scope+".roi-v1",null);
+  }catch(IllegalArgumentException ignored){note="Калибровка повреждена · восстановите стандартное распознавание через Ещё";update();return;}
   modelSlot=VisualGameTarget.modelSlot(learningSlot,controlMode,customVision==null?null:customVision.encode());
   captureProfile=profile;jumperResponseFailures=0;jumperResponsePaused=false;arcadeLastUsable=null;arcadeController.reset();if(arcadeLearning!=null){arcadeController.restore(arcadeLearning.get(target,modelSlot,profile));JumperPolicy.restore(arcadeLearning.get(target,modelSlot,ArcadeProfile.ARI));}arcadeFeedback.reset();clearDiagnosticFrame();sceneRecovery.reset();arcadeRoundSeen=false;arcadeState=null;arcadeBefore=null;arcadePending=null;arcadeAck=false;
   jumperFeedback.reset();
@@ -579,7 +591,7 @@ public class PilotService extends AccessibilityService {
   if(selectedProfile>=4){note="Для 2048 настройте область поля";update();return;}
   if(!bindSelectedWindow())return;
   String slot=getSharedPreferences("panel",MODE_PRIVATE).getString("game_slot."+target,"default"),key=VisualGameTarget.key(target,slot,ArcadeProfile.values()[selectedProfile]);
-  getSharedPreferences("custom-vision",MODE_PRIVATE).edit().remove(key).apply();customVision=null;
+  getSharedPreferences("custom-vision",MODE_PRIVATE).edit().remove(key).remove(key+".roi-v1").apply();customVision=null;customVisionRoiScope=null;
   if(selectedProfile==0){android.content.SharedPreferences.Editor prefs=getSharedPreferences("jumper-vision",MODE_PRIVATE).edit();for(String role:new String[]{"player","platform","hazard"}){prefs.remove(key+"."+role);if(VisualGameTarget.legacyMarket(target)&&slot.equals("default"))prefs.remove(target+"."+role);}prefs.apply();jumperColorProfile=null;}
   note="Стандартное распознавание восстановлено · нажмите Старт";update();
  }
@@ -594,12 +606,12 @@ public class PilotService extends AccessibilityService {
  }
 
  private boolean gridSelected(){return selectedProfile==6||selectedProfile==7||selectedProfile==10||selectedProfile==11;}
- private GridPuzzlePolicy.Mode gridMode(){return selectedProfile==6||selectedProfile==11?GridPuzzlePolicy.Mode.SWAP_MATCH3:selectedProfile==10?GridPuzzlePolicy.Mode.TRACE_LINE:GridPuzzlePolicy.Mode.TAP_GROUP;}
- private String gridKey(){String slot=getSharedPreferences("panel",MODE_PRIVATE).getString("game_slot."+target,"default");return GridPuzzleConfig.key(target,slot,gridMode())+(selectedProfile==11?".protected-skull":"");}
+ private GridPuzzlePolicy.Mode gridMode(){return GridProfileRules.mode(selectedProfile);}
+ private String gridKey(){String slot=getSharedPreferences("panel",MODE_PRIVATE).getString("game_slot."+target,"default");return GridPuzzleConfig.key(target,slot,gridMode())+(selectedProfile==11?".protected-skull-swap-v2":"");}
  private void loadGridConfig(){
   String value=getSharedPreferences("grid-puzzle",MODE_PRIVATE).getString(gridKey()+".config",null);
-  try{gridConfig=value==null?new GridPuzzleConfig(6,6,selectedProfile==10?3:2):GridPuzzleConfig.decode(value);}
-  catch(IllegalArgumentException error){gridConfig=new GridPuzzleConfig(6,6,selectedProfile==10?3:2);visualRoi=null;manualVisualRoi=false;}
+  try{gridConfig=value==null?new GridPuzzleConfig(6,6,GridProfileRules.minimum(selectedProfile)):GridPuzzleConfig.decode(value);}
+  catch(IllegalArgumentException error){gridConfig=new GridPuzzleConfig(6,6,GridProfileRules.minimum(selectedProfile));visualRoi=null;manualVisualRoi=false;}
   if(!manualVisualRoi&&gridConfig.fits(armedBounds.width(),armedBounds.height())){
    visualRoi=new Rect(armedBounds.left+Math.round(gridConfig.left*armedBounds.width()),armedBounds.top+Math.round(gridConfig.top*armedBounds.height()),armedBounds.left+Math.round(gridConfig.right*armedBounds.width()),armedBounds.top+Math.round(gridConfig.bottom*armedBounds.height()));manualVisualRoi=true;
   }
@@ -611,7 +623,7 @@ public class PilotService extends AccessibilityService {
  private void configureGrid(){
   if(!gridSelected()){note="Сначала Игра → Фишки: обмен или группы";update();return;}
   if(!bindSelectedWindow())return;loadGridConfig();
-  overlayMenu("Сетка фишек · "+gridConfig.rows+"×"+gridConfig.cols,new String[]{"6×6","7×7","Другой размер / минимум группы"},i->{if(i<2){setGridSize(i==0?6:7,i==0?6:7,selectedProfile==10?3:2);selectVisualRegion();}else showGridSizeForm();});
+  overlayMenu("Сетка фишек · "+gridConfig.rows+"×"+gridConfig.cols,new String[]{"6×6","7×7","Другой размер / минимум группы"},i->{if(i<2){setGridSize(i==0?6:7,i==0?6:7,GridProfileRules.minimum(selectedProfile));selectVisualRegion();}else showGridSizeForm();});
  }
  private void chooseGridGoal(){
   if(!gridSelected()){note="Сначала Игра → Фишки: обмен или группы";update();return;}if(!bindSelectedWindow())return;
@@ -679,6 +691,7 @@ public class PilotService extends AccessibilityService {
    if(status==BubbleSession.Status.PAUSED){note="Шипучка: "+(bubbleSession.acknowledged()?"Android завершил жест; ":"нет подтверждения Android; ")+bubbleWaitMessage(bubbleSession.lastWait())+" · продолжаю наблюдение без ввода. Старт — повторная проверка";update();scheduleGrid(epoch);return;}
    if(status!=BubbleSession.Status.READY&&status!=BubbleSession.Status.VERIFIED){note=read.usable()?(bubbleSession.pending()?"Шипучка: проверяю попадание":"Шипучка: ожидаю второй устойчивый кадр"):read.reason();update();scheduleGrid(epoch);return;}
    bubbleGeometry=read.board();gridVerified=bubbleSession.verified();
+   if(targetIsBrowser&&!browserSceneGate.observe(frameAt,read.usable())){note="Шипучка: проверяю 2 стабильных кадра после изменения браузера";update();scheduleGrid(epoch);return;}
    metrics.attempt(StageMetrics.Stage.POLICY);started=SystemClock.elapsedRealtimeNanos();BubblePolicy.Shot shot=BubblePolicy.choose(bubbleGeometry);
    captureDecisions++;metrics.record(StageMetrics.Stage.POLICY,SystemClock.elapsedRealtimeNanos()-started);
    uiStats="Шипучка · шаров "+bubbleGeometry.count()+" · выстрелов "+gridMoves+" · подтверждено "+gridVerified;
@@ -751,7 +764,7 @@ public class PilotService extends AccessibilityService {
    }
    gridResultVisible=false;long readNs=SystemClock.elapsedRealtimeNanos();metrics.attempt(StageMetrics.Stage.READ);
    long frameAt=SystemClock.elapsedRealtime()-Math.max(0,SystemClock.uptimeMillis()-lastShotTimestamp);
-   GridPuzzleVision.Observation observation=GridPuzzleVision.detect(pixels::getPixel,r.left,r.top,r.right,r.bottom,gridConfig.rows,gridConfig.cols,panel.left,panel.top,panel.right,panel.bottom,frameAt,gridPalette,selectedProfile==11);
+   GridPuzzleVision.Observation observation=GridPuzzleVision.detect(pixels::getPixel,r.left,r.top,r.right,r.bottom,gridConfig.rows,gridConfig.cols,panel.left,panel.top,panel.right,panel.bottom,frameAt,gridPalette,GridProfileRules.protectSkulls(selectedProfile));
    captureReads++;metrics.record(StageMetrics.Stage.READ,SystemClock.elapsedRealtimeNanos()-readNs);
    gridUnknownReasons=observation.unknownReasonCounts();if(gridUnknownReasons.isEmpty())gridUnknownReasons="none";
    int unknownCount=observation.unknownIndices().length;
@@ -790,6 +803,7 @@ public class PilotService extends AccessibilityService {
       :"Не распознано "+unknownGridCells(observation)+" из "+(gridConfig.rows*gridConfig.cols)+" клеток · "+observation.unknownSummary(3)+" · продолжаю чтение без ввода";
     update();scheduleGrid(epoch);return;
    }
+   if(targetIsBrowser&&!browserSceneGate.observe(frameAt,observation.usable())){note="Сетка: после изменения браузера нужны 2 стабильных кадра, жестов нет";update();scheduleGrid(epoch);return;}
    gridPalette=observation.palette();
    // Only fully verified observations may overwrite a stored game palette.
    // Partial observations remain session-local until a complete board appears.
@@ -842,7 +856,9 @@ public class PilotService extends AccessibilityService {
     try{
      for(int i=0;i<3;i++){x[i]=(x[i]*fw-geometry.left)/(geometry.right-geometry.left);y[i]=(y[i]*fh-geometry.top)/(geometry.bottom-geometry.top);}
      CustomVisionConfig selected=new CustomVisionConfig(colors,x,y);
-     getSharedPreferences("custom-vision",MODE_PRIVATE).edit().putString(VisualGameTarget.key(target,learningSlot,captureProfile),selected.encode()).apply();customVision=selected;
+     String scope=VisualGameTarget.key(target,learningSlot,captureProfile);
+     customVisionRoiScope=arcadeCalibrationGeometry();
+     getSharedPreferences("custom-vision",MODE_PRIVATE).edit().putString(scope,selected.encode()).putString(scope+".roi-v1",customVisionRoiScope).apply();customVision=selected;
      modelSlot=VisualGameTarget.modelSlot(learningSlot,controlMode,selected.encode());
      arcadeSceneGeneration++;jumperVisionPending=false;arcadeState=null;arcadeLastUsable=null;arcadeBefore=null;arcadePending=null;arcadeAck=false;arcadeController.reset();arcadeFeedback.reset();sceneRecovery.reset();roundOutcome.reset();persistArcadeModel(false);
      note="Настройка объектов сохранена · проверяю новые кадры";
@@ -953,6 +969,14 @@ public class PilotService extends AccessibilityService {
    captureFrames++;
    if(customCalibrationOverlay!=null){frame.recycle();return;}
    try{resolveVisualRegion(frame);}catch(RuntimeException error){/* Preserve full window when optional crop is unavailable. */}
+   if(customVision!=null&&!customCalibrationPending&&customCalibrationOverlay==null){
+    Rect sampleRoi=visualBounds();
+    if(!CalibrationGeometryScope.matches(customVisionRoiScope,armedBounds.width(),armedBounds.height(),
+       sampleRoi.left-armedBounds.left,sampleRoi.top-armedBounds.top,
+       sampleRoi.right-armedBounds.left,sampleRoi.bottom-armedBounds.top)){
+     frame.recycle();stop("Калибровка другого размера или области · выделите игровое поле и настройте цвета заново");return;
+    }
+   }
    rememberDiagnosticFrame(frame,timestampMs);
    jumperLastFrameMs=Math.max(jumperLastFrameMs,timestampMs);
    if(customCalibrationPending){if(!valid(gate.offer(SystemClock.elapsedRealtime()))){if(!waitForCaptureTarget(SystemClock.elapsedRealtime())&&!deferFocus(invalidReason(gate.offer(SystemClock.elapsedRealtime()))))stop("Вернитесь в выбранное окно для настройки");frame.recycle();return;}customCalibrationPending=false;showCustomCalibration(frame);return;}
@@ -1102,6 +1126,7 @@ public class PilotService extends AccessibilityService {
    }
    if(busy||now-arcadeLastAction<ArcadePolicy.interval(captureProfile))return;
   }
+  if(targetIsBrowser&&!browserSceneGate.observe(timestampMs,observation!=null&&observation.usable())){note="Аркада: подтверждаю браузерную сцену · без ввода";update();return;}
   metrics.attempt(StageMetrics.Stage.POLICY);long policyStarted=SystemClock.elapsedRealtimeNanos();
   captureDecisions++;
   ArcadePolicy.Decision action=predictive==null?ArcadePolicy.next(observation):predictive;
@@ -1177,6 +1202,7 @@ public class PilotService extends AccessibilityService {
   JumperFeedback.State feedback=advanceJumperFeedback(state,now);
   if(feedback==JumperFeedback.State.PAUSED){note="Ари: нет видимого ответа на 3 касания · нажмите Старт";update();return;}
   if(feedback==JumperFeedback.State.WAITING){note="Проверяю направление касания…";update();return;}
+  if(targetIsBrowser&&!browserSceneGate.observe(timestampMs,state!=null&&state.usable())){note="Ари: перепроверяю сцену браузера · без ввода";update();return;}
   if(busy||now-jumperLastActionMs<180){update();return;}
   captureDecisions++;
   JumperPolicy.Action action=JumperPolicy.nextAction(state);
@@ -1211,6 +1237,7 @@ public class PilotService extends AccessibilityService {
   if(panel==null||!panel.isShown()){failStage(StageMetrics.Stage.ANDROID_ACK,"STOP_PANEL_MISSING","Нет панели Stop");return;}int[] panelXY=new int[2];panel.getLocationOnScreen(panelXY);Rect panelRect=new Rect(panelXY[0],panelXY[1],panelXY[0]+panel.getWidth(),panelXY[1]+panel.getHeight());
   Rect pathRect=new Rect((int)Math.min(x,ex)-2,(int)Math.min(y,ey)-2,(int)Math.max(x,ex)+3,(int)Math.max(y,ey)+3);
   if(Rect.intersects(panelRect,pathRect)){failStage(StageMetrics.Stage.ANDROID_ACK,"PANEL_OVERLAP","Панель перекрывает жест: передвиньте её");return;}
+  if(targetIsBrowser&&browserSceneGate.quarantined()){note="Браузерная игра не подтверждена · жест не отправлен";update();return;}
   if(!permit.allows(gate.epoch(),SystemClock.elapsedRealtime())){failStage(StageMetrics.Stage.ANDROID_ACK,"PERMIT_REQUIRED","Сначала явно разрешите ввод");return;}
   if(journal==null){failStage(StageMetrics.Stage.ANDROID_ACK,"JOURNAL_UNAVAILABLE","Журнал недоступен — ввода нет");return;}final long gestureId=journal.nextRequest();if(!audit(SafeJournal.Event.PROPOSED,gestureId,0)){failStage(StageMetrics.Stage.ANDROID_ACK,"JOURNAL_WRITE_FAILED","Ошибка журнала — ввода нет");return;}
   if(frameAt>=0&&(SystemClock.elapsedRealtime()<frameAt||SystemClock.elapsedRealtime()-frameAt>300)){metrics.failure(StageMetrics.Stage.CAPTURE,"STALE_BEFORE_DISPATCH");note="Кадр устарел при подготовке жеста · жду свежий";update();return;}
@@ -1507,7 +1534,13 @@ public class PilotService extends AccessibilityService {
   };
   try{takeScreenshot(Display.DEFAULT_DISPLAY,getMainExecutor(),callback);}catch(RuntimeException e){captureTiming.unavailable(requestId,request,SystemClock.elapsedRealtime());captureBusy=false;failStage(StageMetrics.Stage.CAPTURE,"SCREENSHOT_UNAVAILABLE","Захват недоступен");return;}
   final long watchdogScheduledAt=SystemClock.elapsedRealtime();captureTiming.apiReturned(requestId,request,watchdogScheduledAt);
-  handler.postDelayed(()->{boolean stillPending=captureBusy&&pendingCapture==requestId&&epoch==gate.epoch();captureTiming.timeout(requestId,request,watchdogScheduledAt,SystemClock.elapsedRealtime(),4000,stillPending);if(stillPending){captureBusy=false;pendingCapture=++captureCounter;failStage(StageMetrics.Stage.CAPTURE,"SCREENSHOT_TIMEOUT","Захват: таймаут без ввода");}},4000);
+  handler.postDelayed(()->{boolean stillPending=captureBusy&&pendingCapture==requestId&&epoch==gate.epoch();captureTiming.timeout(requestId,request,watchdogScheduledAt,SystemClock.elapsedRealtime(),4000,stillPending);if(stillPending){
+   // Revoke the timed-out request ID BEFORE scheduling any retry. A late
+   // callback is discarded, never interpreted as a fresh gameplay frame.
+   captureBusy=false;pendingCapture=++captureCounter;
+   if(!retryCapture(epoch,result,"SCREENSHOT_TIMEOUT"))
+    failStage(StageMetrics.Stage.CAPTURE,"SCREENSHOT_TIMEOUT","Захват: повторный таймаут, STOP без ввода");
+  }},4000);
  }
  private long captureDelay(){return Build.VERSION.SDK_INT>=31?400:1100;}
  private void stable(long epoch,BoardResult result){
@@ -1528,8 +1561,8 @@ public class PilotService extends AccessibilityService {
  private void start2048(){start2048(false);}
  private void start2048(boolean colored){
   if(busy||captureBusy||discoveringBoard||autoLeft>0||playing2048||playingMini||playingJumper||playingGrid||!gate.armed()||boardRoi==null){note=colored?"Цветной 2048: привяжите игру и выберите поле 4×4":"Привязать → Поле 4×4 → Авто2048";update();return;}
-  if(!RegionPickerGeometry.squareBoardAspect(new GameViewport.Box(boardRoi.left,boardRoi.top,boardRoi.right,boardRoi.bottom),4,4)){
-   stop("AUTO_BOARD_GEOMETRY: выберите квадратную сетку 2048 размером 4×4");return;
+  if(!RegionPickerGeometry.readable2048(new GameViewport.Box(boardRoi.left,boardRoi.top,boardRoi.right,boardRoi.bottom))){
+   stop("AUTO_BOARD_GEOMETRY: 2048 требует минимум 160 пикселей и разницу сторон до 8%");return;
   }
   boardReadGeneration++;boardReadMisses=0;colorSession.reset();before2048=null;colored2048=colored;
   if(colored2048){String saved=getSharedPreferences("color-2048",MODE_PRIVATE).getString(color2048PaletteKey(),null);if(saved!=null)try{colorSession.restoreLearned(saved);}catch(IllegalArgumentException invalidPalette){note="Сохранённая цветовая палитра повреждена · начинаю с базовых плиток";}}
@@ -1561,6 +1594,10 @@ public class PilotService extends AccessibilityService {
    if(before2048!=null&&!before2048.verifies(board,direction2048)){Board2048.Verification why=before2048.verification(board,direction2048);note="2048: Android завершил жест · "+(why==Board2048.Verification.UNCHANGED?"поле не изменилось":why==Board2048.Verification.MISSING_SPAWN?"нет ожидаемой новой плитки":"поле отличается от расчёта")+" · наблюдаю без ввода";update();long generation=boardReadGeneration;handler.postDelayed(()->{if(epoch==gate.epoch()&&generation==boardReadGeneration&&playing2048&&!focusPaused)round2048(epoch);},Math.max(1000,captureDelay()));return;}
    if(before2048!=null){if(!saveExample("2048",before2048.cells,direction2048,board.cells))return;mergeTotal+=Verified2048.mergeReward(before2048,direction2048,board);if(!audit(SafeJournal.Event.VERIFIED_2048,0,mergeTotal)){stop("Ошибка журнала результатов");return;}before2048=null;}
    if(board.max()>=2048){stop("2048: распознана плитка 2048; сверить визуально");return;}
+   if(targetIsBrowser&&!browserSceneGate.observe(SystemClock.elapsedRealtime()-Math.max(0,SystemClock.uptimeMillis()-lastShotTimestamp),true)){
+    note="2048: перепроверяю сцену браузера · без ввода";update();long generation=boardReadGeneration;
+    handler.postDelayed(()->{if(epoch==gate.epoch()&&generation==boardReadGeneration&&playing2048&&!focusPaused)round2048(epoch);},captureDelay());return;
+   }
    metrics.attempt(StageMetrics.Stage.POLICY);long policyNs=SystemClock.elapsedRealtimeNanos();long started=SystemClock.elapsedRealtime();int d;try{d=board.choose();}catch(RuntimeException error){failStage(StageMetrics.Stage.POLICY,"POLICY_FAILED","Не удалось выбрать ход");return;}metrics.record(StageMetrics.Stage.POLICY,SystemClock.elapsedRealtimeNanos()-policyNs);long think=SystemClock.elapsedRealtime()-started;if(d<0){stop("2048: допустимых ходов нет");return;}if(!Verified2048.mask(board)[d]){stop("2048: ход вне маски");return;}if(!valid(ticket)){if(deferFocus(invalidReason(ticket)))return;stop("План устарел");return;}
    Rect r=new Rect(boardRoi);float x=r.exactCenterX(),y=r.exactCenterY(),dx=0,dy=0;switch(d){case Board2048.LEFT:dx=-r.width()*.30f;break;case Board2048.RIGHT:dx=r.width()*.30f;break;case Board2048.UP:dy=-r.height()*.30f;break;case Board2048.DOWN:dy=r.height()*.30f;break;}
    before2048=board;direction2048=d;moves2048++;uiStats="кадр "+captureMs+" мс · CPU "+think+" мс · проверено "+(moves2048-1);note="Ход "+moves2048+" · max "+board.max()+" · кадр "+captureMs+"мс · CPU "+think+"мс";update();
@@ -1604,7 +1641,12 @@ public class PilotService extends AccessibilityService {
   if(reason!=null){if(!deferFocus(reason))stop("Смена окна/блокировка — STOP ["+reason+"]");return;}
   if(focusPaused){watchFocus(gate.epoch(),++focusWatchId);return;}
   if(targetIsBrowser&&(playingJumper&&arcadeRoundSeen||playingGrid||playing2048||playingMini)
-    &&e.getEventType()==AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED&&target.equals(String.valueOf(e.getPackageName()))){stop("Состояние браузера изменилось · выберите игру и нажмите Старт заново");return;}
+    &&e.getEventType()==AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED&&target.equals(String.valueOf(e.getPackageName()))){
+     // Same-package browser events may be harmless score banners or hints.
+     // Quarantine new gestures until two fresh game-state reads confirm safety.
+     browserSceneGate.changed(SystemClock.elapsedRealtime());
+     note="Браузер изменил интерфейс · визуальная перепроверка без жестов";update();return;
+    }
 
  }
  @Override public void onInterrupt(){CrashDiagnostics.phase("SERVICE_INTERRUPTED");stop("Служба прервана");}
