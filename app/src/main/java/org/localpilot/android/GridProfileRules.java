@@ -7,7 +7,8 @@ public final class GridProfileRules {
   return switch(profile){
    case 6->GridPuzzlePolicy.Mode.SWAP_MATCH3; // Match World
    case 7->GridPuzzlePolicy.Mode.TAP_GROUP;
-   case 10,11->GridPuzzlePolicy.Mode.TRACE_LINE; // Straight line, incl. diagonals.
+   case 10->GridPuzzlePolicy.Mode.TRACE_LINE; // Generic straight chain, incl. diagonals.
+   case 11->GridPuzzlePolicy.Mode.SWAP_MATCH3; // Protected neighbour swap; no physical trace evidence.
    default->throw new IllegalArgumentException("unsupported grid profile");
   };
  }
