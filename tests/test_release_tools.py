@@ -52,14 +52,15 @@ class ReleaseToolsTest(unittest.TestCase):
 
     def test_isolated_field_apk_never_overwrites_preview_or_old_dev(self):
         config = common.configuration(self.root)
-        self.assertEqual('org.localpilot.android.field32', config['package'])
-        self.assertEqual('0.7.36-field32', config['version'])
+        self.assertEqual('org.localpilot.android.field33dyn', config['package'])
+        self.assertEqual('0.7.37-field33dyn', config['version'])
         self.assertNotIn(config['package'], {
             'org.localpilot.android.preview',
             'org.localpilot.android.dev',
             'org.localpilot.android.dev.install1029',
             'org.localpilot.android.field1030',
             'org.localpilot.android.field31',
+            'org.localpilot.android.field32',
         })
 
     def test_missing_or_ambiguous_version_fails(self):
