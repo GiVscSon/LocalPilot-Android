@@ -606,12 +606,12 @@ public class PilotService extends AccessibilityService {
  }
 
  private boolean gridSelected(){return selectedProfile==6||selectedProfile==7||selectedProfile==10||selectedProfile==11;}
- private GridPuzzlePolicy.Mode gridMode(){return selectedProfile==6?GridPuzzlePolicy.Mode.SWAP_MATCH3:selectedProfile==10||selectedProfile==11?GridPuzzlePolicy.Mode.TRACE_LINE:GridPuzzlePolicy.Mode.TAP_GROUP;}
+ private GridPuzzlePolicy.Mode gridMode(){return GridProfileRules.mode(selectedProfile);}
  private String gridKey(){String slot=getSharedPreferences("panel",MODE_PRIVATE).getString("game_slot."+target,"default");return GridPuzzleConfig.key(target,slot,gridMode())+(selectedProfile==11?".protected-skull":"");}
  private void loadGridConfig(){
   String value=getSharedPreferences("grid-puzzle",MODE_PRIVATE).getString(gridKey()+".config",null);
-  try{gridConfig=value==null?new GridPuzzleConfig(6,6,(selectedProfile==10||selectedProfile==11)?3:2):GridPuzzleConfig.decode(value);}
-  catch(IllegalArgumentException error){gridConfig=new GridPuzzleConfig(6,6,(selectedProfile==10||selectedProfile==11)?3:2);visualRoi=null;manualVisualRoi=false;}
+  try{gridConfig=value==null?new GridPuzzleConfig(6,6,GridProfileRules.minimum(selectedProfile)):GridPuzzleConfig.decode(value);}
+  catch(IllegalArgumentException error){gridConfig=new GridPuzzleConfig(6,6,GridProfileRules.minimum(selectedProfile));visualRoi=null;manualVisualRoi=false;}
   if(!manualVisualRoi&&gridConfig.fits(armedBounds.width(),armedBounds.height())){
    visualRoi=new Rect(armedBounds.left+Math.round(gridConfig.left*armedBounds.width()),armedBounds.top+Math.round(gridConfig.top*armedBounds.height()),armedBounds.left+Math.round(gridConfig.right*armedBounds.width()),armedBounds.top+Math.round(gridConfig.bottom*armedBounds.height()));manualVisualRoi=true;
   }
@@ -623,7 +623,7 @@ public class PilotService extends AccessibilityService {
  private void configureGrid(){
   if(!gridSelected()){note="Сначала Игра → Фишки: обмен или группы";update();return;}
   if(!bindSelectedWindow())return;loadGridConfig();
-  overlayMenu("Сетка фишек · "+gridConfig.rows+"×"+gridConfig.cols,new String[]{"6×6","7×7","Другой размер / минимум группы"},i->{if(i<2){setGridSize(i==0?6:7,i==0?6:7,(selectedProfile==10||selectedProfile==11)?3:2);selectVisualRegion();}else showGridSizeForm();});
+  overlayMenu("Сетка фишек · "+gridConfig.rows+"×"+gridConfig.cols,new String[]{"6×6","7×7","Другой размер / минимум группы"},i->{if(i<2){setGridSize(i==0?6:7,i==0?6:7,GridProfileRules.minimum(selectedProfile));selectVisualRegion();}else showGridSizeForm();});
  }
  private void chooseGridGoal(){
   if(!gridSelected()){note="Сначала Игра → Фишки: обмен или группы";update();return;}if(!bindSelectedWindow())return;
@@ -764,7 +764,7 @@ public class PilotService extends AccessibilityService {
    }
    gridResultVisible=false;long readNs=SystemClock.elapsedRealtimeNanos();metrics.attempt(StageMetrics.Stage.READ);
    long frameAt=SystemClock.elapsedRealtime()-Math.max(0,SystemClock.uptimeMillis()-lastShotTimestamp);
-   GridPuzzleVision.Observation observation=GridPuzzleVision.detect(pixels::getPixel,r.left,r.top,r.right,r.bottom,gridConfig.rows,gridConfig.cols,panel.left,panel.top,panel.right,panel.bottom,frameAt,gridPalette,selectedProfile==11);
+   GridPuzzleVision.Observation observation=GridPuzzleVision.detect(pixels::getPixel,r.left,r.top,r.right,r.bottom,gridConfig.rows,gridConfig.cols,panel.left,panel.top,panel.right,panel.bottom,frameAt,gridPalette,GridProfileRules.protectSkulls(selectedProfile));
    captureReads++;metrics.record(StageMetrics.Stage.READ,SystemClock.elapsedRealtimeNanos()-readNs);
    gridUnknownReasons=observation.unknownReasonCounts();if(gridUnknownReasons.isEmpty())gridUnknownReasons="none";
    int unknownCount=observation.unknownIndices().length;
