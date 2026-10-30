@@ -311,6 +311,14 @@ public final class PilotUiInstrumentation extends Instrumentation {
         int settled = score();
         require(settled <= afterClick + 1, "More than one target click happened after Stop returned");
         require(!armed() && onMain(() -> intField("autoLeft")) == 0, "Stop did not disarm future actions");
+        String savedStop = onMain(() -> (String) field("lastSessionReport"));
+        require(savedStop.startsWith("STOP_CONTEXT ") && savedStop.contains("bound_before=true")
+                && savedStop.contains(" reason=STOP\n"), "STOP lost its pre-revocation identity or immediate cause");
+        String exported = onMain(() -> service.exportDiagnosticState());
+        require(exported.contains("LAST ACTIVE SESSION\n" + savedStop)
+                && savedStop.equals(onMain(() -> (String) field("lastSessionReport"))),
+                "Inactive diagnostic export overwrote the actual stopped session");
+        require(!armed(), "Diagnostic export rearmed the stopped session");
         long until = SystemClock.uptimeMillis() + 1_100;
         while (SystemClock.uptimeMillis() < until) {
             require(score() == settled, "Demo continued after Stop and gesture completion");
