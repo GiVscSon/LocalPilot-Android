@@ -115,7 +115,8 @@ public final class JumperCaptureService extends Service {
         real.getRealMetrics(metrics);
         screenDisplayId=real.getDisplayId();
         screenWidth=metrics.widthPixels;screenHeight=metrics.heightPixels;
-        CaptureResolution size=new CaptureResolution(screenWidth,screenHeight);
+        CaptureResolution size=CaptureResolution.forDevice(screenWidth,screenHeight,
+                getResources().getConfiguration().smallestScreenWidthDp);
         width=size.width;height=size.height;
         CrashDiagnostics.phase("CAPTURE_SURFACE_"+width+"x"+height);
         argbBuffer=new int[width*height];
