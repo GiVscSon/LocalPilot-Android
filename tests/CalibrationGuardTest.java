@@ -60,6 +60,22 @@ public final class CalibrationGuardTest {
   }
   check(RegionPickerGeometry.squareBoardAspect(new GameViewport.Box(0,0,300,500),6,7),
     "non-square 6x7 grids keep their explicit geometry contract");
+  // The tablet editor previously accepted 15% stretched 2048 ROIs, although
+  // both PixelBoardReader and Color2048Reader reject them at the first read.
+  check(RegionPickerGeometry.readable2048(new GameViewport.Box(100,100,500,500)),
+    "square 400x400 2048 region is readable on tablet");
+  check(RegionPickerGeometry.readable2048(new GameViewport.Box(0,0,324,300)),
+    "8 percent border accepted by the actual readers");
+  check(!RegionPickerGeometry.readable2048(new GameViewport.Box(0,0,345,300)),
+    "15 percent stretched 2048 ROI cannot be saved as working");
+  check(!RegionPickerGeometry.readable2048(new GameViewport.Box(0,0,300,345)),
+    "15 percent vertically stretched 2048 ROI rejected");
+  check(!RegionPickerGeometry.readable2048(new GameViewport.Box(0,0,150,150)),
+    "too-small 2048 board rejected at calibration, not after start");
+  check(!RegionPickerGeometry.readable2048(new GameViewport.Box(0,0,1500,350)),
+    "tablet full-landscape window cannot masquerade as 2048 board");
+  check(RegionPickerGeometry.squareBoardAspect(new GameViewport.Box(0,0,345,300),6,6),
+    "other square-cell games preserve their own 18 percent tolerance");
   for(GameViewport.Box bad:new GameViewport.Box[]{new GameViewport.Box(0,0,0,30),new GameViewport.Box(0,0,30,0)}){
    try{RegionPickerGeometry.squareBoardAspect(bad,4,4);throw new AssertionError("invalid rectangle accepted");}
    catch(IllegalArgumentException expected){checks++;}
