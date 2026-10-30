@@ -2,11 +2,11 @@ plugins { id 'com.android.application' }
 android {
  namespace 'org.localpilot.android'
  compileSdk 35
- defaultConfig { applicationId 'org.localpilot.android'; minSdk 30; targetSdk 35; versionCode 51; versionName '0.7.35'; testInstrumentationRunner 'org.localpilot.android.PilotUiInstrumentation' }
+ defaultConfig { applicationId 'org.localpilot.android'; minSdk 30; targetSdk 35; versionCode 52; versionName '0.7.36'; testInstrumentationRunner 'org.localpilot.android.PilotUiInstrumentation' }
  buildTypes {
   debug {
-   applicationIdSuffix '.field31'
-   versionNameSuffix '-field31'
+   applicationIdSuffix '.field32'
+   versionNameSuffix '-field32'
    debuggable false
   }
  }

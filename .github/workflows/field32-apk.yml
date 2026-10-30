@@ -1,0 +1,122 @@
+name: Publish LocalPilot Field 32 directly installable APK
+on:
+  push:
+    branches:
+      - install/field32-object-integration-20261030
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: localpilot-field32-release
+  cancel-in-progress: false
+
+jobs:
+  build-install-publish:
+    name: build, verify, install, publish APK
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      GH_TOKEN: ${{ github.token }}
+      FIELD_PACKAGE: org.localpilot.android.field32
+      FIELD_TAG: v0.7.36-field32
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Android SDK and build tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-35' 'build-tools;35.0.0'
+      - name: Verify package isolation and release tooling
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p 'test_release_tools.py' -v
+      - name: Verify real-screenshot 2048 and protected partial-grid gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          java tests/GridVerify.java
+          java tests/Field2048GlassVerify.java
+          java tests/Verify.java tests/legacy_parity.txt
+          java tests/CalibrationVerify.java
+          java tests/CaptureTimingVerify.java
+          java tests/PanelDockingVerify.java
+          java tests/BubbleVerify.java
+          java tests/LearningVerify.java
+          java tests/ProcessExitVerify.java
+          java tests/AuditVerify.java
+          java tests/CaptureCleanupVerify.java
+          java tests/RuntimeVerify.java
+          java tests/Upgrade726Verify.java
+          java tests/Upgrade727Verify.java
+          java tests/ResultVerify.java
+          java tests/UniversalVerify.java
+          java tests/ControllerVerify.java
+          java tests/SystemVerify.java
+          java tests/RlVerify.java
+      - name: Build and verify full signed APK, lint, instrumentation compile
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 build_debug.py --gradle gradle
+          python3 tools/package_release.py
+          mkdir -p dist
+          cp app/build/outputs/apk/debug/app-debug.apk dist/LocalPilot_Field32_0.7.36.apk
+          sha256sum dist/LocalPilot_Field32_0.7.36.apk > dist/SHA256SUMS.txt
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs --verbose dist/LocalPilot_Field32_0.7.36.apk
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging dist/LocalPilot_Field32_0.7.36.apk | grep "^package: name='$FIELD_PACKAGE' versionCode='52' versionName='0.7.36-field32'"
+      - name: Store APK independently of release publication
+        uses: actions/upload-artifact@v4
+        with:
+          name: LocalPilot-Field32-${{ github.sha }}
+          path: |
+            dist/LocalPilot_Field32_0.7.36.apk
+            dist/SHA256SUMS.txt
+          if-no-files-found: error
+      - name: Enable KVM for Android emulator
+        run: |
+          test -c /dev/kvm
+          sudo chmod 666 /dev/kvm
+      - name: Install and launch the actual APK on Android 15
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: default
+          profile: pixel_2
+          disable-animations: true
+          emulator-boot-timeout: 300
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
+          script: |
+            set -eu
+            adb install dist/LocalPilot_Field32_0.7.36.apk
+            adb shell pm path "$FIELD_PACKAGE" | grep -q 'package:'
+            adb shell am start -W -n "$FIELD_PACKAGE/org.localpilot.android.MainActivity"
+            adb shell pidof "$FIELD_PACKAGE"
+            echo "PASS: isolated Field32 APK installed and launched"
+      - name: Publish direct APK download only after installation succeeds
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view "$FIELD_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "::error::Field release already exists. Refusing to overwrite its APK or signer."
+            exit 1
+          fi
+          gh release create "$FIELD_TAG" \
+            dist/LocalPilot_Field32_0.7.36.apk \
+            dist/SHA256SUMS.txt \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "LocalPilot Field 32 0.7.36 (separate Android app)" \
+            --notes-file docs/FIELD32_INSTALL.ru.md \
+            --prerelease
+          gh release view "$FIELD_TAG" --repo "$GITHUB_REPOSITORY" --json tagName,assets,url
