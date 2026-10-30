@@ -32,6 +32,7 @@ jobs:
       java tests/CalibrationVerify.java
       java tests/BrowserSceneVerify.java
       java tests/TabletCaptureVerify.java
+      java tests/Field2048GlassVerify.java
       java tests/CaptureTimingVerify.java
       java tests/CaptureMatrixVerify.java
       java tests/PanelDockingVerify.java
