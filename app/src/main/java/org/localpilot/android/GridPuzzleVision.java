@@ -11,7 +11,7 @@ public final class GridPuzzleVision {
  public interface Pixels { int get(int x,int y); }
  /** Trace-only reasons; these labels do not authorize a game gesture. */
  public enum CellReason {
-  KNOWN, KNOWN_SPECIAL, PROTECTED_SKULL, EXCLUDED_OVERLAY,
+  KNOWN, KNOWN_SPECIAL, PROTECTED_SKULL, PROTECTED_DYNAMITE, EXCLUDED_OVERLAY,
   RING_NO_MATCH, RING_AMBIGUOUS, COLOR_NO_MATCH, COLOR_AMBIGUOUS, NO_SAMPLE
  }
  private static final int FEATURES=42,MAX_TYPES=24;
@@ -120,6 +120,12 @@ public final class GridPuzzleVision {
    if(protectSkulls&&protectedSkull(pixels,l,t,r,b)){
     cells[index]=0;special.set(index);reasons[index]=CellReason.PROTECTED_SKULL;continue;
    }
+   // A red dynamite stick with a gold fuse is a protected hazard, not a
+   // palette token or a skippable UNKNOWN. Only the opt-in skull-protected
+   // game recognises it; other games retain the old conservative reader.
+   if(protectSkulls&&protectedDynamite(pixels,l,t,r,b)){
+    cells[index]=0;special.set(index);reasons[index]=CellReason.PROTECTED_DYNAMITE;continue;
+   }
    float[] ring=ring(pixels,l,t,r,b);
    if(ring!=null){rings[index]=ring;reasons[index]=CellReason.RING_NO_MATCH;continue;}
    samples[index]=describe(pixels,l,t,r,b);
@@ -215,6 +221,35 @@ public final class GridPuzzleVision {
    if(pale<37)return false;
   }
   return true;
+ }
+
+ /**
+  * Recognise the actual Market red dynamite: a tall dark-red cylindrical core
+  * across the lower centre AND a separate bright yellow/orange fuse near the
+  * upper-right edge. Both are mandatory; orange flowers, red tomato slices,
+  * yellow coins, skulls and ordinary tokens alone must not match.
+  *
+  * Each of the two small grids is bounded to 81 pixel reads. Semantics are
+  * fail-closed: detection only blocks the cell, never authorises a gesture.
+  */
+ static boolean protectedDynamite(Pixels pixels,float l,float t,float r,float b){
+  int body=0;
+  for(int yy=0;yy<9;yy++)for(int xx=0;xx<9;xx++){
+   int color=sample(pixels,l,t,r,b,.25f+xx*.5f/8,.40f+yy*.45f/8);
+   int red=color>>16&255,green=color>>8&255,blue=color&255;
+   if(red>=150&&green<95&&blue<75&&red>green*1.8f)body++;
+  }
+  // A 4-pixel ROI shift still retains 38 characteristic core samples.
+  // Two recorded boards with 25 shifts had no false positives at this bound.
+  // This offline calibration is not a real-device gameplay guarantee.
+  if(body<38)return false;
+  int fuse=0;
+  for(int yy=0;yy<9;yy++)for(int xx=0;xx<9;xx++){
+   int color=sample(pixels,l,t,r,b,.48f+xx*.44f/8,.05f+yy*.36f/8);
+   int red=color>>16&255,green=color>>8&255,blue=color&255;
+   if(red>170&&green>108&&blue<115&&red<green*2.4f&&red>green*.85f)fuse++;
+  }
+  return fuse>=3;
  }
 
  /** Returns a chromatic ring descriptor for a contrasting centre; invalid rings carry NaN. */
