@@ -50,6 +50,16 @@ class ReleaseToolsTest(unittest.TestCase):
         self.assertEqual(('8.9.10-fixture', 987), (config['version'], config['versionCode']))
         self.assertEqual('org.localpilot.android.fixture', config['package'])
 
+    def test_isolated_field_apk_never_overwrites_preview_or_old_dev(self):
+        config = common.configuration(self.root)
+        self.assertEqual('org.localpilot.android.field1030', config['package'])
+        self.assertEqual('0.7.34-field1030', config['version'])
+        self.assertNotIn(config['package'], {
+            'org.localpilot.android.preview',
+            'org.localpilot.android.dev',
+            'org.localpilot.android.dev.install1029',
+        })
+
     def test_missing_or_ambiguous_version_fails(self):
         path = self.root / 'app/build.gradle'
         path.write_text(path.read_text() + "\nversionCode 44\n")
