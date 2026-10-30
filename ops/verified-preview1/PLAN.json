@@ -1,0 +1,13 @@
+{
+  "source_sha": "1961f29c2b2cf6c29b40b007dbb8442814a95914",
+  "build_run_id": 40944359214,
+  "artifact_name": "LocalPilot-Android-1961f29c2b2cf6c29b40b007dbb8442814a95914",
+  "release_id": 428332366,
+  "apk_sha256": "80ff96cf93d357ed59d00cbfc4eaa1a32cd18902e7e843aaee5ba701204a771a",
+  "certificate_sha256": "2b695e01cf85531fe518b733307881b0b9c48e5f78ace67cc227ab46670ab579",
+  "matrix_runs": [
+    40944359211,
+    40944446833,
+    40944450870
+  ]
+}

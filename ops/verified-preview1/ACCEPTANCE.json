@@ -1,0 +1,116 @@
+{
+  "source_sha": "1961f29c2b2cf6c29b40b007dbb8442814a95914",
+  "exact_sha_pass_count": 3,
+  "exact_sha_matrices": [
+    {
+      "id": 40944359211,
+      "head_sha": "1961f29c2b2cf6c29b40b007dbb8442814a95914",
+      "run_attempt": 1,
+      "event": "push",
+      "status": "completed",
+      "conclusion": "success",
+      "html_url": "https://github.com/GiVscSon/LocalPilot-Android/actions/runs/40944359211",
+      "jobs": [
+        {
+          "id": 123695673485,
+          "name": "device (30, default)",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 123695673783,
+          "name": "device (36, google_apis)",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 123695673878,
+          "name": "device (35, default)",
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "id": 40944446833,
+      "head_sha": "1961f29c2b2cf6c29b40b007dbb8442814a95914",
+      "run_attempt": 1,
+      "event": "workflow_dispatch",
+      "status": "completed",
+      "conclusion": "success",
+      "html_url": "https://github.com/GiVscSon/LocalPilot-Android/actions/runs/40944446833",
+      "jobs": [
+        {
+          "id": 123695982069,
+          "name": "device (30, default)",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 123695982846,
+          "name": "device (35, default)",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 123695982860,
+          "name": "device (36, google_apis)",
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "id": 40944450870,
+      "head_sha": "1961f29c2b2cf6c29b40b007dbb8442814a95914",
+      "run_attempt": 2,
+      "event": "workflow_dispatch",
+      "status": "completed",
+      "conclusion": "success",
+      "html_url": "https://github.com/GiVscSon/LocalPilot-Android/actions/runs/40944450870",
+      "jobs": [
+        {
+          "id": 123951580783,
+          "name": "device (35, default)",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 123951581134,
+          "name": "device (30, default)",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 123951581256,
+          "name": "device (36, google_apis)",
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ]
+    }
+  ],
+  "build_run_id": 40944359214,
+  "local_checks": {
+    "jvm_runners": 22,
+    "release_tool_tests": 10,
+    "result": "PASS",
+    "assembleDebug": "PASS",
+    "lintDebug": "PASS",
+    "compileDebugAndroidTestJavaWithJavac": "PASS"
+  },
+  "historical_failures": [
+    {
+      "run_id": 40944450870,
+      "run_attempt": 1,
+      "api": 30,
+      "result": "FAIL",
+      "last_stop": "ACK_TIMEOUT",
+      "observation": "Main dispatch blocked 5000 ms in AccessibilityCache; simultaneous UiAutomation refresh waited. Metadata assertion followed a watchdog STOP. No installation failure demonstrated.",
+      "resolution": "Full matrix rerun on unchanged source; attempt 2 PASS. No deadline or production behavior changed; intermittent latency not claimed fixed."
+    }
+  ],
+  "physical_phone_acceptance": "USER WILL TEST MANUALLY; NOT YET VERIFIED",
+  "installed_dev_update": "NOT AN UPDATE: separate .preview package; old data not migrated",
+  "ci_signing_key_persistence": "NOT CONFIGURED: Actions secrets access denied (403)"
+}

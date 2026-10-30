@@ -1,0 +1,38 @@
+name: Publish verified 0.7.34 Preview1 artifact
+on:
+  push:
+    branches: ['ops/publish-0734-preview1']
+    paths: ['.github/workflows/publish-verified-preview1.yml', 'ops/publish_verified_preview1.py', 'ops/verified-preview1/**']
+permissions:
+  actions: read
+  contents: write
+concurrency:
+  group: publish-localpilot-0734-preview1
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: github.repository == 'GiVscSon/LocalPilot-Android'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Validate the checked-in release plan
+        id: plan
+        run: python3 ops/publish_verified_preview1.py --plan ops/verified-preview1/PLAN.json --emit-download-outputs "$GITHUB_OUTPUT"
+      - name: Download the already built and tested Preview artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ steps.plan.outputs.artifact }}
+          run-id: ${{ steps.plan.outputs.run }}
+          github-token: ${{ github.token }}
+          path: verified-artifact
+      - name: Install signature verification tool
+        run: '"$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "build-tools;35.0.0"'
+      - name: Verify and publish only the Preview prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 ops/publish_verified_preview1.py --plan ops/verified-preview1/PLAN.json --download verified-artifact --output release-assets --sdk "$ANDROID_HOME" --publish
