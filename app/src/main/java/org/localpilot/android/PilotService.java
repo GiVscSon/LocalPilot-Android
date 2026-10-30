@@ -208,7 +208,7 @@ public class PilotService extends AccessibilityService {
   if(SystemClock.elapsedRealtime()>=until){note="Окно не стало активным. Коснитесь игры и выберите окно снова";update();return;}
   note="Коснитесь выбранного окна игры · ожидаю фокус";update();handler.postDelayed(()->awaitChosenWindow(pkg,id,expected,epoch,until),250);
  }
- private void chooseProfile(){stop("Выберите механику игры");overlayMenu("Механика · выбирайте по управлению, не по оформлению",new String[]{ArcadeProfile.ARI.label,ArcadeProfile.PADDLE.label,ArcadeProfile.TRAFFIC.label,ArcadeProfile.FLAPPY.label,"2048","Цветной2048","Мэтч Ворлд · обмен соседей","Фишки · удалить группу","Имя игры · отдельное обучение","Шипучка · обычные шары (эксперимент)","Фишки · провести прямую цепочку","Нащупай ход · обмен, избегать черепов"},i->{if(i==8){nameLearningGame();return;}unsupportedGame=false;if(selectedProfile!=i){visualRoi=null;manualVisualRoi=false;boardRoi=null;}selectedProfile=i;if(i<4)captureProfile=ArcadeProfile.values()[i];getSharedPreferences("panel",MODE_PRIVATE).edit().putInt("profile",i).apply();AccessibilityNodeInfo root=appRoot();try{if(root!=null){String pkg=String.valueOf(root.getPackageName());getSharedPreferences("game-profiles",MODE_PRIVATE).edit().putInt(profileChoiceKey(pkg),i).apply();browserProfileConfirmed=true;confirmedProfileScope=profileChoiceKey(pkg);}}finally{if(root!=null)root.recycle();}note="Выбрано: "+profileLabel()+". Другая графика: Ещё → Настроить распознавание. Затем Старт";update();if(i==9){if(bindSelectedWindow())selectVisualRegion();}else if(i>=6)configureGrid();});}
+ private void chooseProfile(){stop("Выберите механику игры");overlayMenu("Механика · выбирайте по управлению, не по оформлению",new String[]{ArcadeProfile.ARI.label,ArcadeProfile.PADDLE.label,ArcadeProfile.TRAFFIC.label,ArcadeProfile.FLAPPY.label,"2048","Цветной2048","Мэтч Ворлд · обмен соседей","Фишки · удалить группу","Имя игры · отдельное обучение","Шипучка · обычные шары (эксперимент)","Фишки · провести прямую цепочку","Нащупай ход · ЛИНИЯ, черепа защищены"},i->{if(i==8){nameLearningGame();return;}unsupportedGame=false;if(selectedProfile!=i){visualRoi=null;manualVisualRoi=false;boardRoi=null;}selectedProfile=i;if(i<4)captureProfile=ArcadeProfile.values()[i];getSharedPreferences("panel",MODE_PRIVATE).edit().putInt("profile",i).apply();AccessibilityNodeInfo root=appRoot();try{if(root!=null){String pkg=String.valueOf(root.getPackageName());getSharedPreferences("game-profiles",MODE_PRIVATE).edit().putInt(profileChoiceKey(pkg),i).apply();browserProfileConfirmed=true;confirmedProfileScope=profileChoiceKey(pkg);}}finally{if(root!=null)root.recycle();}note="Выбрано: "+profileLabel()+". Другая графика: Ещё → Настроить распознавание. Затем Старт";update();if(i==9){if(bindSelectedWindow())selectVisualRegion();}else if(i>=6)configureGrid();});}
  private void nameLearningGame(){
   AccessibilityNodeInfo root=appRoot();if(root==null){note="Сначала откройте приложение с игрой";update();return;}
   final String pkg;try{pkg=String.valueOf(root.getPackageName());}finally{root.recycle();}
@@ -225,7 +225,7 @@ public class PilotService extends AccessibilityService {
    }).create();
   overlayDialog=d;d.setOnDismissListener(dialog->{if(overlayDialog==d)overlayDialog=null;});d.getWindow().setType(WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY);d.show();
  }
- private String profileLabel(){if(unsupportedGame)return "Тип игры не поддерживается";return selectedProfile<4?ArcadeProfile.values()[selectedProfile].label:switch(selectedProfile){case 4->"2048";case 5->"Цветной2048";case 6->"Мэтч Ворлд · обмен";case 9->"Шипучка · обычные шары";case 10->"Фишки · прямая цепочка";case 11->"Нащупай ход · обмен";default->"Фишки · группы";};}
+ private String profileLabel(){if(unsupportedGame)return "Тип игры не поддерживается";return selectedProfile<4?ArcadeProfile.values()[selectedProfile].label:switch(selectedProfile){case 4->"2048";case 5->"Цветной2048";case 6->"Мэтч Ворлд · обмен";case 9->"Шипучка · обычные шары";case 10->"Фишки · прямая цепочка";case 11->"Нащупай ход · линия";default->"Фишки · группы";};}
  private boolean bindSelectedWindow(){
   if(gate.armed()){String reason=windowRejection(null,false,true);if(reason==null)return true;stop("Выбранное окно недоступно ["+reason+"] · выберите Окно снова");return false;}
   if(explicitWindow){AccessibilityNodeInfo r=appRoot();boolean same=false;try{same=r!=null&&visualOwner.equals(String.valueOf(r.getPackageName()))&&visualWindow==r.getWindowId()&&visualWindowBounds.equals(windowBounds(r));}finally{if(r!=null)r.recycle();}
@@ -565,7 +565,7 @@ public class PilotService extends AccessibilityService {
 
  private void chooseControlMode(){
   if(selectedProfile==9){note="Шипучка: удержать шар в пушке, навести и отпустить";update();return;}
-  if(gridSelected()){note=selectedProfile==11?"Нащупай ход: обмен соседей · черепа не трогаю":selectedProfile==6?"Мэтч Ворлд: обмен соседей · особые клетки пропускаю":selectedProfile==10?"Фишки: прямая цепочка · особые клетки пропускаю":"Фишки: связанная группа · особые клетки пропускаю";update();return;}
+  if(gridSelected()){note=selectedProfile==11?"Нащупай ход: провести линию · черепа не трогаю":selectedProfile==6?"Мэтч Ворлд: обмен соседей · особые клетки пропускаю":selectedProfile==10?"Фишки: прямая цепочка · особые клетки пропускаю":"Фишки: связанная группа · особые клетки пропускаю";update();return;}
   if(selectedProfile>=4){note="Управление 2048: свайпы по выбранному полю";update();return;}
   if(!bindSelectedWindow())return;
   String slot=getSharedPreferences("panel",MODE_PRIVATE).getString("game_slot."+target,"default");
@@ -593,13 +593,13 @@ public class PilotService extends AccessibilityService {
   startVisualArcade(ArcadeProfile.values()[selectedProfile]);if(playingJumper)customCalibrationPending=true;
  }
 
- private boolean gridSelected(){return selectedProfile==6||selectedProfile==7||selectedProfile==10||selectedProfile==11;}
- private GridPuzzlePolicy.Mode gridMode(){return selectedProfile==6||selectedProfile==11?GridPuzzlePolicy.Mode.SWAP_MATCH3:selectedProfile==10?GridPuzzlePolicy.Mode.TRACE_LINE:GridPuzzlePolicy.Mode.TAP_GROUP;}
- private String gridKey(){String slot=getSharedPreferences("panel",MODE_PRIVATE).getString("game_slot."+target,"default");return GridPuzzleConfig.key(target,slot,gridMode())+(selectedProfile==11?".protected-skull":"");}
+ private boolean gridSelected(){return GridGamePreset.selected(selectedProfile);}
+ private GridPuzzlePolicy.Mode gridMode(){return GridGamePreset.mode(selectedProfile);}
+ private String gridKey(){String slot=getSharedPreferences("panel",MODE_PRIVATE).getString("game_slot."+target,"default");return GridPuzzleConfig.key(target,slot,gridMode())+GridGamePreset.keySuffix(selectedProfile);}
  private void loadGridConfig(){
   String value=getSharedPreferences("grid-puzzle",MODE_PRIVATE).getString(gridKey()+".config",null);
-  try{gridConfig=value==null?new GridPuzzleConfig(6,6,selectedProfile==10?3:2):GridPuzzleConfig.decode(value);}
-  catch(IllegalArgumentException error){gridConfig=new GridPuzzleConfig(6,6,selectedProfile==10?3:2);visualRoi=null;manualVisualRoi=false;}
+  try{gridConfig=value==null?new GridPuzzleConfig(6,6,GridGamePreset.defaultMinimum(selectedProfile)):GridPuzzleConfig.decode(value);}
+  catch(IllegalArgumentException error){gridConfig=new GridPuzzleConfig(6,6,GridGamePreset.defaultMinimum(selectedProfile));visualRoi=null;manualVisualRoi=false;}
   if(!manualVisualRoi&&gridConfig.fits(armedBounds.width(),armedBounds.height())){
    visualRoi=new Rect(armedBounds.left+Math.round(gridConfig.left*armedBounds.width()),armedBounds.top+Math.round(gridConfig.top*armedBounds.height()),armedBounds.left+Math.round(gridConfig.right*armedBounds.width()),armedBounds.top+Math.round(gridConfig.bottom*armedBounds.height()));manualVisualRoi=true;
   }
@@ -611,7 +611,7 @@ public class PilotService extends AccessibilityService {
  private void configureGrid(){
   if(!gridSelected()){note="Сначала Игра → Фишки: обмен или группы";update();return;}
   if(!bindSelectedWindow())return;loadGridConfig();
-  overlayMenu("Сетка фишек · "+gridConfig.rows+"×"+gridConfig.cols,new String[]{"6×6","7×7","Другой размер / минимум группы"},i->{if(i<2){setGridSize(i==0?6:7,i==0?6:7,selectedProfile==10?3:2);selectVisualRegion();}else showGridSizeForm();});
+  overlayMenu("Сетка фишек · "+gridConfig.rows+"×"+gridConfig.cols,new String[]{"6×6","7×7","Другой размер / минимум группы"},i->{if(i<2){setGridSize(i==0?6:7,i==0?6:7,GridGamePreset.defaultMinimum(selectedProfile));selectVisualRegion();}else showGridSizeForm();});
  }
  private void chooseGridGoal(){
   if(!gridSelected()){note="Сначала Игра → Фишки: обмен или группы";update();return;}if(!bindSelectedWindow())return;
@@ -752,11 +752,11 @@ public class PilotService extends AccessibilityService {
    }
    gridResultVisible=false;long readNs=SystemClock.elapsedRealtimeNanos();metrics.attempt(StageMetrics.Stage.READ);
    long frameAt=SystemClock.elapsedRealtime()-Math.max(0,SystemClock.uptimeMillis()-lastShotTimestamp);
-   GridPuzzleVision.Observation observation=GridPuzzleVision.detect(pixels::getPixel,r.left,r.top,r.right,r.bottom,gridConfig.rows,gridConfig.cols,panel.left,panel.top,panel.right,panel.bottom,frameAt,gridPalette,selectedProfile==11);
+   GridPuzzleVision.Observation observation=GridPuzzleVision.detect(pixels::getPixel,r.left,r.top,r.right,r.bottom,gridConfig.rows,gridConfig.cols,panel.left,panel.top,panel.right,panel.bottom,frameAt,gridPalette,GridGamePreset.protectSkulls(selectedProfile));
    captureReads++;metrics.record(StageMetrics.Stage.READ,SystemClock.elapsedRealtimeNanos()-readNs);
    gridUnknownReasons=observation.unknownReasonCounts();if(gridUnknownReasons.isEmpty())gridUnknownReasons="none";
    int unknownCount=observation.unknownIndices().length;
-   gridReview=profileLabel()+" · "+observation.rows+"×"+observation.cols+"\nНеизвестно: "+unknownCount+"\n"+(unknownCount==0?"Все клетки распознаны.":observation.unknownSummary(observation.rows*observation.cols))+"\n\nЭто последнее чтение, а не текущее поле. Неизвестные клетки не разрешают ввод.";
+   gridReview=profileLabel()+" · "+observation.rows+"×"+observation.cols+"\nНеизвестно: "+unknownCount+"\n"+(unknownCount==0?"Все клетки распознаны.":observation.unknownSummary(observation.rows*observation.cols))+"\n\nЭто последнее чтение, а не текущее поле. Неизвестные клетки нельзя пересекать; только стабильная прямая линия из известных обычных фишек допускает ввод.";
    boolean partialGrid=observation.partialUsable();
    int[] observedCells=observation.cells();
    // Keep individually recognized cells; the policy treats every unknown as
@@ -808,18 +808,28 @@ public class PilotService extends AccessibilityService {
    boolean shadowChain=gridMode()==GridPuzzlePolicy.Mode.TRACE_LINE
      &&GridChainShadow.findFour(board,observation.specialCellsMask())!=null;
    if(!automatic()){note="Наблюдение: сетка прочитана · "+(shadowChain?"найдена цепочка из 4 (без ввода)":action==null?"совпадений не найдено":"найден ход, фишек "+action.expectedCleared);update();scheduleGrid(epoch);return;}
-   // Incomplete boards remain observational until partial-grid safety is validated.
-   if(partialGrid){note="Частичная сетка · наблюдение без ввода"+(shadowChain?" · найдена цепочка из 4":action==null?"":" · найден возможный ход");update();scheduleGrid(epoch);return;}
+   // Partial live input is limited to a known-only straight TRACE_LINE.
+   // Vision requires >=72% stable coverage; the session requires two fresh
+   // matching frames. Other mechanics and uncertain paths remain read-only.
+   if(partialGrid&&!GridPartialActionGate.allows(board,gridMode(),
+       observation.specialCellsMask(),action,true,
+       status==GridPuzzleSession.Status.READY||status==GridPuzzleSession.Status.CHANGED)){
+    note="Частичная сетка · неизвестные и опасные клетки не трогаю"
+       +(shadowChain?" · изогнутая цепочка только для наблюдения":"");
+    update();scheduleGrid(epoch);return;
+   }
    if(action==null){note="Нет проверяемого хода · продолжаю наблюдение"+(partialGrid?" (неизвестные клетки не трогаю)":"");update();scheduleGrid(epoch);return;}
    if(busy||!valid(ticket)||SystemClock.elapsedRealtime()-frameAt>300){note="Жду свежий кадр для хода";update();scheduleGrid(epoch);return;}
    float x=r.left+(action.fromCol+.5f)*r.width()/gridConfig.cols,y=r.top+(action.fromRow+.5f)*r.height()/gridConfig.rows;
    float ex=r.left+(action.toCol+.5f)*r.width()/gridConfig.cols,ey=r.top+(action.toRow+.5f)*r.height()/gridConfig.rows;
    long sentBefore=captureSent;gridSession.sent(observation.cells(),SystemClock.elapsedRealtime(),action);
-   sendObserved(x,y,ex,ey,ticket,()->{gridSession.acknowledge(SystemClock.elapsedRealtime());note="Жест доставлен · проверяю поле";update();scheduleGrid(epoch);},frameAt,action.mode==GridPuzzlePolicy.Mode.TAP_GROUP?55:160);
+   sendObserved(x,y,ex,ey,ticket,()->{gridSession.acknowledge(SystemClock.elapsedRealtime());note="Жест доставлен · проверяю поле";update();scheduleGrid(epoch);},frameAt,action.mode==GridPuzzlePolicy.Mode.TAP_GROUP?55:
+     action.mode==GridPuzzlePolicy.Mode.TRACE_LINE
+       ?Math.min(450,Math.max(160,action.expectedCleared*45)):160);
    if(captureSent>sentBefore){
     metrics.attempt(StageMetrics.Stage.GRID_VISUAL_RESPONSE);
     gridPendingDecision=action;gridPendingBoard=board;gridPendingSpecial=observation.specialCellsMask();gridPendingScope=gridKey()+"|"+gridConfig.encode()+"|"+gridPalette.encode();gridMoves++;gridSawAction=true;incrementGridStat("dispatched");
-    note="Ход "+gridMoves+" · ожидается фишек "+action.expectedCleared+" · подтверждено "+gridVerified
+    note=(partialGrid?"Частичная прямая линия ":"Ход ")+gridMoves+" · ожидается фишек "+action.expectedCleared+" · подтверждено "+gridVerified
       +" · обучение "+gridLearning.verifiedCount()+" / "+gridLearning.notConfirmedCount();
     update();
    }

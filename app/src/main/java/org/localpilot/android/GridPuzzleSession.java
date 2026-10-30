@@ -148,7 +148,7 @@ public final class GridPuzzleSession {
  private static boolean validPartial(int rows,int cols,int[] cells){
   if(rows<3||rows>10||cols<3||cols>10||cells==null||cells.length!=rows*cols)return false;
   int known=0;for(int cell:cells){if(cell< -1)return false;if(cell>=0)known++;}
-  return known>=Math.max(6,(cells.length*2+2)/3);
+  return known>=Math.max(6,(cells.length*72+99)/100);
  }
  private static boolean complete(int rows,int cols,int[] cells){
   if(rows<3||rows>10||cols<3||cols>10||cells==null||cells.length!=rows*cols)return false;

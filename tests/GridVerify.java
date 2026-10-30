@@ -10,8 +10,8 @@ class GridVerify {
  public static void main(String[] args)throws Exception{
   Path out=Files.createTempDirectory("pilot-grid-");ArrayList<String> sources=new ArrayList<>();
   sources.add("--release");sources.add("17");sources.add("-d");sources.add(out.toString());
-  for(String name:new String[]{"GridPuzzle","GridChainShadow","GridPuzzlePolicy","GridOnlineLearning","GridPuzzleVision","GridPuzzleSession","GridPuzzleConfig","GridPuzzleGoal"})sources.add("app/src/main/java/org/localpilot/android/"+name+".java");
-  String[] tests={"GridChainShadowTest","GridPuzzlePolicyTest","GridPuzzleVisionTest","GridPuzzleSessionTest","GridPuzzleConfigTest","GridPuzzleLoopTest","GridPuzzleGoalTest","GridRecordedTest","GridPartialVerifyTest","GridOnlineLearningTest"};
+  for(String name:new String[]{"GridPuzzle","GridChainShadow","GridPuzzlePolicy","GridGamePreset","GridPartialActionGate","GridOnlineLearning","GridPuzzleVision","GridPuzzleSession","GridPuzzleConfig","GridPuzzleGoal"})sources.add("app/src/main/java/org/localpilot/android/"+name+".java");
+  String[] tests={"GridChainShadowTest","GridPuzzlePolicyTest","GridGamePresetTest","GridPartialActionGateTest","GridPuzzleVisionTest","GridPuzzleSessionTest","GridPuzzleConfigTest","GridPuzzleLoopTest","GridPuzzleGoalTest","GridRecordedTest","GridPartialVerifyTest","GridOnlineLearningTest"};
   for(String name:tests)sources.add("tests/"+name+".java");
   if(ToolProvider.getSystemJavaCompiler()==null)throw new IllegalStateException("JDK required for grid verification");
   if(ToolProvider.getSystemJavaCompiler().run(null,System.out,System.err,sources.toArray(String[]::new))!=0)throw new AssertionError("grid verification compile failed");
