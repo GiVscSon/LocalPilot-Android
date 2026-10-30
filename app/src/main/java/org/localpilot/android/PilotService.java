@@ -25,7 +25,7 @@ public class PilotService extends AccessibilityService {
  private boolean busy=false;private int autoLeft=0;private long deadline;private int demoVerified;private String target="";private Rect armedBounds=new Rect();private int nx=50,ny=65;
  private long lastPanelRender;
  private String lastGestureContext="none";
- private String note="STOP",uiStats="",lastStopReason="Нет остановок";private final InputPermit permit=new InputPermit();private RotatingJournal journal;private final GestureFlight gestureFlight=new GestureFlight();
+ private String note="STOP",uiStats="",lastStopReason="Нет остановок";private final InputPermit permit=new InputPermit();private final StopContext stopContext=new StopContext();private RotatingJournal journal;private final GestureFlight gestureFlight=new GestureFlight();
  private final Color2048Reader.Session colorSession=new Color2048Reader.Session();
  private boolean playingMini;private int miniKind,miniAction;private long miniMoves;private int[] miniBefore;private Rect boardRoi;private View picker;private boolean playing2048=false,colored2048=false,captureBusy=false;private long moves2048;private long captureCounter,pendingCapture,lastShotTimestamp=-1;private long mergeTotal;private Board2048 before2048;private int direction2048;private AlertDialog preview,overlayDialog;
  private final CaptureStartup captureStartup=new CaptureStartup();
@@ -106,7 +106,7 @@ public class PilotService extends AccessibilityService {
  private String diagnosticState(){
   long now=SystemClock.elapsedRealtime();
   StringBuilder out=new StringBuilder("LocalPilot game-session-v1\nelapsed_ms=").append(now)
-    .append("\nprofile=").append(captureProfile).append(" selected_profile=").append(profileLabel()).append(" target=").append(target).append(" bound=").append(gate.armed())
+    .append("\nepoch=").append(gate.epoch()).append("\nprofile=").append(captureProfile).append(" selected_profile=").append(profileLabel()).append(" target=").append(target).append(" bound=").append(gate.armed())
     .append("\nvisual_roi=").append(visualBounds().toShortString()).append(" manual_roi=").append(manualVisualRoi)
     .append("\nbounds=").append(armedBounds.toShortString()).append(" display=").append(jumperDisplayWidth).append('x').append(jumperDisplayHeight)
     .append("\nplaying=").append(playingJumper||playingGrid).append(" capture_ready=").append(playingGrid||jumperCaptureReady).append(" busy=").append(busy)
@@ -208,7 +208,7 @@ public class PilotService extends AccessibilityService {
   if(SystemClock.elapsedRealtime()>=until){note="Окно не стало активным. Коснитесь игры и выберите окно снова";update();return;}
   note="Коснитесь выбранного окна игры · ожидаю фокус";update();handler.postDelayed(()->awaitChosenWindow(pkg,id,expected,epoch,until),250);
  }
- private void chooseProfile(){stop("Выберите механику игры");overlayMenu("Механика · выбирайте по управлению, не по оформлению",new String[]{ArcadeProfile.ARI.label,ArcadeProfile.PADDLE.label,ArcadeProfile.TRAFFIC.label,ArcadeProfile.FLAPPY.label,"2048","Цветной2048","Мэтч Ворлд · обмен соседей","Фишки · удалить группу","Имя игры · отдельное обучение","Шипучка · обычные шары (эксперимент)","Фишки · провести прямую цепочку","Нащупай ход · ЛИНИЯ, черепа защищены"},i->{if(i==8){nameLearningGame();return;}unsupportedGame=false;if(selectedProfile!=i){visualRoi=null;manualVisualRoi=false;boardRoi=null;}selectedProfile=i;if(i<4)captureProfile=ArcadeProfile.values()[i];getSharedPreferences("panel",MODE_PRIVATE).edit().putInt("profile",i).apply();AccessibilityNodeInfo root=appRoot();try{if(root!=null){String pkg=String.valueOf(root.getPackageName());getSharedPreferences("game-profiles",MODE_PRIVATE).edit().putInt(profileChoiceKey(pkg),i).apply();browserProfileConfirmed=true;confirmedProfileScope=profileChoiceKey(pkg);}}finally{if(root!=null)root.recycle();}note="Выбрано: "+profileLabel()+". Другая графика: Ещё → Настроить распознавание. Затем Старт";update();if(i==9){if(bindSelectedWindow())selectVisualRegion();}else if(i>=6)configureGrid();});}
+ private void chooseProfile(){stop("Выберите механику игры");overlayMenu("Механика · выбирайте по управлению, не по оформлению",new String[]{ArcadeProfile.ARI.label,ArcadeProfile.PADDLE.label,ArcadeProfile.TRAFFIC.label,ArcadeProfile.FLAPPY.label,"2048","Цветной2048","Мэтч Ворлд · обмен соседей","Фишки · удалить группу","Имя игры · отдельное обучение","Шипучка · обычные шары (эксперимент)","Фишки · провести прямую цепочку","Нащупай ход · обмен, черепа защищены"},i->{if(i==8){nameLearningGame();return;}unsupportedGame=false;if(selectedProfile!=i){visualRoi=null;manualVisualRoi=false;boardRoi=null;}selectedProfile=i;if(i<4)captureProfile=ArcadeProfile.values()[i];getSharedPreferences("panel",MODE_PRIVATE).edit().putInt("profile",i).apply();AccessibilityNodeInfo root=appRoot();try{if(root!=null){String pkg=String.valueOf(root.getPackageName());getSharedPreferences("game-profiles",MODE_PRIVATE).edit().putInt(profileChoiceKey(pkg),i).apply();browserProfileConfirmed=true;confirmedProfileScope=profileChoiceKey(pkg);}}finally{if(root!=null)root.recycle();}note="Выбрано: "+profileLabel()+". Другая графика: Ещё → Настроить распознавание. Затем Старт";update();if(i==9){if(bindSelectedWindow())selectVisualRegion();}else if(i>=6)configureGrid();});}
  private void nameLearningGame(){
   AccessibilityNodeInfo root=appRoot();if(root==null){note="Сначала откройте приложение с игрой";update();return;}
   final String pkg;try{pkg=String.valueOf(root.getPackageName());}finally{root.recycle();}
@@ -225,7 +225,7 @@ public class PilotService extends AccessibilityService {
    }).create();
   overlayDialog=d;d.setOnDismissListener(dialog->{if(overlayDialog==d)overlayDialog=null;});d.getWindow().setType(WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY);d.show();
  }
- private String profileLabel(){if(unsupportedGame)return "Тип игры не поддерживается";return selectedProfile<4?ArcadeProfile.values()[selectedProfile].label:switch(selectedProfile){case 4->"2048";case 5->"Цветной2048";case 6->"Мэтч Ворлд · обмен";case 9->"Шипучка · обычные шары";case 10->"Фишки · прямая цепочка";case 11->"Нащупай ход · линия";default->"Фишки · группы";};}
+ private String profileLabel(){if(unsupportedGame)return "Тип игры не поддерживается";return selectedProfile<4?ArcadeProfile.values()[selectedProfile].label:switch(selectedProfile){case 4->"2048";case 5->"Цветной2048";case 6->"Мэтч Ворлд · обмен";case 9->"Шипучка · обычные шары";case 10->"Фишки · прямая цепочка";case 11->"Нащупай ход · обмен";default->"Фишки · группы";};}
  private boolean bindSelectedWindow(){
   if(gate.armed()){String reason=windowRejection(null,false,true);if(reason==null)return true;stop("Выбранное окно недоступно ["+reason+"] · выберите Окно снова");return false;}
   if(explicitWindow){AccessibilityNodeInfo r=appRoot();boolean same=false;try{same=r!=null&&visualOwner.equals(String.valueOf(r.getPackageName()))&&visualWindow==r.getWindowId()&&visualWindowBounds.equals(windowBounds(r));}finally{if(r!=null)r.recycle();}
@@ -382,13 +382,13 @@ public class PilotService extends AccessibilityService {
  private AccessibilityNodeInfo windowRoot(AccessibilityWindowInfo window){return Build.VERSION.SDK_INT>=33?window.getRoot(0):window.getRoot();}
  private AccessibilityNodeInfo appRoot(){for(AccessibilityWindowInfo w:getWindows())if(w.getType()==AccessibilityWindowInfo.TYPE_APPLICATION&&w.isFocused()){AccessibilityNodeInfo r=windowRoot(w);if(r!=null){if(r.getWindowId()==w.getId())return r;r.recycle();}}return null;}
  private boolean unlocked(){return ((PowerManager)getSystemService(POWER_SERVICE)).isInteractive()&&!((KeyguardManager)getSystemService(KEYGUARD_SERVICE)).isKeyguardLocked();}
- private void arm(){stop("Привязка");if(busy){note="Дождитесь завершения жеста";update();return;}AccessibilityNodeInfo r=appRoot();try{if(r==null||!unlocked()){note="Нет активного приложения";update();return;}target=String.valueOf(r.getPackageName());targetLabel=applicationLabel(target);targetIsBrowser=browserTarget();armedBounds=windowBounds(r);if(armedBounds.isEmpty()){note="Нет границ окна";update();return;}retainVisualScope(r);gate.arm(target,r.getWindowId(),armedBounds.width(),armedBounds.height());if(automatic())permit.grantSession(gate.epoch(),SystemClock.elapsedRealtime());note=automatic()?"Окно выбрано · нажмите Старт":"Только наблюдение";update();}finally{if(r!=null)r.recycle();}}
+ private void arm(){stop("Привязка");if(busy){note="Дождитесь завершения жеста";update();return;}AccessibilityNodeInfo r=appRoot();try{if(r==null||!unlocked()){note="Нет активного приложения";update();return;}target=String.valueOf(r.getPackageName());targetLabel=applicationLabel(target);targetIsBrowser=browserTarget();armedBounds=windowBounds(r);if(armedBounds.isEmpty()){note="Нет границ окна";update();return;}retainVisualScope(r);gate.arm(target,r.getWindowId(),armedBounds.width(),armedBounds.height());stopContext.clearBounds();if(automatic())permit.grantSession(gate.epoch(),SystemClock.elapsedRealtime());note=automatic()?"Окно выбрано · нажмите Старт":"Только наблюдение";update();}finally{if(r!=null)r.recycle();}}
  private String applicationLabel(String packageName){try{return String.valueOf(getPackageManager().getApplicationLabel(getPackageManager().getApplicationInfo(packageName,0)));}catch(Exception e){return packageName;}}
  private void stop(String reason){
   boolean stoppedGame=playingJumper||playingGrid||playing2048||playingMini;
-  boolean wasArmed=gate.armed();permit.revoke();gate.stop();
+  boolean wasArmed=gate.armed();long stoppedEpoch=gate.epoch();permit.revoke();gate.stop();
   if(!reason.startsWith("Экспорт"))lastStopReason=reason;
-  if(playingJumper||playingGrid||wasArmed||autoLeft>0)try{lastSessionReport=diagnosticState();}catch(RuntimeException|OutOfMemoryError ignored){lastSessionReport="Сеанс остановлен; метаданные недоступны";}
+  if(stoppedGame||wasArmed||autoLeft>0)try{lastSessionReport=stopContext.report(reason,SystemClock.elapsedRealtime(),stoppedEpoch,gate.epoch(),wasArmed,stoppedGame,selectedProfile,armedBounds.left,armedBounds.top,armedBounds.right,armedBounds.bottom)+"\n"+diagnosticState();}catch(RuntimeException|OutOfMemoryError ignored){lastSessionReport="Сеанс остановлен; метаданные недоступны";}
   if(playingJumper)CrashDiagnostics.captureStopped();
   // Save measured physics before reset, including measurements made while no
   // gesture was needed. Stopping a session is not a new round loss.
@@ -420,7 +420,7 @@ public class PilotService extends AccessibilityService {
    if(!gate.armed())return "NOT_BOUND";if(!unlocked())return "DEVICE_LOCKED";
    root=appRoot();if(root==null)return "TARGET_WINDOW_UNAVAILABLE";
    Rect bounds=windowBounds(root);String pkg=String.valueOf(root.getPackageName());int id=root.getWindowId();
-   if(!unlocked())return "DEVICE_LOCKED";if(!target.equals(pkg))return "TARGET_APP_CHANGED";if(bounds.isEmpty())return gate.identityRejection(pkg,id,0,0);if(!bounds.equals(armedBounds))return "TARGET_BOUNDS_CHANGED";
+   if(!unlocked())return "DEVICE_LOCKED";if(!target.equals(pkg))return "TARGET_APP_CHANGED";if(bounds.isEmpty())return gate.identityRejection(pkg,id,0,0);if(!bounds.equals(armedBounds)){stopContext.boundsChanged(gate.epoch(),SystemClock.elapsedRealtime(),visualWindow,id,armedBounds.left,armedBounds.top,armedBounds.right,armedBounds.bottom,bounds.left,bounds.top,bounds.right,bounds.bottom);return "TARGET_BOUNDS_CHANGED";}
    long now=SystemClock.elapsedRealtime();
    // A slow Binder query is not an expired action in this read-only path.
    if(observationOnly)return gate.identityRejection(pkg,id,bounds.width(),bounds.height());
@@ -525,7 +525,7 @@ public class PilotService extends AccessibilityService {
      Rect bounds=windowBounds(root);
      if(!bounds.equals(armedBounds))return false;
      boolean allowed=automatic()||permit.allows(gate.epoch(),now);
-     gate.arm(target,root.getWindowId(),bounds.width(),bounds.height());
+     gate.arm(target,root.getWindowId(),bounds.width(),bounds.height());stopContext.clearBounds();
      visualOwner=target;visualWindow=root.getWindowId();visualWindowBounds.set(bounds);
      if(allowed)permit.grantSession(gate.epoch(),now);
      watchArcadeCapture(gate.epoch());
@@ -565,7 +565,7 @@ public class PilotService extends AccessibilityService {
 
  private void chooseControlMode(){
   if(selectedProfile==9){note="Шипучка: удержать шар в пушке, навести и отпустить";update();return;}
-  if(gridSelected()){note=selectedProfile==11?"Нащупай ход: провести линию · черепа не трогаю":selectedProfile==6?"Мэтч Ворлд: обмен соседей · особые клетки пропускаю":selectedProfile==10?"Фишки: прямая цепочка · особые клетки пропускаю":"Фишки: связанная группа · особые клетки пропускаю";update();return;}
+  if(gridSelected()){note=selectedProfile==11?"Нащупай ход: обмен соседей · черепа не трогаю":selectedProfile==6?"Мэтч Ворлд: обмен соседей · особые клетки пропускаю":selectedProfile==10?"Фишки: прямая цепочка · особые клетки пропускаю":"Фишки: связанная группа · особые клетки пропускаю";update();return;}
   if(selectedProfile>=4){note="Управление 2048: свайпы по выбранному полю";update();return;}
   if(!bindSelectedWindow())return;
   String slot=getSharedPreferences("panel",MODE_PRIVATE).getString("game_slot."+target,"default");
