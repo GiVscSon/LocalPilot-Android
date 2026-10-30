@@ -65,7 +65,7 @@ public class PilotService extends AccessibilityService {
  private String gridAvoidScope="",gridPendingScope="";
  // Bounded symbolic counts from the current grid observation; no pixels retained.
  private String gridUnknownReasons="none",gridReview="Нет данных: запустите сеточную игру и дождитесь чтения поля.";
- private CustomVisionConfig customVision;
+ private CustomVisionConfig customVision;private String customVisionRoiScope;
  private boolean customCalibrationPending;
  private View customCalibrationOverlay;
  private int controlMode;
@@ -150,6 +150,12 @@ public class PilotService extends AccessibilityService {
  private boolean browserTarget(){try{return getPackageManager().resolveActivity(new Intent(Intent.ACTION_VIEW,android.net.Uri.parse("https://localpilot.invalid")).setPackage(target),android.content.pm.PackageManager.MATCH_DEFAULT_ONLY)!=null;}catch(RuntimeException ignored){return true;}}
  private boolean explicitWindow;
  private Rect visualBounds(){return visualRoi!=null&&armedBounds.contains(visualRoi)?new Rect(visualRoi):new Rect(armedBounds);}
+ private String arcadeCalibrationGeometry(){
+  Rect region=visualBounds();
+  return CalibrationGeometryScope.id(armedBounds.width(),armedBounds.height(),
+    region.left-armedBounds.left,region.top-armedBounds.top,
+    region.right-armedBounds.left,region.bottom-armedBounds.top);
+ }
  private Rect windowBounds(AccessibilityNodeInfo root){
   if(root!=null)for(AccessibilityWindowInfo w:getWindows())if(w.getType()==AccessibilityWindowInfo.TYPE_APPLICATION&&w.getId()==root.getWindowId()){Rect b=new Rect();w.getBoundsInScreen(b);return b;}
   return new Rect();
@@ -483,8 +489,11 @@ public class PilotService extends AccessibilityService {
   learningSlot=getSharedPreferences("panel",MODE_PRIVATE).getString("game_slot."+target,"default");JumperPolicy.reset();
   String scope=VisualGameTarget.key(target,learningSlot,profile);
   controlMode=Math.max(0,Math.min(2,getSharedPreferences("controls",MODE_PRIVATE).getInt(scope,0)));
-  customVision=null;String savedVision=getSharedPreferences("custom-vision",MODE_PRIVATE).getString(scope,null);
-  if(savedVision!=null)try{customVision=CustomVisionConfig.decode(savedVision);}catch(IllegalArgumentException ignored){note="Калибровка повреждена · восстановите стандартное распознавание через Ещё";update();return;}
+  customVision=null;customVisionRoiScope=null;String savedVision=getSharedPreferences("custom-vision",MODE_PRIVATE).getString(scope,null);
+  if(savedVision!=null)try{
+   customVision=CustomVisionConfig.decode(savedVision);
+   customVisionRoiScope=getSharedPreferences("custom-vision",MODE_PRIVATE).getString(scope+".roi-v1",null);
+  }catch(IllegalArgumentException ignored){note="Калибровка повреждена · восстановите стандартное распознавание через Ещё";update();return;}
   modelSlot=VisualGameTarget.modelSlot(learningSlot,controlMode,customVision==null?null:customVision.encode());
   captureProfile=profile;jumperResponseFailures=0;jumperResponsePaused=false;arcadeLastUsable=null;arcadeController.reset();if(arcadeLearning!=null){arcadeController.restore(arcadeLearning.get(target,modelSlot,profile));JumperPolicy.restore(arcadeLearning.get(target,modelSlot,ArcadeProfile.ARI));}arcadeFeedback.reset();clearDiagnosticFrame();sceneRecovery.reset();arcadeRoundSeen=false;arcadeState=null;arcadeBefore=null;arcadePending=null;arcadeAck=false;
   jumperFeedback.reset();
@@ -582,7 +591,7 @@ public class PilotService extends AccessibilityService {
   if(selectedProfile>=4){note="Для 2048 настройте область поля";update();return;}
   if(!bindSelectedWindow())return;
   String slot=getSharedPreferences("panel",MODE_PRIVATE).getString("game_slot."+target,"default"),key=VisualGameTarget.key(target,slot,ArcadeProfile.values()[selectedProfile]);
-  getSharedPreferences("custom-vision",MODE_PRIVATE).edit().remove(key).apply();customVision=null;
+  getSharedPreferences("custom-vision",MODE_PRIVATE).edit().remove(key).remove(key+".roi-v1").apply();customVision=null;customVisionRoiScope=null;
   if(selectedProfile==0){android.content.SharedPreferences.Editor prefs=getSharedPreferences("jumper-vision",MODE_PRIVATE).edit();for(String role:new String[]{"player","platform","hazard"}){prefs.remove(key+"."+role);if(VisualGameTarget.legacyMarket(target)&&slot.equals("default"))prefs.remove(target+"."+role);}prefs.apply();jumperColorProfile=null;}
   note="Стандартное распознавание восстановлено · нажмите Старт";update();
  }
@@ -847,7 +856,9 @@ public class PilotService extends AccessibilityService {
     try{
      for(int i=0;i<3;i++){x[i]=(x[i]*fw-geometry.left)/(geometry.right-geometry.left);y[i]=(y[i]*fh-geometry.top)/(geometry.bottom-geometry.top);}
      CustomVisionConfig selected=new CustomVisionConfig(colors,x,y);
-     getSharedPreferences("custom-vision",MODE_PRIVATE).edit().putString(VisualGameTarget.key(target,learningSlot,captureProfile),selected.encode()).apply();customVision=selected;
+     String scope=VisualGameTarget.key(target,learningSlot,captureProfile);
+     customVisionRoiScope=arcadeCalibrationGeometry();
+     getSharedPreferences("custom-vision",MODE_PRIVATE).edit().putString(scope,selected.encode()).putString(scope+".roi-v1",customVisionRoiScope).apply();customVision=selected;
      modelSlot=VisualGameTarget.modelSlot(learningSlot,controlMode,selected.encode());
      arcadeSceneGeneration++;jumperVisionPending=false;arcadeState=null;arcadeLastUsable=null;arcadeBefore=null;arcadePending=null;arcadeAck=false;arcadeController.reset();arcadeFeedback.reset();sceneRecovery.reset();roundOutcome.reset();persistArcadeModel(false);
      note="Настройка объектов сохранена · проверяю новые кадры";
@@ -958,6 +969,14 @@ public class PilotService extends AccessibilityService {
    captureFrames++;
    if(customCalibrationOverlay!=null){frame.recycle();return;}
    try{resolveVisualRegion(frame);}catch(RuntimeException error){/* Preserve full window when optional crop is unavailable. */}
+   if(customVision!=null&&!customCalibrationPending&&customCalibrationOverlay==null){
+    Rect sampleRoi=visualBounds();
+    if(!CalibrationGeometryScope.matches(customVisionRoiScope,armedBounds.width(),armedBounds.height(),
+       sampleRoi.left-armedBounds.left,sampleRoi.top-armedBounds.top,
+       sampleRoi.right-armedBounds.left,sampleRoi.bottom-armedBounds.top)){
+     frame.recycle();stop("Калибровка другого размера или области · выделите игровое поле и настройте цвета заново");return;
+    }
+   }
    rememberDiagnosticFrame(frame,timestampMs);
    jumperLastFrameMs=Math.max(jumperLastFrameMs,timestampMs);
    if(customCalibrationPending){if(!valid(gate.offer(SystemClock.elapsedRealtime()))){if(!waitForCaptureTarget(SystemClock.elapsedRealtime())&&!deferFocus(invalidReason(gate.offer(SystemClock.elapsedRealtime()))))stop("Вернитесь в выбранное окно для настройки");frame.recycle();return;}customCalibrationPending=false;showCustomCalibration(frame);return;}
