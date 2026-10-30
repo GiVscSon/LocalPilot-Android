@@ -16,6 +16,8 @@ public final class GridPuzzleVision {
  }
  private static final int FEATURES=42,MAX_TYPES=24;
  private static final float MATCH=.14f,AMBIGUITY=.025f;
+ private static final byte DETAIL_NONE=0,DETAIL_RING_UNSTABLE=1,DETAIL_RING_LOW_CHROMA=2,DETAIL_SAMPLE_FLAT=3,DETAIL_SAMPLE_NEUTRAL=4;
+ private static final String[] DETAIL_NAMES={"NONE","RING_UNSTABLE","RING_DARK_OR_LOW_CHROMA","SAMPLE_FLAT","SAMPLE_NEUTRAL_CENTER"};
  private GridPuzzleVision(){}
 
  /** Stable one-based type IDs. Save candidate additions only after the board is stable. */
@@ -41,10 +43,11 @@ public final class GridPuzzleVision {
   private final boolean usable,partialUsable;
   private final java.util.BitSet specialCellsMask;
   private final CellReason[] cellReasons;
-  private Observation(int rows,int cols,long time,int[] cells,Palette palette,float confidence,boolean usable,boolean partialUsable,java.util.BitSet special,CellReason[] reasons){
+  private final byte[] cellDetails;
+  private Observation(int rows,int cols,long time,int[] cells,Palette palette,float confidence,boolean usable,boolean partialUsable,java.util.BitSet special,CellReason[] reasons,byte[] details){
    specialCellsMask=(java.util.BitSet)special.clone();this.rows=rows;this.cols=cols;timestampMs=time;
    values=cells.clone();this.palette=palette;this.confidence=confidence;this.usable=usable;this.partialUsable=partialUsable;
-   cellReasons=reasons.clone();
+   cellReasons=reasons.clone();cellDetails=details.clone();
   }
   public CellReason reason(int row,int col){
    if(row<0||row>=rows||col<0||col>=cols)throw new IllegalArgumentException("cell");
@@ -82,6 +85,14 @@ public final class GridPuzzleVision {
    }
    return out.toString();
   }
+  /** Additional bounded, pixel-free details; does not change the established reason codes. */
+  public String unknownDetailCounts(){
+   int[] counts=new int[DETAIL_NAMES.length];
+   for(int i=0;i<values.length;i++)if(values[i]<0&&cellDetails[i]>DETAIL_NONE)counts[cellDetails[i]]++;
+   StringBuilder out=new StringBuilder();
+   for(int i=1;i<counts.length;i++)if(counts[i]>0){if(out.length()>0)out.append(", ");out.append(DETAIL_NAMES[i]).append("=").append(counts[i]);}
+   return out.toString();
+  }
   public java.util.BitSet specialCellsMask(){return (java.util.BitSet)specialCellsMask.clone();}
   public int[] cells(){return values.clone();}
   public int type(int row,int col){if(row<0||row>=rows||col<0||col>=cols)throw new IllegalArgumentException("cell");return values[row*cols+col];}
@@ -109,6 +120,7 @@ public final class GridPuzzleVision {
   float[][] rings=new float[rows*cols][];java.util.BitSet special=new java.util.BitSet(rows*cols);
   float[][] samples=new float[rows*cols][];int[] cells=new int[samples.length];java.util.Arrays.fill(cells,-1);
   CellReason[] reasons=new CellReason[samples.length];
+  byte[] details=new byte[samples.length];
   java.util.Arrays.fill(reasons,CellReason.NO_SAMPLE);
   for(int row=0;row<rows;row++)for(int col=0;col<cols;col++){
    float l=left+col*(right-left)/(float)cols,t=top+row*(bottom-top)/(float)rows;
@@ -121,8 +133,8 @@ public final class GridPuzzleVision {
     cells[index]=0;special.set(index);reasons[index]=CellReason.PROTECTED_SKULL;continue;
    }
    float[] ring=ring(pixels,l,t,r,b);
-   if(ring!=null){rings[index]=ring;reasons[index]=CellReason.RING_NO_MATCH;continue;}
-   samples[index]=describe(pixels,l,t,r,b);
+   if(ring!=null){rings[index]=ring;reasons[index]=CellReason.RING_NO_MATCH;if(!Float.isFinite(ring[0]))details[index]=(byte)ring[1];continue;}
+   samples[index]=describe(pixels,l,t,r,b,details,index);
    // A flat or visually unsupported cell has no token descriptor. Keep it
    // UNKNOWN: it may be an absent corner, an obstacle, or an occluded tile.
    reasons[index]=samples[index]==null?CellReason.NO_SAMPLE:CellReason.COLOR_NO_MATCH;
@@ -182,7 +194,7 @@ public final class GridPuzzleVision {
     &&known>=Math.max(6,(cells.length*72+99)/100);
   float resultConfidence=usable?.72f+.23f*quality/samples.length:
     partialUsable?.60f+.20f*quality/samples.length:0f;
-  return new Observation(rows,cols,timestampMs,cells,new Palette(prototypes),resultConfidence,usable,partialUsable,special,reasons);
+  return new Observation(rows,cols,timestampMs,cells,new Palette(prototypes),resultConfidence,usable,partialUsable,special,reasons,details);
  }
 
  private static int sample(Pixels pixels,float l,float t,float r,float b,float x,float y){return pixels.get((int)(l+x*(r-l)),(int)(t+y*(b-t)));}
@@ -233,7 +245,8 @@ public final class GridPuzzleVision {
   float contrast=0,spread=0;for(int c=0;c<3;c++){contrast+=(mean[c]-center[c])*(mean[c]-center[c]);spread+=Math.max(0,sq[c]/count-mean[c]*mean[c]);}
   if(Math.sqrt(contrast/3)<.18)return null;
   float hi=Math.max(mean[0],Math.max(mean[1],mean[2])),lo=Math.min(mean[0],Math.min(mean[1],mean[2]));
-  if(Math.sqrt(spread/3)>.07||hi<.2||hi-lo<.18)return new float[]{Float.NaN,0,0};
+  if(Math.sqrt(spread/3)>.07)return new float[]{Float.NaN,DETAIL_RING_UNSTABLE,0};
+  if(hi<.2||hi-lo<.18)return new float[]{Float.NaN,DETAIL_RING_LOW_CHROMA,0};
   return mean;
  }
  private static float ringDistance(float[] ring,float[] descriptor){
@@ -247,7 +260,7 @@ public final class GridPuzzleVision {
   return (float)Math.sqrt(distance/3);
  }
 
- private static float[] describe(Pixels pixels,float l,float t,float r,float b){
+ private static float[] describe(Pixels pixels,float l,float t,float r,float b,byte[] details,int index){
   float[] d=new float[FEATURES];float[] mean=new float[3],sq=new float[3];
   int count=0;
   for(int yy=0;yy<17;yy++)for(int xx=0;xx<17;xx++){
@@ -267,7 +280,7 @@ public final class GridPuzzleVision {
   }
   float contrast=0;for(int ch=0;ch<3;ch++){float v=mean[ch]-rim[ch]/rimCount;contrast+=v*v;}contrast=(float)Math.sqrt(contrast/3);
   // A flat field or a smooth background provides no evidence of an actual token.
-  if(spread<.045f&&contrast<.09f)return null;
+  if(spread<.045f&&contrast<.09f){details[index]=DETAIL_SAMPLE_FLAT;return null;}
   // Grey/white special icons (e.g. skulls) need semantic handling. Do not merge
   // those into a similarly coloured ordinary piece and silently treat them as safe.
   if((d[39]+d[40]+d[41])/count>.30f){
@@ -280,7 +293,7 @@ public final class GridPuzzleVision {
     float lo=Math.min(rgb>>16&255,Math.min(rgb>>8&255,rgb&255))/255f;
     if(hi>=.2f&&hi-lo>=.12f&&(hi-lo)/hi>=.3f)chromatic++;
    }
-   if(chromatic<40)return null;
+   if(chromatic<40){details[index]=DETAIL_SAMPLE_NEUTRAL;return null;}
   }
   for(int gy=0;gy<3;gy++)for(int gx=0;gx<3;gx++){
    int base=(gy*3+gx)*3;

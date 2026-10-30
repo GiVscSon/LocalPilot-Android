@@ -60,6 +60,7 @@ public final class GridPuzzleVisionTest {
   check(!irregularBoard.usable()&&irregularBoard.unknownSummary(1).contains("NO_SAMPLE"),"irregular corners never authorize a complete board");
   int expectedUnknown=irregularBoard.unknownIndices().length;
   check(irregularBoard.unknownReasonCounts().equals("NO_SAMPLE="+expectedUnknown),"counts every unknown corner without pixels");
+  check(irregularBoard.unknownDetailCounts().equals("SAMPLE_FLAT="+expectedUnknown),"flat cells have a separate pixel-free diagnostic detail");
   var mixedReasons=GridPuzzleVision.detect((x,y)->{
    int row=y/40,col=x/40;
    if((row<2||row>4)&&(col<2||col>4))return 0xb9cce1;
@@ -69,6 +70,20 @@ public final class GridPuzzleVisionTest {
   check(!mixedReasons.partialUsable(),"an overlay is never permitted as a partial observation");
   var gradient=GridPuzzleVision.detect((x,y)->{int v=70+x/10+y/10;return v<<16|v<<8|v;},0,0,420,420,7,7,0,0,0,0,1000,null);check(!gradient.usable(),"smooth background abstains");
   int[] sixBySix=new int[36];for(int i=0;i<sixBySix.length;i++)sixBySix[i]=i%4;
+  for(int variant=0;variant<3;variant++){
+   final int mode=variant;
+   var detailed=GridPuzzleVision.detect((x,y)->{
+    if(x>=40||y>=40)return token(x,y,0,0,40,6,6,sixBySix,new int[]{0xe72832,0xfbc72b,0x4aa91f,0x266ac6},0);
+    if(mode==2)return (x/4+y/4)%2==0?0x555555:0xaaaaaa;
+    if(x>=14&&x<=26&&y>=14&&y<=26)return 0xffffff;
+    if(mode==0)return (x/4)%2==0?0xff0000:0x0000ff;
+    return 0x444444;
+   },0,0,240,240,6,6,0,0,0,0,1050,null);
+   String expected=mode==0?"RING_UNSTABLE":mode==1?"RING_DARK_OR_LOW_CHROMA":"SAMPLE_NEUTRAL_CENTER";
+   check(detailed.type(0,0)==-1,"extra diagnostics never turn an unknown cell into a playable tile");
+   check(detailed.unknownDetailCounts().contains(expected+"=1"),"distinct no-sample or ring cause "+expected);
+   check(mode==2?detailed.reason(0,0)==GridPuzzleVision.CellReason.NO_SAMPLE:detailed.reason(0,0)==GridPuzzleVision.CellReason.RING_NO_MATCH,"legacy unknown reason is unchanged");
+  }
   int[] specials={0xd02020,0x20a020,0x3060e0,0xd0d0d0};
   var neutral=GridPuzzleVision.detect((x,y)->token(x,y,0,0,40,6,6,sixBySix,specials,0),0,0,240,240,6,6,0,0,0,0,1000,null);
   check(!neutral.usable()&&neutral.type(0,3)==-1,"neutral/special icons need separate rules and abstain");
