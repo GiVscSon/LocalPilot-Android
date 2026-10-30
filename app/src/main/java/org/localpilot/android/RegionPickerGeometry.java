@@ -15,6 +15,13 @@ public final class RegionPickerGeometry {
   double aspect=region.width()/(double)region.height();
   return aspect>=.82&&aspect<=1.18;
  }
+ /** Both stock and coloured 2048 readers require cells on a square >=160px.
+  * The generic 18% grid tolerance is deliberately NOT enough for 2048.
+  */
+ public static boolean readable2048(GameViewport.Box region){
+  if(region==null||region.width()<160||region.height()<160)return false;
+  return Math.abs((long)region.width()-region.height())<=Math.min(region.width(),region.height())*.08;
+ }
  private static void window(GameViewport.Box window){
   if(window==null||window.left()<0||window.top()<0||(long)window.right()-window.left()<1
     ||(long)window.bottom()-window.top()<1)throw new IllegalArgumentException("region window");
