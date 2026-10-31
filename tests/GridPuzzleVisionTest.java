@@ -46,6 +46,10 @@ public final class GridPuzzleVisionTest {
    types[0]=-1;var missing=GridPuzzleVision.detect((x,y)->token(x,y,left,top,size,rows,cols,types,colors,0),left,top,left+size*cols,top+size*rows,rows,cols,0,0,0,0,1700,restored);
    check(!missing.usable()&&missing.type(0,0)==-1,"blank cell is uncertain, no fabricated empty tile");
    check(missing.reason(0,0)!=GridPuzzleVision.CellReason.KNOWN,"missing symbol may not claim a known classification");
+   String evidence=missing.cellReasonDetails();
+   check(evidence.contains("R1C1:")&&evidence.contains("RGB(")&&evidence.contains("HSV("),
+     "refused cell includes row, column, and center/ring RGB HSV");
+   check(evidence.contains("center=")&&evidence.contains("ring="),"two independent sample regions");
   }
   for(int color:new int[]{0,0xffffff,0x209030,0x808080}){var blank=GridPuzzleVision.detect((x,y)->color,0,0,420,420,7,7,0,0,0,0,1000,null);check(!blank.usable()&&blank.palette().size()==0,"uniform scene abstains");}
   // A cropped, irregular board can contain flat corner cells. They remain
@@ -98,6 +102,8 @@ public final class GridPuzzleVisionTest {
    check(eyes&&redFrame?protectedBoard.usable()&&protectedBoard.type(2,2)==0&&protectedBoard.specialCellsMask().get(14):!protectedBoard.specialCellsMask().get(14),"protected skull requires both face and red tile evidence");
    if(eyes&&redFrame)check(protectedBoard.reason(2,2)==GridPuzzleVision.CellReason.PROTECTED_SKULL,
      "protected skull carries a distinct diagnostic reason");
+   if(eyes&&redFrame)check(protectedBoard.cellReasonDetails().contains("R3C3:PROTECTED_SKULL"),
+     "protected skull diagnostics remain explicit even though protected cells are not UNKNOWN");
    var genericBoard=GridPuzzleVision.detect(image,0,0,480,480,6,6,0,0,0,0,1400,null);
    check(genericBoard.type(2,2)!=0,"generic mode cannot silently enable the skull preset");
   }
