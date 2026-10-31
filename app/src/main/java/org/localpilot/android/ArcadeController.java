@@ -191,7 +191,7 @@ public final class ArcadeController {
   float horizon=clamp(Float.isFinite(arrives)?arrives+.22f:.8f,.45f,1.3f);
   // Waiting for another observation is itself an action with latency. The
   // planner must not postpone until the next sample can no longer avert impact.
-  float nextDecision=.10f;
+  float nextDecision=.18f;
   float nextY=projectedY+projectedV*nextDecision+.5f*gravity*nextDecision*nextDecision;
   if(projectedV>-.08f&&(nextY>floor-.025f||(arrives<.55f&&nextY>hi-.015f)))
    return new ArcadePolicy.Decision(ArcadePolicy.Action.FLAP,.62f,(s.top+s.bottom)*.5f,"Упреждаю нижнюю границу прохода");
