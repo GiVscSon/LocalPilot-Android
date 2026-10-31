@@ -27,6 +27,11 @@ public final class PanelDockingTest {
    PanelDocking.Area old=a(170,430,466,560);
    assertDock(phone,old,roi,16);
   }
+  // Phone diagnostic: 1220x2712, manual 6x6 ROI [103,1241][1099,2262].
+  var phoneRoi=a(103,1241,1099,2262);
+  var dock=PanelDocking.choose(a(0,82,1220,2630),a(310,2280,430,2350),phoneRoi,24);
+  check(dock!=null&&dock.bottom<=1241-24&&dock.top>=82,"phone STOP docks above the 6x6 ROI");
+  check(!dock.intersects(phoneRoi),"phone STOP never covers manually selected ROI");
   PanelDocking.Area safe=a(0,0,400,400),roi=a(90,0,310,400),current=a(140,130,210,180);
   var side=PanelDocking.choose(safe,current,roi,8);
   check(side!=null&&safe.contains(side)&&!roi.intersects(side),"find narrow left/right pocket, not just corners");

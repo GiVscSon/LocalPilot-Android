@@ -50,6 +50,12 @@ jobs:
       java tests/ControllerVerify.java
       java tests/SystemVerify.java
       java tests/RlVerify.java
+   - name: Explicit unit tests and Android lint
+     shell: bash
+     run: |
+      set -euo pipefail
+      chmod +x ./gradlew
+      ./gradlew --no-daemon testDebugUnitTest lintDebug
    - name: Build and verify current Dev APK
      run: python3 build_debug.py --gradle gradle
    - name: Package verified APK and source

@@ -26,7 +26,12 @@ public class PilotService extends AccessibilityService {
  private boolean busy=false;private int autoLeft=0;private long deadline;private int demoVerified;private String target="";private Rect armedBounds=new Rect();private int nx=50,ny=65;
  private long lastPanelRender;
  private String lastGestureContext="none";
- private String note="STOP",uiStats="",lastStopReason="Нет остановок";private final InputPermit permit=new InputPermit();private RotatingJournal journal;private final GestureFlight gestureFlight=new GestureFlight();
+ private String note="STOP",uiStats="",lastStopReason="Нет остановок";
+ private long lastStopSessionId=-1,lastStopUptimeMs=-1,lastActiveSessionId=-1;
+ private String lastBoundsRejection="none";
+ private long lastBoundsRejectionEpoch=-1,lastBoundsRejectionUptimeMs=-1;
+ private final WindowFocus.RebindStability rebindStability=new WindowFocus.RebindStability();
+ private long rebindGeneration;private final InputPermit permit=new InputPermit();private RotatingJournal journal;private final GestureFlight gestureFlight=new GestureFlight();
  private final Color2048Reader.Session colorSession=new Color2048Reader.Session();
  private boolean playingMini;private int miniKind,miniAction;private long miniMoves;private int[] miniBefore;private Rect boardRoi;private View picker;private boolean playing2048=false,colored2048=false,captureBusy=false;private long moves2048;private long captureCounter,pendingCapture,lastShotTimestamp=-1;private long mergeTotal;private Board2048 before2048;private int direction2048;private AlertDialog preview,overlayDialog;
  private final CaptureStartup captureStartup=new CaptureStartup();
@@ -64,7 +69,7 @@ public class PilotService extends AccessibilityService {
  private GridPuzzle gridPendingBoard;private java.util.BitSet gridPendingSpecial;
  private String gridAvoidScope="",gridPendingScope="";
  // Bounded symbolic counts from the current grid observation; no pixels retained.
- private String gridUnknownReasons="none",gridReview="Нет данных: запустите сеточную игру и дождитесь чтения поля.";
+ private String gridUnknownReasons="none",gridReasonDetails="none",gridLastStatus="none",gridReview="Нет данных: запустите сеточную игру и дождитесь чтения поля.";
  private CustomVisionConfig customVision;private String customVisionRoiScope;
  private boolean customCalibrationPending;
  private View customCalibrationOverlay;
@@ -83,8 +88,31 @@ public class PilotService extends AccessibilityService {
  private final Object jumperFrameLock=new Object();
  private final java.util.ArrayDeque<Bitmap> jumperQueuedFrames=new java.util.ArrayDeque<>();
  private Bitmap diagnosticFrame;private long diagnosticFrameAt=-1;
+ private Bitmap retainedGridFrame;private long retainedGridFrameAt=-1;
+ private boolean gridFrameNeeded;
  private String diagnosticFrameGeometry="No game frame retained",lastSessionReport="No recorded game session";
 
+ private void clearRetainedGridFrame(){
+  if(retainedGridFrame!=null&&!retainedGridFrame.isRecycled())retainedGridFrame.recycle();
+  retainedGridFrame=null;retainedGridFrameAt=-1;gridFrameNeeded=false;
+ }
+ /** Hold only one validated ROI crop in RAM for explicit, opt-in export.
+  * The existing DiagnosticBundle PNG limits apply before compression. */
+ private void rememberGridRefusalFrame(Bitmap pixels,Rect roi,long timestamp,boolean needed){
+  gridFrameNeeded=needed;
+  if(!needed){clearRetainedGridFrame();return;}
+  if(roi==null||roi.isEmpty()||!panelOutsideRoi(roi)
+      ||!getSharedPreferences("diagnostics",MODE_PRIVATE).getBoolean("include_grid_frame",true))return;
+  try{
+   double scale=Math.min(1d,Math.min(720d/roi.width(),
+      Math.min(720d/roi.height(),Math.sqrt(345600d/((double)roi.width()*roi.height())))));
+   int w=Math.max(1,(int)Math.floor(roi.width()*scale)),h=Math.max(1,(int)Math.floor(roi.height()*scale));
+   Bitmap copy=Bitmap.createBitmap(w,h,Bitmap.Config.ARGB_8888);
+   new Canvas(copy).drawBitmap(pixels,roi,new Rect(0,0,w,h),new Paint(Paint.FILTER_BITMAP_FLAG));
+   if(retainedGridFrame!=null&&!retainedGridFrame.isRecycled())retainedGridFrame.recycle();
+   retainedGridFrame=copy;retainedGridFrameAt=timestamp;
+  }catch(RuntimeException|OutOfMemoryError ignored){/* Diagnostic retention never changes input. */}
+ }
  private void clearDiagnosticFrame(){if(diagnosticFrame!=null&&!diagnosticFrame.isRecycled())diagnosticFrame.recycle();diagnosticFrame=null;diagnosticFrameAt=-1;diagnosticFrameGeometry="No game frame retained";}
  /** A single RAM-only crop, sampled at most once a second while the bound game is focused. */
  private void rememberDiagnosticFrame(Bitmap frame,long timestamp){
@@ -103,7 +131,13 @@ public class PilotService extends AccessibilityService {
   }catch(RuntimeException|OutOfMemoryError error){/* Reporting must not interrupt gameplay. */}
   finally{if(copy!=null&&!copy.isRecycled())copy.recycle();}
  }
- public Bitmap copyDiagnosticFrame(){try{return diagnosticFrame==null||diagnosticFrame.isRecycled()||SystemClock.elapsedRealtime()-diagnosticFrameAt>5000?null:diagnosticFrame.copy(Bitmap.Config.ARGB_8888,false);}catch(RuntimeException|OutOfMemoryError error){return null;}}
+ public Bitmap copyDiagnosticFrame(){try{
+  if(gridFrameNeeded&&retainedGridFrame!=null&&!retainedGridFrame.isRecycled()
+    &&getSharedPreferences("diagnostics",MODE_PRIVATE).getBoolean("include_grid_frame",true))
+   return retainedGridFrame.copy(Bitmap.Config.ARGB_8888,false);
+  return diagnosticFrame==null||diagnosticFrame.isRecycled()||SystemClock.elapsedRealtime()-diagnosticFrameAt>5000
+    ?null:diagnosticFrame.copy(Bitmap.Config.ARGB_8888,false);
+ }catch(RuntimeException|OutOfMemoryError error){return null;}}
  private String diagnosticState(){
   long now=SystemClock.elapsedRealtime();
   StringBuilder out=new StringBuilder("LocalPilot game-session-v1\nelapsed_ms=").append(now)
@@ -111,7 +145,10 @@ public class PilotService extends AccessibilityService {
     .append("\nvisual_roi=").append(visualBounds().toShortString()).append(" manual_roi=").append(manualVisualRoi)
     .append("\nbounds=").append(armedBounds.toShortString()).append(" display=").append(jumperDisplayWidth).append('x').append(jumperDisplayHeight)
     .append("\nplaying=").append(playingJumper||playingGrid).append(" capture_ready=").append(playingGrid||jumperCaptureReady).append(" busy=").append(busy)
-    .append("\nstatus=").append(note).append("\nLAST_STOP=").append(lastStopReason).append("\nlast_gesture=").append(lastGestureContext).append('\n').append(captureCounters()).append('\n').append(captureTiming.report())
+    .append("\nstatus=").append(note).append("\nsession_epoch=").append(gate.epoch())
+    .append("\nLAST_STOP=").append(lastStopReason).append(" last_stop_session_id=").append(lastStopSessionId)
+    .append(" last_stop_uptime_ms=").append(lastStopUptimeMs)
+    .append("\nTARGET_BOUNDS_CHANGED_DETAIL=").append(lastBoundsRejection).append("\nlast_gesture=").append(lastGestureContext).append('\n').append(captureCounters()).append('\n').append(captureTiming.report())
     .append("\nframe_age_ms=").append(diagnosticFrameAt<0?-1:Math.max(0,now-diagnosticFrameAt)).append('\n').append(diagnosticFrameGeometry)
     .append('\n').append(gestureFlight.report(now)).append('\n').append(sceneRecovery.report())
     .append('\n').append(arcadeFeedback.report()).append('\n').append(jumperFeedback.report()).append("\nMOTION MODEL: ").append(arcadeController.model())
@@ -121,7 +158,10 @@ public class PilotService extends AccessibilityService {
     .append(" losses=").append(arcadeLearning==null||target.isEmpty()?-1:arcadeLearning.losses(target,modelSlot,captureProfile))
     .append("\nSAVED_MODEL: ").append(arcadeLearning==null||target.isEmpty()?"unavailable":arcadeLearning.get(target,modelSlot,captureProfile))
     .append("\nCUSTOM_VISION: ").append(customVision!=null).append(" control_mode=").append(controlMode);
-  out.append('\n').append(gridSession.report()).append(" unknown_reasons=").append(gridUnknownReasons).append(" size=").append(gridConfig.rows).append('x').append(gridConfig.cols).append(" goal_color=").append(gridGoal).append(" dispatched=").append(gridMoves).append(" visual_changes=").append(gridVerified);
+  out.append('\n').append(gridSession.report()).append(" grid_status=").append(gridLastStatus)
+    .append(" unknown_reason_cells=").append(gridReasonDetails)
+    .append(" frame_needed=").append(gridFrameNeeded).append(" retained_frame_at_ms=").append(retainedGridFrameAt)
+    .append(" unknown_reasons=").append(gridUnknownReasons).append(" size=").append(gridConfig.rows).append('x').append(gridConfig.cols).append(" goal_color=").append(gridGoal).append(" dispatched=").append(gridMoves).append(" visual_changes=").append(gridVerified);
   out.append('\n').append(bubbleSession.report());
   if(arcadeState!=null)out.append("\narcade_usable=").append(arcadeState.usable()).append(" confidence=").append(arcadeState.confidence)
     .append(" terminal=").append(arcadeState.terminal).append(" tracked=").append(arcadeState.tracked)
@@ -136,7 +176,10 @@ public class PilotService extends AccessibilityService {
  }
  private String diagnosticBox(ArcadeObservation.Box b){return b==null?"none":b.left+","+b.top+","+b.right+","+b.bottom;}
  public String exportDiagnosticState(){
-  String result="BEFORE EXPORT\n"+diagnosticState()+"\n\nLAST ACTIVE SESSION\n"+lastSessionReport+"\n\n"+metrics.report()+"\nCAPTURE STARTUP\n"+captureStartup.report();
+  String result="BEFORE EXPORT\n"+diagnosticState()+"\n\nLAST ACTIVE SESSION\n"+lastSessionReport+
+    "\nLAST_STOP_RELATES_TO_ACTIVE_SESSION="+(lastActiveSessionId>=0&&lastActiveSessionId==lastStopSessionId)+
+    " last_active_session_id="+lastActiveSessionId+" last_stop_session_id="+lastStopSessionId+
+    " last_stop_uptime_ms="+lastStopUptimeMs+"\n\n"+metrics.report()+"\nCAPTURE STARTUP\n"+captureStartup.report();
   stop("Экспорт отчёта: STOP");return result;
  }
 
@@ -162,7 +205,7 @@ public class PilotService extends AccessibilityService {
  }
  private void retainVisualScope(AccessibilityNodeInfo root){
   if(!target.equals(visualOwner)||root.getWindowId()!=visualWindow||!armedBounds.equals(visualWindowBounds)){
-   visualRoi=null;manualVisualRoi=false;visualOwner=target;visualWindow=root.getWindowId();visualWindowBounds=new Rect(armedBounds);
+   clearRetainedGridFrame();visualRoi=null;manualVisualRoi=false;visualOwner=target;visualWindow=root.getWindowId();visualWindowBounds=new Rect(armedBounds);
    // Never carry a screenshot or scene geometry from the previous app into a
    // newly bound game.  The next capture must establish a fresh ROI/profile.
    boardRoi=null;clearDiagnosticFrame();sceneRecovery.reset();jumperState=null;jumperTracking.reset();
@@ -394,10 +437,31 @@ public class PilotService extends AccessibilityService {
  private void arm(){stop("Привязка");if(busy){note="Дождитесь завершения жеста";update();return;}AccessibilityNodeInfo r=appRoot();try{if(r==null||!unlocked()){note="Нет активного приложения";update();return;}target=String.valueOf(r.getPackageName());targetLabel=applicationLabel(target);targetIsBrowser=browserTarget();armedBounds=windowBounds(r);if(armedBounds.isEmpty()){note="Нет границ окна";update();return;}retainVisualScope(r);gate.arm(target,r.getWindowId(),armedBounds.width(),armedBounds.height());if(automatic())permit.grantSession(gate.epoch(),SystemClock.elapsedRealtime());note=automatic()?"Окно выбрано · нажмите Старт":"Только наблюдение";update();}finally{if(r!=null)r.recycle();}}
  private String applicationLabel(String packageName){try{return String.valueOf(getPackageManager().getApplicationLabel(getPackageManager().getApplicationInfo(packageName,0)));}catch(Exception e){return packageName;}}
  private void stop(String reason){
+  long stopEpoch=gate.epoch(),stopAt=SystemClock.uptimeMillis();
   boolean stoppedGame=playingJumper||playingGrid||playing2048||playingMini;
-  boolean wasArmed=gate.armed();permit.revoke();gate.stop();browserSceneGate.reset();
-  if(!reason.startsWith("Экспорт"))lastStopReason=reason;
-  if(playingJumper||playingGrid||wasArmed||autoLeft>0)try{lastSessionReport=diagnosticState();}catch(RuntimeException|OutOfMemoryError ignored){lastSessionReport="Сеанс остановлен; метаданные недоступны";}
+  boolean wasArmed=gate.armed();
+  Rect priorBounds=new Rect(armedBounds),currentBounds=new Rect();
+  AccessibilityNodeInfo stopRoot=null;
+  try{stopRoot=appRoot();if(stopRoot!=null)currentBounds=windowBounds(stopRoot);}
+  catch(RuntimeException ignored){/* Never block STOP on window metadata. */}
+  finally{if(stopRoot!=null)stopRoot.recycle();}
+  boolean boundsJustChanged=lastBoundsRejectionEpoch==stopEpoch
+    &&lastBoundsRejectionUptimeMs>=0&&stopAt-lastBoundsRejectionUptimeMs>=0
+    &&stopAt-lastBoundsRejectionUptimeMs<=750;
+  boolean rebindAfterStop=wasArmed&&"ru.beru.android".equals(target)
+    &&manualVisualRoi&&visualRoi!=null
+    &&(reason.contains("TARGET_BOUNDS_CHANGED")||boundsJustChanged);
+  Rect rebindRoi=visualRoi==null?null:new Rect(visualRoi);
+  if(!reason.startsWith("Экспорт")){lastStopReason=reason;lastStopSessionId=stopEpoch;lastStopUptimeMs=stopAt;}
+  if(playingJumper||playingGrid||playing2048||playingMini||wasArmed||autoLeft>0)try{
+   lastActiveSessionId=stopEpoch;
+   lastSessionReport=diagnosticState()
+     +"\nSTOP_SNAPSHOT wasBound="+wasArmed+" reason="+reason+" session_epoch="+stopEpoch
+     +" uptime_ms="+stopAt+" armedBounds="+priorBounds.toShortString()
+     +" currentBounds="+currentBounds.toShortString();
+  }catch(RuntimeException|OutOfMemoryError ignored){lastSessionReport="Сеанс остановлен; метаданные недоступны";}
+  permit.revoke();gate.stop();browserSceneGate.reset();
+  rebindGeneration++;rebindStability.reset();
   if(playingJumper)CrashDiagnostics.captureStopped();
   // Save measured physics before reset, including measurements made while no
   // gesture was needed. Stopping a session is not a new round loss.
@@ -418,6 +482,7 @@ public class PilotService extends AccessibilityService {
   if(overlayDialog!=null){AlertDialog old=overlayDialog;overlayDialog=null;CaptureCleanup.run(old::dismiss);}
   if(preview!=null){AlertDialog old=preview;preview=null;CaptureCleanup.run(old::dismiss);}View oldPicker=picker;picker=null;removeOverlay(oldPicker);
   handler.removeCallbacksAndMessages(null);note=reason;restoreConsentPanel();update();
+  if(rebindAfterStop&&rebindRoi!=null)beginBoundsRebind(stopEpoch,rebindRoi);
  }
  private void failStage(StageMetrics.Stage stage,String code,String message){metrics.failure(stage,code);stop(stage+" / "+code+": "+message);compact(false);}
  private String invalidReason(ActionGate.Ticket t){return invalidReason(t,false);}
@@ -429,7 +494,17 @@ public class PilotService extends AccessibilityService {
    if(!gate.armed())return "NOT_BOUND";if(!unlocked())return "DEVICE_LOCKED";
    root=appRoot();if(root==null)return "TARGET_WINDOW_UNAVAILABLE";
    Rect bounds=windowBounds(root);String pkg=String.valueOf(root.getPackageName());int id=root.getWindowId();
-   if(!unlocked())return "DEVICE_LOCKED";if(!target.equals(pkg))return "TARGET_APP_CHANGED";if(bounds.isEmpty())return gate.identityRejection(pkg,id,0,0);if(!bounds.equals(armedBounds))return "TARGET_BOUNDS_CHANGED";
+   if(!unlocked())return "DEVICE_LOCKED";if(!target.equals(pkg))return "TARGET_APP_CHANGED";if(bounds.isEmpty())return gate.identityRejection(pkg,id,0,0);if(!bounds.equals(armedBounds)){
+    DisplayGeometry geometry=readDisplayGeometry();
+    lastBoundsRejectionEpoch=gate.epoch();
+    lastBoundsRejectionUptimeMs=SystemClock.uptimeMillis();
+    lastBoundsRejection="armedBounds="+armedBounds.toShortString()
+      +" currentBounds="+bounds.toShortString()
+      +" displayGeometry="+(geometry==null?"unavailable":geometry.width()+"x"+geometry.height()+"/rotation="+geometry.rotation())
+      +" timestamp_ms="+System.currentTimeMillis()+" uptimeMillis="+lastBoundsRejectionUptimeMs
+      +" session_epoch="+lastBoundsRejectionEpoch;
+    return "TARGET_BOUNDS_CHANGED";
+   }
    long now=SystemClock.elapsedRealtime();
    // A slow Binder query is not an expired action in this read-only path.
    if(observationOnly)return gate.identityRejection(pkg,id,bounds.width(),bounds.height());
@@ -467,6 +542,63 @@ public class PilotService extends AccessibilityService {
   if(playingGrid)scheduleGrid(epoch);
   else if(playing2048)postBoardTask(epoch,captureDelay(),()->round2048(epoch));
   else if(discoveringBoard)postBoardTask(epoch,captureDelay(),()->findAutomaticBoard(epoch,SystemClock.elapsedRealtime()));
+ }
+ /** Re-arm only after 600 ms of stable focused Market geometry, valid manual ROI,
+  * and measured STOP-panel separation. Never resume the old game loop or permit. */
+ private void beginBoundsRebind(long oldEpoch,Rect roi){
+  long stoppedEpoch=gate.epoch(),generation=rebindGeneration;
+  rebindStability.reset();
+  attemptBoundsRebind(oldEpoch,stoppedEpoch,generation,new Rect(roi),SystemClock.uptimeMillis()+6000);
+ }
+ private void attemptBoundsRebind(long oldEpoch,long stoppedEpoch,long generation,Rect roi,long until){
+  if(destroying||generation!=rebindGeneration||gate.epoch()!=stoppedEpoch||gate.armed())return;
+  long now=SystemClock.uptimeMillis();
+  if(now>until){note="REBOUND_TIMEOUT: выберите Окно заново";update();return;}
+  AccessibilityNodeInfo root=null;Rect current=new Rect();int id=-1;DisplayGeometry geometry=null;
+  try{
+   root=appRoot();
+   if(root!=null&&unlocked()&&"ru.beru.android".equals(String.valueOf(root.getPackageName()))){
+    id=root.getWindowId();current=windowBounds(root);geometry=readDisplayGeometry();
+   }
+  }catch(RuntimeException ignored){/* Metadata loss never authorizes input. */}
+  finally{if(root!=null)root.recycle();}
+  if(geometry==null||current.isEmpty()||!current.contains(roi)){
+   if(!current.isEmpty()&&!current.contains(roi)){
+    note="REBOUND_ROI_OUTSIDE_WINDOW: выделите область заново";update();return;
+   }
+   rebindStability.reset();handler.postDelayed(()->attemptBoundsRebind(oldEpoch,stoppedEpoch,generation,roi,until),120);return;
+  }
+  final Rect verifiedBounds=new Rect(current);final int windowId=id;final DisplayGeometry verifiedDisplay=geometry;
+  boolean stable=rebindStability.observe(oldEpoch,"ru.beru.android",id,
+     current.left,current.top,current.right,current.bottom,
+     geometry.width(),geometry.height(),geometry.rotation(),now);
+  if(!stable){
+   handler.postDelayed(()->attemptBoundsRebind(oldEpoch,stoppedEpoch,generation,roi,until),120);return;
+  }
+  compact(true);
+  afterPanelLayout(()->{
+   if(generation!=rebindGeneration||gate.epoch()!=stoppedEpoch||gate.armed())return;
+   if(!movePanelAway(roi,verifiedBounds)){note="REBOUND_PANEL_UNSAFE: STOP не помещается";update();return;}
+   afterPanelLayout(()->{
+    if(generation!=rebindGeneration||gate.epoch()!=stoppedEpoch||gate.armed())return;
+    AccessibilityNodeInfo check=null;
+    try{
+     check=appRoot();DisplayGeometry latest=readDisplayGeometry();
+     if(check==null||!unlocked()
+       ||!"ru.beru.android".equals(String.valueOf(check.getPackageName()))
+       ||check.getWindowId()!=windowId||!verifiedBounds.equals(windowBounds(check))
+       ||latest==null||latest.requiresRebind(verifiedDisplay)
+       ||!verifiedBounds.contains(roi)||!panelOutsideRoi(roi)){
+      note="REBOUND_VERIFY_FAILED: проверьте Окно/Область";update();return;
+     }
+     armedBounds=new Rect(verifiedBounds);visualRoi=new Rect(roi);manualVisualRoi=true;
+     visualOwner="ru.beru.android";visualWindow=windowId;visualWindowBounds.set(verifiedBounds);
+     target="ru.beru.android";targetLabel=applicationLabel(target);explicitWindow=true;boardRoi=null;
+     clearDiagnosticFrame();gate.arm(target,windowId,verifiedBounds.width(),verifiedBounds.height());
+     permit.revoke();note="Окно ru.beru.android перепривязано · нажмите Старт";update();
+    }finally{if(check!=null)check.recycle();}
+   });
+  });
  }
  private boolean valid(ActionGate.Ticket t){return invalidReason(t)==null;}
  private void manual(int dx,int dy){if(autoLeft>0||playing2048||playingMini||playingJumper||playingGrid){stop("Авторежим остановлен; нажмите ещё раз");return;}if(!gate.armed()){note="Сначала нажмите «Привязать»";update();return;}if(!permit.allows(gate.epoch(),SystemClock.elapsedRealtime())){note="Нажмите «Разрешить ввод» для запуска";update();return;}float x=armedBounds.left+Math.min(.99f,nx/100f)*armedBounds.width(),y=armedBounds.top+Math.min(.99f,ny/100f)*armedBounds.height();send(x,y,x+dx*armedBounds.width()*.18f,y+dy*armedBounds.height()*.18f,gate.offer(SystemClock.elapsedRealtime()),null);}
@@ -732,7 +864,7 @@ public class PilotService extends AccessibilityService {
   if(palette!=null)try{gridPalette=GridPuzzleVision.Palette.decode(palette);}catch(IllegalArgumentException error){note="Типы фишек повреждены · Ещё → Вернуть стандартное распознавание";update();return;}
   learningSlot=getSharedPreferences("panel",MODE_PRIVATE).getString("game_slot."+target,"default");
   try{gridGoal=GridPuzzleGoal.Color.valueOf(getSharedPreferences("grid-puzzle",MODE_PRIVATE).getString(gridKey()+".goal","ANY"));}catch(IllegalArgumentException error){gridGoal=GridPuzzleGoal.Color.ANY;}
-  gridSession.reset();gridUnknownReasons="none";gridReview="Ожидаю чтение текущей сетки.";gridMoves=gridVerified=0;gridResultVisible=gridSawAction=false;playingGrid=true;clearDiagnosticFrame();captureFrames=captureReads=captureDecisions=captureSent=captureCompleted=0;
+  gridSession.reset();clearRetainedGridFrame();gridUnknownReasons="none";gridReasonDetails="none";gridLastStatus="WAIT_STABLE";gridReview="Ожидаю чтение текущей сетки.";gridMoves=gridVerified=0;gridResultVisible=gridSawAction=false;playingGrid=true;clearDiagnosticFrame();captureFrames=captureReads=captureDecisions=captureSent=captureCompleted=0;
   gridPendingDecision=null;gridPendingBoard=null;gridPendingSpecial=null;
   GridOnlineLearning previousLearning=gridLearning;gridLearning=new GridOnlineLearning();
   String savedLearning=getSharedPreferences("grid-puzzle",MODE_PRIVATE).getString(gridKey()+".online-v1",null);
@@ -767,6 +899,7 @@ public class PilotService extends AccessibilityService {
    GridPuzzleVision.Observation observation=GridPuzzleVision.detect(pixels::getPixel,r.left,r.top,r.right,r.bottom,gridConfig.rows,gridConfig.cols,panel.left,panel.top,panel.right,panel.bottom,frameAt,gridPalette,GridProfileRules.protectSkulls(selectedProfile));
    captureReads++;metrics.record(StageMetrics.Stage.READ,SystemClock.elapsedRealtimeNanos()-readNs);
    gridUnknownReasons=observation.unknownReasonCounts();if(gridUnknownReasons.isEmpty())gridUnknownReasons="none";
+   gridReasonDetails=observation.cellReasonDetails();
    int unknownCount=observation.unknownIndices().length;
    gridReview=profileLabel()+" · "+observation.rows+"×"+observation.cols+"\nНеизвестно: "+unknownCount+"\n"+(unknownCount==0?"Все клетки распознаны.":observation.unknownSummary(observation.rows*observation.cols))+"\n\nЭто последнее чтение, а не текущее поле. Неизвестные клетки не разрешают ввод.";
    boolean partialGrid=observation.partialUsable();
@@ -777,6 +910,8 @@ public class PilotService extends AccessibilityService {
    GridPuzzleSession.Status status=partialGrid||gridSession.pending()
      ?gridSession.observePartial(gridConfig.rows,gridConfig.cols,observedCells,observation.specialCellsMask(),frameAt,SystemClock.elapsedRealtime())
      :gridSession.observe(gridConfig.rows,gridConfig.cols,observedCells,observation.specialCellsMask(),frameAt,SystemClock.elapsedRealtime());
+   gridLastStatus=status.name();
+   rememberGridRefusalFrame(pixels,r,frameAt,unknownCount>0||status==GridPuzzleSession.Status.WAIT_STABLE);
    if(status==GridPuzzleSession.Status.PAUSED){
     if(gridSession.awaitingLateVerification()){
      note="Ожидаю завершения анимации · наблюдение без ввода";update();scheduleGrid(epoch);return;
@@ -1439,12 +1574,19 @@ public class PilotService extends AccessibilityService {
   });
  }
  /** Dock a measured compact STOP panel outside the ROI; fail if no safe place exists. */
- private boolean movePanelAway(Rect roi){
-  if(roi==null||roi.isEmpty()||panel==null||layout==null||wm==null||consentPanelDetached||armedBounds.isEmpty())return false;
+ private boolean movePanelAway(Rect roi){return movePanelAway(roi,armedBounds);}
+ private boolean movePanelAway(Rect roi,Rect safeBounds){
+  if(roi==null||roi.isEmpty()||panel==null||layout==null||wm==null||consentPanelDetached||safeBounds==null||safeBounds.isEmpty())return false;
   Rect current=panelBounds();if(current.isEmpty())return false;
   Point size=new Point();wm.getDefaultDisplay().getRealSize(size);
-  Rect safe=new Rect(Math.max(0,armedBounds.left),Math.max(0,armedBounds.top),
-    Math.min(size.x,armedBounds.right),Math.min(size.y-dp(24),armedBounds.bottom));
+  int insetLeft=0,insetTop=dp(24),insetRight=0,insetBottom=dp(24);
+  WindowInsets insets=panel.getRootWindowInsets();
+  if(insets!=null){
+   android.graphics.Insets bars=insets.getInsets(WindowInsets.Type.systemBars()|WindowInsets.Type.displayCutout());
+   insetLeft=bars.left;insetTop=bars.top;insetRight=bars.right;insetBottom=bars.bottom;
+  }
+  Rect safe=new Rect(Math.max(insetLeft,safeBounds.left),Math.max(insetTop,safeBounds.top),
+    Math.min(size.x-insetRight,safeBounds.right),Math.min(size.y-insetBottom,safeBounds.bottom));
   if(safe.isEmpty())return false;
   PanelDocking.Area placement=PanelDocking.choose(
     new PanelDocking.Area(safe.left,safe.top,safe.right,safe.bottom),
@@ -1663,5 +1805,5 @@ public class PilotService extends AccessibilityService {
   // target window remain the same. The normal per-frame window gate still applies.
   if(!changed){update();return;}
   stop("Поворот/конфигурация — STOP. Выберите окно игры заново");explicitWindow=false;browserProfileConfirmed=false;visualRoi=null;manualVisualRoi=false;visualOwner="";visualWindow=-1;visualWindowBounds.setEmpty();if(layout!=null){layout.x=0;layout.y=dp(48);updatePanelLayout();}}
- @Override public void onDestroy(){destroying=true;CrashDiagnostics.phase("SERVICE_DESTROYED");permit.revoke();gate.stop();if(instance==this)instance=null;try{CaptureCleanup.run(this::hidePanel,this::clearDiagnosticFrame,gestureFlight::clear,()->gestureHandler.removeCallbacksAndMessages(null),()->handler.removeCallbacksAndMessages(null),()->visionWorker.shutdownNow());}finally{busy=false;super.onDestroy();}}
+ @Override public void onDestroy(){destroying=true;CrashDiagnostics.phase("SERVICE_DESTROYED");permit.revoke();gate.stop();if(instance==this)instance=null;try{CaptureCleanup.run(this::hidePanel,this::clearDiagnosticFrame,this::clearRetainedGridFrame,gestureFlight::clear,()->gestureHandler.removeCallbacksAndMessages(null),()->handler.removeCallbacksAndMessages(null),()->visionWorker.shutdownNow());}finally{busy=false;super.onDestroy();}}
 }
