@@ -6,7 +6,7 @@ tasks.register('localJpgReplay', Exec) {
   workingDir rootDir
   def jpgDir = System.getProperty('localpilot.jpgDir') ?: System.getenv('LOCALPILOT_JPG_DIR')
   def javaBin = new File(System.getProperty('java.home'), 'bin/java').absolutePath
-  def cmd = [javaBin, '-Djava.awt.headless=true']
+  def cmd = [javaBin, '-Dfile.encoding=UTF-8', '-Dstdout.encoding=UTF-8', '-Dstderr.encoding=UTF-8', '-Djava.awt.headless=true']
   if (jpgDir) cmd.add('-Dlocalpilot.jpgDir=' + jpgDir)
   cmd.add('tests/LocalJpgVerify.java')
   commandLine cmd
