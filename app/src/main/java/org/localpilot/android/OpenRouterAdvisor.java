@@ -85,7 +85,7 @@ public final class OpenRouterAdvisor {
     final String result=answer;
     if(!closed)main.post(()->{if(!closed)callback.complete(result);});
    });
-  }catch(RuntimeException problem){
+  }catch(JSONException|RuntimeException problem){
    busy.set(false);throw problem;
   }
  }
