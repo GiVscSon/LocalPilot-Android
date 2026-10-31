@@ -66,7 +66,7 @@ public final class OnlineDiagnosticsActivity extends Activity {
   routerKey=field(content,"OpenRouter API key · только для текущего запроса",true);
   models=field(content,"Модель или несколько через запятую",false);
   models.setText("openrouter/free");
-  paragraph(content,"По умолчанию бесплатный маршрутизатор openrouter/free. Список ниже загружается из OpenRouter, с текущей ценой ввода и вывода за миллион токенов. Бесплатные модели могут иметь лимиты.");
+  paragraph(content,"По умолчанию бесплатный маршрутизатор openrouter/free. Введите свой OpenRouter API-ключ выше, затем загрузите каталог: цены и доступность меняются. Бесплатные модели могут иметь лимиты.");
   addButton(content,"Обновить доступные модели",()->refreshCatalog(false));
   addButton(content,"Выбрать модель: бесплатные / платные / подходящие",()->{
    if(availableModels.isEmpty())refreshCatalog(true);
@@ -121,9 +121,10 @@ public final class OnlineDiagnosticsActivity extends Activity {
 
  private void refreshCatalog(boolean openWhenReady){
   if(catalog.busy()){answer.setText("Список OpenRouter уже загружается");return;}
-  answer.setText("Получаю актуальные модели, цены и контекст OpenRouter...");
+  answer.setText("Получаю актуальные модели и цены OpenRouter по введённому ключу...");
   try{
-   catalog.load((received,error)->{
+   final String enteredKey=routerKey.getText().toString();
+   catalog.load(enteredKey,(received,error)->{
     if(error!=null){answer.setText(error+" Можно использовать openrouter/free или ввести точный slug модели вручную.");return;}
     availableModels=received;
     int free=0,paid=0,recommended=0;
@@ -134,7 +135,7 @@ public final class OnlineDiagnosticsActivity extends Activity {
     answer.setText("Каталог получен: "+free+" бесплатных, "+paid+" платных. Для диагностики подходит "+recommended+". Выберите раздел и модель.");
     if(openWhenReady)chooseModelCategory();
    });
-  }catch(IllegalStateException error){answer.setText(error.getMessage());}
+  }catch(IllegalArgumentException|IllegalStateException error){answer.setText("Каталог: "+error.getMessage()+". Введите свой API-ключ OpenRouter.");}
  }
  private void chooseModelCategory(){
   if(availableModels.isEmpty()){refreshCatalog(true);return;}
