@@ -31,7 +31,7 @@ public final class ExperienceStore {
   // Require a legal match through the swapped endpoints on the recorded
   // known board. This is structural validation, not a substitute for two
   // fresh post-ACK visual observations at the call site.
-  int[] swapped=before.clone(),tmp=swapped[from];swapped[from]=swapped[to];swapped[to]=tmp;
+  int[] swapped=before.clone();int tmp=swapped[from];swapped[from]=swapped[to];swapped[to]=tmp;
   boolean match=false;
   for(int endpoint:new int[]{from,to}){
    int row=endpoint/side,col=endpoint%side,color=swapped[endpoint];
