@@ -19,13 +19,31 @@ public final class VisionNoveltyMemory {
  private final List<Entry> entries=new ArrayList<>();
  public int size(){return entries.size();}
  public int stableCount(){int n=0;for(Entry e:entries)if(e.votes>=3)n++;return n;}
- public int identify(int rgb,int shape){Entry e=nearest(rgb,shape);return e!=null&&e.votes>=3?entries.indexOf(e)+1:0;}
+ /** Returns 0 when appearance resembles two clusters too closely. */
+ public int identify(int rgb,int shape){
+  Entry best=null;int first=Integer.MAX_VALUE,second=Integer.MAX_VALUE;
+  for(Entry e:entries){
+   int d=distance(e,rgb,shape);if(d<0)continue;
+   if(d<first){second=first;first=d;best=e;}
+   else if(d<second)second=d;
+  }
+  if(best==null||best.votes<3||second-first<225)return 0;
+  return entries.indexOf(best)+1;
+ }
  public void observe(int rgb,int shape,long frameAt){
   if(frameAt<0||shape<0||shape>255||rgb<0||rgb>0xffffff)throw new IllegalArgumentException("novel appearance");
   Entry e=nearest(rgb,shape);
   if(e==null){
-   if(entries.size()==MAX)return;
-   e=new Entry(rgb,shape,0);entries.add(e);
+   if(entries.size()==MAX){
+    // Replace only unconfirmed low-support noise; never silently overwrite a
+    // stable cluster trained in earlier sessions.
+    int replace=-1,least=3;
+    for(int i=0;i<entries.size();i++)if(entries.get(i).votes<least){
+     replace=i;least=entries.get(i).votes;
+    }
+    if(replace<0)return;
+    entries.set(replace,new Entry(rgb,shape,0));e=entries.get(replace);
+   }else{e=new Entry(rgb,shape,0);entries.add(e);}
   }
   if(frameAt<=e.lastFrame)return;
   e.lastFrame=frameAt;e.votes=Math.min(MAX_VOTES,e.votes+1);
@@ -37,16 +55,18 @@ public final class VisionNoveltyMemory {
   e.rgb=(r<<16)|(g<<8)|b;
   e.shape=(e.shape*(weight-1)+shape)/weight;
  }
+ private static int distance(Entry e,int rgb,int shape){
+  int dr=(rgb>>16&255)-(e.rgb>>16&255);
+  int dg=(rgb>>8&255)-(e.rgb>>8&255);
+  int db=(rgb&255)-(e.rgb&255),ds=shape-e.shape;
+  int d=dr*dr+dg*dg+db*db;
+  return d<=RGB_LIMIT2&&Math.abs(ds)<=SHAPE_LIMIT?d+ds*ds:-1;
+ }
  private Entry nearest(int rgb,int shape){
   Entry best=null;int distance=Integer.MAX_VALUE;
   for(Entry e:entries){
-   int dr=(rgb>>16&255)-(e.rgb>>16&255);
-   int dg=(rgb>>8&255)-(e.rgb>>8&255);
-   int db=(rgb&255)-(e.rgb&255),ds=shape-e.shape;
-   int d=dr*dr+dg*dg+db*db;
-   if(d<=RGB_LIMIT2&&Math.abs(ds)<=SHAPE_LIMIT&&d+ds*ds<distance){
-    best=e;distance=d+ds*ds;
-   }
+   int d=distance(e,rgb,shape);
+   if(d>=0&&d<distance){best=e;distance=d;}
   }
   return best;
  }
@@ -57,7 +77,7 @@ public final class VisionNoveltyMemory {
   return b.toString();
  }
  public static VisionNoveltyMemory decode(String saved){
-  if(saved==null||saved.length()>600||!saved.startsWith("v1"))throw new IllegalArgumentException("novel version");
+  if(saved==null||saved.length()>600||!(saved.equals("v1")||saved.startsWith("v1;")))throw new IllegalArgumentException("novel version");
   VisionNoveltyMemory model=new VisionNoveltyMemory();String[] parts=saved.split(";",-1);
   if(parts.length>MAX+1)throw new IllegalArgumentException("novel capacity");
   try{
