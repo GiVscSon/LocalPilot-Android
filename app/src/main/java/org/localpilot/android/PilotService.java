@@ -40,7 +40,7 @@ public class PilotService extends AccessibilityService {
  private boolean visionTraining;private long visionTrainingUntil;private int visionTrainingFrames;
  private String visionTrainingScope="";private VisionNoveltyMemory visionMemory=new VisionNoveltyMemory();
  private GridPuzzleVision.Observation trainingPreviousGrid,gridAdaptiveCandidate;
- private int gridAdaptiveFrames,gridUnknownStreak;
+ private int gridAdaptiveFrames,gridUnknownStreak,trainingStableGrid;
  private BubbleBoard trainingPreviousBubble;private int trainingBubbleStable;
  private float learnedBubbleLauncher=Float.NaN;
  private boolean playingMini;private int miniKind,miniAction;private long miniMoves;private int[] miniBefore;private Rect boardRoi;private View picker;private boolean playing2048=false,colored2048=false,captureBusy=false;private long moves2048;private long captureCounter,pendingCapture,lastShotTimestamp=-1;private long mergeTotal;private Board2048 before2048;private int direction2048;private AlertDialog preview,overlayDialog;
@@ -479,6 +479,7 @@ public class PilotService extends AccessibilityService {
       new GameViewport.Box(visualRoi.left,visualRoi.top,visualRoi.right,visualRoi.bottom))){
    note="Обучение 2048: выделите квадрат 4×4";update();return;
   }
+  if(unsupportedGame||selectedProfile==8){note="Для обучения выберите поддерживаемую механику игры";update();return;}
   if(gridSelected()){
    loadGridConfig();
    String savedPalette=getSharedPreferences("grid-puzzle",MODE_PRIVATE).getString(gridKey()+".palette",null);
@@ -487,7 +488,7 @@ public class PilotService extends AccessibilityService {
     catch(IllegalArgumentException ignored){gridPalette=null;}
   }
   loadVisionTraining();
-  visionTraining=true;visionTrainingFrames=0;trainingPreviousGrid=null;
+  visionTraining=true;visionTrainingFrames=0;trainingPreviousGrid=null;trainingStableGrid=0;
   trainingPreviousBubble=null;trainingBubbleStable=0;
   visionTrainingUntil=SystemClock.elapsedRealtime()+60_000;
   permit.revoke(); // Never dispatch learning gestures.
@@ -542,12 +543,23 @@ public class PilotService extends AccessibilityService {
     GridPuzzleVision.Observation obs=GridPuzzleVision.detect(image::getPixel,r.left,r.top,r.right,r.bottom,
       gridConfig.rows,gridConfig.cols,excluded.left,excluded.top,excluded.right,excluded.bottom,frameAt,
       gridPalette,GridProfileRules.protectSkulls(selectedProfile),selectedProfile==6);
-    if(obs.usable()&&trainingPreviousGrid!=null&&trainingPreviousGrid.usable()
-      &&obs.signature()==trainingPreviousGrid.signature()&&obs.timestampMs>trainingPreviousGrid.timestampMs){
-      gridPalette=obs.palette();
-      getSharedPreferences("grid-puzzle",MODE_PRIVATE).edit().putString(gridKey()+".palette",gridPalette.encode()).apply();
+    // A stale palette is an observation failure, not a reason to invent
+    // missing cell colours. Independently reconstruct from actual pixels.
+    GridPuzzleVision.Observation hypothesis=obs;
+    if(!obs.usable()&&gridPalette!=null)
+     hypothesis=GridPuzzleVision.detect(image::getPixel,r.left,r.top,r.right,r.bottom,
+      gridConfig.rows,gridConfig.cols,excluded.left,excluded.top,excluded.right,excluded.bottom,
+      frameAt,null,GridProfileRules.protectSkulls(selectedProfile),selectedProfile==6);
+    if(hypothesis.usable()&&trainingPreviousGrid!=null&&trainingPreviousGrid.usable()
+      &&hypothesis.signature()==trainingPreviousGrid.signature()
+      &&hypothesis.timestampMs>trainingPreviousGrid.timestampMs)trainingStableGrid++;
+    else trainingStableGrid=hypothesis.usable()?1:0;
+    if(trainingStableGrid==3){
+      gridPalette=hypothesis.palette();
+      getSharedPreferences("grid-puzzle",MODE_PRIVATE).edit()
+        .putString(gridKey()+".palette",gridPalette.encode()).apply();
     }
-    trainingPreviousGrid=obs;
+    trainingPreviousGrid=hypothesis;
     for(int index:obs.unknownIndices()){
      GridPuzzleVision.CellReason reason=obs.reason(index/gridConfig.cols,index%gridConfig.cols);
      if(reason==GridPuzzleVision.CellReason.EXCLUDED_OVERLAY||reason==GridPuzzleVision.CellReason.PROTECTED_SKULL)continue;
@@ -653,7 +665,7 @@ public class PilotService extends AccessibilityService {
   // gesture was needed. Stopping a session is not a new round loss.
   if(playingJumper&&jumperCaptureReady)CaptureCleanup.run(()->persistArcadeModel(false));
   if(visionTraining)persistVisionTraining();
-  visionTraining=false;visionTrainingUntil=0;trainingPreviousGrid=gridAdaptiveCandidate=null;gridAdaptiveFrames=gridUnknownStreak=0;trainingPreviousBubble=null;trainingBubbleStable=0;
+  visionTraining=false;visionTrainingUntil=0;trainingPreviousGrid=gridAdaptiveCandidate=null;trainingStableGrid=gridAdaptiveFrames=gridUnknownStreak=0;trainingPreviousBubble=null;trainingBubbleStable=0;
   captureStartup.stop(SystemClock.elapsedRealtime());clearDiagnosticFrame();arcadeSceneGeneration++;
   playingGrid=false;gridSession.reset();gridPalette=null;gridPendingDecision=null;gridUnknownReasons="none";bubbleSession.reset();bubbleGeometry=null;
   arcadeLastUsable=null;arcadeController.reset();arcadeFeedback.reset();jumperFeedback.reset();arcadeState=null;arcadeBefore=null;arcadePending=null;arcadeAck=false;
