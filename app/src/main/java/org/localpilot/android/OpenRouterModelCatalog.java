@@ -17,7 +17,7 @@ import javax.net.ssl.HttpsURLConnection;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
-/** Live, public OpenRouter catalog. No API key required for GET /api/v1/models. */
+/** Live catalog filtered by this user's provider access and privacy settings. */
 public final class OpenRouterModelCatalog {
  public interface Callback {void complete(List<Model> models,String error);}
  public record Model(String id,String name,boolean free,boolean suitable,
@@ -29,7 +29,7 @@ public final class OpenRouterModelCatalog {
   }
   private static String price(double n){return String.format(Locale.ROOT,"%.3f",n);}
  }
- private static final String ADDRESS="https://openrouter.ai/api/v1/models";
+ private static final String ADDRESS="https://openrouter.ai/api/v1/models/user";
  private static final int MAX_BYTES=5*1024*1024;
  private static final int MAX_ITEMS=2_500;
  private final ExecutorService worker=Executors.newSingleThreadExecutor(r->{
