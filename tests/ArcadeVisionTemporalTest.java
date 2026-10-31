@@ -53,6 +53,14 @@ public final class ArcadeVisionTemporalTest {
   ArcadeObservation confined=shop.read(ArcadeProfile.FLAPPY,1000,null);
   check(confined.usable()&&confined.bottom<=.68f+.005f,"counter defines strict upper gameplay region");
   check(confined.obstacles.size()==1,"fruit shop below counter never becomes extra obstacle");
+  ArcadeVision.Readout diagnostic=ArcadeVision.inspect(ArcadeProfile.FLAPPY,shop,shop.w,shop.h,
+    0,0,shop.w,shop.h,0,0,0,0,1000,null);
+  check(diagnostic.counterConfirmed()&&diagnostic.observation().usable()==confined.usable(),
+    "diagnostic uses same detector and confirmed counter");
+  check(diagnostic.belowCounterRejected()==2,"two candidate-like background fruit blobs rejected below counter");
+  ArcadeVision.Readout empty=ArcadeVision.inspect(ArcadeProfile.FLAPPY,(x,y)->0xffdfba,
+    480,720,0,0,480,720,0,0,0,0,1000,null);
+  check(empty.belowCounterRejected()==0&&!empty.counterConfirmed(),"diagnostic state cannot leak between frames");
   if(args.length>0){
    for(int n:new int[]{26,27,28,29,30,32,36,37,38,39}){
     var path=java.nio.file.Path.of(args[0],"FLAPPY",String.format(java.util.Locale.ROOT,"%04d.jpg",n));
