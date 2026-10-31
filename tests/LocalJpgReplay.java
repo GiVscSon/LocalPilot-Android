@@ -72,15 +72,46 @@ public final class LocalJpgReplay {
    for(int i=2;i<fields.length;i++)nums[i-2]=Integer.parseInt(fields[i].trim());
    String name=fields[0].trim(),profile=fields[1].trim().toUpperCase(Locale.ROOT);
    if(name.isEmpty()||!name.equals(Path.of(name).getFileName().toString()))throw new IllegalArgumentException("BAD_FILENAME line="+lineNumber);
-   if(!List.of("BUBBLE","GRID6","GRID7","2048","FLAPPY","TRAFFIC","PADDLE").contains(profile))
+   if(!List.of("BUBBLE","GRID6","GRID7","2048","FLAPPY","TRAFFIC","PADDLE").contains(profile)
+     &&!profile.matches("GRID(?:[3-9]|10)X(?:[3-9]|10)"))
     throw new IllegalArgumentException("BAD_PROFILE line="+lineNumber+": "+profile);
    Spec spec=new Spec(profile,nums[0],nums[1],nums[2],nums[3],fields.length==10?nums[4]:0,fields.length==10?nums[5]:0,fields.length==10?nums[6]:0,fields.length==10?nums[7]:0);
    if(result.putIfAbsent(name,spec)!=null)throw new IllegalArgumentException("DUPLICATE_FILE line="+lineNumber);
   }
   return result;
  }
+
+ private static String diagnoseGrid(BufferedImage image,Spec s){
+  int rows,cols;
+  if(s.profile.equals("GRID6")||s.profile.equals("GRID7")){
+   rows=cols=s.profile.equals("GRID6")?6:7;
+  }else{
+   String[] dimensions=s.profile.substring(4).split("X");
+   rows=Integer.parseInt(dimensions[0]);cols=Integer.parseInt(dimensions[1]);
+  }
+  // The skull mechanic belongs only to its dedicated 6x6 profile.
+  boolean skulls=rows==6&&cols==6&&s.profile.equals("GRID6");
+  // Recorded Match World is 8 rows x 7 columns, not 7x7.
+  boolean matchWorld=!skulls&&cols>=7;
+  GridPuzzleVision.Observation obs=GridPuzzleVision.detect(image::getRGB,s.l,s.t,s.r,s.b,
+   rows,cols,s.el,s.et,s.er,s.eb,1000,null,skulls,matchWorld);
+  int observed=rows*cols-obs.unknownIndices().length;
+  List<String> reasons=new ArrayList<>();
+  for(int row=0;row<rows;row++)for(int col=0;col<cols;col++){
+   GridPuzzleVision.CellReason reason=obs.reason(row,col);
+   if(reason!=GridPuzzleVision.CellReason.KNOWN)reasons.add("R"+(row+1)+"C"+(col+1)+":"+reason);
+  }
+  String detail="grid="+rows+"x"+cols+" observedCells="+observed+"/"+(rows*cols)
+    +" complete="+obs.complete()+" usable="+obs.usable()
+    +" partialUsable="+obs.partialUsable()+" unknowns="+obs.unknownReasonCounts()
+    +" cellReasons="+String.join(";",reasons);
+  // A still photo cannot confirm temporal stability of a partial board.
+  if(!obs.usable())return "FAIL "+(obs.partialUsable()?"GRID_PARTIAL_SINGLE_FRAME":"GRID_UNUSABLE")+": "+detail;
+  return detail;
+ }
  private static String diagnose(BufferedImage image,Spec s){
   PixelBoardReader.Pixels pixels=image::getRGB;
+  if(s.profile.startsWith("GRID"))return diagnoseGrid(image,s);
   switch(s.profile){
    case "BUBBLE":{
     BubbleVision.Read seen=BubbleVision.read(image::getRGB,image.getWidth(),image.getHeight(),s.l,s.t,s.r,s.b,s.el,s.et,s.er,s.eb,null);
@@ -88,22 +119,6 @@ public final class LocalJpgReplay {
     BubbleBoard b=seen.board();
     return "balls="+b.count()+" shortRowParity="+b.shortRowParity+" disconnected="+(b.count()-b.connected(b.cells()))+
       " ceilingConnected="+b.ceilingConnected()+" reason="+seen.reason()+" HUD_CHECK=requires labelled overlay bounds";
-   }
-   case "GRID6":case "GRID7":{
-    int size=s.profile.equals("GRID6")?6:7;boolean skulls=size==6;
-    GridPuzzleVision.Observation obs=GridPuzzleVision.detect(image::getRGB,s.l,s.t,s.r,s.b,size,size,s.el,s.et,s.er,s.eb,1000,null,skulls,size==7);
-    int observed=size*size-obs.unknownIndices().length;
-    List<String> reasons=new ArrayList<>();
-    for(int row=0;row<size;row++)for(int col=0;col<size;col++){
-     GridPuzzleVision.CellReason reason=obs.reason(row,col);
-     if(reason!=GridPuzzleVision.CellReason.KNOWN)reasons.add("R"+(row+1)+"C"+(col+1)+":"+reason);
-    }
-    String detail="observedCells="+observed+"/"+(size*size)+" complete="+obs.complete()+" usable="+obs.usable()+
-       " partialUsable="+obs.partialUsable()+" unknowns="+obs.unknownReasonCounts()+" cellReasons="+String.join(";",reasons);
-    // A single offline image cannot supply the independent stability and
-    // post-ACK evidence required to act on a partially observed grid.
-    if(!obs.usable())return "FAIL "+(obs.partialUsable()?"GRID_PARTIAL_SINGLE_FRAME":"GRID_UNUSABLE")+": "+detail;
-    return detail;
    }
    case "2048":{
     String locator;
