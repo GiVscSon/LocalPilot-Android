@@ -34,6 +34,9 @@ public final class BubbleSession {
  /** A soft pause may only accept exact visual proof for the still-pending shot. */
  public boolean awaitingLateVerification(){return paused()&&lateWaiting;}
  public boolean finalPaused(){return paused()&&!lateWaiting;}
+ /** Only a final natural timeout is evidence of an unverified shot.
+     A focus/window/ROI interruption is not a game outcome. */
+ public boolean finalResponseExpired(){return finalPaused()&&reason==Reason.EXPIRED;}
  public boolean acknowledged(){return pending()&&ackAt>=0;}
  public Reason lastWait(){return lastWait;}
  public int verified(){return verified;}
