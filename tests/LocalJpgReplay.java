@@ -148,11 +148,13 @@ public final class LocalJpgReplay {
    }
    case "FLAPPY":case "PADDLE":case "TRAFFIC":{
     ArcadeProfile profile=ArcadeProfile.valueOf(s.profile);
-    ArcadeObservation found=ArcadeVision.detect(profile,pixels,image.getWidth(),image.getHeight(),s.l,s.t,s.r,s.b,s.el,s.et,s.er,s.eb,1000,null);
+    ArcadeVision.Readout readout=ArcadeVision.inspect(profile,pixels,image.getWidth(),image.getHeight(),s.l,s.t,s.r,s.b,s.el,s.et,s.er,s.eb,1000,null);
+    ArcadeObservation found=readout.observation();
     StringBuilder detail=new StringBuilder("usable="+found.usable()+" confidence="+String.format(Locale.ROOT,"%.2f",found.confidence));
     if(profile==ArcadeProfile.FLAPPY)detail.append(" counterY_px=").append(s.t+Math.round(found.bottom*(s.b-s.t)));
     detail.append(" acceptedObstacles=");for(ArcadeObservation.Box o:found.obstacles)detail.append(String.format(Locale.ROOT,"(%.2f,%.2f)-(%.2f,%.2f) ",o.left,o.top,o.right,o.bottom));
-    if(profile==ArcadeProfile.FLAPPY)detail.append(" belowCounterRejected=not_exposed_by_ArcadeVision");
+    if(profile==ArcadeProfile.FLAPPY)detail.append(" belowCounterRejected=").append(readout.belowCounterRejected())
+      .append(" counterConfirmed=").append(readout.counterConfirmed());
     return detail.toString();
    }
    default:throw new IllegalArgumentException("UNKNOWN_PROFILE "+s.profile);
