@@ -3,7 +3,7 @@ import java.io.*;import java.nio.charset.StandardCharsets;import java.security.*
 /** Private bounded metadata receipts; checksum chain detects corruption, not malicious re-signing. */
 public final class SafeJournal {
  public static final int MAX=524288;private final File file;private String previous="0";private long sequence;
- public enum Event {PROPOSED,ANDROID_COMPLETED,ANDROID_CANCELLED,REJECTED,STOP,VERIFIED_2048}
+ public enum Event {PROPOSED,ANDROID_COMPLETED,ANDROID_CANCELLED,REJECTED,STOP,VERIFIED_2048,VERIFIED_GRID,VERIFIED_BUBBLE,VERIFIED_ARCADE}
  public SafeJournal(File file)throws IOException {this.file=file;File parent=file.getParentFile();if(parent!=null&&!parent.isDirectory()&&!parent.mkdirs())throw new IOException("journal directory");if(file.exists())read(true);}
  private static String sha(String text)throws IOException{try{byte[] b=MessageDigest.getInstance("SHA-256").digest(text.getBytes(StandardCharsets.UTF_8));StringBuilder out=new StringBuilder();for(byte x:b)out.append(String.format(java.util.Locale.ROOT,"%02x",x&255));return out.toString();}catch(NoSuchAlgorithmException e){throw new IOException(e);}}
  private byte[] read(boolean load)throws IOException{
