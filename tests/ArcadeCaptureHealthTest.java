@@ -13,7 +13,7 @@ public final class ArcadeCaptureHealthTest {
   health.imageCallback(101,1901);health.acquired(101,1901,0,1,0,1,0);
   var observation=health.snapshot(101,1902);
   check(observation.state==ArcadeCaptureHealth.State.FRAME_NOT_WANTED,"fresh unwanted callbacks distinguish backpressure");
-  check(observation.callbacks==1&&observation.notWanted==1,"record callback metadata without pixels");
+  check(observation.callbacks==2&&observation.acquired==1&&observation.notWanted==1,"distinguish empty callback from actual acquired image");
   health.imageCallback(101,1950);health.acquired(101,1950,1,1,0,1,0);
   check(health.snapshot(101,1951).state==ArcadeCaptureHealth.State.FRAME_DELIVERY_PENDING,"accepted but not delivered");
   health.delivered(101,1960);
