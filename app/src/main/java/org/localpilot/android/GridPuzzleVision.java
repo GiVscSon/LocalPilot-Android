@@ -204,7 +204,7 @@ public final class GridPuzzleVision {
   long[] center=new long[3],ring=new long[3];int nc=0,nr=0;
   for(int yy=0;yy<7;yy++)for(int xx=0;xx<7;xx++){
    float x=.2f+xx*.1f,y=.2f+yy*.1f;
-   int rgb=sample(pixels,l,t,r,b,x,y);
+   int rgb=sampleSquare(pixels,l,t,r,b,x,y);
    long[] into=xx>=2&&xx<=4&&yy>=2&&yy<=4?center:ring;
    for(int ch=0;ch<3;ch++)into[ch]+=(rgb>>(16-8*ch))&255;
    if(into==center)nc++;else nr++;
@@ -223,6 +223,12 @@ public final class GridPuzzleVision {
   }
   int sat=hi==0?0:Math.round(delta*100f/hi),val=Math.round(hi*100f/255f);
   return "RGB("+r+","+g+","+b+") HSV("+Math.round(hue)+","+sat+"%,"+val+"%)";
+ }
+ /** Ring and center share a square sampling footprint scaled by min(width,height).
+  * The outermost ring at 20% leaves >=18% edge margin. */
+ private static int sampleSquare(Pixels pixels,float l,float t,float r,float b,float x,float y){
+  float side=Math.min(r-l,b-t);
+  return pixels.get((int)((l+r)*.5f+(x-.5f)*side),(int)((t+b)*.5f+(y-.5f)*side));
  }
  private static int sample(Pixels pixels,float l,float t,float r,float b,float x,float y){return pixels.get((int)(l+x*(r-l)),(int)(t+y*(b-t)));}
  private static int brightness(int rgb){return Math.max(rgb>>16&255,Math.max(rgb>>8&255,rgb&255));}
@@ -261,12 +267,12 @@ public final class GridPuzzleVision {
   float[] mean=new float[3],sq=new float[3],center=new float[3];int count=0;
   for(int yy=0;yy<7;yy++)for(int xx=0;xx<7;xx++){
    float x=.2f+xx*.1f,y=.2f+yy*.1f;if(x>=.35f&&x<=.65f&&y>=.35f&&y<=.65f)continue;
-   int rgb=pixels.get((int)(l+x*(r-l)),(int)(t+y*(b-t)));
+   int rgb=sampleSquare(pixels,l,t,r,b,x,y);
    for(int c=0;c<3;c++){float v=(rgb>>(16-8*c)&255)/255f;mean[c]+=v;sq[c]+=v*v;}count++;
   }
   for(int c=0;c<3;c++)mean[c]/=count;
   for(int yy=0;yy<3;yy++)for(int xx=0;xx<3;xx++){
-   int rgb=pixels.get((int)(l+(.35f+xx*.15f)*(r-l)),(int)(t+(.35f+yy*.15f)*(b-t)));
+   int rgb=sampleSquare(pixels,l,t,r,b,.35f+xx*.15f,.35f+yy*.15f);
    for(int c=0;c<3;c++)center[c]+=(rgb>>(16-8*c)&255)/(255f*9);
   }
   float contrast=0,spread=0;for(int c=0;c<3;c++){contrast+=(mean[c]-center[c])*(mean[c]-center[c]);spread+=Math.max(0,sq[c]/count-mean[c]*mean[c]);}
