@@ -205,7 +205,7 @@ public class PilotService extends AccessibilityService {
  }
  private void retainVisualScope(AccessibilityNodeInfo root){
   if(!target.equals(visualOwner)||root.getWindowId()!=visualWindow||!armedBounds.equals(visualWindowBounds)){
-   visualRoi=null;manualVisualRoi=false;visualOwner=target;visualWindow=root.getWindowId();visualWindowBounds=new Rect(armedBounds);
+   clearRetainedGridFrame();visualRoi=null;manualVisualRoi=false;visualOwner=target;visualWindow=root.getWindowId();visualWindowBounds=new Rect(armedBounds);
    // Never carry a screenshot or scene geometry from the previous app into a
    // newly bound game.  The next capture must establish a fresh ROI/profile.
    boardRoi=null;clearDiagnosticFrame();sceneRecovery.reset();jumperState=null;jumperTracking.reset();
@@ -543,6 +543,63 @@ public class PilotService extends AccessibilityService {
   else if(playing2048)postBoardTask(epoch,captureDelay(),()->round2048(epoch));
   else if(discoveringBoard)postBoardTask(epoch,captureDelay(),()->findAutomaticBoard(epoch,SystemClock.elapsedRealtime()));
  }
+ /** Re-arm only after 600 ms of stable focused Market geometry, valid manual ROI,
+  * and measured STOP-panel separation. Never resume the old game loop or permit. */
+ private void beginBoundsRebind(long oldEpoch,Rect roi){
+  long stoppedEpoch=gate.epoch(),generation=rebindGeneration;
+  rebindStability.reset();
+  attemptBoundsRebind(oldEpoch,stoppedEpoch,generation,new Rect(roi),SystemClock.uptimeMillis()+6000);
+ }
+ private void attemptBoundsRebind(long oldEpoch,long stoppedEpoch,long generation,Rect roi,long until){
+  if(destroying||generation!=rebindGeneration||gate.epoch()!=stoppedEpoch||gate.armed())return;
+  long now=SystemClock.uptimeMillis();
+  if(now>until){note="REBOUND_TIMEOUT: выберите Окно заново";update();return;}
+  AccessibilityNodeInfo root=null;Rect current=new Rect();int id=-1;DisplayGeometry geometry=null;
+  try{
+   root=appRoot();
+   if(root!=null&&unlocked()&&"ru.beru.android".equals(String.valueOf(root.getPackageName()))){
+    id=root.getWindowId();current=windowBounds(root);geometry=readDisplayGeometry();
+   }
+  }catch(RuntimeException ignored){/* Metadata loss never authorizes input. */}
+  finally{if(root!=null)root.recycle();}
+  if(geometry==null||current.isEmpty()||!current.contains(roi)){
+   if(!current.isEmpty()&&!current.contains(roi)){
+    note="REBOUND_ROI_OUTSIDE_WINDOW: выделите область заново";update();return;
+   }
+   rebindStability.reset();handler.postDelayed(()->attemptBoundsRebind(oldEpoch,stoppedEpoch,generation,roi,until),120);return;
+  }
+  final Rect verifiedBounds=new Rect(current);final int windowId=id;final DisplayGeometry verifiedDisplay=geometry;
+  boolean stable=rebindStability.observe(oldEpoch,"ru.beru.android",id,
+     current.left,current.top,current.right,current.bottom,
+     geometry.width(),geometry.height(),geometry.rotation(),now);
+  if(!stable){
+   handler.postDelayed(()->attemptBoundsRebind(oldEpoch,stoppedEpoch,generation,roi,until),120);return;
+  }
+  compact(true);
+  afterPanelLayout(()->{
+   if(generation!=rebindGeneration||gate.epoch()!=stoppedEpoch||gate.armed())return;
+   if(!movePanelAway(roi,verifiedBounds)){note="REBOUND_PANEL_UNSAFE: STOP не помещается";update();return;}
+   afterPanelLayout(()->{
+    if(generation!=rebindGeneration||gate.epoch()!=stoppedEpoch||gate.armed())return;
+    AccessibilityNodeInfo check=null;
+    try{
+     check=appRoot();DisplayGeometry latest=readDisplayGeometry();
+     if(check==null||!unlocked()
+       ||!"ru.beru.android".equals(String.valueOf(check.getPackageName()))
+       ||check.getWindowId()!=windowId||!verifiedBounds.equals(windowBounds(check))
+       ||latest==null||latest.requiresRebind(verifiedDisplay)
+       ||!verifiedBounds.contains(roi)||!panelOutsideRoi(roi)){
+      note="REBOUND_VERIFY_FAILED: проверьте Окно/Область";update();return;
+     }
+     armedBounds=new Rect(verifiedBounds);visualRoi=new Rect(roi);manualVisualRoi=true;
+     visualOwner="ru.beru.android";visualWindow=windowId;visualWindowBounds.set(verifiedBounds);
+     target="ru.beru.android";targetLabel=applicationLabel(target);explicitWindow=true;boardRoi=null;
+     clearDiagnosticFrame();gate.arm(target,windowId,verifiedBounds.width(),verifiedBounds.height());
+     permit.revoke();note="Окно ru.beru.android перепривязано · нажмите Старт";update();
+    }finally{if(check!=null)check.recycle();}
+   });
+  });
+ }
  private boolean valid(ActionGate.Ticket t){return invalidReason(t)==null;}
  private void manual(int dx,int dy){if(autoLeft>0||playing2048||playingMini||playingJumper||playingGrid){stop("Авторежим остановлен; нажмите ещё раз");return;}if(!gate.armed()){note="Сначала нажмите «Привязать»";update();return;}if(!permit.allows(gate.epoch(),SystemClock.elapsedRealtime())){note="Нажмите «Разрешить ввод» для запуска";update();return;}float x=armedBounds.left+Math.min(.99f,nx/100f)*armedBounds.width(),y=armedBounds.top+Math.min(.99f,ny/100f)*armedBounds.height();send(x,y,x+dx*armedBounds.width()*.18f,y+dy*armedBounds.height()*.18f,gate.offer(SystemClock.elapsedRealtime()),null);}
  private boolean audit(SafeJournal.Event event,long request,long metric){return auditAt(event,request,metric,gate.epoch());}
@@ -807,7 +864,7 @@ public class PilotService extends AccessibilityService {
   if(palette!=null)try{gridPalette=GridPuzzleVision.Palette.decode(palette);}catch(IllegalArgumentException error){note="Типы фишек повреждены · Ещё → Вернуть стандартное распознавание";update();return;}
   learningSlot=getSharedPreferences("panel",MODE_PRIVATE).getString("game_slot."+target,"default");
   try{gridGoal=GridPuzzleGoal.Color.valueOf(getSharedPreferences("grid-puzzle",MODE_PRIVATE).getString(gridKey()+".goal","ANY"));}catch(IllegalArgumentException error){gridGoal=GridPuzzleGoal.Color.ANY;}
-  gridSession.reset();gridUnknownReasons="none";gridReview="Ожидаю чтение текущей сетки.";gridMoves=gridVerified=0;gridResultVisible=gridSawAction=false;playingGrid=true;clearDiagnosticFrame();captureFrames=captureReads=captureDecisions=captureSent=captureCompleted=0;
+  gridSession.reset();clearRetainedGridFrame();gridUnknownReasons="none";gridReasonDetails="none";gridLastStatus="WAIT_STABLE";gridReview="Ожидаю чтение текущей сетки.";gridMoves=gridVerified=0;gridResultVisible=gridSawAction=false;playingGrid=true;clearDiagnosticFrame();captureFrames=captureReads=captureDecisions=captureSent=captureCompleted=0;
   gridPendingDecision=null;gridPendingBoard=null;gridPendingSpecial=null;
   GridOnlineLearning previousLearning=gridLearning;gridLearning=new GridOnlineLearning();
   String savedLearning=getSharedPreferences("grid-puzzle",MODE_PRIVATE).getString(gridKey()+".online-v1",null);
@@ -842,6 +899,7 @@ public class PilotService extends AccessibilityService {
    GridPuzzleVision.Observation observation=GridPuzzleVision.detect(pixels::getPixel,r.left,r.top,r.right,r.bottom,gridConfig.rows,gridConfig.cols,panel.left,panel.top,panel.right,panel.bottom,frameAt,gridPalette,GridProfileRules.protectSkulls(selectedProfile));
    captureReads++;metrics.record(StageMetrics.Stage.READ,SystemClock.elapsedRealtimeNanos()-readNs);
    gridUnknownReasons=observation.unknownReasonCounts();if(gridUnknownReasons.isEmpty())gridUnknownReasons="none";
+   gridReasonDetails=observation.cellReasonDetails();
    int unknownCount=observation.unknownIndices().length;
    gridReview=profileLabel()+" · "+observation.rows+"×"+observation.cols+"\nНеизвестно: "+unknownCount+"\n"+(unknownCount==0?"Все клетки распознаны.":observation.unknownSummary(observation.rows*observation.cols))+"\n\nЭто последнее чтение, а не текущее поле. Неизвестные клетки не разрешают ввод.";
    boolean partialGrid=observation.partialUsable();
@@ -852,6 +910,8 @@ public class PilotService extends AccessibilityService {
    GridPuzzleSession.Status status=partialGrid||gridSession.pending()
      ?gridSession.observePartial(gridConfig.rows,gridConfig.cols,observedCells,observation.specialCellsMask(),frameAt,SystemClock.elapsedRealtime())
      :gridSession.observe(gridConfig.rows,gridConfig.cols,observedCells,observation.specialCellsMask(),frameAt,SystemClock.elapsedRealtime());
+   gridLastStatus=status.name();
+   rememberGridRefusalFrame(pixels,r,frameAt,unknownCount>0||status==GridPuzzleSession.Status.WAIT_STABLE);
    if(status==GridPuzzleSession.Status.PAUSED){
     if(gridSession.awaitingLateVerification()){
      note="Ожидаю завершения анимации · наблюдение без ввода";update();scheduleGrid(epoch);return;
@@ -1514,12 +1574,19 @@ public class PilotService extends AccessibilityService {
   });
  }
  /** Dock a measured compact STOP panel outside the ROI; fail if no safe place exists. */
- private boolean movePanelAway(Rect roi){
-  if(roi==null||roi.isEmpty()||panel==null||layout==null||wm==null||consentPanelDetached||armedBounds.isEmpty())return false;
+ private boolean movePanelAway(Rect roi){return movePanelAway(roi,armedBounds);}
+ private boolean movePanelAway(Rect roi,Rect safeBounds){
+  if(roi==null||roi.isEmpty()||panel==null||layout==null||wm==null||consentPanelDetached||safeBounds==null||safeBounds.isEmpty())return false;
   Rect current=panelBounds();if(current.isEmpty())return false;
   Point size=new Point();wm.getDefaultDisplay().getRealSize(size);
-  Rect safe=new Rect(Math.max(0,armedBounds.left),Math.max(0,armedBounds.top),
-    Math.min(size.x,armedBounds.right),Math.min(size.y-dp(24),armedBounds.bottom));
+  int insetLeft=0,insetTop=dp(24),insetRight=0,insetBottom=dp(24);
+  WindowInsets insets=panel.getRootWindowInsets();
+  if(insets!=null){
+   android.graphics.Insets bars=insets.getInsets(WindowInsets.Type.systemBars()|WindowInsets.Type.displayCutout());
+   insetLeft=bars.left;insetTop=bars.top;insetRight=bars.right;insetBottom=bars.bottom;
+  }
+  Rect safe=new Rect(Math.max(insetLeft,safeBounds.left),Math.max(insetTop,safeBounds.top),
+    Math.min(size.x-insetRight,safeBounds.right),Math.min(size.y-insetBottom,safeBounds.bottom));
   if(safe.isEmpty())return false;
   PanelDocking.Area placement=PanelDocking.choose(
     new PanelDocking.Area(safe.left,safe.top,safe.right,safe.bottom),
@@ -1738,5 +1805,5 @@ public class PilotService extends AccessibilityService {
   // target window remain the same. The normal per-frame window gate still applies.
   if(!changed){update();return;}
   stop("Поворот/конфигурация — STOP. Выберите окно игры заново");explicitWindow=false;browserProfileConfirmed=false;visualRoi=null;manualVisualRoi=false;visualOwner="";visualWindow=-1;visualWindowBounds.setEmpty();if(layout!=null){layout.x=0;layout.y=dp(48);updatePanelLayout();}}
- @Override public void onDestroy(){destroying=true;CrashDiagnostics.phase("SERVICE_DESTROYED");permit.revoke();gate.stop();if(instance==this)instance=null;try{CaptureCleanup.run(this::hidePanel,this::clearDiagnosticFrame,gestureFlight::clear,()->gestureHandler.removeCallbacksAndMessages(null),()->handler.removeCallbacksAndMessages(null),()->visionWorker.shutdownNow());}finally{busy=false;super.onDestroy();}}
+ @Override public void onDestroy(){destroying=true;CrashDiagnostics.phase("SERVICE_DESTROYED");permit.revoke();gate.stop();if(instance==this)instance=null;try{CaptureCleanup.run(this::hidePanel,this::clearDiagnosticFrame,this::clearRetainedGridFrame,gestureFlight::clear,()->gestureHandler.removeCallbacksAndMessages(null),()->handler.removeCallbacksAndMessages(null),()->visionWorker.shutdownNow());}finally{busy=false;super.onDestroy();}}
 }
