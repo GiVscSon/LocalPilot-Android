@@ -34,6 +34,17 @@ public final class Field2048GlassTest {
   check(staged.same(board),"game-scoped session must classify the same glass cells");
   check(session.learnedCount()==0,"empty glass must never become a learned tile");
 
+  // A dark tile 32 is present before we have witnessed a merge. Its narrow
+  // recorded RGB fingerprint is recognized, but is never "learned" from a
+  // guessed new palette entry.
+  int[][] with32=new int[4][4];
+  for(int i=0;i<4;i++)with32[i]=CAPTURED_RGB[i].clone();
+  with32[0][0]=rgb(50,50,51);
+  Board2048 dark=Color2048Reader.read(pixels(with32),640,640,0,0,640,640);
+  check(dark.cells[0]==32&&dark.cells[1]==0&&dark.cells[2]==2,"32 and translucent background are distinct");
+  var darkSession=new Color2048Reader.Session();
+  check(darkSession.read(pixels(with32),640,640,0,0,640,640,null,0,650).same(dark)
+    &&darkSession.learnedCount()==0,"preexisting 32 does not invent a learned palette");
   // A vivid, foreign pixel is not a safe empty cell or known numbered tile.
   int[][] altered=new int[4][4];
   for(int i=0;i<4;i++)altered[i]=CAPTURED_RGB[i].clone();
