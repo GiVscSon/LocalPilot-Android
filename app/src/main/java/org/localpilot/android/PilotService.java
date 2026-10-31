@@ -34,6 +34,7 @@ public class PilotService extends AccessibilityService {
  private long rebindGeneration;private final InputPermit permit=new InputPermit();private RotatingJournal journal;private final GestureFlight gestureFlight=new GestureFlight();
  private final Color2048Reader.Session colorSession=new Color2048Reader.Session();
  private boolean awaiting2048Intro,authorized2048Intro;
+ private long capture2048Requests;
  private boolean playingMini;private int miniKind,miniAction;private long miniMoves;private int[] miniBefore;private Rect boardRoi;private View picker;private boolean playing2048=false,colored2048=false,captureBusy=false;private long moves2048;private long captureCounter,pendingCapture,lastShotTimestamp=-1;private long mergeTotal;private Board2048 before2048;private int direction2048;private AlertDialog preview,overlayDialog;
  private final CaptureStartup captureStartup=new CaptureStartup();
  private final SceneRecovery sceneRecovery=new SceneRecovery();
@@ -145,7 +146,12 @@ public class PilotService extends AccessibilityService {
     .append("\nprofile=").append(captureProfile).append(" selected_profile=").append(profileLabel()).append(" target=").append(target).append(" bound=").append(gate.armed())
     .append("\nvisual_roi=").append(visualBounds().toShortString()).append(" manual_roi=").append(manualVisualRoi)
     .append("\nbounds=").append(armedBounds.toShortString()).append(" display=").append(jumperDisplayWidth).append('x').append(jumperDisplayHeight)
-    .append("\nplaying=").append(playingJumper||playingGrid).append(" capture_ready=").append(playingGrid||jumperCaptureReady).append(" busy=").append(busy)
+    .append("\nplaying=").append(playingJumper||playingGrid||playing2048||playingMini)
+    .append(" capture_ready=").append(captureEnabled()||jumperCaptureReady)
+    .append(" 2048_intro_pending=").append(awaiting2048Intro)
+    .append(" 2048_authorized=").append(authorized2048Intro)
+    .append(" 2048_capture_requests=").append(capture2048Requests)
+    .append(" focus_paused=").append(focusPaused).append(" busy=").append(busy)
     .append("\nstatus=").append(note).append("\nsession_epoch=").append(gate.epoch())
     .append("\nLAST_STOP=").append(lastStopReason).append(" last_stop_session_id=").append(lastStopSessionId)
     .append(" last_stop_uptime_ms=").append(lastStopUptimeMs)
@@ -418,7 +424,7 @@ public class PilotService extends AccessibilityService {
  private void single(String label,Runnable callback){Button v=new Button(this);v.setText(label);v.setTextSize(12);v.setOnClickListener(x->callback.run());controls.addView(v,new LinearLayout.LayoutParams(-1,dp(40)));}
  private void row(String a,Runnable ar,String b,Runnable br,boolean needsInput){LinearLayout line=new LinearLayout(this);for(int i=0;i<2;i++){Button v=new Button(this);v.setText(i==0?a:b);v.setTextSize(12);Runnable r=i==0?ar:br;v.setOnClickListener(x->r.run());if(needsInput)manualControls.add(v);line.addView(v,new LinearLayout.LayoutParams(0,dp(40),1));}(controls==null?panel:controls).addView(line);}
  public void hidePanel(){try{stop("STOP");}finally{clearPanel();}}
- private String captureCounters(){return "Захват: кадры="+captureFrames+" · READ="+captureReads+" · решения="+captureDecisions+" · ввод="+captureSent+" · ACK="+captureCompleted+(playingJumper?" · MediaProjection pacerAccepted="+captureAcceptedFrames+" · skippedFrames="+captureSkippedFrames+" (pacing="+captureSkippedThrottle+", idle="+captureSkippedUnwanted+", clock="+captureSkippedClock+")":" · Accessibility capture (MediaProjection counters N/A)");}
+ private String captureCounters(){return "Захват: кадры="+captureFrames+" · READ="+captureReads+" · решения="+captureDecisions+" · ввод="+captureSent+" · ACK="+captureCompleted+(playing2048?" · 2048 запрошено="+capture2048Requests:"")+(playingJumper?" · MediaProjection pacerAccepted="+captureAcceptedFrames+" · skippedFrames="+captureSkippedFrames+" (pacing="+captureSkippedThrottle+", idle="+captureSkippedUnwanted+", clock="+captureSkippedClock+")":" · Accessibility capture (MediaProjection counters N/A)");}
  private void update(){
   boolean inputReady=gate.armed()&&!gate.paused()&&permit.allows(gate.epoch(),SystemClock.elapsedRealtime());for(Button control:manualControls)control.setEnabled(inputReady&&!busy);
   long renderNow=SystemClock.elapsedRealtime();if(playingJumper&&renderNow-lastPanelRender<100)return;lastPanelRender=renderNow;
@@ -1699,6 +1705,7 @@ public class PilotService extends AccessibilityService {
  private void captureImage(long epoch,ImageResult result){
   if(epoch!=gate.epoch()||!captureEnabled())return;
   metrics.attempt(StageMetrics.Stage.CAPTURE);
+  if(playing2048)capture2048Requests++; // Includes failed pre-callback attempts.
   ActionGate.Ticket ticket=gate.offer(SystemClock.elapsedRealtime());if(!valid(ticket)||boardRoi==null){if(deferFocus(invalidReason(ticket)))return;failStage(StageMetrics.Stage.CAPTURE,"BINDING_OR_ROI_MISSING","Нет привязки/поля");return;}
   if(captureBusy){failStage(StageMetrics.Stage.CAPTURE,"CAPTURE_INFLIGHT","Предыдущий захват ещё выполняется");return;}final Rect roi=new Rect(boardRoi);
   if(!discoveringBoard&&Rect.intersects(panelBounds(),roi)){failStage(StageMetrics.Stage.CAPTURE,"PANEL_COVERS_ROI","Панель закрывает поле: передвиньте её");return;}
@@ -1763,7 +1770,7 @@ public class PilotService extends AccessibilityService {
    stop("AUTO_BOARD_GEOMETRY: 2048 требует минимум 160 пикселей и разницу сторон до 8%");return;
   }
   boardReadGeneration++;boardReadMisses=0;colorSession.reset();before2048=null;colored2048=colored;awaiting2048Intro=true;authorized2048Intro=false;
-  captureFrames=captureReads=captureDecisions=captureSent=captureCompleted=0;
+  captureFrames=captureReads=captureDecisions=captureSent=captureCompleted=0;capture2048Requests=0;
   if(colored2048){String saved=getSharedPreferences("color-2048",MODE_PRIVATE).getString(color2048PaletteKey(),null);if(saved!=null)try{colorSession.restoreLearned(saved);}catch(IllegalArgumentException invalidPalette){note="Сохранённая цветовая палитра повреждена · начинаю с базовых плиток";}}
   long epoch=gate.epoch(),generation=boardReadGeneration;playing2048=true;compact(true);note=colored2048?"Читаю цветное поле 2048 · изучено цветов "+colorSession.learnedCount():"Читаю поле в памяти…";update();
   start2048Intro(epoch,generation);
