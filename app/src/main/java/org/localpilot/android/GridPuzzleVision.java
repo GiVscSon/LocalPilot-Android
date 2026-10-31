@@ -11,7 +11,7 @@ public final class GridPuzzleVision {
  public interface Pixels { int get(int x,int y); }
  /** Trace-only reasons; these labels do not authorize a game gesture. */
  public enum CellReason {
-  KNOWN, KNOWN_SPECIAL, PROTECTED_SKULL, EMPTY_HOLE, BLOCKER_CRATE, EXCLUDED_OVERLAY,
+  KNOWN, KNOWN_SPECIAL, PROTECTED_SKULL, PROTECTED_DYNAMITE, EMPTY_HOLE, BLOCKER_CRATE, EXCLUDED_OVERLAY,
   RING_NO_MATCH, RING_AMBIGUOUS, COLOR_NO_MATCH, COLOR_AMBIGUOUS, NO_SAMPLE
  }
  private static final int FEATURES=42,MAX_TYPES=24;
@@ -142,6 +142,11 @@ public final class GridPuzzleVision {
    }
    if(protectSkulls&&protectedSkull(pixels,l,t,r,b)){
     cells[index]=0;special.set(index);reasons[index]=CellReason.PROTECTED_SKULL;continue;
+   }
+   // A fuse above a narrow red cylinder is an immovable explosive, not a
+   // colour token. Only the explicitly protected 6x6 Market preset opts in.
+   if(protectSkulls&&rows==6&&cols==6&&protectedDynamite(pixels,l,t,r,b)){
+    cells[index]=0;special.set(index);reasons[index]=CellReason.PROTECTED_DYNAMITE;continue;
    }
    float[] ring=ring(pixels,l,t,r,b);
    if(ring!=null){rings[index]=ring;reasons[index]=CellReason.RING_NO_MATCH;continue;}
@@ -303,6 +308,51 @@ public final class GridPuzzleVision {
    if(pale<37)return false;
   }
   return true;
+ }
+
+ /** Field-specific high-precision explosive guard: saturated red cylinder in
+  * the middle/lower region PLUS an orange/yellow fuse above its right side.
+  * Circular tomatoes are red but lack a fuse; gold coins have no red body.
+  * Failure to identify the object leaves the ordinary conservative vision
+  * pipeline in charge. It never authorizes a swap or tap on this tile. */
+ private static boolean protectedDynamite(Pixels pixels,float l,float t,float r,float b){
+  int bodyRed=0,bodyYellow=0,bodyTotal=0,topYellow=0,topTotal=0,interiorRed=0,interiorTotal=0,sideRed=0,sideTotal=0;
+  for(int yy=0;yy<11;yy++)for(int xx=0;xx<11;xx++){
+   int rgb=sampleSquare(pixels,l,t,r,b,.30f+xx*.036f,.42f+yy*.037f);
+   if(explosiveRed(rgb))bodyRed++;
+   if(explosiveFuse(rgb))bodyYellow++;
+   bodyTotal++;
+  }
+  // A yellow/orange fuse is above the cylinder, not inside it. A single
+  // highlighted red chip or translucent cell cannot satisfy both tests.
+  for(int yy=0;yy<9;yy++)for(int xx=0;xx<11;xx++){
+   int rgb=sampleSquare(pixels,l,t,r,b,.38f+xx*.044f,.08f+yy*.035f);
+   if(explosiveFuse(rgb))topYellow++;
+   topTotal++;
+  }
+  // A tube stops at its right edge. Orange flower petals extend laterally;
+  // they must remain ordinary movable pieces, even with yellow highlights.
+  for(int yy=0;yy<9;yy++)for(int xx=0;xx<7;xx++){
+   int rgb=sampleSquare(pixels,l,t,r,b,.68f+xx*.026f,.42f+yy*.044f);
+   if(explosiveRed(rgb))sideRed++;
+   sideTotal++;
+  }
+  for(int yy=0;yy<9;yy++)for(int xx=0;xx<9;xx++){
+   int rgb=sampleSquare(pixels,l,t,r,b,.12f+xx*.095f,.12f+yy*.095f);
+   if(explosiveRed(rgb))interiorRed++;
+   interiorTotal++;
+  }
+  return bodyRed>=bodyTotal*.60f && bodyYellow<bodyTotal*.12f
+    && topYellow>=topTotal*.10f && sideRed<sideTotal*.20f
+    && interiorRed>=interiorTotal*.18f && interiorRed<=interiorTotal*.68f;
+ }
+ private static boolean explosiveRed(int rgb){
+  int r=rgb>>16&255,g=rgb>>8&255,b=rgb&255;
+  return r>130&&g<160&&r>g*1.45f&&r>b*1.45f;
+ }
+ private static boolean explosiveFuse(int rgb){
+  int r=rgb>>16&255,g=rgb>>8&255,b=rgb&255;
+  return r>180&&g>105&&r>b*1.55f&&g>b*1.5f;
  }
 
  /** Returns a chromatic ring descriptor for a contrasting centre; invalid rings carry NaN. */
