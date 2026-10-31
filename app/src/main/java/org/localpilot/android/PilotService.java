@@ -1100,6 +1100,11 @@ public class PilotService extends AccessibilityService {
    BubbleSession.Status status=bubbleSession.observe(read.board(),frameAt,SystemClock.elapsedRealtime());
    if(status==BubbleSession.Status.PAUSED){bubbleDecisionReason="WAITING_VISUAL_RESPONSE";note="Шипучка: "+(bubbleSession.acknowledged()?"Android завершил жест; ":"нет подтверждения Android; ")+bubbleWaitMessage(bubbleSession.lastWait())+" · продолжаю наблюдение без ввода. Старт — повторная проверка";update();scheduleGrid(epoch);return;}
    if(status!=BubbleSession.Status.READY&&status!=BubbleSession.Status.VERIFIED){bubbleDecisionReason=read.usable()?"WAITING_STABLE_BOARD":"VISION_REJECTED";note=read.usable()?(bubbleSession.pending()?"Шипучка: проверяю попадание":"Шипучка: ожидаю второй устойчивый кадр"):read.reason();update();scheduleGrid(epoch);return;}
+   // This witness is independent of Android's gesture callback.
+   if(status==BubbleSession.Status.VERIFIED
+     &&!audit(SafeJournal.Event.VERIFIED_BUBBLE,0,bubbleSession.verified())){
+    stop("Не удалось записать подтверждённый выстрел");return;
+   }
    bubbleGeometry=read.board();gridVerified=bubbleSession.verified();
    if(targetIsBrowser&&!browserSceneGate.observe(frameAt,read.usable())){bubbleDecisionReason="BROWSER_SCENE_GUARD";note="Шипучка: проверяю 2 стабильных кадра после изменения браузера";update();scheduleGrid(epoch);return;}
    metrics.attempt(StageMetrics.Stage.POLICY);started=SystemClock.elapsedRealtimeNanos();BubblePolicy.Shot shot=BubblePolicy.choose(bubbleGeometry);
@@ -1260,6 +1265,10 @@ public class PilotService extends AccessibilityService {
      failStage(StageMetrics.Stage.POLICY,"GRID_PALETTE_IDENTITY_DRIFT",
        "Идентификаторы фишек после хода несовместимы с исходными. Обучение не записано; проверьте ROI и профиль, затем перепривяжите окно.");
      return;
+    }
+    // Only stable, palette-consistent post-gesture changes are verified.
+    if(!audit(SafeJournal.Event.VERIFIED_GRID,0,gridVerified+1)){
+     stop("Не удалось записать подтверждение изменения сетки");return;
     }
     gridVerified++;incrementGridStat("visual_changes");
     if(gridPendingDecision!=null){
@@ -1613,6 +1622,9 @@ public class PilotService extends AccessibilityService {
      if(now-arcadePendingAt>ArcadePolicy.responseTimeout(captureProfile)){failStage(StageMetrics.Stage.POLICY,"ARCADE_NO_RESPONSE","Сцена найдена, но игра не подтвердила движение после касания");return;}
      note="Проверяю реакцию игры…";update();return;
     }
+    if(!audit(SafeJournal.Event.VERIFIED_ARCADE,0,arcadeVerified+1)){
+     stop("Не удалось записать подтверждение реакции аркады");return;
+    }
     arcadeVerified++;arcadePending=null;arcadeBefore=null;arcadeAck=false;
    }
    if(busy||now-arcadeLastAction<ArcadePolicy.interval(captureProfile))return;
@@ -1645,7 +1657,14 @@ public class PilotService extends AccessibilityService {
 
  private ArcadeFeedback.State advanceArcadeFeedback(ArcadeObservation observation,long now){
   long verifiedBefore=arcadeFeedback.verified();ArcadeFeedback.State feedback=arcadeFeedback.observe(observation,now);
-  if(arcadeFeedback.verified()>verifiedBefore){arcadeController.observeGesture(arcadePending,arcadeBefore,observation);persistArcadeModel(false);arcadeVerified++;}
+  if(arcadeFeedback.verified()>verifiedBefore){
+   if(!audit(SafeJournal.Event.VERIFIED_ARCADE,0,arcadeVerified+1)){
+    stop("Не удалось записать подтверждение реакции аркады");
+    return ArcadeFeedback.State.PAUSED;
+   }
+   arcadeController.observeGesture(arcadePending,arcadeBefore,observation);
+   persistArcadeModel(false);arcadeVerified++;
+  }
   if(arcadeFeedback.verified()>verifiedBefore||feedback==ArcadeFeedback.State.RETRY||feedback==ArcadeFeedback.State.PAUSED){
    if(arcadePending!=null&&feedback!=ArcadeFeedback.State.READY)metrics.failure(StageMetrics.Stage.POLICY,"VISUAL_RESPONSE_RETRY");
    arcadePending=null;arcadeBefore=null;arcadeAck=false;
@@ -1654,7 +1673,14 @@ public class PilotService extends AccessibilityService {
  }
  private JumperFeedback.State advanceJumperFeedback(JumperState observation,long now){
   JumperFeedback.State feedback=jumperFeedback.observe(observation,now);
-  if(feedback==JumperFeedback.State.VERIFIED){jumperAwaitingVerification=false;jumperResponseFailures=0;arcadeVerified++;JumperPolicy.learn(true);persistArcadeModel(false);note="Движение подтверждено · "+jumperPendingAction;}
+  if(feedback==JumperFeedback.State.VERIFIED){
+   if(!audit(SafeJournal.Event.VERIFIED_ARCADE,0,arcadeVerified+1)){
+    stop("Не удалось записать подтверждение движения Ари");
+    return JumperFeedback.State.PAUSED;
+   }
+   jumperAwaitingVerification=false;jumperResponseFailures=0;arcadeVerified++;
+   JumperPolicy.learn(true);persistArcadeModel(false);note="Движение подтверждено · "+jumperPendingAction;
+  }
   if(feedback==JumperFeedback.State.SCENE_PROGRESS){jumperAwaitingVerification=false;jumperResponseFailures=0;jumperResponsePaused=false;note="Камера движется у края · продолжаю наблюдение без оценки касания";}
   if(feedback==JumperFeedback.State.RETRY||feedback==JumperFeedback.State.PAUSED){
    if(jumperAwaitingVerification){
