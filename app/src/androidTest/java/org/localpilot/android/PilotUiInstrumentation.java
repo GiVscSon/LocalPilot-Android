@@ -146,6 +146,7 @@ public final class PilotUiInstrumentation extends Instrumentation {
             service = onMain(() -> PilotService.instance);
 
             checkLauncherAndPicker();
+            checkOpenRouterAdvisorPicker();
             checkCollapseAndReopen();
             checkFullDemo();
             checkStopDuringDemo();
@@ -211,6 +212,49 @@ public final class PilotUiInstrumentation extends Instrumentation {
             catch(org.json.JSONException error){result.putString("result","FAIL");passed=false;}
             finish(passed ? Activity.RESULT_OK : Activity.RESULT_CANCELED, result);
         }
+    }
+
+    private void checkOpenRouterAdvisorPicker() throws Exception {
+        onMain(()->{service.hidePanel();return null;});
+        launch(MainActivity.class);
+        click("Онлайн-диагностика и модели");
+        // Each button must be independently reachable on narrow-phone screens,
+        // where the keyboard and long content require scrolling.
+        click("Выбрать модель: бесплатные / платные / подходящие");
+        click("Проверить API-ключ OpenRouter");
+        click("Спросить OpenRouter");
+        require(!armed(),"OpenRouter diagnostics cannot arm gameplay input");
+        // Parse the same pricing/modality JSON fields returned by /api/v1/models/user,
+        // without a real API key or any billed requests in the emulator.
+        JSONObject free=new JSONObject().put("id","test/chat:free").put("name","Test free chat")
+          .put("context_length",32768)
+          .put("architecture",new JSONObject().put("input_modalities",new JSONArray().put("text"))
+            .put("output_modalities",new JSONArray().put("text")))
+          .put("pricing",new JSONObject().put("prompt","0").put("completion","0").put("request","0"));
+        var freeModel=OpenRouterModelCatalog.parseModel(free);
+        require(freeModel!=null&&freeModel.free()&&freeModel.suitable()
+             &&freeModel.label().contains("Бесплатно"),
+             "Free model must stay free and eligible for text diagnostics");
+        JSONObject paid=new JSONObject(free.toString()).put("id","test/paid")
+           .put("pricing",new JSONObject().put("prompt","0.0000005").put("completion","0.000001").put("request","0"));
+        var paidModel=OpenRouterModelCatalog.parseModel(paid);
+        require(paidModel!=null&&!paidModel.free()&&paidModel.suitable()
+             &&paidModel.inputPerMillion()>.49&&paidModel.outputPerMillion()>.99,
+             "Paid model price must convert USD/token to USD/million");
+        JSONObject perRequest=new JSONObject(free.toString()).put("id","test/request-fee")
+           .put("pricing",new JSONObject().put("prompt","0").put("completion","0").put("request","0.01"));
+        var fee=OpenRouterModelCatalog.parseModel(perRequest);
+        require(fee!=null&&!fee.free()&&fee.label().contains("/запрос"),
+             "Per-request billing must not be classified as free");
+        JSONObject nontext=new JSONObject(free.toString()).put("id","test/image-only")
+          .put("architecture",new JSONObject().put("input_modalities",new JSONArray().put("text"))
+            .put("output_modalities",new JSONArray().put("image")));
+        require(OpenRouterModelCatalog.parseModel(nontext)==null,
+             "Image-only models must not be offered for text diagnostic chat");
+        addCheck("openrouter_native_model_picker_and_price_contract",
+          new JSONObject().put("free_and_paid",true).put("dispatched_actions",0));
+        sendKeyDownUpSync(KeyEvent.KEYCODE_BACK);
+        waitForIdleSync();
     }
 
     private void checkLauncherAndPicker() throws Exception {
