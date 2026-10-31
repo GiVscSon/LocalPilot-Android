@@ -291,5 +291,33 @@ public final class BubbleTest {
    System.out.printf(java.util.Locale.ROOT,"Recorded bubble frame scale=%.2f count=%d x0=%.2f y0=%.2f step=%.2f; cloud JVM acquire=%.2fms cached-p50=%.2fms cached-max=%.2fms policy=%.2fms%n",scale,b.count(),b.x0/scale,b.y0/scale,b.step/scale,coldNs/1e6,elapsed[4]/1e6,elapsed[7]/1e6,policyNs/1e6);
   }
  }
- public static void main(String[] args)throws Exception{geometryAndPolicy();singleRemaining();directShotGeometry();session();lateVerification();diagnostics();perception();reversedStaggerFixture();gappedIslandsFixture();if(args.length>0)recorded(Path.of(args[0]));System.out.println("Bubble board/policy/feedback: "+checks+" assertions PASS; no physical-device claim");}
+ private static void liveLearningSafety(){
+  BubbleBoard b=board(1);BubblePolicy.Shot base=BubblePolicy.choose(b);
+  check(base!=null,"bubble baseline must be safe before ranking");
+  BubblePolicy.Shot zero=BubblePolicy.choose(b,shot->0.0);
+  check(zero!=null&&base.landing==zero.landing&&base.bounces==zero.bounces
+    &&base.removed==zero.removed&&base.dropped==zero.dropped,"zero learning preserves baseline policy");
+  BubblePolicy.Shot ranked=BubblePolicy.choose(b,shot->shot.bounces==0?4.0:-4.0);
+  check(ranked!=null&&ranked.belongsTo(b)&&b.slot(ranked.landing)&&b.color(ranked.landing)==0,
+    "learner cannot invent a trajectory or land on an occupied slot");
+  boolean rejected=false;
+  try{BubblePolicy.choose(b,shot->Double.NaN);}catch(IllegalArgumentException expected){rejected=true;}
+  check(rejected,"NaN learned ranking cannot authorize a shot");
+  rejected=false;
+  try{BubblePolicy.choose(b,shot->7.0);}catch(IllegalArgumentException expected){rejected=true;}
+  check(rejected,"unbounded learned ranking rejected");
+
+  BubbleSession late=new BubbleSession(7000,12000);
+  late.observe(b,1000,1000);late.observe(b,1200,1200);late.sent(b,base,1200);late.acknowledge(1300);
+  check(late.observe(null,8500,8500)==BubbleSession.Status.PAUSED
+    &&late.awaitingLateVerification()&&!late.finalResponseExpired(),"soft pause is not a failed shot");
+  late.invalidateCandidate();
+  check(late.finalPaused()&&!late.finalResponseExpired(),"focus invalidation is not gameplay feedback");
+
+  late.reset();late.observe(b,1000,1000);late.observe(b,1200,1200);late.sent(b,base,1200);late.acknowledge(1300);
+  late.observe(null,8500,8500);
+  check(late.observe(null,13200,13200)==BubbleSession.Status.PAUSED
+    &&late.finalResponseExpired()&&late.acknowledged(),"only final ACK-expired observation may become unconfirmed");
+ }
+ public static void main(String[] args)throws Exception{geometryAndPolicy();liveLearningSafety();singleRemaining();directShotGeometry();session();lateVerification();diagnostics();perception();reversedStaggerFixture();gappedIslandsFixture();if(args.length>0)recorded(Path.of(args[0]));System.out.println("Bubble board/policy/feedback: "+checks+" assertions PASS; no physical-device claim");}
 }
