@@ -166,6 +166,9 @@ public final class ArcadeVision {
 
  private static ArcadeObservation flappy(Frame f,long time,ArcadeObservation previous){
   float floor=.49f;boolean foundFloor=false;
+   // Market counter/background occupies roughly the bottom third of the
+   // recorded scene. Even with an unusually low detected wood boundary,
+   // never mine fruit-shelf pixels below 68% as gameplay obstacles.
   for(int y=(int)(f.h*.40f);y<f.h*.70f;y++){
    float row=y/(float)f.h;
    // A shop shelf can be brown across one row. The counter remains wooden
@@ -173,7 +176,7 @@ public final class ArcadeVision {
    if(f.fraction(WOOD,.05f,row,.95f,Math.min(1,(y+3f)/f.h))>.80f
      &&f.fraction(WOOD,.05f,row+.02f,.95f,row+.024f)>.75f
      &&f.fraction(WOOD,.05f,row+.05f,.95f,row+.054f)>.75f){
-    floor=y/(float)f.h;foundFloor=true;break;
+    floor=Math.min(.68f,y/(float)f.h);foundFloor=true;break;
    }
   }
   List<Blob> dark=f.blobs(DARK),red=f.blobs(RED),players=new ArrayList<>();
@@ -188,7 +191,7 @@ public final class ArcadeVision {
   }
   ArcadeObservation.Box player=choose(players,previous==null?null:previous.player,.105f,.22f);
   List<Column> columns=new ArrayList<>();
-  for(Blob b:f.blobs(GREEN))if(b.box.top>.035f&&b.box.bottom<floor
+  for(Blob b:f.blobs(GREEN))if(b.box.top>.035f&&b.box.bottom<Math.min(floor,.68f)
     &&b.box.width()>.033f&&b.box.width()<.145f&&b.box.height()>.002f
     &&b.box.height()<.028f&&b.aspect()>1.5f&&b.density()>.25f){
    Column group=null;for(Column c:columns)if(Math.abs(c.x-b.box.x())<.03f){group=c;break;}
