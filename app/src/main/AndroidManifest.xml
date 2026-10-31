@@ -12,6 +12,7 @@
   <activity android:name=".MiniGamesActivity" android:exported="false"/>
   <activity android:name=".DemoActivity" android:exported="false"/>
   <activity android:name=".GamePickerActivity" android:exported="false"/>
+  <activity android:name=".OnlineDiagnosticsActivity" android:exported="false"/>
   <activity android:name=".WebLearningActivity" android:exported="false"/>
   <activity android:name=".TrainingActivity" android:exported="false"/>
   <activity android:name=".JumperCaptureConsentActivity" android:taskAffinity="" android:excludeFromRecents="true" android:exported="false" android:theme="@android:style/Theme.Translucent.NoTitleBar"/>
