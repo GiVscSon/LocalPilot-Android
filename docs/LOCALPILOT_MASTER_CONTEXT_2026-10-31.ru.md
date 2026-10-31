@@ -18,7 +18,7 @@
 - **PR #53:** [fix(field): 8×7 Match World, fuel pickup and earlier Gosha reactions](https://github.com/GiVscSon/LocalPilot-Android/pull/53). Исходный HEAD рабочего патча **`6d6b8cb8672dd3cc37df8b575ed13892039fa926`**; Draft, открыт, `mergeable: true` в последнем чтении. `mergeable` не значит release-ready.
 - Стек PR: [#44](https://github.com/GiVscSon/LocalPilot-Android/pull/44) → [#51](https://github.com/GiVscSon/LocalPilot-Android/pull/51) (JPG manifest fail closed, `45bb7d7`) → [#52](https://github.com/GiVscSon/LocalPilot-Android/pull/52) (непригодные наблюдения не становятся `OBSERVED`, `100b921`) → **#53**. При слиянии проверять реальные base и ancestry.
 - [Build run 41214695637](https://github.com/GiVscSon/LocalPilot-Android/actions/runs/41214695637) **SUCCESS** для 6d6b8cb. В логе: `Real Market 2048 glass-palette regression: 26 assertions PASS`, `Vision novelty cumulative heuristic: 11 assertions PASS`, `Bubble board/policy/feedback: 225 assertions PASS`, `LOCAL_JPG_CONTRACT_PASS checks=27`, `lintDebug` PASS и `assembleDebug` PASS. `testDebugUnitTest` в Gradle = `NO-SOURCE`, а не множество Android unit-тестов; отдельная JVM-регрессионная матрица действительно прошла.
-- [Device acceptance run 41214695632](https://github.com/GiVscSon/LocalPilot-Android/actions/runs/41214695632): **API 35/default SUCCESS**, **API 30/default и API 36/google_apis ещё IN_PROGRESS** в последнем доступном срезе. Это эмуляторные проверки, не физические телефон/планшет.
+- [Device acceptance run 41214695632](https://github.com/GiVscSon/LocalPilot-Android/actions/runs/41214695632): **API 30/default SUCCESS, API 35/default SUCCESS, API 36/google_apis SUCCESS** на том же кодовом SHA 6d6b8cb. Все три emulator job завершились успешно в повторной проверке 31.10.2026. Это эмуляторные проверки, не физические телефон/планшет.
 - Ранние версии 0.7.33 / 0.7.34-dev, Standalone, preview/code50 и разные PR нельзя смешивать по одним именам APK. Один успешный старый workflow не переносит PASS на новый SHA. Сохранить исходную подпись dev и проверять update-совместимость.
 - APK build-артефакт есть у успешного run, но **релиз, signer-equivalence, новая установка и физический gameplay на 6d6b8cb не подтверждены**. Не публиковать и не рекламировать как рабочую релизную установку.
 
@@ -80,11 +80,11 @@
 6. Дополнительные реальные игры: 8×7/другая сетка Match World, 6×6 protected-skull swap, Market Rush топливо/машины, Gosha latency, Ari wrap. Котобашня/Гексон не считать проверенными адаптерами до отдельной реализации.
 7. Экспортировать приватный `Locpiand.zip` с timestamps, errors, metrics, model-status, before/after counters, verified responses, а также отчёт памяти/CPU; не сливать raw media в публичный репозиторий.
 
-**Критерий перед слиянием:** (a) зелёная обязательная CI-матрица API30/35/36 на точном HEAD, (b) установленная версия и signer проверены, (c) физические прогоны телефона и планшета включая обучение и реальные действия, (d) реально доказанное применение сохранённой памяти, (e) нет регрессий fail-closed. До этого PR #53 Draft.
+**Критерий перед слиянием:** (a) зелёная обязательная CI-матрица API30/35/36 на точном HEAD — **выполнено для 6d6b8cb**, (b) установленная версия и signer проверены — **не выполнено**, (c) физические прогоны телефона и планшета включая обучение и реальные действия — **не выполнено**, (d) реально доказанное применение сохранённой памяти — **не выполнено полностью**, (e) нет регрессий fail-closed на устройствах — **не проверено**. До этого PR #53 Draft.
 
 ## 9. Основные P0/P1 и координация исполнителей
 
-**P0:** закончить точную CI-матрицу PR #53, исправить её фактические ошибки по первым stack traces; live кадр 2048 R2C4; нижний launcher Bubble; 8×7 ROI; проблема топливных канистр и задержки Гошана; WINDOW/ROI/STOP переходы. Обязательное непротиворечивое сравнение установленного APK с commit/signature.
+**P0:** сохранить зафиксированную зелёную CI-матрицу PR #53 на точном SHA (она уже пройдена); live кадр 2048 R2C4; нижний launcher Bubble; 8×7 ROI; проблема топливных канистр и задержки Гошана; WINDOW/ROI/STOP переходы. Обязательное непротиворечивое сравнение установленного APK с commit/signature.
 
 **P1:** внедрить реально используемые appearance prototypes в игровые детекторы с ограниченными confidence-gates, обучаемым возвратом к более слабому но безопасному распознаванию, **без** самообъявления unknown безопасным; закрепить повторяемость спустя 2×60 с. Улучшить live performance только после wall-clock benchmarks. Отдельно Карканоид (спускающиеся блоки), Ари (живой wrap), новые адаптеры Гексон/Котобашня.
 
@@ -97,7 +97,7 @@
 - 20–23.10: перенос/разделение PC и Android, ранние ZIP/APK, проблемы CI сборки; исправления workflow. Наличие APK без реального verified gameplay.
 - 24–27.10: 0.7.33-dev, матричная инженерная программа 0.7.34, PanelDocking, Bubble/GRID/Arcade проверки; unified handoff от 27.10.
 - 28–30.10: гонки API30/API36, screenshot timeout, диагностика `Locpiand.zip` (без JPG), физический планшет показал общие проблемы во всех десяти играх; подтверждённые симптомы TARGET_BOUNDS_CHANGED, UNKNOWN, PANEL_COVERS_ROI.
-- 31.10: PR #51 и #52 устранили ложноположительную JPG-приёмку; снимки пользователя уточнили 8×7 Match World, 6×6 protected-skull, проблемы машины/птицы/пушки/2048. PR #53 добавил native Soft Vision, 60-секундное накопительное наблюдение и эвристическое распознавание. Build 6d6b8cb зелёный; эмуляторы API30/36 в момент записи ещё исполняются; реальный релиз **не объявлен**.
+- 31.10: PR #51 и #52 устранили ложноположительную JPG-приёмку; снимки пользователя уточнили 8×7 Match World, 6×6 protected-skull, проблемы машины/птицы/пушки/2048. PR #53 добавил native Soft Vision, 60-секундное накопительное наблюдение и эвристическое распознавание. Build 6d6b8cb зелёный; эмуляторы API30/35/36 завершились SUCCESS на SHA 6d6b8cb; физический e2e и signer остаются NOT RUN, реальный релиз **не объявлен**.
 
 ## 11. Формат следующего сообщения проекта
 
@@ -105,7 +105,7 @@
 Проект: GiVscSon/LocalPilot-Android (отдельно от PC my-agent).
 База: PR #53, HEAD 6d6b8cb... (перед работой перепроверить).
 Единый контекст: docs/LOCALPILOT_MASTER_CONTEXT_2026-10-31.ru.md.
-На текущем SHA: build PASS; matrix API35 PASS, API30/API36 были IN_PROGRESS.
+На текущем SHA: build PASS; emulator API30/35/36 PASS. Реальное устройство NOT RUN.
 Ключевая задача: завершить CI, физическая проверка 60s vision learning
 на телефоне и планшете, использование сохранённых прототипов в live-детекторах.
 Соблюдать STOP/InputPermit/ActionGate/TTL/ROI/UNKNOWN, 6×6 protected-skull swap.
