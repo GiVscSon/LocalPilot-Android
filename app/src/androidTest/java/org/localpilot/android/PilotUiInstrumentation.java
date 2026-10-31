@@ -218,11 +218,12 @@ public final class PilotUiInstrumentation extends Instrumentation {
         onMain(()->{service.hidePanel();return null;});
         launch(MainActivity.class);
         click("Онлайн-диагностика и модели");
-        await(()->present("Проверить API-ключ OpenRouter")
-             &&present("Выбрать модель: бесплатные / платные / подходящие")
-             &&present("Спросить OpenRouter"),4_000,
-             "Native OpenRouter selector/connection is absent from the live launcher");
-        require(!armed(),"Opening a model selection screen cannot arm gameplay input");
+        // Each button must be independently reachable on narrow-phone screens,
+        // where the keyboard and long content require scrolling.
+        click("Выбрать модель: бесплатные / платные / подходящие");
+        click("Проверить API-ключ OpenRouter");
+        click("Спросить OpenRouter");
+        require(!armed(),"OpenRouter diagnostics cannot arm gameplay input");
         // Parse the same pricing/modality JSON fields returned by /api/v1/models/user,
         // without a real API key or any billed requests in the emulator.
         JSONObject free=new JSONObject().put("id","test/chat:free").put("name","Test free chat")
