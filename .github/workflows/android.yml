@@ -23,6 +23,8 @@ jobs:
       "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-35' 'build-tools;35.0.0'
    - name: Release tooling regression checks
      run: python3 -m unittest discover -s tests -p 'test_release_tools.py' -v
+   - name: Verify optional HTTPS telemetry receiver
+     run: python3 -m unittest discover -s tests -p 'test_telemetry_receiver.py' -v
    - name: JVM regressions
      shell: bash
      run: |
