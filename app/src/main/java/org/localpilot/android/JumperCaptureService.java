@@ -84,7 +84,7 @@ public final class JumperCaptureService extends Service {
                     if (!closing) {
                         closing = true;
                         PilotService pilot = PilotService.instance;
-                        if (pilot != null) pilot.onJumperCaptureLost(session,"Android завершил захват экрана");
+                        if (pilot != null) pilot.onJumperCaptureLost(session,"MediaProjection.Callback.onStop: Android завершил или отозвал захват; повторное разрешение требуется");
                     }
                     stopSelf();
                 }
