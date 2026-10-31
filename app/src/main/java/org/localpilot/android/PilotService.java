@@ -1605,6 +1605,13 @@ public class PilotService extends AccessibilityService {
   }
   jumperConsentPending=false;
   jumperState=state;jumperTracking.observe(state);
+  if(visionTraining){
+   if(state!=null&&state.usable())visionTrainingFrames++;
+   note="Обучение Ари · кадров "+visionTrainingFrames+" · обнаружено платформ "
+    +(state==null?0:state.platforms.size())+" · осталось "
+    +Math.max(0,(visionTrainingUntil-now+999)/1000)+" с · ввод выключен";
+   update();return;
+  }
   if(!sceneRecovery.observe(state!=null&&state.usable(),timestampMs)){
    advanceJumperFeedback(null,now);
    if(sceneRecovery.selectionRequired()){note="Ари пока не распознан · продолжаю наблюдение без ввода. Проверьте профиль и область";update();return;}
@@ -1646,6 +1653,8 @@ public class PilotService extends AccessibilityService {
  private void send(float x,float y,float ex,float ey,ActionGate.Ticket ticket,Runnable done){sendObserved(x,y,ex,ey,ticket,done,-1);}
  private void sendObserved(float x,float y,float ex,float ey,ActionGate.Ticket ticket,Runnable done,long frameAt){sendObserved(x,y,ex,ey,ticket,done,frameAt,50);}
  private void sendObserved(float x,float y,float ex,float ey,ActionGate.Ticket ticket,Runnable done,long frameAt,int holdMs){
+  // Absolute no-input guarantee for manual, arcade and board-game paths.
+  if(visionTraining){note="Обучение: касания запрещены · только чтение";update();return;}
   metrics.attempt(StageMetrics.Stage.ANDROID_ACK);
   if(busy){metrics.failure(StageMetrics.Stage.ANDROID_ACK,"EXECUTOR_BUSY");note="Исполнитель занят";update();return;}String rejection=invalidReason(ticket);if(rejection!=null){if(deferFocus(rejection))return;failStage(StageMetrics.Stage.ANDROID_ACK,rejection,"Привяжите текущее окно заново; ввод не отправлен");return;}
   if(!armedBounds.contains((int)x,(int)y)||!armedBounds.contains((int)ex,(int)ey)){failStage(StageMetrics.Stage.ANDROID_ACK,"OUTSIDE_WINDOW","Жест вне окна");return;}
