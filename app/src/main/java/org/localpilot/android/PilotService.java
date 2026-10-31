@@ -472,7 +472,7 @@ public class PilotService extends AccessibilityService {
   if(busy||captureBusy||visionTraining){note="Завершите текущий жест/режим";update();return;}
   stop("Подготовка обучения · STOP");
   if(!bindSelectedWindow())return;
-  if(visualRoi==null||!armedBounds.contains(visualRoi)||visualRoi.isEmpty()){
+  if(selectedProfile>=4&&(visualRoi==null||!armedBounds.contains(visualRoi)||visualRoi.isEmpty())){
    note="Обучение: сначала выберите Область для "+profileLabel();update();return;
   }
   if(selectedProfile>=4&&selectedProfile<=5&&!RegionPickerGeometry.readable2048(
