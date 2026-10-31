@@ -33,6 +33,7 @@ jobs:
       java tests/BrowserSceneVerify.java
       java tests/TabletCaptureVerify.java
       java tests/Field2048GlassVerify.java
+      java -Djava.awt.headless=true tests/LocalJpgVerify.java --self-test
       java tests/CaptureTimingVerify.java
       java tests/CaptureRetryVerify.java
       java tests/CaptureMatrixVerify.java
