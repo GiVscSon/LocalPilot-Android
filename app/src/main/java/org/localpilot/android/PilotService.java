@@ -1120,7 +1120,15 @@ public class PilotService extends AccessibilityService {
   long generation=boardReadGeneration;
   handler.postDelayed(()->{if(epoch==gate.epoch()&&generation==boardReadGeneration&&!focusPaused)task.run();},delay);
  }
- private void scheduleGrid(long epoch){if(playingGrid&&epoch==gate.epoch()&&!focusPaused)postBoardTask(epoch,(selectedProfile==9?bubbleSession.paused():gridSession.paused())?Math.max(1000,captureDelay()):captureDelay(),()->gridStep(epoch));}
+ private void scheduleGrid(long epoch){
+  if(!playingGrid||epoch!=gate.epoch()||focusPaused)return;
+  // Never speed up an unresolved/paused gesture, and never infer game success from Android ACK.
+  long delay=selectedProfile==9
+    ?(bubbleSession.paused()?Math.max(1000,captureDelay()):captureDelay())
+    :GridCaptureCadence.delayMs(Build.VERSION.SDK_INT,selectedProfile,gridSession.pending(),
+       gridSession.acknowledged(),gridSession.paused(),captureDelay());
+  postBoardTask(epoch,delay,()->gridStep(epoch));
+ }
  private void gridStep(long epoch){
   if(selectedProfile==9){bubbleStep(epoch);return;}
   if(epoch!=gate.epoch()||!playingGrid||focusPaused)return;
