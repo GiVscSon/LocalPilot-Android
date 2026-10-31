@@ -34,6 +34,11 @@ public final class BubbleVision {
  /** Soft mode relaxes only object geometry, never ROI or UNKNOWN/special rejection. */
  public static Read read(Pixels pixels,int width,int height,int left,int top,int right,int bottom,
    int excludedLeft,int excludedTop,int excludedRight,int excludedBottom,BubbleBoard previous,boolean strict){
+  return read(pixels,width,height,left,top,right,bottom,excludedLeft,excludedTop,excludedRight,excludedBottom,previous,strict,Float.NaN);
+ }
+ /** Only a hint for searching a real observed ball. Cannot synthesize a ball. */
+ public static Read read(Pixels pixels,int width,int height,int left,int top,int right,int bottom,
+   int excludedLeft,int excludedTop,int excludedRight,int excludedBottom,BubbleBoard previous,boolean strict,float learnedLauncherFraction){
   if(pixels==null||width<1||height<1||width>16_384||height>16_384||left<0||top<0||right>width||bottom>height||right-left<80||bottom-top<120)
    throw new IllegalArgumentException("bubble image bounds");
   if(excludedLeft<right&&excludedRight>left&&excludedTop<bottom&&excludedBottom>top)
@@ -55,12 +60,16 @@ public final class BubbleVision {
   }else{
    List<Blob> blobs=blobs(work,w,h);if(blobs==null)return new Read(null,"Слишком много цветовых объектов");
    Blob launcher=null;float score=Float.POSITIVE_INFINITY,second=Float.POSITIVE_INFINITY;
+   float centerX=Float.isFinite(learnedLauncherFraction)
+      &&learnedLauncherFraction>=.35f&&learnedLauncherFraction<=.65f
+      ?learnedLauncherFraction*w:w*.5f;
+   float radiusX=strict?.08f:.10f;
    // This skin's ordinary loaded ball is centered. The reserve sits only
    // ~15% of the arena width to its left and must never replace a missing gun.
    for(Blob b:blobs)if(b.color<=4&&b.round()&&b.width()>w*(strict?.045f:.04f)&&b.width()<w*(strict?.15f:.18f)
-     &&b.x()>w*(strict?.42f:.40f)&&b.x()<w*(strict?.58f:.60f)
+     &&b.x()>centerX-radiusX*w&&b.x()<centerX+radiusX*w
      &&b.y()>h*(strict?.68f:.60f)&&b.y()<h*(strict?.98f:.995f)){
-    float s=Math.abs(b.x()-w*.5f)/w+(h-b.y())/h*.2f;
+    float s=Math.abs(b.x()-centerX)/w+(h-b.y())/h*.2f;
     if(s<score){second=score;score=s;launcher=b;}else second=Math.min(second,s);
    }
    if(launcher==null||second-score<(strict?.035f:.012f))return new Read(null,"Не найдена отдельная пушка: включите её в область");
