@@ -1,1 +1,24 @@
 plugins { id 'com.android.application' version '8.7.3' apply false }
+
+/**
+ * Opt-in private image verification; excluded from routine CI builds because
+ * screenshots live only on the user's machine and must not be uploaded.
+ *
+ *   ./gradlew localJpgReplay -Dlocalpilot.jpgDir=/path/to/jpgs
+ * or LOCALPILOT_JPG_DIR=/path/to/jpgs ./gradlew localJpgReplay
+ */
+tasks.register('localJpgReplay', Exec) {
+ group = 'verification'
+ description = 'Probe the annotated R2C4 cell on the private 2048 JPEG'
+ workingDir rootProject.projectDir
+ executable = new File(System.getProperty('java.home'), 'bin/java').absolutePath
+ doFirst {
+  def dir = System.getProperty('localpilot.jpgDir')
+  if (dir == null || dir.trim().isEmpty()) dir = System.getenv('LOCALPILOT_JPG_DIR')
+  if (dir == null || dir.trim().isEmpty())
+   throw new GradleException('Set -Dlocalpilot.jpgDir=/path/to/jpgs or LOCALPILOT_JPG_DIR')
+  args = ['-Djava.awt.headless=true',
+    "-Dlocalpilot.jpgDir=${dir}",
+    rootProject.file('tests/LocalJpgVerify.java').absolutePath]
+ }
+}
