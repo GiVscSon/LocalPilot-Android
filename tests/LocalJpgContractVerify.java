@@ -68,6 +68,45 @@ class LocalJpgContractVerify {
    Files.writeString(incomplete.resolve("localpilot-frames.csv"),
      "filename,profile,left,top,right,bottom\npresent.png,GRID6,0,0,8,8\nmissing.png,GRID6,0,0,8,8\n");
    replay(cls,incomplete,AssertionError.class,"MISSING_IMAGE");
+   // A seeded 32 may exist on the very first visible 2048 frame.
+   Path known32=Files.createDirectory(root.resolve("known32"));
+   BufferedImage board=new BufferedImage(584,584,BufferedImage.TYPE_INT_RGB);
+   java.awt.Graphics2D boardPaint=board.createGraphics();
+   boardPaint.setColor(new java.awt.Color(237,225,213));
+   boardPaint.fillRect(0,0,584,584);
+   boardPaint.setColor(new java.awt.Color(0x323233));
+   boardPaint.fillRect(438,146,146,146); // R2C4
+   boardPaint.setColor(java.awt.Color.WHITE);
+   boardPaint.fillRect(511,219,1,1); // center glyph must not tint background ring
+   boardPaint.dispose();
+   ImageIO.write(board,"png",known32.resolve("known32.png").toFile());
+   Files.writeString(known32.resolve("localpilot-frames.csv"),
+     "filename,profile,left,top,right,bottom\nknown32.png,2048,0,0,584,584\n");
+   String boardReport=replay(cls,known32,null,"DIAG_2048_CELL_R2C4");
+   require(boardReport.contains("centerXY=(511,219)")&&boardReport.contains("ring_avg=#323233"),
+     "R2C4 diagnostic must scan the declared ROI without guessing the tile");
+   require(boardReport.contains("dark32_count=1")&&boardReport.contains("OBSERVED"),
+     "known seeded dark-32 must remain readable as observation, not an approved gesture");
+
+   Path shop=Files.createDirectory(root.resolve("shop"));
+   BufferedImage scene=new BufferedImage(480,720,BufferedImage.TYPE_INT_RGB);
+   java.awt.Graphics2D paint=scene.createGraphics();
+   paint.setColor(new java.awt.Color(0xffdfba));paint.fillRect(0,0,480,720);
+   paint.setColor(new java.awt.Color(0x9e5428));paint.fillRect(0,490,480,230);
+   paint.setColor(new java.awt.Color(0x454545));paint.fillOval(36,175,24,24);
+   paint.setColor(new java.awt.Color(0xc93020));paint.fillRect(38,155,24,15);
+   paint.setColor(new java.awt.Color(0x387e25));
+   paint.fillRect(278,281,44,9); // active obstacle
+   paint.fillRect(365,569,48,15); // first below-counter candidate
+   paint.fillRect(394,591,38,15); // second below-counter candidate
+   paint.dispose();
+   ImageIO.write(scene,"png",shop.resolve("flappy.png").toFile());
+   Files.writeString(shop.resolve("localpilot-frames.csv"),
+     "filename,profile,left,top,right,bottom\nflappy.png,FLAPPY,0,0,480,720\n");
+   String shopReport=replay(cls,shop,null,"belowCounterRejected=2");
+   require(shopReport.contains("counterConfirmed=true"),
+     "FLAPPY rejection count must be tied to a detected wooden counter");
+
   }
   System.out.println("LOCAL_JPG_CONTRACT_PASS checks="+checks);
  }
