@@ -39,19 +39,20 @@ public final class OpenRouterModelCatalog {
  private volatile boolean closed,busy;
  private volatile HttpsURLConnection active;
  public boolean busy(){return busy;}
- public void load(Callback callback){
+ public void load(String apiKey,Callback callback){
+  OpenRouterAdvisor.validateKey(apiKey);
   if(closed||busy)throw new IllegalStateException("Каталог уже обновляется");
   busy=true;
   worker.execute(()->{
    List<Model> result=List.of();String error=null;
-   try{result=fetch();}
+   try{result=fetch(apiKey);}
    catch(Exception failure){error="Каталог OpenRouter недоступен: проверьте сеть и повторите.";}
    finally{busy=false;}
    final List<Model> models=result;final String message=error;
    if(!closed)main.post(()->{if(!closed)callback.complete(models,message);});
   });
  }
- private List<Model> fetch()throws Exception{
+ private List<Model> fetch(String apiKey)throws Exception{
   HttpsURLConnection conn=(HttpsURLConnection)new URL(ADDRESS).openConnection();
   active=conn;
   try{
@@ -59,6 +60,7 @@ public final class OpenRouterModelCatalog {
    conn.setConnectTimeout(6000);conn.setReadTimeout(12000);
    conn.setRequestMethod("GET");conn.setInstanceFollowRedirects(false);
    conn.setRequestProperty("Accept","application/json");
+   conn.setRequestProperty("Authorization","Bearer "+apiKey);
    conn.setRequestProperty("Cache-Control","no-store");
    if(conn.getResponseCode()!=200)throw new java.io.IOException("catalog status");
    byte[] raw;
@@ -86,6 +88,11 @@ public final class OpenRouterModelCatalog {
   // The assistant sends plain text diagnostics. Never offer image-only, embedding
   // or audio-only endpoints through the chat-completions advisor.
   if(arch!=null){
+   JSONArray inputs=arch.optJSONArray("input_modalities");
+   if(inputs!=null){boolean hasText=false;for(int i=0;i<inputs.length();i++)
+     if("text".equals(inputs.optString(i)))hasText=true;
+    if(!hasText)return null;
+   }
    JSONArray outputs=arch.optJSONArray("output_modalities");
    if(outputs!=null){boolean hasText=false;for(int i=0;i<outputs.length();i++)
      if("text".equals(outputs.optString(i)))hasText=true;
@@ -96,8 +103,10 @@ public final class OpenRouterModelCatalog {
   if(price==null)return null;
   // OpenRouter prices are USD per token, not per million tokens.
   double input=number(price.opt("prompt")),output=number(price.opt("completion"));
-  if(!Double.isFinite(input)||!Double.isFinite(output)||input<0||output<0)return null;
-  boolean free=input==0&&output==0;
+  double requestFee=price.has("request")?number(price.opt("request")):0;
+  if(!Double.isFinite(input)||!Double.isFinite(output)||input<0||output<0
+     ||!Double.isFinite(requestFee)||requestFee<0)return null;
+  boolean free=input==0&&output==0&&requestFee==0;
   long context=item.optLong("context_length",0);
   if(context<2048)return null;
   // Heuristic suitability: adequate context plus reasonably affordable text
