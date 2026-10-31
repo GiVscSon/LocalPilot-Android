@@ -100,10 +100,10 @@ public final class OnlineDiagnosticsActivity extends Activity {
     (service.onlineDiagnosticsEnabled()?"Активно · ":"Выключено · ")+service.onlineDiagnosticsStatus());
  }
  private static void title(LinearLayout into,String text,int size){
-  TextView view=new TextView(into);view.setText(text);view.setTextSize(size);into.addView(view);
+  TextView view=new TextView(into.getContext());view.setText(text);view.setTextSize(size);into.addView(view);
  }
  private static TextView paragraph(LinearLayout into,String text){
-  TextView view=new TextView(into);view.setText(text);view.setPadding(0,8,0,12);into.addView(view);
+  TextView view=new TextView(into.getContext());view.setText(text);view.setPadding(0,8,0,12);into.addView(view);
   return view;
  }
  private EditText field(LinearLayout into,String hint,boolean secret){
