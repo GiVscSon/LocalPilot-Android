@@ -59,6 +59,10 @@ public class PilotService extends AccessibilityService {
  private boolean playingGrid,gridResultVisible,gridSawAction; // Shared screenshot loop for grid and bubble puzzles.
  private final BubbleSession bubbleSession=new BubbleSession(7000,12000);
  private BubbleBoard bubbleGeometry;
+ private BubblePolicy.Shot bubblePendingShot;
+ private LiveGameLearning bubbleLearning=new LiveGameLearning(LiveGameLearning.Game.BUBBLE);
+ private LiveGameLearning learning2048=new LiveGameLearning(LiveGameLearning.Game.GAME_2048);
+ private boolean bubbleLearningWritable=true,learning2048Writable=true;
  private GridPuzzleConfig gridConfig=new GridPuzzleConfig(6,6,2);
  private GridPuzzleVision.Palette gridPalette;
  private GridPuzzleGoal.Color gridGoal=GridPuzzleGoal.Color.ANY;
@@ -153,6 +157,11 @@ public class PilotService extends AccessibilityService {
     .append('\n').append(gestureFlight.report(now)).append('\n').append(sceneRecovery.report())
     .append('\n').append(arcadeFeedback.report()).append('\n').append(jumperFeedback.report()).append("\nMOTION MODEL: ").append(arcadeController.model())
     .append('\n').append(roundOutcome.report()).append("\nLEARNING: ").append(learningStatus)
+    .append("\nLIVE_LEARNING_2048: verified=").append(learning2048.verifiedCount())
+    .append(" save_enabled=").append(learning2048Writable)
+    .append("\nLIVE_LEARNING_BUBBLE: verified=").append(bubbleLearning.verifiedCount())
+    .append(" unconfirmed=").append(bubbleLearning.unconfirmedCount())
+    .append(" save_enabled=").append(bubbleLearningWritable)
     .append(" scope=").append(target).append('/').append(learningSlot)
     .append(" model_context=").append(modelSlot)
     .append(" losses=").append(arcadeLearning==null||target.isEmpty()?-1:arcadeLearning.losses(target,modelSlot,captureProfile))
@@ -189,6 +198,25 @@ public class PilotService extends AccessibilityService {
  private boolean browserProfileConfirmed,unsupportedGame,targetIsBrowser;
  private String confirmedProfileScope="";
  private String profileChoiceKey(String pkg){String slot=getSharedPreferences("panel",MODE_PRIVATE).getString("game_slot."+pkg,"default");return VisualGameTarget.selectionKey(pkg,slot);}
+ /** Target package + named game slot prevents lessons leaking between browser games. */
+ private String liveLearningKey(LiveGameLearning.Game game,boolean colored){
+  return profileChoiceKey(target)+(game==LiveGameLearning.Game.BUBBLE?".bubble":colored?".color2048":".2048")+".verified-live-v1";
+ }
+ private LiveGameLearning loadLiveLearning(LiveGameLearning.Game game,boolean colored){
+  String saved=getSharedPreferences("live-game-learning",MODE_PRIVATE).getString(liveLearningKey(game,colored),null);
+  if(saved==null)return new LiveGameLearning(game);
+  try{return LiveGameLearning.decode(game,saved);}
+  catch(IllegalArgumentException invalid){
+   if(game==LiveGameLearning.Game.BUBBLE)bubbleLearningWritable=false;else learning2048Writable=false;
+   learningStatus="Игровая модель повреждена · сохранена без перезаписи, обучение приостановлено";
+   return new LiveGameLearning(game);
+  }
+ }
+ private void saveLiveLearning(LiveGameLearning model,boolean colored){
+  if(model.game()==LiveGameLearning.Game.BUBBLE&&!bubbleLearningWritable
+     ||model.game()==LiveGameLearning.Game.GAME_2048&&!learning2048Writable)return;
+  getSharedPreferences("live-game-learning",MODE_PRIVATE).edit().putString(liveLearningKey(model.game(),colored),model.encode()).apply();
+ }
  private String color2048PaletteKey(){if(target==null||target.isEmpty())throw new IllegalStateException("2048 game scope unavailable");return profileChoiceKey(target)+".learned_colors";}
  private boolean browserTarget(){try{return getPackageManager().resolveActivity(new Intent(Intent.ACTION_VIEW,android.net.Uri.parse("https://localpilot.invalid")).setPackage(target),android.content.pm.PackageManager.MATCH_DEFAULT_ONLY)!=null;}catch(RuntimeException ignored){return true;}}
  private boolean explicitWindow;
@@ -467,7 +495,7 @@ public class PilotService extends AccessibilityService {
   // gesture was needed. Stopping a session is not a new round loss.
   if(playingJumper&&jumperCaptureReady)CaptureCleanup.run(()->persistArcadeModel(false));
   captureStartup.stop(SystemClock.elapsedRealtime());clearDiagnosticFrame();arcadeSceneGeneration++;
-  playingGrid=false;gridSession.reset();gridPalette=null;gridPendingDecision=null;gridUnknownReasons="none";bubbleSession.reset();bubbleGeometry=null;
+  playingGrid=false;gridSession.reset();gridPalette=null;gridPendingDecision=null;gridUnknownReasons="none";bubbleSession.reset();bubbleGeometry=null;bubblePendingShot=null;
   arcadeLastUsable=null;arcadeController.reset();arcadeFeedback.reset();jumperFeedback.reset();arcadeState=null;arcadeBefore=null;arcadePending=null;arcadeAck=false;
   boolean stopJumper=playingJumper||jumperCaptureReady||jumperConsentPending;
   playingJumper=false;jumperCaptureReady=false;jumperConsentPending=false;jumperVisionPending=false;jumperAwaitingVerification=false;jumperCalibrationPending=false;jumperState=null;jumperTracking.reset();
@@ -824,7 +852,8 @@ public class PilotService extends AccessibilityService {
   if(!VisualGameTarget.allowed(target,getPackageName())){note="Выберите окно сторонней игры";update();return;}
   loadBubbleRegion();
   if(!manualVisualRoi||visualRoi==null||!armedBounds.contains(visualRoi)){note="Шипучка: выделите всю ширину игры от верхних шаров до пушки";update();selectVisualRegion();return;}
-  boardRoi=new Rect(visualRoi);saveBubbleRegion(boardRoi);bubbleSession.reset();bubbleGeometry=null;
+  boardRoi=new Rect(visualRoi);saveBubbleRegion(boardRoi);bubbleSession.reset();bubbleGeometry=null;bubblePendingShot=null;
+  bubbleLearningWritable=true;bubbleLearning=loadLiveLearning(LiveGameLearning.Game.BUBBLE,false);
   gridMoves=gridVerified=0;gridResultVisible=gridSawAction=false;playingGrid=true;clearDiagnosticFrame();captureFrames=captureReads=captureDecisions=captureSent=captureCompleted=0;
   if(automatic())permit.grantSession(gate.epoch(),SystemClock.elapsedRealtime());
   compact(true);note="Шипучка · проверяю обычные шары и пушку";update();long epoch=gate.epoch(),generation=boardReadGeneration;
@@ -840,7 +869,7 @@ public class PilotService extends AccessibilityService {
    if(epoch!=gate.epoch()||!playingGrid||selectedProfile!=9||focusPaused)return;
    captureFrames++;Rect r=new Rect(boardRoi),panel=panelBounds();
    if(GameOverScreen.detect(pixels::getPixel,armedBounds.left,armedBounds.top,armedBounds.right,armedBounds.bottom,panel.left,panel.top,panel.right,panel.bottom)){
-    gridResultVisible=true;bubbleSession.reset();bubbleGeometry=null;note="Экран результата · нажмите Играть снова";update();scheduleGrid(epoch);return;
+    gridResultVisible=true;bubbleSession.reset();bubbleGeometry=null;bubblePendingShot=null;note="Экран результата · нажмите Играть снова";update();scheduleGrid(epoch);return;
    }
    gridResultVisible=false;metrics.attempt(StageMetrics.Stage.READ);long started=SystemClock.elapsedRealtimeNanos();
    BubbleVision.Read read=BubbleVision.read(pixels::getPixel,pixels.getWidth(),pixels.getHeight(),r.left,r.top,r.right,r.bottom,panel.left,panel.top,panel.right,panel.bottom,bubbleGeometry);
@@ -848,13 +877,31 @@ public class PilotService extends AccessibilityService {
    captureReads++;metrics.record(StageMetrics.Stage.READ,SystemClock.elapsedRealtimeNanos()-started);
    long frameAt=SystemClock.elapsedRealtime()-Math.max(0,SystemClock.uptimeMillis()-lastShotTimestamp);
    BubbleSession.Status status=bubbleSession.observe(read.board(),frameAt,SystemClock.elapsedRealtime());
-   if(status==BubbleSession.Status.PAUSED){note="Шипучка: "+(bubbleSession.acknowledged()?"Android завершил жест; ":"нет подтверждения Android; ")+bubbleWaitMessage(bubbleSession.lastWait())+" · продолжаю наблюдение без ввода. Старт — повторная проверка";update();scheduleGrid(epoch);return;}
+   if(status==BubbleSession.Status.PAUSED){
+    // Soft-pause is visual-only. An acknowledged shot is UNCONFIRMED only
+    // at the final absolute timeout, not after a window/focus interruption.
+    if(bubblePendingShot!=null&&bubbleSession.finalResponseExpired()){
+     if(bubbleSession.acknowledged()){
+      bubbleLearning.unconfirmedBubble(bubblePendingShot.bounces,bubblePendingShot.removed,bubblePendingShot.dropped);
+      saveLiveLearning(bubbleLearning,false);
+     }
+     bubblePendingShot=null;
+    }
+    note="Шипучка: "+(bubbleSession.acknowledged()?"Android завершил жест; ":"нет подтверждения Android; ")+bubbleWaitMessage(bubbleSession.lastWait())+" · продолжаю наблюдение без ввода. Старт — повторная проверка";update();scheduleGrid(epoch);return;}
    if(status!=BubbleSession.Status.READY&&status!=BubbleSession.Status.VERIFIED){note=read.usable()?(bubbleSession.pending()?"Шипучка: проверяю попадание":"Шипучка: ожидаю второй устойчивый кадр"):read.reason();update();scheduleGrid(epoch);return;}
+   if(status==BubbleSession.Status.VERIFIED&&bubblePendingShot!=null){
+    bubbleLearning.verifiedBubble(bubblePendingShot.bounces,bubblePendingShot.removed,bubblePendingShot.dropped);
+    saveLiveLearning(bubbleLearning,false);bubblePendingShot=null;
+   }
    bubbleGeometry=read.board();gridVerified=bubbleSession.verified();
    if(targetIsBrowser&&!browserSceneGate.observe(frameAt,read.usable())){note="Шипучка: проверяю 2 стабильных кадра после изменения браузера";update();scheduleGrid(epoch);return;}
-   metrics.attempt(StageMetrics.Stage.POLICY);started=SystemClock.elapsedRealtimeNanos();BubblePolicy.Shot shot=BubblePolicy.choose(bubbleGeometry);
+   metrics.attempt(StageMetrics.Stage.POLICY);started=SystemClock.elapsedRealtimeNanos();
+   BubblePolicy.Shot shot;
+   try{shot=BubblePolicy.choose(bubbleGeometry,plan->bubbleLearning.bonusBubble(plan.bounces,plan.removed,plan.dropped));}
+   catch(RuntimeException error){failStage(StageMetrics.Stage.POLICY,"BUBBLE_LEARNED_RANK_INVALID","Невозможно безопасно выбрать траекторию");return;}
    captureDecisions++;metrics.record(StageMetrics.Stage.POLICY,SystemClock.elapsedRealtimeNanos()-started);
-   uiStats="Шипучка · шаров "+bubbleGeometry.count()+" · выстрелов "+gridMoves+" · подтверждено "+gridVerified;
+   uiStats="Шипучка · шаров "+bubbleGeometry.count()+" · выстрелов "+gridMoves+" · подтверждено "+gridVerified
+      +" · опыт "+bubbleLearning.verifiedCount()+" / "+bubbleLearning.unconfirmedCount();
    if(shot==null||!automatic()){note=shot==null?"Безопасная траектория не найдена · ожидаю поле":(shot.bounces==0?"Наблюдение: найден прямой выстрел":"Наблюдение: найден один рикошет");update();scheduleGrid(epoch);return;}
    if(bubbleGeometry.shortRowParity==0){note="Шипучка: обратное чередование рядов · наблюдение без ввода";update();scheduleGrid(epoch);return;}
    if(busy||!valid(ticket)||SystemClock.elapsedRealtime()-frameAt>300){note="Шипучка: жду свежий кадр для выстрела";update();scheduleGrid(epoch);return;}
@@ -863,8 +910,8 @@ public class PilotService extends AccessibilityService {
     if(epoch!=gate.epoch()||!playingGrid||selectedProfile!=9)return;
     bubbleSession.acknowledge(SystemClock.elapsedRealtime());note="Android завершил жест · проверяю поле";update();scheduleGrid(epoch);
    },frameAt,220);
-   if(captureSent>sentBefore){gridMoves++;gridSawAction=true;note=(shot.bounces==0?"Прямой выстрел ":"Один рикошет ")+gridMoves+" · ожидается удалений "+shot.removed+", падений "+shot.dropped;update();}
-   else if(playingGrid){bubbleSession.cancelUnsent();scheduleGrid(epoch);}
+   if(captureSent>sentBefore){bubblePendingShot=shot;gridMoves++;gridSawAction=true;note=(shot.bounces==0?"Прямой выстрел ":"Один рикошет ")+gridMoves+" · ожидается удалений "+shot.removed+", падений "+shot.dropped;update();}
+   else if(playingGrid){bubblePendingShot=null;bubbleSession.cancelUnsent();scheduleGrid(epoch);}
   });
  }
  private String bubbleWaitMessage(BubbleSession.Reason reason){
@@ -1749,6 +1796,7 @@ public class PilotService extends AccessibilityService {
    stop("AUTO_BOARD_GEOMETRY: 2048 требует минимум 160 пикселей и разницу сторон до 8%");return;
   }
   boardReadGeneration++;boardReadMisses=0;colorSession.reset();before2048=null;colored2048=colored;
+  learning2048Writable=true;learning2048=loadLiveLearning(LiveGameLearning.Game.GAME_2048,colored);
   if(colored2048){String saved=getSharedPreferences("color-2048",MODE_PRIVATE).getString(color2048PaletteKey(),null);if(saved!=null)try{colorSession.restoreLearned(saved);}catch(IllegalArgumentException invalidPalette){note="Сохранённая цветовая палитра повреждена · начинаю с базовых плиток";}}
   long epoch=gate.epoch(),generation=boardReadGeneration;playing2048=true;compact(true);note=colored2048?"Читаю цветное поле 2048 · изучено цветов "+colorSession.learnedCount():"Читаю поле в памяти…";update();
   afterPanelLayout(()->{
@@ -1759,7 +1807,8 @@ public class PilotService extends AccessibilityService {
     }
     if(epoch==gate.epoch()&&generation==boardReadGeneration&&playing2048&&!focusPaused)postBoardTask(epoch,captureDelay(),()->stable(epoch,(board,t,ms)->{
    StringBuilder text=new StringBuilder("Сверьте все 16 клеток с игрой:\n");for(int i=0;i<16;i++){text.append(board.cells[i]==0?"·":board.cells[i]).append(i%4==3?"\n":"  ");}
-   text.append("До STOP или конца партии. Кадры только в RAM. Это CPU-алгоритм, не обучение.");
+   text.append("До STOP или конца партии. Кадры только в RAM. CPU-планировщик.");
+   text.append("\nПодтверждённых ходов этой игры: ").append(learning2048.verifiedCount());
    if(automatic()){permit.grantSession(epoch,SystemClock.elapsedRealtime());moves2048=0;mergeTotal=0;before2048=null;uiStats=text.toString();postBoardTask(epoch,captureDelay(),()->round2048(epoch));return;}
    preview=new AlertDialog.Builder(this).setTitle("2048 — начать игру?").setMessage(text.toString()).setPositiveButton("Поле верное, начать",(dialog,which)->{preview=null;if(epoch!=gate.epoch()||generation!=boardReadGeneration||!playing2048||focusPaused)return;permit.grantSession(epoch,SystemClock.elapsedRealtime());moves2048=0;mergeTotal=0;before2048=null;postBoardTask(epoch,captureDelay(),()->round2048(epoch));}).setNegativeButton("Отмена",(d,w)->stop("2048 отменён")).setCancelable(false).create();preview.getWindow().setType(WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY);preview.getWindow().addFlags(WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE);preview.show();
    }));});
@@ -1776,15 +1825,23 @@ public class PilotService extends AccessibilityService {
   stable(epoch,(board,ticket,captureMs)->{
    if(epoch!=gate.epoch()||!playing2048)return;
    if(before2048!=null&&!before2048.verifies(board,direction2048)){Board2048.Verification why=before2048.verification(board,direction2048);note="2048: Android завершил жест · "+(why==Board2048.Verification.UNCHANGED?"поле не изменилось":why==Board2048.Verification.MISSING_SPAWN?"нет ожидаемой новой плитки":"поле отличается от расчёта")+" · наблюдаю без ввода";update();long generation=boardReadGeneration;handler.postDelayed(()->{if(epoch==gate.epoch()&&generation==boardReadGeneration&&playing2048&&!focusPaused)round2048(epoch);},Math.max(1000,captureDelay()));return;}
-   if(before2048!=null){if(!saveExample("2048",before2048.cells,direction2048,board.cells))return;mergeTotal+=Verified2048.mergeReward(before2048,direction2048,board);if(!audit(SafeJournal.Event.VERIFIED_2048,0,mergeTotal)){stop("Ошибка журнала результатов");return;}before2048=null;}
+   if(before2048!=null){
+    if(!saveExample("2048",before2048.cells,direction2048,board.cells))return;
+    int actualReward=Verified2048.mergeReward(before2048,direction2048,board);
+    mergeTotal+=actualReward;
+    if(!audit(SafeJournal.Event.VERIFIED_2048,0,mergeTotal)){stop("Ошибка журнала результатов");return;}
+    learning2048.verified2048(direction2048,actualReward);
+    saveLiveLearning(learning2048,colored2048);
+    before2048=null;
+   }
    if(board.max()>=2048){stop("2048: распознана плитка 2048; сверить визуально");return;}
    if(targetIsBrowser&&!browserSceneGate.observe(SystemClock.elapsedRealtime()-Math.max(0,SystemClock.uptimeMillis()-lastShotTimestamp),true)){
     note="2048: перепроверяю сцену браузера · без ввода";update();long generation=boardReadGeneration;
     handler.postDelayed(()->{if(epoch==gate.epoch()&&generation==boardReadGeneration&&playing2048&&!focusPaused)round2048(epoch);},captureDelay());return;
    }
-   metrics.attempt(StageMetrics.Stage.POLICY);long policyNs=SystemClock.elapsedRealtimeNanos();long started=SystemClock.elapsedRealtime();int d;try{d=board.choose();}catch(RuntimeException error){failStage(StageMetrics.Stage.POLICY,"POLICY_FAILED","Не удалось выбрать ход");return;}metrics.record(StageMetrics.Stage.POLICY,SystemClock.elapsedRealtimeNanos()-policyNs);long think=SystemClock.elapsedRealtime()-started;if(d<0){stop("2048: допустимых ходов нет");return;}if(!Verified2048.mask(board)[d]){stop("2048: ход вне маски");return;}if(!valid(ticket)){if(deferFocus(invalidReason(ticket)))return;stop("План устарел");return;}
+   metrics.attempt(StageMetrics.Stage.POLICY);long policyNs=SystemClock.elapsedRealtimeNanos();long started=SystemClock.elapsedRealtime();int d;try{d=board.choose(learning2048::bonus2048);}catch(RuntimeException error){failStage(StageMetrics.Stage.POLICY,"POLICY_FAILED","Не удалось выбрать ход");return;}metrics.record(StageMetrics.Stage.POLICY,SystemClock.elapsedRealtimeNanos()-policyNs);long think=SystemClock.elapsedRealtime()-started;if(d<0){stop("2048: допустимых ходов нет");return;}if(!Verified2048.mask(board)[d]){stop("2048: ход вне маски");return;}if(!valid(ticket)){if(deferFocus(invalidReason(ticket)))return;stop("План устарел");return;}
    Rect r=new Rect(boardRoi);float x=r.exactCenterX(),y=r.exactCenterY(),dx=0,dy=0;switch(d){case Board2048.LEFT:dx=-r.width()*.30f;break;case Board2048.RIGHT:dx=r.width()*.30f;break;case Board2048.UP:dy=-r.height()*.30f;break;case Board2048.DOWN:dy=r.height()*.30f;break;}
-   before2048=board;direction2048=d;moves2048++;uiStats="кадр "+captureMs+" мс · CPU "+think+" мс · проверено "+(moves2048-1);note="Ход "+moves2048+" · max "+board.max()+" · кадр "+captureMs+"мс · CPU "+think+"мс";update();
+   before2048=board;direction2048=d;moves2048++;uiStats="кадр "+captureMs+" мс · CPU "+think+" мс · подтверждено "+learning2048.verifiedCount()+" · опыт 2048";note="Ход "+moves2048+" · max "+board.max()+" · кадр "+captureMs+"мс · CPU "+think+"мс";update();
    long sentBefore=dispatchedInputs;
    send(x-dx/2,y-dy/2,x+dx/2,y+dy/2,ticket,()->{note="Проверяю исход хода "+moves2048;update();long generation=boardReadGeneration;handler.postDelayed(()->{if(generation==boardReadGeneration)round2048(epoch);},captureDelay());});
    if(dispatchedInputs==sentBefore&&playing2048&&epoch==gate.epoch()){
