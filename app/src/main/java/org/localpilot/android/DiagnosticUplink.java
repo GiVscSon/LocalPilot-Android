@@ -30,7 +30,7 @@ public final class DiagnosticUplink {
  private volatile String status="Выключено";
  private volatile boolean enabled,closed;
  private volatile HttpsURLConnection activeConnection;
- private int generation;
+ private volatile int generation;
  private String endpoint,secret;
  private Supplier<String> source;
  private final Runnable next=new Runnable(){
@@ -72,7 +72,7 @@ public final class DiagnosticUplink {
    URI uri=new URI(endpoint);
    if(!"https".equalsIgnoreCase(uri.getScheme())||uri.getHost()==null
      ||uri.getUserInfo()!=null||uri.getFragment()!=null||uri.getRawQuery()!=null
-     ||!uri.getRawPath().endsWith("/v1/telemetry"))
+     ||uri.getRawPath()==null||!uri.getRawPath().endsWith("/v1/telemetry"))
     throw new IllegalArgumentException("Адрес должен оканчиваться на /v1/telemetry");
   }catch(java.net.URISyntaxException invalid){throw new IllegalArgumentException("Неверный HTTPS адрес");}
  }
