@@ -125,7 +125,7 @@ public class PilotService extends AccessibilityService {
  private GridPuzzle gridPendingBoard;private java.util.BitSet gridPendingSpecial;
  private String gridAvoidScope="",gridPendingScope="";
  // Bounded symbolic counts from the current grid observation; no pixels retained.
- private String gridUnknownReasons="none",gridReasonDetails="none",gridLastStatus="none",gridReview="Нет данных: запустите сеточную игру и дождитесь чтения поля.";
+ private String gridUnknownReasons="none",gridReasonDetails="none",gridLastStatus="NONE",gridReview="Нет данных: запустите сеточную игру и дождитесь чтения поля.";
  private CustomVisionConfig customVision;private String customVisionRoiScope;
  private boolean customCalibrationPending;
  private View customCalibrationOverlay;
