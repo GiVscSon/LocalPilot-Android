@@ -21,10 +21,11 @@ import org.json.JSONObject;
 public final class OpenRouterModelCatalog {
  public interface Callback {void complete(List<Model> models,String error);}
  public record Model(String id,String name,boolean free,boolean suitable,
-                     long context,double inputPerMillion,double outputPerMillion) {
+                     long context,double inputPerMillion,double outputPerMillion,double perRequest) {
   public String label(){
    return name+" · "+(free?"Бесплатно":"$"+price(inputPerMillion)+"/$"+
      price(outputPerMillion)+" за 1М ток. ввод/вывод")+
+     (perRequest>0?" + $"+price(perRequest)+"/запрос":"")+
      " · "+(context>=1000?context/1000+"k":context)+" контекст";
   }
   private static String price(double n){return String.format(Locale.ROOT,"%.3f",n);}
@@ -113,7 +114,7 @@ public final class OpenRouterModelCatalog {
   // inference. This is NOT a quality benchmark nor a health/uptime claim.
   boolean suitable=context>=16_384&&(free||(input*1_000_000<=1.5&&output*1_000_000<=6));
   String shown=name.length()>85?name.substring(0,85):name;
-  return new Model(id,shown,free,suitable,context,input*1_000_000,output*1_000_000);
+  return new Model(id,shown,free,suitable,context,input*1_000_000,output*1_000_000,requestFee);
  }
  private static double number(Object value){
   if(value==null||value==JSONObject.NULL)return Double.NaN;
