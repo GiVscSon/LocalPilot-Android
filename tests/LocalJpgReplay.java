@@ -6,6 +6,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Set;
+import java.util.TreeSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -25,27 +28,38 @@ public final class LocalJpgReplay {
    files=listing.filter(Files::isRegularFile).filter(f->f.getFileName().toString().toLowerCase(Locale.ROOT).matches(".*\\.(jpg|jpeg|png)"))
     .sorted().toList();
   }
-  if(files.isEmpty()){System.out.println("LOCAL_JPG_REPLAY SKIP: empty directory");return;}
-  List<Result> results=new ArrayList<>();int errors=0,unmapped=0;
+  if(files.isEmpty()&&manifest.isEmpty()){System.out.println("LOCAL_JPG_REPLAY SKIP: empty directory and manifest");return;}
+  List<Result> results=new ArrayList<>();int errors=0,unmapped=0,missing=0;
+  Set<String> actualFiles=new HashSet<>();
   for(Path file:files){
-   String filename=file.getFileName().toString();Spec spec=manifest.get(filename);
+   String filename=file.getFileName().toString();actualFiles.add(filename);Spec spec=manifest.get(filename);
    if(spec==null){
     results.add(new Result(filename,"UNMAPPED","UNVERIFIED","Add filename,profile,left,top,right,bottom to localpilot-frames.csv"));unmapped++;continue;
    }
    try{
+    if(Files.size(file)>32L*1024*1024)throw new IllegalArgumentException("IMAGE_FILE_TOO_LARGE");
     BufferedImage image=ImageIO.read(file.toFile());
     if(image==null)throw new IllegalArgumentException("UNSUPPORTED_IMAGE");
     if(spec.l<0||spec.t<0||spec.r>image.getWidth()||spec.b>image.getHeight()||spec.r<=spec.l||spec.b<=spec.t)
      throw new IllegalArgumentException("INVALID_ROI image="+image.getWidth()+"x"+image.getHeight());
+    boolean noExclusion=spec.el==0&&spec.et==0&&spec.er==0&&spec.eb==0;
+    if(!noExclusion&&(spec.el<0||spec.et<0||spec.er<=spec.el||spec.eb<=spec.et
+        ||spec.er>image.getWidth()||spec.eb>image.getHeight()))
+     throw new IllegalArgumentException("INVALID_EXCLUDED_ROI image="+image.getWidth()+"x"+image.getHeight());
     String detail=diagnose(image,spec);String verdict=detail.startsWith("FAIL ")?"FAIL":"OBSERVED";
     if("FAIL".equals(verdict))errors++;
     results.add(new Result(filename,spec.profile,verdict,detail));
    }catch(Exception failure){errors++;results.add(new Result(filename,spec.profile,"FAIL",failure.getClass().getSimpleName()+": "+failure.getMessage()));}
   }
-  System.out.println("LOCAL_JPG_REPLAY files="+files.size()+" mapped="+(files.size()-unmapped)+" unmapped="+unmapped+" failed="+errors);
+  // A manifest listing ten frames must never PASS when only one frame is available.
+  for(String expected:new TreeSet<>(manifest.keySet()))if(!actualFiles.contains(expected)){
+   missing++;errors++;
+   results.add(new Result(expected,manifest.get(expected).profile,"FAIL","MISSING_IMAGE: manifest lists a frame not present in this directory"));
+  }
+  System.out.println("LOCAL_JPG_REPLAY files="+files.size()+" declared="+manifest.size()+" mapped="+(files.size()-unmapped)+" unmapped="+unmapped+" missing="+missing+" failed="+errors);
   System.out.println("FILE | PROFILE | VERDICT | READER DIAGNOSTICS");
   for(Result item:results)System.out.println(item.file+" | "+item.profile+" | "+item.verdict+" | "+item.detail);
-  if(unmapped>0||errors>0)throw new AssertionError("LOCAL_JPG_REPLAY_NOT_ACCEPTED: failed="+errors+" unmapped="+unmapped);
+  if(unmapped>0||errors>0)throw new AssertionError("LOCAL_JPG_REPLAY_NOT_ACCEPTED: failed="+errors+" unmapped="+unmapped+" missing="+missing);
  }
  private static Map<String,Spec> readManifest(Path path) throws IOException {
   Map<String,Spec> result=new HashMap<>();if(!Files.exists(path))return result;
@@ -64,6 +78,35 @@ public final class LocalJpgReplay {
    if(result.putIfAbsent(name,spec)!=null)throw new IllegalArgumentException("DUPLICATE_FILE line="+lineNumber);
   }
   return result;
+ }
+ /** Diagnostic only: output actual pixels, never assign UNKNOWN cells a value. */
+ private static String scan2048Cell(BufferedImage image,Spec spec){
+  // R2C4 for a 4x4 board. ROI [54,825,638,1409] gives center (565,1044).
+  int w=spec.r-spec.l,h=spec.b-spec.t;
+  int cx=spec.l+(int)Math.round(w*3.5/4.0),cy=spec.t+(int)Math.round(h*1.5/4.0);
+  double scale=Math.min(w,h)/584.0;
+  int inner=Math.max(4,(int)Math.round(24*scale));
+  int outer=Math.max(inner+2,(int)Math.round(48*scale));
+  int stride=Math.max(1,(int)Math.round(2*scale));
+  int minLum=255,maxLum=0;long red=0,green=0,blue=0,count=0;
+  for(int y=cy-outer;y<=cy+outer;y+=stride)for(int x=cx-outer;x<=cx+outer;x+=stride){
+   if(x<spec.l||x>=spec.r||y<spec.t||y>=spec.b)continue;
+   int dx=x-cx,dy=y-cy,d2=dx*dx+dy*dy;
+   if(d2<inner*inner||d2>outer*outer)continue;
+   int rgb=image.getRGB(x,y),r=rgb>>16&255,g=rgb>>8&255,b=rgb&255;
+   int lum=(r*77+g*150+b*29)>>8;
+   minLum=Math.min(minLum,lum);maxLum=Math.max(maxLum,lum);
+   red+=r;green+=g;blue+=b;count++;
+  }
+  if(count==0)return "DIAG_2048_CELL_R2C4 samples=0";
+  int rAvg=(int)(red/count),gAvg=(int)(green/count),bAvg=(int)(blue/count);
+  float[] ringHsv=java.awt.Color.RGBtoHSB(rAvg,gAvg,bAvg,null);
+  int center=image.getRGB(cx,cy),cr=center>>16&255,cg=center>>8&255,cb=center&255;
+  float[] centerHsv=java.awt.Color.RGBtoHSB(cr,cg,cb,null);
+  return String.format(Locale.ROOT,
+   "DIAG_2048_CELL_R2C4 centerXY=(%d,%d) ring_avg=#%02X%02X%02X ringHSV=(%.1f,%.3f,%.3f) lumSpread=%d..%d center=#%02X%02X%02X centerHSV=(%.1f,%.3f,%.3f) samples=%d",
+   cx,cy,rAvg,gAvg,bAvg,ringHsv[0]*360f,ringHsv[1],ringHsv[2],minLum,maxLum,
+   cr,cg,cb,centerHsv[0]*360f,centerHsv[1],centerHsv[2],count);
  }
  private static String diagnose(BufferedImage image,Spec s){
   PixelBoardReader.Pixels pixels=image::getRGB;
@@ -88,6 +131,7 @@ public final class LocalJpgReplay {
        " partialUsable="+obs.partialUsable()+" unknowns="+obs.unknownReasonCounts()+" cellReasons="+String.join(";",reasons);
    }
    case "2048":{
+    String cellProbe=scan2048Cell(image,s);
     String locator;
     try{
      BoardSelection.Candidate board=PixelBoardLocator.find(pixels,image.getWidth(),image.getHeight(),0,0,image.getWidth(),image.getHeight(),s.el,s.et,s.er,s.eb);
@@ -97,18 +141,20 @@ public final class LocalJpgReplay {
     try{board=Color2048Reader.read(pixels,image.getWidth(),image.getHeight(),s.l,s.t,s.r,s.b);}
     catch(IllegalArgumentException colorError){
      try{board=PixelBoardReader.read(pixels,image.getWidth(),image.getHeight(),s.l,s.t,s.r,s.b);}
-     catch(IllegalArgumentException oldError){return "FAIL 2048_READ_REJECTED: color="+colorError.getMessage()+" standard="+oldError.getMessage()+" "+locator;}
+     catch(IllegalArgumentException oldError){return "FAIL 2048_READ_REJECTED: color="+colorError.getMessage()+" standard="+oldError.getMessage()+" "+locator+" "+cellProbe;}
     }
     int count32=0;for(int n:board.cells)if(n==32)count32++;
-    return "board=4x4 max="+board.max()+" dark32_count="+count32+" boardValues="+java.util.Arrays.toString(board.cells)+" "+locator;
+    return "board=4x4 max="+board.max()+" dark32_count="+count32+" boardValues="+java.util.Arrays.toString(board.cells)+" "+locator+" "+cellProbe;
    }
    case "FLAPPY":case "PADDLE":case "TRAFFIC":{
     ArcadeProfile profile=ArcadeProfile.valueOf(s.profile);
-    ArcadeObservation found=ArcadeVision.detect(profile,pixels,image.getWidth(),image.getHeight(),s.l,s.t,s.r,s.b,s.el,s.et,s.er,s.eb,1000,null);
+    ArcadeVision.Readout readout=ArcadeVision.inspect(profile,pixels,image.getWidth(),image.getHeight(),s.l,s.t,s.r,s.b,s.el,s.et,s.er,s.eb,1000,null);
+    ArcadeObservation found=readout.observation();
     StringBuilder detail=new StringBuilder("usable="+found.usable()+" confidence="+String.format(Locale.ROOT,"%.2f",found.confidence));
     if(profile==ArcadeProfile.FLAPPY)detail.append(" counterY_px=").append(s.t+Math.round(found.bottom*(s.b-s.t)));
     detail.append(" acceptedObstacles=");for(ArcadeObservation.Box o:found.obstacles)detail.append(String.format(Locale.ROOT,"(%.2f,%.2f)-(%.2f,%.2f) ",o.left,o.top,o.right,o.bottom));
-    if(profile==ArcadeProfile.FLAPPY)detail.append(" belowCounterRejected=not_exposed_by_ArcadeVision");
+    if(profile==ArcadeProfile.FLAPPY)detail.append(" belowCounterRejected=").append(readout.belowCounterRejected())
+      .append(" counterConfirmed=").append(readout.counterConfirmed());
     return detail.toString();
    }
    default:throw new IllegalArgumentException("UNKNOWN_PROFILE "+s.profile);

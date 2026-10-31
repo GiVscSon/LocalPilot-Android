@@ -18,7 +18,8 @@ class LocalJpgVerify {
   Path dir=Path.of(path).toAbsolutePath().normalize();
   if(!Files.isDirectory(dir))throw new IllegalArgumentException("LOCAL_JPG_DIR_NOT_DIRECTORY: "+dir);
   try(var images=Files.list(dir)){
-   if(images.noneMatch(f->Files.isRegularFile(f)&&f.getFileName().toString().toLowerCase(java.util.Locale.ROOT).matches(".*\\.(jpg|jpeg|png)"))){
+   if(images.noneMatch(f->Files.isRegularFile(f)&&f.getFileName().toString().toLowerCase(java.util.Locale.ROOT).matches(".*\\.(jpg|jpeg|png)"))
+       &&!Files.exists(dir.resolve("localpilot-frames.csv"))){
     System.out.println("LOCAL_JPG_REPLAY SKIP: no JPG/PNG images in "+dir);
     return;
    }

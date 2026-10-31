@@ -10,10 +10,29 @@ public final class ArcadeVision {
  private static final int RED=1,WOOD=2,BLUE=4,LIGHT=8,DARK=16,GREEN=32,BALL=64,DARK_CAR=128,SATURATED=256;
  private ArcadeVision(){}
 
+ /** Stateless per-frame diagnostic, never a shared counter across captures. */
+ public record Readout(ArcadeObservation observation,int belowCounterRejected,boolean counterConfirmed){}
+ public static Readout inspect(ArcadeProfile profile,PixelBoardReader.Pixels pixels,
+   int width,int height,int left,int top,int right,int bottom,
+   int excludedLeft,int excludedTop,int excludedRight,int excludedBottom,
+   long timestampMs,ArcadeObservation previous){
+  int[] counters=new int[2];
+  ArcadeObservation observation=detectCore(profile,pixels,width,height,left,top,right,bottom,
+    excludedLeft,excludedTop,excludedRight,excludedBottom,timestampMs,previous,counters);
+  return new Readout(observation,counters[0],counters[1]!=0);
+ }
+
  public static ArcadeObservation detect(ArcadeProfile profile,PixelBoardReader.Pixels pixels,
    int width,int height,int left,int top,int right,int bottom,
    int excludedLeft,int excludedTop,int excludedRight,int excludedBottom,
    long timestampMs,ArcadeObservation previous){
+  return detectCore(profile,pixels,width,height,left,top,right,bottom,excludedLeft,excludedTop,
+    excludedRight,excludedBottom,timestampMs,previous,null);
+ }
+ private static ArcadeObservation detectCore(ArcadeProfile profile,PixelBoardReader.Pixels pixels,
+   int width,int height,int left,int top,int right,int bottom,
+   int excludedLeft,int excludedTop,int excludedRight,int excludedBottom,
+   long timestampMs,ArcadeObservation previous,int[] counters){
   if(profile==null||profile==ArcadeProfile.ARI||pixels==null||width<1||height<1
     ||(long)width*height>8_000_000||left<0||top<0||right>width||bottom>height
     ||right-left<120||bottom-top<180||timestampMs<0
@@ -23,7 +42,7 @@ public final class ArcadeVision {
   switch(profile){
    case PADDLE:return paddle(f,timestampMs,previous);
    case TRAFFIC:return traffic(f,timestampMs,previous);
-   case FLAPPY:return flappy(f,timestampMs,previous);
+   case FLAPPY:return flappy(f,timestampMs,previous,counters);
    default:throw new IllegalArgumentException("unsupported profile");
   }
  }
@@ -164,7 +183,7 @@ public final class ArcadeVision {
   return new int[]{bestL,bestR};
  }
 
- private static ArcadeObservation flappy(Frame f,long time,ArcadeObservation previous){
+ private static ArcadeObservation flappy(Frame f,long time,ArcadeObservation previous,int[] counters){
   float floor=.49f;boolean foundFloor=false;
    // Market counter/background occupies roughly the bottom third of the
    // recorded scene. Even with an unusually low detected wood boundary,
@@ -191,9 +210,14 @@ public final class ArcadeVision {
   }
   ArcadeObservation.Box player=choose(players,previous==null?null:previous.player,.105f,.22f);
   List<Column> columns=new ArrayList<>();
-  for(Blob b:f.blobs(GREEN))if(b.box.top>.035f&&b.box.bottom<Math.min(floor,.68f)
-    &&b.box.width()>.033f&&b.box.width()<.145f&&b.box.height()>.002f
-    &&b.box.height()<.028f&&b.aspect()>1.5f&&b.density()>.25f){
+  for(Blob b:f.blobs(GREEN)){
+   if(!(b.box.width()>.033f&&b.box.width()<.145f&&b.box.height()>.002f
+     &&b.box.height()<.028f&&b.aspect()>1.5f&&b.density()>.25f))continue;
+   if(b.box.top<=.035f)continue;
+   if(b.box.bottom>=Math.min(floor,.68f)){
+    if(counters!=null)counters[0]++;
+    continue;
+   }
    Column group=null;for(Column c:columns)if(Math.abs(c.x-b.box.x())<.03f){group=c;break;}
    if(group==null){group=new Column(b.box.x());columns.add(group);}group.bands.add(b.box);
   }
@@ -236,6 +260,7 @@ public final class ArcadeVision {
     gapTop=bestLo;gapBottom=bestHi;gapFound=true;
    }
   }
+  if(counters!=null)counters[1]=foundFloor?1:0;
   boolean terminal=f.fraction(LIGHT,.27f,.43f,.74f,.57f)>.50f;
   return observation(ArcadeProfile.FLAPPY,time,player,player,obstacles,0,.045f,1,floor,gapTop,gapBottom,
     player!=null&&foundFloor&&(gapFound||columns.isEmpty())?.84f:0,terminal,previous);
