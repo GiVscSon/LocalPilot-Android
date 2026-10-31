@@ -69,6 +69,39 @@ public final class GridPuzzlePolicyTest {
   var goalSwap=GridPuzzlePolicy.choose(new GridPuzzle(5,5,twoGoals),GridPuzzlePolicy.Mode.SWAP_MATCH3,2,3,2);
   check(goalSwap!=null&&goalSwap.targetCleared==2&&Arrays.binarySearch(goalSwap.clearedTypes(),3)>=0,"swap goal weighting uses types AFTER exchange and remaining cap");
   invalid(()->GridPuzzlePolicy.choose(b,null),"null mode");invalid(()->GridPuzzlePolicy.choose(b,GridPuzzlePolicy.Mode.TAP_GROUP,1,0,0),"invalid group minimum");
+  // 31 Oct field screenshot: 6x6 octopus swap, preserving protected skulls.
+  // Pure symbolic transcription only: no device screenshot or private video in git.
+  // 1 coin, 2 fish, 0 skull, 3 dynamite, 4 ham, 5 flower, 6 leaf, 7 shell, 8 tomato.
+  int[] octopus={
+   1,2,0,3,4,5,
+   6,7,8,2,4,1,
+   6,6,1,6,0,6,
+   3,8,7,4,4,1,
+   4,0,3,8,6,5,
+   4,2,2,4,1,4
+  };
+  java.util.BitSet excluded=new java.util.BitSet(36);
+  for(int index:new int[]{2,3,16,18,25,26})excluded.set(index); // 3 skulls, 3 explosive tokens
+  var octopusMove=GridPuzzlePolicy.choose(new GridPuzzle(6,6,octopus),
+    GridPuzzlePolicy.Mode.SWAP_MATCH3,3,0,0,excluded);
+  check(octopusMove!=null,"observed 6x6 layout has a legal non-hazard swap");
+  check(octopusMove.fromRow==2&&octopusMove.fromCol==2&&octopusMove.toRow==2&&octopusMove.toCol==3,
+    "known 6x6 candidate swaps R3C3 coin with R3C4 leaf");
+  check(Arrays.equals(octopusMove.clearedCells(),new int[]{12,13,14}),
+    "6x6 swap clears only R3C1..R3C3 leaves");
+  check(octopusMove.specialInvolved==0,"6x6 move never touches skull or explosive exclusion");
+  // An unrecognized non-involved cell is an obstacle, never guessed into a token.
+  int[] partialOctopus=octopus.clone();partialOctopus[0]=-1;
+  var partialMove=GridPuzzlePolicy.choosePartial(new GridPuzzle(6,6,partialOctopus),
+    GridPuzzlePolicy.Mode.SWAP_MATCH3,3,0,0,excluded);
+  check(partialMove!=null&&partialMove.specialInvolved==0,
+    "partial 6x6 keeps a separately proven non-hazard option");
+  int[] rect9x8=new int[9*8];
+  for(int i=0;i<rect9x8.length;i++)rect9x8[i]=100+i;
+  rect9x8[16]=rect9x8[17]=rect9x8[19]=1;rect9x8[18]=2;
+  var crateLevel=GridPuzzlePolicy.choose(new GridPuzzle(9,8,rect9x8),GridPuzzlePolicy.Mode.SWAP_MATCH3);
+  check(crateLevel!=null&&crateLevel.expectedCleared==3,
+    "9x8 rectangular crate-level geometry remains supported by swap planner");
   // Independent oracle: enumerate legal swaps and validate selected movement and
   // its exact immediate clear set on reproducible rectangular boards.
   Random rng=new Random(71520);
