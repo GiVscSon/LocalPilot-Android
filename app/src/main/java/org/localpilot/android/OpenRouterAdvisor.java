@@ -48,6 +48,43 @@ public final class OpenRouterAdvisor {
   if(key==null||key.length()<16||key.length()>256||key.indexOf('\n')>=0||key.indexOf('\r')>=0)
    throw new IllegalArgumentException("Нужен действующий ключ OpenRouter");
  }
+ /** A free credential check, independent of a billed model completion. */
+ public void checkKey(String key,Callback callback){
+  validateKey(key);
+  if(closed||!busy.compareAndSet(false,true))
+   throw new IllegalStateException("Запрос уже выполняется");
+  worker.execute(()->{
+   String message;
+   HttpsURLConnection connection=null;
+   try{
+    connection=(HttpsURLConnection)new URL("https://openrouter.ai/api/v1/key").openConnection();
+    active=connection;
+    connection.setConnectTimeout(5000);connection.setReadTimeout(8000);
+    connection.setRequestMethod("GET");
+    connection.setInstanceFollowRedirects(false);
+    connection.setRequestProperty("Authorization","Bearer "+key);
+    connection.setRequestProperty("Cache-Control","no-store");
+    int response=connection.getResponseCode();
+    if(response!=200)throw new HttpStatus(response);
+    JSONObject data;
+    try(InputStream in=connection.getInputStream()){
+     data=new JSONObject(new String(bounded(in),StandardCharsets.UTF_8)).getJSONObject("data");
+    }
+    message="Ключ подтверждён OpenRouter";
+    if(data.has("limit_remaining")&&!data.isNull("limit_remaining"))
+     message+=". Остаток лимита: "+data.opt("limit_remaining");
+    if(data.optBoolean("is_free_tier",false))
+     message+=". Бесплатный тариф: возможны лимиты частоты.";
+   }catch(Exception e){message="Проверка OpenRouter не прошла: "+
+     (e instanceof HttpStatus status?"HTTP "+status.code:"нет сети или некорректный ответ");}
+   finally{
+    if(connection!=null){connection.disconnect();if(active==connection)active=null;}
+    busy.set(false);
+   }
+   final String result=message;
+   if(!closed)main.post(()->{if(!closed)callback.complete(result);});
+  });
+ }
  public void ask(String key,String models,String question,String diagnostic,Callback callback){
   validateKey(key);
   String[] selected=validateModels(models);
