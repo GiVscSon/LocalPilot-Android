@@ -11,7 +11,7 @@ public class PilotService extends AccessibilityService {
  private final StageMetrics metrics=new StageMetrics();
  private final CaptureTimingTrace captureTiming=new CaptureTimingTrace();
  public String captureTimingReport(){return captureTiming.report();}
- public String exportMetrics(){String bubbleReport=bubbleSession.report();stop("Экспорт замеров: STOP");return metrics.report()+"\n"+captureTiming.report()+"\n"+captureCounters()+"\nLAST_STOP: "+lastStopReason+"\nCAPTURE STARTUP\n"+captureStartup.report()+"\n"+sceneRecovery.report()+"\n"+bubbleReport;}
+ public String exportMetrics(){String bubbleReport=playingGrid&&selectedProfile==9?bubbleSession.report()+" decision="+bubbleDecisionReason:lastBubbleSessionReport;stop("Экспорт замеров: STOP");return metrics.report()+"\n"+captureTiming.report()+"\n"+captureCounters()+"\nLAST_STOP: "+lastStopReason+"\nCAPTURE STARTUP\n"+captureStartup.report()+"\n"+sceneRecovery.report()+"\nLAST_BUBBLE_SESSION\n"+bubbleReport;}
  private final Handler handler=new Handler(Looper.getMainLooper());private final Handler gestureHandler=new Handler(Looper.getMainLooper());private final ActionGate gate=new ActionGate();
  private final CaptureRetry captureRetry=new CaptureRetry();
  private final BrowserSceneGate browserSceneGate=new BrowserSceneGate();
@@ -101,6 +101,7 @@ public class PilotService extends AccessibilityService {
  private Bitmap retainedGridFrame;private long retainedGridFrameAt=-1;
  private boolean gridFrameNeeded;
  private String diagnosticFrameGeometry="No game frame retained",lastSessionReport="No recorded game session";
+ private String bubbleDecisionReason="NOT_EVALUATED",lastBubbleSessionReport="No stopped Bubble session";
 
  private void clearRetainedGridFrame(){
   if(retainedGridFrame!=null&&!retainedGridFrame.isRecycled())retainedGridFrame.recycle();
@@ -172,7 +173,7 @@ public class PilotService extends AccessibilityService {
     .append(" unknown_reason_cells=").append(gridReasonDetails)
     .append(" frame_needed=").append(gridFrameNeeded).append(" retained_frame_at_ms=").append(retainedGridFrameAt)
     .append(" unknown_reasons=").append(gridUnknownReasons).append(" size=").append(gridConfig.rows).append('x').append(gridConfig.cols).append(" goal_color=").append(gridGoal).append(" dispatched=").append(gridMoves).append(" visual_changes=").append(gridVerified);
-  out.append('\n').append(bubbleSession.report());
+  out.append('\n').append(bubbleSession.report()).append(" decision=").append(bubbleDecisionReason);
   if(arcadeState!=null)out.append("\narcade_usable=").append(arcadeState.usable()).append(" confidence=").append(arcadeState.confidence)
     .append(" terminal=").append(arcadeState.terminal).append(" tracked=").append(arcadeState.tracked)
     .append("\nplayer=").append(diagnosticBox(arcadeState.player)).append(" control=").append(diagnosticBox(arcadeState.control))
@@ -658,6 +659,8 @@ public class PilotService extends AccessibilityService {
      +" uptime_ms="+stopAt+" armedBounds="+priorBounds.toShortString()
      +" currentBounds="+currentBounds.toShortString();
   }catch(RuntimeException|OutOfMemoryError ignored){lastSessionReport="Сеанс остановлен; метаданные недоступны";}
+  if(playingGrid&&selectedProfile==9)
+   lastBubbleSessionReport=bubbleSession.report()+" decision="+bubbleDecisionReason;
   permit.revoke();gate.stop();browserSceneGate.reset();
   rebindGeneration++;rebindStability.reset();
   if(playingJumper)CrashDiagnostics.captureStopped();
@@ -1049,23 +1052,23 @@ public class PilotService extends AccessibilityService {
    captureReads++;metrics.record(StageMetrics.Stage.READ,SystemClock.elapsedRealtimeNanos()-started);
    long frameAt=SystemClock.elapsedRealtime()-Math.max(0,SystemClock.uptimeMillis()-lastShotTimestamp);
    BubbleSession.Status status=bubbleSession.observe(read.board(),frameAt,SystemClock.elapsedRealtime());
-   if(status==BubbleSession.Status.PAUSED){note="Шипучка: "+(bubbleSession.acknowledged()?"Android завершил жест; ":"нет подтверждения Android; ")+bubbleWaitMessage(bubbleSession.lastWait())+" · продолжаю наблюдение без ввода. Старт — повторная проверка";update();scheduleGrid(epoch);return;}
-   if(status!=BubbleSession.Status.READY&&status!=BubbleSession.Status.VERIFIED){note=read.usable()?(bubbleSession.pending()?"Шипучка: проверяю попадание":"Шипучка: ожидаю второй устойчивый кадр"):read.reason();update();scheduleGrid(epoch);return;}
+   if(status==BubbleSession.Status.PAUSED){bubbleDecisionReason="WAITING_VISUAL_RESPONSE";note="Шипучка: "+(bubbleSession.acknowledged()?"Android завершил жест; ":"нет подтверждения Android; ")+bubbleWaitMessage(bubbleSession.lastWait())+" · продолжаю наблюдение без ввода. Старт — повторная проверка";update();scheduleGrid(epoch);return;}
+   if(status!=BubbleSession.Status.READY&&status!=BubbleSession.Status.VERIFIED){bubbleDecisionReason=read.usable()?"WAITING_STABLE_BOARD":"VISION_REJECTED";note=read.usable()?(bubbleSession.pending()?"Шипучка: проверяю попадание":"Шипучка: ожидаю второй устойчивый кадр"):read.reason();update();scheduleGrid(epoch);return;}
    bubbleGeometry=read.board();gridVerified=bubbleSession.verified();
-   if(targetIsBrowser&&!browserSceneGate.observe(frameAt,read.usable())){note="Шипучка: проверяю 2 стабильных кадра после изменения браузера";update();scheduleGrid(epoch);return;}
+   if(targetIsBrowser&&!browserSceneGate.observe(frameAt,read.usable())){bubbleDecisionReason="BROWSER_SCENE_GUARD";note="Шипучка: проверяю 2 стабильных кадра после изменения браузера";update();scheduleGrid(epoch);return;}
    metrics.attempt(StageMetrics.Stage.POLICY);started=SystemClock.elapsedRealtimeNanos();BubblePolicy.Shot shot=BubblePolicy.choose(bubbleGeometry);
    captureDecisions++;metrics.record(StageMetrics.Stage.POLICY,SystemClock.elapsedRealtimeNanos()-started);
    uiStats="Шипучка · шаров "+bubbleGeometry.count()+" · выстрелов "+gridMoves+" · подтверждено "+gridVerified;
-   if(shot==null||!automatic()){note=shot==null?"Безопасная траектория не найдена · ожидаю поле":(shot.bounces==0?"Наблюдение: найден прямой выстрел":"Наблюдение: найден один рикошет");update();scheduleGrid(epoch);return;}
-   if(bubbleGeometry.shortRowParity==0){note="Шипучка: обратное чередование рядов · наблюдение без ввода";update();scheduleGrid(epoch);return;}
-   if(busy||!valid(ticket)||SystemClock.elapsedRealtime()-frameAt>300){note="Шипучка: жду свежий кадр для выстрела";update();scheduleGrid(epoch);return;}
+   if(shot==null||!automatic()){bubbleDecisionReason=shot==null?"NO_VERIFIABLE_TRAJECTORY":"INPUT_DISABLED";note=shot==null?"Безопасная траектория не найдена · ожидаю поле":(shot.bounces==0?"Наблюдение: найден прямой выстрел":"Наблюдение: найден один рикошет");update();scheduleGrid(epoch);return;}
+   if(bubbleGeometry.shortRowParity==0){bubbleDecisionReason="UNSUPPORTED_ROW_PARITY";note="Шипучка: обратное чередование рядов · наблюдение без ввода";update();scheduleGrid(epoch);return;}
+   if(busy||!valid(ticket)||SystemClock.elapsedRealtime()-frameAt>300){bubbleDecisionReason="STALE_TICKET_OR_BUSY";note="Шипучка: жду свежий кадр для выстрела";update();scheduleGrid(epoch);return;}
    long sentBefore=captureSent;bubbleSession.sent(bubbleGeometry,shot,SystemClock.elapsedRealtime());
    sendObserved(r.left+bubbleGeometry.launcherX,r.top+bubbleGeometry.launcherY,r.left+shot.aimX,r.top+shot.aimY,ticket,()->{
     if(epoch!=gate.epoch()||!playingGrid||selectedProfile!=9)return;
     bubbleSession.acknowledge(SystemClock.elapsedRealtime());note="Android завершил жест · проверяю поле";update();scheduleGrid(epoch);
    },frameAt,220);
-   if(captureSent>sentBefore){gridMoves++;gridSawAction=true;note=(shot.bounces==0?"Прямой выстрел ":"Один рикошет ")+gridMoves+" · ожидается удалений "+shot.removed+", падений "+shot.dropped;update();}
-   else if(playingGrid){bubbleSession.cancelUnsent();scheduleGrid(epoch);}
+   if(captureSent>sentBefore){bubbleDecisionReason="DISPATCHED_AWAITING_VERIFY";gridMoves++;gridSawAction=true;note=(shot.bounces==0?"Прямой выстрел ":"Один рикошет ")+gridMoves+" · ожидается удалений "+shot.removed+", падений "+shot.dropped;update();}
+   else if(playingGrid){bubbleDecisionReason="GESTURE_NOT_SENT";bubbleSession.cancelUnsent();scheduleGrid(epoch);}
   });
  }
  private String bubbleWaitMessage(BubbleSession.Reason reason){
@@ -1942,7 +1945,16 @@ public class PilotService extends AccessibilityService {
    before2048=null;colorSession.cancelPending();retryBoardRead(epoch,result,"экран результата · нажмите Играть снова");return;
   }
   Board2048 board;
-  try{board=PipelineRead.read(metrics,()->colored2048?colorSession.read(pixels::getPixel,pixels.getWidth(),pixels.getHeight(),r.left,r.top,r.right,r.bottom,before2048,direction2048,lastShotTimestamp):PixelBoardReader.read(pixels::getPixel,pixels.getWidth(),pixels.getHeight(),r.left,r.top,r.right,r.bottom));}
+  try{
+    Game2048AutoReader.Result detected=PipelineRead.read(metrics,()->
+      Game2048AutoReader.read(pixels::getPixel,pixels.getWidth(),pixels.getHeight(),
+        r.left,r.top,r.right,r.bottom,colorSession,colored2048,
+        !colored2048&&selectedProfile==4&&VisualGameTarget.legacyMarket(target)
+          &&before2048==null&&moves2048==0,
+        before2048,direction2048,lastShotTimestamp));
+    board=detected.board();
+    if(detected.switched()){colored2048=true;note="2048: определена цветная палитра Маркета. Проверяю вторым кадром без ввода";update();}
+   }
   catch(PipelineRead.Failure error){String detail=error.getMessage();
    retryBoardRead(epoch,result,colored2048&&detail!=null&&detail.startsWith("Неизвестная или анимированная плитка:")?detail:"ожидаю распознаваемое поле");return;}
   boardReadMisses=0;result.ready(board,t,ms);
@@ -2020,7 +2032,7 @@ public class PilotService extends AccessibilityService {
   }
   loadVisionTraining();
   boardReadGeneration++;boardReadMisses=0;colorSession.reset();colorSession.setStrictMode(strictVision);before2048=null;colored2048=colored;
-  if(colored2048){String saved=getSharedPreferences("color-2048",MODE_PRIVATE).getString(color2048PaletteKey(),null);if(saved!=null)try{colorSession.restoreLearned(saved);}catch(IllegalArgumentException invalidPalette){note="Сохранённая цветовая палитра повреждена · начинаю с базовых плиток";}}
+  if(colored2048||selectedProfile==4&&VisualGameTarget.legacyMarket(target)){String saved=getSharedPreferences("color-2048",MODE_PRIVATE).getString(color2048PaletteKey(),null);if(saved!=null)try{colorSession.restoreLearned(saved);}catch(IllegalArgumentException invalidPalette){note="Сохранённая цветовая палитра повреждена · начинаю с базовых плиток";}}
   long epoch=gate.epoch(),generation=boardReadGeneration;playing2048=true;compact(true);note=colored2048?"Читаю цветное поле 2048 · изучено цветов "+colorSession.learnedCount():"Читаю поле в памяти…";update();
   afterPanelLayout(()->{
    if(epoch!=gate.epoch()||generation!=boardReadGeneration||!playing2048||focusPaused)return;
