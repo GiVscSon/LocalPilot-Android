@@ -28,6 +28,16 @@ public final class PanelDocking {
   if(safe==null||current==null||roi==null||gapPx<0||gapPx>10000)throw new IllegalArgumentException("invalid docking geometry");
   int w=current.width(),h=current.height();
   if(w>safe.width()||h>safe.height())return null;
+  // For a lower-half manual board prefer the upper free strip, even when the
+  // current STOP panel happens to be below the board and does not overlap it.
+  // Physical display cutouts/system bars are already excluded by the caller.
+  if((long)roi.top-safe.top>=h+gapPx){
+   int x=(int)Math.max(safe.left,Math.min((long)current.left,(long)safe.right-w));
+   int y=(int)Math.max(safe.top,Math.min((long)current.top,(long)roi.top-h-gapPx));
+   Area top=new Area(x,y,x+w,y+h);
+   if(safe.contains(top)&&!intersectsExpanded(top,roi,gapPx))
+    return current.left==x&&current.top==y&&safe.contains(current)?current:top;
+  }
   if(safe.contains(current)&&!current.intersects(roi))return current;
   // Try a comfortable margin first, then exact non-overlap if the window is tight.
   for(int margin:new int[]{gapPx,0}){
