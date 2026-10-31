@@ -158,7 +158,7 @@ public final class OnlineDiagnosticsActivity extends Activity {
   ListView list=new ListView(this);
   ArrayAdapter<String> adapter=new ArrayAdapter<>(this,android.R.layout.simple_list_item_1);
   list.setAdapter(adapter);
-  panel.addView(list,new LinearLayout.LayoutParams(-1,0,1));
+  panel.addView(list,new LinearLayout.LayoutParams(-1,(int)(getResources().getDisplayMetrics().density*350)));
   List<OpenRouterModelCatalog.Model> filtered=new ArrayList<>();
   Runnable update=()->{
    filtered.clear();adapter.clear();
