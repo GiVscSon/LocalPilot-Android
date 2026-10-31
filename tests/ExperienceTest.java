@@ -2,6 +2,7 @@ package org.localpilot.android;
 import java.io.*;import java.nio.file.*;import java.nio.charset.StandardCharsets;import java.util.*;
 public class ExperienceTest {
  static int checks;static void check(boolean b){checks++;if(!b)throw new AssertionError("check "+checks);}
+ static void check(boolean b,String message){checks++;if(!b)throw new AssertionError(message+" (check "+checks+")");}
  interface Failure{void run()throws Exception;}static void refuses(Failure f)throws Exception{boolean fail=false;try{f.run();}catch(IOException e){fail=true;}check(fail);}
  public static void main(String[] args)throws Exception{
   Path dir=Files.createTempDirectory("experience-");File file=dir.resolve("data.log").toFile();ExperienceStore store=new ExperienceStore(file);check(ExperienceStore.validate(store.snapshot())==0);
