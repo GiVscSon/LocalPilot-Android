@@ -1197,6 +1197,17 @@ public class PilotService extends AccessibilityService {
     update();scheduleGrid(epoch);return;
    }
    if(status==GridPuzzleSession.Status.CHANGED){
+    // Fail closed on a suspected palette namespace reset. A stable two-frame
+    // difference alone cannot distinguish gameplay from token renumbering.
+    // Do not record experience, reinforce GridOnlineLearning, or continue
+    // issuing gestures until the user explicitly restarts/rebinds.
+    if(gridPendingDecision!=null&&gridPendingBoard!=null
+      &&gridPendingDecision.mode==GridPuzzlePolicy.Mode.SWAP_MATCH3
+      &&!ExperienceStore.sharedGridPaletteIdentity(gridPendingBoard.cells(),gridSession.stableCells())){
+     failStage(StageMetrics.Stage.POLICY,"GRID_PALETTE_IDENTITY_DRIFT",
+       "Идентификаторы фишек после хода несовместимы с исходными. Обучение не записано; проверьте ROI и профиль, затем перепривяжите окно.");
+     return;
+    }
     gridVerified++;incrementGridStat("visual_changes");
     if(gridPendingDecision!=null){
      // Store only the stable, visually verified transition, never raw ACK.
