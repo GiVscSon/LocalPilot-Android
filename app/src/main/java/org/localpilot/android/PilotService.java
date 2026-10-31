@@ -1317,7 +1317,20 @@ public class PilotService extends AccessibilityService {
    if(!automatic()){note="Наблюдение: сетка прочитана · "+(shadowChain?"найдена цепочка из 4 (без ввода)":action==null?"совпадений не найдено":"найден ход, фишек "+action.expectedCleared);update();scheduleGrid(epoch);return;}
    // Partial actions are legal only on the intersection: policy forbids
    // UNKNOWN and protected endpoints or predicted clears.
-   if(action==null){note="Нет проверяемого хода · продолжаю наблюдение"+(partialGrid?" (неизвестные клетки не трогаю)":"");update();scheduleGrid(epoch);return;}
+   if(action==null){
+    // Distinguish visual/semantic exclusion from learned no-response avoidance.
+    // Probe the pure baseline policy ONLY for diagnostics. It can never
+    // override a rejected action or authorize a gesture.
+    GridPuzzlePolicy.Decision unweighted=GridPuzzlePolicy.chooseAdaptive(
+      board,gridMode(),gridConfig.minGroup,targetType,gridConfig.rows*gridConfig.cols,
+      stableSpecial,stablePartial,null);
+    int unknown=0;for(int cell:stableCells)if(cell<0)unknown++;
+    note=(unweighted!=null?"Ход на поле есть, но память неудачных попыток исключила его":
+      "Нет безопасного хода в распознанной сетке")
+      +" · UNKNOWN="+unknown+" · особые/защищённые="+stableSpecial.cardinality()
+      +" · ввод не выполняю";
+    update();scheduleGrid(epoch);return;
+   }
    if(busy||!valid(ticket)||SystemClock.elapsedRealtime()-frameAt>300){note="Жду свежий кадр для хода";update();scheduleGrid(epoch);return;}
    float x=r.left+(action.fromCol+.5f)*r.width()/gridConfig.cols,y=r.top+(action.fromRow+.5f)*r.height()/gridConfig.rows;
    float ex=r.left+(action.toCol+.5f)*r.width()/gridConfig.cols,ey=r.top+(action.toRow+.5f)*r.height()/gridConfig.rows;
