@@ -5,6 +5,13 @@ import android.app.AlertDialog;
 import android.os.Bundle;
 import android.text.InputType;
 import android.view.ViewGroup;
+import android.widget.ArrayAdapter;
+import android.widget.ListView;
+import android.text.TextWatcher;
+import android.text.Editable;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Comparator;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
@@ -14,6 +21,8 @@ import android.widget.TextView;
 /** Standalone native screen. Neither credential is stored or logged. */
 public final class OnlineDiagnosticsActivity extends Activity {
  private final OpenRouterAdvisor advisor=new OpenRouterAdvisor();
+ private final OpenRouterModelCatalog catalog=new OpenRouterModelCatalog();
+ private List<OpenRouterModelCatalog.Model> availableModels=List.of();
  private TextView status,answer;
  private EditText url,telemetryToken,routerKey,models,question;
  @Override public void onCreate(Bundle saved){
@@ -56,7 +65,13 @@ public final class OnlineDiagnosticsActivity extends Activity {
   paragraph(content,"Введите свой ключ OpenRouter и точное название модели. Для резервной маршрутизации можно указать до трёх моделей через запятую. Сводка отправляется только после вашего подтверждения; OpenRouter и выбранный провайдер получат её и вопрос. Запрос может расходовать платные токены. Ключ не сохраняется.");
   routerKey=field(content,"OpenRouter API key · только для текущего запроса",true);
   models=field(content,"Модель или несколько через запятую",false);
-  models.setText("openai/gpt-4o-mini");
+  models.setText("openrouter/free");
+  paragraph(content,"По умолчанию бесплатный маршрутизатор openrouter/free. Список ниже загружается из OpenRouter, с текущей ценой ввода и вывода за миллион токенов. Бесплатные модели могут иметь лимиты.");
+  addButton(content,"Обновить доступные модели",()->refreshCatalog(false));
+  addButton(content,"Выбрать модель: бесплатные / платные / подходящие",()->{
+   if(availableModels.isEmpty())refreshCatalog(true);
+   else chooseModelCategory();
+  });
   addButton(content,"Проверить API-ключ OpenRouter",()->{
    if(advisor.busy()){answer.setText("Предыдущий запрос ещё выполняется");return;}
    String key=routerKey.getText().toString();
@@ -103,6 +118,81 @@ public final class OnlineDiagnosticsActivity extends Activity {
   });
   updateStatus();
  }
+
+ private void refreshCatalog(boolean openWhenReady){
+  if(catalog.busy()){answer.setText("Список OpenRouter уже загружается");return;}
+  answer.setText("Получаю актуальные модели, цены и контекст OpenRouter...");
+  try{
+   catalog.load((received,error)->{
+    if(error!=null){answer.setText(error+" Можно использовать openrouter/free или ввести точный slug модели вручную.");return;}
+    availableModels=received;
+    int free=0,paid=0,recommended=0;
+    for(OpenRouterModelCatalog.Model m:received){
+     if(m.free())free++;else paid++;
+     if(m.suitable())recommended++;
+    }
+    answer.setText("Каталог получен: "+free+" бесплатных, "+paid+" платных. Для диагностики подходит "+recommended+". Выберите раздел и модель.");
+    if(openWhenReady)chooseModelCategory();
+   });
+  }catch(IllegalStateException error){answer.setText(error.getMessage());}
+ }
+ private void chooseModelCategory(){
+  if(availableModels.isEmpty()){refreshCatalog(true);return;}
+  new AlertDialog.Builder(this).setTitle("Каталог OpenRouter · "+availableModels.size()+" моделей")
+   .setItems(new String[]{"Подходящие для диагностики","Бесплатные","Платные"},
+    (dialog,which)->chooseModel(which)).setNegativeButton("Закрыть",null).show();
+ }
+ private void chooseModel(int kind){
+  List<OpenRouterModelCatalog.Model> matching=new ArrayList<>();
+  for(OpenRouterModelCatalog.Model m:availableModels){
+   if(kind==0&&m.suitable()||kind==1&&m.free()||kind==2&&!m.free())matching.add(m);
+  }
+  matching.sort(Comparator
+    .comparing((OpenRouterModelCatalog.Model m)->kind==0?!m.free():!m.suitable())
+    .thenComparingDouble(m->m.inputPerMillion()+m.outputPerMillion())
+    .thenComparing(OpenRouterModelCatalog.Model::name));
+  LinearLayout panel=new LinearLayout(this);panel.setOrientation(LinearLayout.VERTICAL);
+  EditText search=new EditText(this);search.setSingleLine(true);
+  search.setHint("Поиск: Qwen, Gemini, DeepSeek, GPT, ...");
+  panel.addView(search);
+  ListView list=new ListView(this);
+  ArrayAdapter<String> adapter=new ArrayAdapter<>(this,android.R.layout.simple_list_item_1);
+  list.setAdapter(adapter);
+  panel.addView(list,new LinearLayout.LayoutParams(-1,0,1));
+  List<OpenRouterModelCatalog.Model> filtered=new ArrayList<>();
+  Runnable update=()->{
+   filtered.clear();adapter.clear();
+   String q=search.getText().toString().toLowerCase(java.util.Locale.ROOT).trim();
+   for(OpenRouterModelCatalog.Model item:matching){
+    if(!q.isEmpty()&&!item.id().toLowerCase(java.util.Locale.ROOT).contains(q)
+      &&!item.name().toLowerCase(java.util.Locale.ROOT).contains(q))continue;
+    filtered.add(item);
+    if(filtered.size()>=80)break;
+   }
+   for(OpenRouterModelCatalog.Model item:filtered)adapter.add(item.label());
+   adapter.notifyDataSetChanged();
+  };
+  AlertDialog dialog=new AlertDialog.Builder(this)
+    .setTitle(kind==0?"Подходящие · недорогие и с большим контекстом":
+      kind==1?"Бесплатные модели":"Платные модели")
+    .setView(panel).setNegativeButton("Назад",(d,w)->chooseModelCategory()).create();
+  list.setOnItemClickListener((parent,v,index,id)->{
+   OpenRouterModelCatalog.Model chosen=filtered.get(index);
+   models.setText(chosen.id());
+   answer.setText("Выбрано: "+chosen.label()+
+     (chosen.free()?" · без стоимости токенов, возможны лимиты":
+       " · платная тарификация при запросе. Модель не получает управления игрой."));
+   dialog.dismiss();
+  });
+  search.addTextChangedListener(new TextWatcher(){
+   @Override public void beforeTextChanged(CharSequence text,int start,int count,int after){}
+   @Override public void onTextChanged(CharSequence text,int start,int before,int count){update.run();}
+   @Override public void afterTextChanged(Editable value){}
+  });
+  update.run();dialog.show();
+  if(dialog.getWindow()!=null)dialog.getWindow().setLayout(-1,
+    (int)(getResources().getDisplayMetrics().heightPixels*.72f));
+ }
  private void updateStatus(){
   if(status==null)return;
   PilotService service=PilotService.instance;
@@ -126,5 +216,5 @@ public final class OnlineDiagnosticsActivity extends Activity {
   into.addView(button,new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT));
  }
  @Override protected void onResume(){super.onResume();updateStatus();}
- @Override protected void onDestroy(){advisor.close();super.onDestroy();}
+ @Override protected void onDestroy(){catalog.close();advisor.close();super.onDestroy();}
 }
