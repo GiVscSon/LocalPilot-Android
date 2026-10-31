@@ -13,7 +13,7 @@ class Field2048GlassVerify {
   Path out=Files.createTempDirectory("localpilot-field-2048-");
   var sources=new ArrayList<String>();
   sources.add("--release");sources.add("17");sources.add("-d");sources.add(out.toString());
-  for(String name:new String[]{"Board2048","PixelBoardReader","Verified2048","Color2048Reader","VisionNoveltyMemory"})
+  for(String name:new String[]{"Board2048","PixelBoardReader","Verified2048","Color2048Reader","Game2048AutoReader","VisionNoveltyMemory"})
    sources.add("app/src/main/java/org/localpilot/android/"+name+".java");
   sources.add("tests/Field2048GlassTest.java");
   sources.add("tests/VisionNoveltyModelTest.java");
