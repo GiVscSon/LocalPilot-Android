@@ -52,6 +52,31 @@ public final class GridPuzzlePolicyTest {
   check(target!=null&&target.fromRow==1&&target.fromCol==1&&target.expectedCleared==2&&target.targetCleared==2,"target group outweighs larger unrelated group");
   var capped=GridPuzzlePolicy.choose(board(1,1,1,1,2,2,3,4,5),GridPuzzlePolicy.Mode.TAP_GROUP,2,1,1);check(capped!=null&&capped.targetCleared==1,"remaining goal caps target credit");
   var disabled=GridPuzzlePolicy.choose(board(1,1,1,1,2,2,3,4,5),GridPuzzlePolicy.Mode.TAP_GROUP,2,2,0);check(disabled!=null&&disabled.fromRow==0&&disabled.targetCleared==0,"completed target does not distort policy");
+  // 31 Oct user-supplied 6x6 octopus frame, manually transcribed by icon.
+  // Coin=1, fish=2, tomato=3, flower=4, leaf=5, shell=6,
+  // ham=7, dynamite=8 (excluded), skull=0 (protected).
+  int[] octopusFrame={
+    1,2,0,8,7,4,
+    5,6,3,2,7,1,
+    5,5,1,5,0,5,
+    8,3,6,7,7,1,
+    7,0,8,3,5,4,
+    7,2,2,7,1,7
+  };
+  java.util.BitSet octopusHazards=new java.util.BitSet(36);
+  for(int index:new int[]{2,3,16,18,25,26})octopusHazards.set(index);
+  var octopus=new GridPuzzle(6,6,octopusFrame);
+  var octopusMove=GridPuzzlePolicy.choose(octopus,GridPuzzlePolicy.Mode.SWAP_MATCH3,
+    3,0,0,octopusHazards);
+  check(octopusMove!=null&&octopusMove.specialInvolved==0,
+    "recorded 6x6 scene has a legal swap without touching skulls or dynamite");
+  int[] octopusAfter=octopusFrame.clone();
+  int first=2*6+2,second=2*6+3;
+  int tmp=octopusAfter[first];octopusAfter[first]=octopusAfter[second];octopusAfter[second]=tmp;
+  check(octopusAfter[2*6]==5&&octopusAfter[2*6+1]==5&&octopusAfter[2*6+2]==5,
+    "swapping 3rd-row coin and leaf yields three leaves in a row");
+  check(octopus.at(2,2)==1&&octopus.at(2,3)==5,
+    "read-only policy must not mutate live 6x6 board");
   int[] fourCells=new int[16];for(int i=0;i<fourCells.length;i++)fourCells[i]=100+i;
   fourCells[2]=1;fourCells[4]=1;fourCells[5]=1;fourCells[6]=2;fourCells[7]=1;
   var four=swap(new GridPuzzle(4,4,fourCells));check(four!=null&&four.expectedCleared==4&&four.score>40,"four-line receives tactical bonus without phantom clears");
