@@ -59,7 +59,7 @@ public final class OnlineDiagnosticsActivity extends Activity {
    if(service!=null)service.stopOnlineDiagnostics();
    telemetryToken.getText().clear();updateStatus();
   });
-  addButton(content,"Проверить соединение",this::updateStatus);
+  addButton(content,"Обновить статус последней отправки",this::updateStatus);
 
   title(content,"2. Помощник моделей · OpenRouter",18);
   paragraph(content,"Введите свой ключ OpenRouter и точное название модели. Для резервной маршрутизации можно указать до трёх моделей через запятую. Сводка отправляется только после вашего подтверждения; OpenRouter и выбранный провайдер получат её и вопрос. Запрос может расходовать платные токены. Ключ не сохраняется.");
