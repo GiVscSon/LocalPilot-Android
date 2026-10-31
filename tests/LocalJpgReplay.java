@@ -79,6 +79,35 @@ public final class LocalJpgReplay {
   }
   return result;
  }
+ /** Diagnostic only: output actual pixels, never assign UNKNOWN cells a value. */
+ private static String scan2048Cell(BufferedImage image,Spec spec){
+  // R2C4 for a 4x4 board. ROI [54,825,638,1409] gives center (565,1044).
+  int w=spec.r-spec.l,h=spec.b-spec.t;
+  int cx=spec.l+(int)Math.round(w*3.5/4.0),cy=spec.t+(int)Math.round(h*1.5/4.0);
+  double scale=Math.min(w,h)/584.0;
+  int inner=Math.max(4,(int)Math.round(24*scale));
+  int outer=Math.max(inner+2,(int)Math.round(48*scale));
+  int stride=Math.max(1,(int)Math.round(2*scale));
+  int minLum=255,maxLum=0;long red=0,green=0,blue=0,count=0;
+  for(int y=cy-outer;y<=cy+outer;y+=stride)for(int x=cx-outer;x<=cx+outer;x+=stride){
+   if(x<spec.l||x>=spec.r||y<spec.t||y>=spec.b)continue;
+   int dx=x-cx,dy=y-cy,d2=dx*dx+dy*dy;
+   if(d2<inner*inner||d2>outer*outer)continue;
+   int rgb=image.getRGB(x,y),r=rgb>>16&255,g=rgb>>8&255,b=rgb&255;
+   int lum=(r*77+g*150+b*29)>>8;
+   minLum=Math.min(minLum,lum);maxLum=Math.max(maxLum,lum);
+   red+=r;green+=g;blue+=b;count++;
+  }
+  if(count==0)return "DIAG_2048_CELL_R2C4 samples=0";
+  int rAvg=(int)(red/count),gAvg=(int)(green/count),bAvg=(int)(blue/count);
+  float[] ringHsv=java.awt.Color.RGBtoHSB(rAvg,gAvg,bAvg,null);
+  int center=image.getRGB(cx,cy),cr=center>>16&255,cg=center>>8&255,cb=center&255;
+  float[] centerHsv=java.awt.Color.RGBtoHSB(cr,cg,cb,null);
+  return String.format(Locale.ROOT,
+   "DIAG_2048_CELL_R2C4 centerXY=(%d,%d) ring_avg=#%02X%02X%02X ringHSV=(%.1f,%.3f,%.3f) lumSpread=%d..%d center=#%02X%02X%02X centerHSV=(%.1f,%.3f,%.3f) samples=%d",
+   cx,cy,rAvg,gAvg,bAvg,ringHsv[0]*360f,ringHsv[1],ringHsv[2],minLum,maxLum,
+   cr,cg,cb,centerHsv[0]*360f,centerHsv[1],centerHsv[2],count);
+ }
  private static String diagnose(BufferedImage image,Spec s){
   PixelBoardReader.Pixels pixels=image::getRGB;
   switch(s.profile){
@@ -102,6 +131,7 @@ public final class LocalJpgReplay {
        " partialUsable="+obs.partialUsable()+" unknowns="+obs.unknownReasonCounts()+" cellReasons="+String.join(";",reasons);
    }
    case "2048":{
+    String cellProbe=scan2048Cell(image,s);
     String locator;
     try{
      BoardSelection.Candidate board=PixelBoardLocator.find(pixels,image.getWidth(),image.getHeight(),0,0,image.getWidth(),image.getHeight(),s.el,s.et,s.er,s.eb);
@@ -111,10 +141,10 @@ public final class LocalJpgReplay {
     try{board=Color2048Reader.read(pixels,image.getWidth(),image.getHeight(),s.l,s.t,s.r,s.b);}
     catch(IllegalArgumentException colorError){
      try{board=PixelBoardReader.read(pixels,image.getWidth(),image.getHeight(),s.l,s.t,s.r,s.b);}
-     catch(IllegalArgumentException oldError){return "FAIL 2048_READ_REJECTED: color="+colorError.getMessage()+" standard="+oldError.getMessage()+" "+locator;}
+     catch(IllegalArgumentException oldError){return "FAIL 2048_READ_REJECTED: color="+colorError.getMessage()+" standard="+oldError.getMessage()+" "+locator+" "+cellProbe;}
     }
     int count32=0;for(int n:board.cells)if(n==32)count32++;
-    return "board=4x4 max="+board.max()+" dark32_count="+count32+" boardValues="+java.util.Arrays.toString(board.cells)+" "+locator;
+    return "board=4x4 max="+board.max()+" dark32_count="+count32+" boardValues="+java.util.Arrays.toString(board.cells)+" "+locator+" "+cellProbe;
    }
    case "FLAPPY":case "PADDLE":case "TRAFFIC":{
     ArcadeProfile profile=ArcadeProfile.valueOf(s.profile);
