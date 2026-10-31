@@ -25,7 +25,7 @@ public final class WindowRebindTest {
   check(grace.observe(10,"TARGET_WINDOW_UNAVAILABLE",1600,false)==WindowFocus.State.STOP,"invisible target stops at 600ms");
   grace.reset();
   check(grace.observe(11,"TARGET_WINDOW_UNAVAILABLE",1000,true)==WindowFocus.State.WAITING,"temporary visible focus loss");
-  check(grace.observe(11,null,2500,false)==WindowFocus.State.ACTIVE,"recovered identity resets wait");
+  check(grace.observe(11,null,2500,true)==WindowFocus.State.ACTIVE,"recovered identity resets wait");
   check(grace.observe(12,"TARGET_BOUNDS_CHANGED",2600,true)==WindowFocus.State.STOP,"changed bounds never get focus grace");
   System.out.println("Window rebind stability and focus grace: 20 assertions PASS");
  }
