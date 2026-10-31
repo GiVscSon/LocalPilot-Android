@@ -29,6 +29,16 @@ public final class BubbleVision {
  private BubbleVision(){}
  public static Read read(Pixels pixels,int width,int height,int left,int top,int right,int bottom,
    int excludedLeft,int excludedTop,int excludedRight,int excludedBottom,BubbleBoard previous){
+  return read(pixels,width,height,left,top,right,bottom,excludedLeft,excludedTop,excludedRight,excludedBottom,previous,true);
+ }
+ /** Soft mode relaxes only object geometry, never ROI or UNKNOWN/special rejection. */
+ public static Read read(Pixels pixels,int width,int height,int left,int top,int right,int bottom,
+   int excludedLeft,int excludedTop,int excludedRight,int excludedBottom,BubbleBoard previous,boolean strict){
+  return read(pixels,width,height,left,top,right,bottom,excludedLeft,excludedTop,excludedRight,excludedBottom,previous,strict,Float.NaN);
+ }
+ /** Only a hint for searching a real observed ball. Cannot synthesize a ball. */
+ public static Read read(Pixels pixels,int width,int height,int left,int top,int right,int bottom,
+   int excludedLeft,int excludedTop,int excludedRight,int excludedBottom,BubbleBoard previous,boolean strict,float learnedLauncherFraction){
   if(pixels==null||width<1||height<1||width>16_384||height>16_384||left<0||top<0||right>width||bottom>height||right-left<80||bottom-top<120)
    throw new IllegalArgumentException("bubble image bounds");
   if(excludedLeft<right&&excludedRight>left&&excludedTop<bottom&&excludedBottom>top)
@@ -50,13 +60,19 @@ public final class BubbleVision {
   }else{
    List<Blob> blobs=blobs(work,w,h);if(blobs==null)return new Read(null,"Слишком много цветовых объектов");
    Blob launcher=null;float score=Float.POSITIVE_INFINITY,second=Float.POSITIVE_INFINITY;
+   float centerX=Float.isFinite(learnedLauncherFraction)
+      &&learnedLauncherFraction>=.35f&&learnedLauncherFraction<=.65f
+      ?learnedLauncherFraction*w:w*.5f;
+   float radiusX=strict?.08f:.10f;
    // This skin's ordinary loaded ball is centered. The reserve sits only
    // ~15% of the arena width to its left and must never replace a missing gun.
-   for(Blob b:blobs)if(b.color<=4&&b.round()&&b.width()>w*.045f&&b.width()<w*.15f&&b.x()>w*.42f&&b.x()<w*.58f&&b.y()>h*.68f&&b.y()<h*.98f){
-    float s=Math.abs(b.x()-w*.5f)/w+(h-b.y())/h*.2f;
+   for(Blob b:blobs)if(b.color<=4&&b.round()&&b.width()>w*(strict?.045f:.04f)&&b.width()<w*(strict?.15f:.18f)
+     &&b.x()>centerX-radiusX*w&&b.x()<centerX+radiusX*w
+     &&b.y()>h*(strict?.68f:.60f)&&b.y()<h*(strict?.98f:.995f)){
+    float s=Math.abs(b.x()-centerX)/w+(h-b.y())/h*.2f;
     if(s<score){second=score;score=s;launcher=b;}else second=Math.min(second,s);
    }
-   if(launcher==null||second-score<.035f)return new Read(null,"Не найдена отдельная пушка: включите её в область");
+   if(launcher==null||second-score<(strict?.035f:.012f))return new Read(null,"Не найдена отдельная пушка: включите её в область");
    lx=launcher.x();ly=launcher.y();float diameter=(launcher.width()+launcher.height())*.5f;
    loaded=circle(work,w,h,lx,ly,diameter*.47f);
    if(loaded<=0)return new Read(null,"Бонус/неизвестный шар в пушке");
@@ -76,7 +92,7 @@ public final class BubbleVision {
       int row=Math.round((b.y()-oy)/(d*.8660254f));if(row<0||row>23)continue;
       int col=Math.round((b.x()-ox)/d-(row%2==parity?.5f:0f));if(col<0||col>15)continue;
       float dx=b.x()-(ox+(col+(row%2==parity?.5f:0f))*d),dy=b.y()-(oy+row*d*.8660254f),e=dx*dx+dy*dy;
-      if(e>d*d*.045f){continue;}error+=e;matched++;rowPhases|=1<<(row%2);minRow=Math.min(minRow,row);maxRow=Math.max(maxRow,row);
+      if(e>d*d*(strict?.045f:.0675f)){continue;}error+=e;matched++;rowPhases|=1<<(row%2);minRow=Math.min(minRow,row);maxRow=Math.max(maxRow,row);
      }
      // Gapped islands do not require contiguous balls. A few textured
      // foreground fragments can be outliers, but geometry still needs
@@ -87,7 +103,7 @@ public final class BubbleVision {
      if(error<best){best=error;fit=new float[]{ox,oy,d,parity};}
     }
    }
-   if(fit==null||best>.008f)return new Read(null,"Круглые объекты не образуют устойчивые ряды");
+   if(fit==null||best>(strict?.008f:.011f))return new Read(null,"Круглые объекты не образуют устойчивые ряды");
    x0=fit[0];y0=fit[1];step=fit[2];shortParity=(int)fit[3];
    cols=(int)Math.floor((w-x0-step*.40f)/step)+1;
    rows=Math.min(24,(int)Math.floor((ly-step*2-y0)/(step*.8660254f))+1);

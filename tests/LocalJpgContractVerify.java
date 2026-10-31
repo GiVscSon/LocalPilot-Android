@@ -64,15 +64,19 @@ class LocalJpgContractVerify {
    replay(cls,invalid,AssertionError.class,"INVALID_EXCLUDED_ROI");
    // Detection may finish normally while still reporting unusable vision.
    // Neither incomplete grids nor an absent arcade player are acceptance.
-   for(String profile:List.of("GRID6","GRID7","FLAPPY")){
+   for(String profile:List.of("GRID6","GRID7","GRID8X7","GRID7X8","FLAPPY")){
     Path rejected=Files.createDirectory(root.resolve("rejected-"+profile));
     int w=profile.equals("FLAPPY")?240:profile.equals("GRID7")?224:216;
-    int h=profile.equals("FLAPPY")?320:w;
+    int h=profile.equals("FLAPPY")?320:profile.equals("GRID8X7")?256:profile.equals("GRID7X8")?196:w;
     ImageIO.write(new BufferedImage(w,h,BufferedImage.TYPE_INT_RGB),"png",
       rejected.resolve("blank.png").toFile());
     Files.writeString(rejected.resolve("localpilot-frames.csv"),
       "filename,profile,left,top,right,bottom\nblank.png,"+profile+",0,0,"+w+","+h+"\n");
     replay(cls,rejected,AssertionError.class,profile.equals("FLAPPY")?"ARCADE_UNUSABLE":"GRID_UNUSABLE");
+    if(profile.contains("X")){
+      String diagnosis=Files.readString(rejected.resolve("localpilot-frames.csv"));
+      require(diagnosis.contains(profile),"explicit rectangular profile lost");
+    }
    }
    // Keep a positive 2048 fixture to prevent an all-reject test harness.
    Path valid=Files.createDirectory(root.resolve("valid-2048"));

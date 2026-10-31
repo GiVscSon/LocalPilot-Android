@@ -45,6 +45,29 @@ public final class Field2048GlassTest {
   var darkSession=new Color2048Reader.Session();
   check(darkSession.read(pixels(with32),640,640,0,0,640,640,null,0,650).same(dark)
     &&darkSession.learnedCount()==0,"preexisting 32 does not invent a learned palette");
+  // A slightly shaded pre-existing 32 may be read in Soft Vision without
+  // inventing the value of an unrelated foreign tile.
+  int[][] shaded32=new int[4][4];
+  for(int i=0;i<4;i++)shaded32[i]=CAPTURED_RGB[i].clone();
+  shaded32[0][0]=rgb(75,63,65);
+  var relaxed=new Color2048Reader.Session();
+  relaxed.setStrictMode(false);
+  check(relaxed.read(pixels(shaded32),640,640,0,0,640,640,null,0,700).cells[0]==32,
+    "soft visual tolerance reads a shaded known 32 on the first frame");
+  // Persisted game-scoped 64 is a known value even before a merge in this
+  // session; the very same colour with no such evidence stays UNKNOWN.
+  int[][] persisted64=new int[4][4];
+  for(int i=0;i<4;i++)persisted64[i]=CAPTURED_RGB[i].clone();
+  persisted64[0][0]=rgb(34,153,187);
+  var recovered=new Color2048Reader.Session();recovered.setStrictMode(false);
+  recovered.restoreLearned("v1;-;2299bb;-;-;-;-;-");
+  check(recovered.read(pixels(persisted64),640,640,0,0,640,640,null,0,750).cells[0]==64,
+    "known persisted 64 reads immediately without a new merge");
+  try{
+   new Color2048Reader.Session().read(pixels(persisted64),640,640,0,0,640,640,null,0,750);
+   throw new AssertionError("unmapped 64 paint cannot safely imply its value");
+  }catch(IllegalArgumentException expected){assertions++;}
+
   // A vivid, foreign pixel is not a safe empty cell or known numbered tile.
   int[][] altered=new int[4][4];
   for(int i=0;i<4;i++)altered[i]=CAPTURED_RGB[i].clone();

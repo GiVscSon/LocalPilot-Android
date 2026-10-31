@@ -33,6 +33,16 @@ public class PilotService extends AccessibilityService {
  private final WindowFocus.RebindStability rebindStability=new WindowFocus.RebindStability();
  private long rebindGeneration;private final InputPermit permit=new InputPermit();private RotatingJournal journal;private final GestureFlight gestureFlight=new GestureFlight();
  private final Color2048Reader.Session colorSession=new Color2048Reader.Session();
+ // Session-scoped visual tolerance only. Never changes input authorization.
+ private boolean strictVision=true;private Button strictVisionButton;
+ // One-minute, read-only, cumulative appearance learning scoped to the selected
+ // game/profile. No gesture may be dispatched while this session is active.
+ private boolean visionTraining;private long visionTrainingUntil;private int visionTrainingFrames;
+ private String visionTrainingScope="";private VisionNoveltyMemory visionMemory=new VisionNoveltyMemory();
+ private GridPuzzleVision.Observation trainingPreviousGrid,gridAdaptiveCandidate;
+ private int gridAdaptiveFrames,gridUnknownStreak,trainingStableGrid;
+ private BubbleBoard trainingPreviousBubble;private int trainingBubbleStable;
+ private float learnedBubbleLauncher=Float.NaN;
  private boolean playingMini;private int miniKind,miniAction;private long miniMoves;private int[] miniBefore;private Rect boardRoi;private View picker;private boolean playing2048=false,colored2048=false,captureBusy=false;private long moves2048;private long captureCounter,pendingCapture,lastShotTimestamp=-1;private long mergeTotal;private Board2048 before2048;private int direction2048;private AlertDialog preview,overlayDialog;
  private final CaptureStartup captureStartup=new CaptureStartup();
  private final SceneRecovery sceneRecovery=new SceneRecovery();
@@ -349,8 +359,8 @@ public class PilotService extends AccessibilityService {
  }
  private void moreOptions(){
   stop("Дополнительные действия · STOP");
-  final int[] actions={0,3,4,5,7,8,9,10,11,12,13,14,15};
-  overlayMenu("Ещё",new String[]{"Диагностика сеанса","Выбрать установленную игру","Только чтение","Включить автоуправление","Скрыть панель","Отключить службу","Настроить распознавание","Способ управления","Вернуть стандартное распознавание","Размер сетки фишек","Приоритетный цвет фишек","Помощь по панели и играм","Неизвестные клетки"},i->{switch(actions[i]){
+  final int[] actions={0,3,4,5,7,8,9,10,11,12,13,14,15,16};
+  overlayMenu("Ещё",new String[]{"Диагностика сеанса","Выбрать установленную игру","Только чтение","Включить автоуправление","Скрыть панель","Отключить службу","Настроить распознавание","Способ управления","Вернуть стандартное распознавание","Размер сетки фишек","Приоритетный цвет фишек","Помощь по панели и играм","Неизвестные клетки","Журнал обучения"},i->{switch(actions[i]){
    case 0->showServiceDialog(new AlertDialog.Builder(this).setTitle("Последний сеанс").setMessage(lastSessionReport+"\n"+captureStartup.report()).setPositiveButton("Закрыть",null).create());
    case 3->startActivity(new Intent(this,GamePickerActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));case 4->setAutomatic(false);case 5->setAutomatic(true);case 7->hidePanel();case 8->disableSelf();
    case 9->startCustomCalibration();case 10->chooseControlMode();case 11->resetCustomVision();
@@ -358,6 +368,7 @@ public class PilotService extends AccessibilityService {
    case 13->chooseGridGoal();
    case 14->showPanelHelp();
    case 15->showServiceDialog(new AlertDialog.Builder(this).setTitle("Последнее чтение сетки").setMessage(gridReview).setPositiveButton("Закрыть",null).create());
+   case 16->showVisionTrainingReport();
   }});
  }
 
@@ -379,6 +390,7 @@ public class PilotService extends AccessibilityService {
   row("Окно",this::chooseWindow,"Игра",this::chooseProfile);
   row("Область",this::chooseRegion,"Старт",this::startSelected);
   row("Ещё",this::moreOptions,"Свернуть",()->compact(true));
+  visionControlsRow();
   Button stopButton=new Button(this);stopButton.setText("STOP");stopButton.setOnClickListener(v->stop("STOP"));panel.addView(stopButton,new LinearLayout.LayoutParams(-1,dp(44)));
   miniBar=new LinearLayout(this);miniBar.setOrientation(LinearLayout.HORIZONTAL);miniBar.setVisibility(View.GONE);
   miniState=new TextView(this);miniState.setTextColor(Color.WHITE);miniState.setTextSize(9);miniState.setMaxLines(2);miniBar.addView(miniState,new LinearLayout.LayoutParams(0,dp(48),1));
@@ -390,8 +402,194 @@ public class PilotService extends AccessibilityService {
   panel.addOnLayoutChangeListener((view,l,t,r,b,ol,ot,or,ob)->{if(r-l!=or-ol||b-t!=ob-ot)handler.post(()->{if(panel==view)updatePanelLayout();});});
   updatePanelLayout();update();
  }
+ private void visionControlsRow(){
+  LinearLayout line=new LinearLayout(this);
+  Button train=new Button(this);train.setText("Обучение 60 с");train.setTextSize(11);
+  train.setOnClickListener(v->startVisionTraining());
+  line.addView(train,new LinearLayout.LayoutParams(0,dp(40),1));
+  strictVisionButton=new Button(this);strictVisionButton.setTextSize(11);
+  strictVisionButton.setOnClickListener(v->setStrictMode(!strictVision));
+  line.addView(strictVisionButton,new LinearLayout.LayoutParams(0,dp(40),1));
+  controls.addView(line);updateStrictVisionButton();
+ }
+ private void updateStrictVisionButton(){if(strictVisionButton!=null)strictVisionButton.setText(strictVision?"Зрение: строго":"Зрение: мягко");}
+ /** Public service control for the existing native panel. STOP revokes pending gestures. */
+ public void setStrictMode(boolean enabled){
+  if(strictVision==enabled)return;
+  stop("Режим распознавания изменён · STOP");
+  strictVision=enabled;colorSession.setStrictMode(enabled);
+  bubbleGeometry=null;gridPalette=null;clearDiagnosticFrame();sceneRecovery.reset();
+  note=enabled?"Строгое распознавание включено":"Мягкое распознавание: только визуальные допуски; STOP и ROI обязательны";
+  updateStrictVisionButton();update();
+ }
+ private void rebindVisionRoi(){
+  stop("Перепривязка ROI · STOP");bubbleGeometry=null;gridPalette=null;
+  visualRoi=null;manualVisualRoi=false;boardRoi=null;clearDiagnosticFrame();sceneRecovery.reset();
+  if(!bindSelectedWindow())return;
+  if(gridSelected())loadGridConfig();
+  selectVisualRegion();
+ }
+ private String visionScope(){
+  return profileChoiceKey(target)+".vision."+selectedProfile
+    +(gridSelected()?"."+gridConfig.rows+"x"+gridConfig.cols:"");
+ }
+ private void loadVisionTraining(){
+  visionTrainingScope=visionScope();
+  String data=getSharedPreferences("vision-training",MODE_PRIVATE).getString(visionTrainingScope+".novel",null);
+  try{visionMemory=data==null?new VisionNoveltyMemory():VisionNoveltyMemory.decode(data);}
+  catch(IllegalArgumentException invalid){visionMemory=new VisionNoveltyMemory();}
+  learnedBubbleLauncher=Float.NaN;
+  if(selectedProfile==9){
+   float value=getSharedPreferences("vision-training",MODE_PRIVATE).getFloat(visionTrainingScope+".launcher",Float.NaN);
+   if(Float.isFinite(value)&&value>=.35f&&value<=.65f)learnedBubbleLauncher=value;
+  }
+ }
+ private void persistVisionTraining(){
+  if(visionTrainingScope.isEmpty())return;
+  getSharedPreferences("vision-training",MODE_PRIVATE).edit()
+    .putString(visionTrainingScope+".novel",visionMemory.encode()).apply();
+ }
+ private void observeNovelAppearance(Bitmap image,Rect roi,float cx,float cy,long frameAt){
+  if(roi==null||roi.isEmpty())return;
+  int x=Math.max(roi.left+2,Math.min(roi.right-3,Math.round(roi.left+roi.width()*cx)));
+  int y=Math.max(roi.top+3,Math.min(roi.bottom-4,Math.round(roi.top+roi.height()*cy)));
+  if(x<0||y<0||x>=image.getWidth()||y>=image.getHeight())return;
+  int[] visual=VisionNoveltyMemory.appearance(image.getPixel(x,y),image.getPixel(x,y-2),image.getPixel(x,y+2));
+  visionMemory.observe(visual[0],visual[1],frameAt);
+ }
+ private void showVisionTrainingReport(){
+  stop("Журнал обучения · STOP");
+  if(target.isEmpty()){note="Сначала выберите окно и профиль игры";update();return;}
+  loadVisionTraining();
+  showServiceDialog(new AlertDialog.Builder(this).setTitle("Обучение · "+profileLabel())
+   .setMessage("Накоплено форм: "+visionMemory.size()+"\nПовторяются в кадрах: "+visionMemory.stableCount()
+   +"\nШипучка · обученная позиция пушки: "+(Float.isFinite(learnedBubbleLauncher)?Math.round(learnedBubbleLauncher*100)+"%":"не подтверждена")
+   +"\nСохранённые формы помогают повторно узнавать объекты. Неизвестному объекту нельзя автоматически назначать номинал или безопасность.")
+   .setPositiveButton("Закрыть",null).create());
+ }
+ /** Start ONLY after game+ROI have been selected; observation grants no input. */
+ public void startVisionTraining(){
+  if(busy||captureBusy||visionTraining){note="Завершите текущий жест/режим";update();return;}
+  stop("Подготовка обучения · STOP");
+  if(!bindSelectedWindow())return;
+  if(selectedProfile>=4&&(visualRoi==null||!armedBounds.contains(visualRoi)||visualRoi.isEmpty())){
+   note="Обучение: сначала выберите Область для "+profileLabel();update();return;
+  }
+  if(selectedProfile>=4&&selectedProfile<=5&&!RegionPickerGeometry.readable2048(
+      new GameViewport.Box(visualRoi.left,visualRoi.top,visualRoi.right,visualRoi.bottom))){
+   note="Обучение 2048: выделите квадрат 4×4";update();return;
+  }
+  if(unsupportedGame||selectedProfile==8){note="Для обучения выберите поддерживаемую механику игры";update();return;}
+  if(gridSelected()){
+   loadGridConfig();
+   String savedPalette=getSharedPreferences("grid-puzzle",MODE_PRIVATE).getString(gridKey()+".palette",null);
+   gridPalette=null;
+   if(savedPalette!=null)try{gridPalette=GridPuzzleVision.Palette.decode(savedPalette);}
+    catch(IllegalArgumentException ignored){gridPalette=null;}
+  }
+  loadVisionTraining();
+  visionTraining=true;visionTrainingFrames=0;trainingPreviousGrid=null;trainingStableGrid=0;
+  trainingPreviousBubble=null;trainingBubbleStable=0;
+  visionTrainingUntil=SystemClock.elapsedRealtime()+60_000;
+  permit.revoke(); // Never dispatch learning gestures.
+  long epoch=gate.epoch();
+  if(selectedProfile<4){
+   startVisualArcade(ArcadeProfile.values()[selectedProfile]);
+   if(!playingJumper){visionTraining=false;return;}
+  }else{
+   boardRoi=new Rect(visualRoi);playingGrid=selectedProfile==9||gridSelected();
+   playing2048=selectedProfile==4||selectedProfile==5;
+   compact(true);
+   afterPanelLayout(()->{
+    if(!visionTraining||epoch!=gate.epoch())return;
+    if(!movePanelAway(boardRoi)){stop("Обучение: панель перекрывает поле");return;}
+    afterPanelLayout(()->{if(visionTraining&&epoch==gate.epoch()&&panelOutsideRoi(boardRoi))trainingBoardFrame(epoch);
+      else if(visionTraining&&epoch==gate.epoch())stop("Обучение: панель закрывает ROI");});
+   });
+  }
+  handler.postDelayed(()->{
+   if(visionTraining&&epoch==gate.epoch()&&SystemClock.elapsedRealtime()>=visionTrainingUntil)
+    stop("Обучение 60 секунд завершено · признаки сохранены");
+  },60_000);
+  note="Обучение "+profileLabel()+" · 60 секунд · только наблюдение";update();
+ }
+ private void trainingBoardFrame(long epoch){
+  if(!visionTraining||epoch!=gate.epoch()||focusPaused)return;
+  if(SystemClock.elapsedRealtime()>=visionTrainingUntil){stop("Обучение завершено · модель сохранена");return;}
+  captureImage(epoch,(image,ticket,ms)->{
+   if(!visionTraining||epoch!=gate.epoch())return;
+   Rect r=new Rect(boardRoi),excluded=panelBounds();
+   long frameAt=lastShotTimestamp;
+   visionTrainingFrames++;
+   if(selectedProfile==9){
+    BubbleVision.Read read=BubbleVision.read(image::getPixel,image.getWidth(),image.getHeight(),
+      r.left,r.top,r.right,r.bottom,excluded.left,excluded.top,excluded.right,excluded.bottom,
+      trainingPreviousBubble,strictVision,learnedBubbleLauncher);
+    if(read.usable()){
+     BubbleBoard board=read.board();float fraction=board.launcherX/r.width();
+     if(trainingPreviousBubble!=null&&trainingPreviousBubble.sameGeometry(board)){
+      if(++trainingBubbleStable>=2&&fraction>=.35f&&fraction<=.65f){
+       learnedBubbleLauncher=fraction;
+       getSharedPreferences("vision-training",MODE_PRIVATE).edit()
+        .putFloat(visionTrainingScope+".launcher",fraction).apply();
+      }
+     }else trainingBubbleStable=0;
+     trainingPreviousBubble=board;
+    }else{
+     trainingPreviousBubble=null;trainingBubbleStable=0;
+     for(int i=0;i<3;i++)observeNovelAppearance(image,r,.42f+i*.08f,.87f,frameAt);
+    }
+   }else if(gridSelected()){
+    GridPuzzleVision.Observation obs=GridPuzzleVision.detect(image::getPixel,r.left,r.top,r.right,r.bottom,
+      gridConfig.rows,gridConfig.cols,excluded.left,excluded.top,excluded.right,excluded.bottom,frameAt,
+      gridPalette,GridProfileRules.protectSkulls(selectedProfile),selectedProfile==6);
+    // A stale palette is an observation failure, not a reason to invent
+    // missing cell colours. Independently reconstruct from actual pixels.
+    GridPuzzleVision.Observation hypothesis=obs;
+    if(!obs.usable()&&gridPalette!=null)
+     hypothesis=GridPuzzleVision.detect(image::getPixel,r.left,r.top,r.right,r.bottom,
+      gridConfig.rows,gridConfig.cols,excluded.left,excluded.top,excluded.right,excluded.bottom,
+      frameAt,null,GridProfileRules.protectSkulls(selectedProfile),selectedProfile==6);
+    if(hypothesis.usable()&&trainingPreviousGrid!=null&&trainingPreviousGrid.usable()
+      &&hypothesis.signature()==trainingPreviousGrid.signature()
+      &&hypothesis.timestampMs>trainingPreviousGrid.timestampMs)trainingStableGrid++;
+    else trainingStableGrid=hypothesis.usable()?1:0;
+    if(trainingStableGrid==3){
+      gridPalette=hypothesis.palette();
+      getSharedPreferences("grid-puzzle",MODE_PRIVATE).edit()
+        .putString(gridKey()+".palette",gridPalette.encode()).apply();
+    }
+    trainingPreviousGrid=hypothesis;
+    for(int index:obs.unknownIndices()){
+     GridPuzzleVision.CellReason reason=obs.reason(index/gridConfig.cols,index%gridConfig.cols);
+     if(reason==GridPuzzleVision.CellReason.EXCLUDED_OVERLAY||reason==GridPuzzleVision.CellReason.PROTECTED_SKULL)continue;
+     observeNovelAppearance(image,r,(index%gridConfig.cols+.5f)/gridConfig.cols,
+       (index/gridConfig.cols+.5f)/gridConfig.rows,frameAt);
+    }
+   }else{
+    try{
+     Color2048Reader.read(image::getPixel,image.getWidth(),image.getHeight(),r.left,r.top,r.right,r.bottom);
+    }catch(IllegalArgumentException unknown){
+     // Repeated unknowns become appearance exemplars, NOT guessed tile values.
+     for(int row=0;row<4;row++)for(int col=0;col<4;col++){
+      float x=(col+.30f)/4,y=(row+.24f)/4;
+      int color=image.getPixel(r.left+Math.round(x*r.width()),r.top+Math.round(y*r.height()));
+      int high=Math.max(color>>16&255,Math.max(color>>8&255,color&255));
+      int low=Math.min(color>>16&255,Math.min(color>>8&255,color&255));
+      if(high-low>40||high<140)observeNovelAppearance(image,r,x,y,frameAt);
+     }
+    }
+   }
+   if(visionTrainingFrames%5==0)persistVisionTraining();
+   note="Учу распознавание · кадров "+visionTrainingFrames+" · новых форм "+visionMemory.size()
+    +" · устойчивых "+visionMemory.stableCount()+" · осталось "
+    +Math.max(0,(visionTrainingUntil-SystemClock.elapsedRealtime()+999)/1000)+" с";
+   update();
+   if(visionTraining&&epoch==gate.epoch())postBoardTask(epoch,captureDelay(),()->trainingBoardFrame(epoch));
+  });
+ }
  private void removeOverlay(View view){if(view!=null&&wm!=null)CaptureCleanup.run(()->wm.removeViewImmediate(view));}
- private void clearPanel(){View old=panel;panel=null;controls=null;state=null;miniBar=null;miniState=null;collapseButton=null;layout=null;consentPanelDetached=false;panelRegistered=false;panelCompact=false;manualControls.clear();removeOverlay(old);}
+ private void clearPanel(){View old=panel;panel=null;controls=null;state=null;miniBar=null;miniState=null;collapseButton=null;strictVisionButton=null;layout=null;consentPanelDetached=false;panelRegistered=false;panelCompact=false;manualControls.clear();removeOverlay(old);}
  /** A missing/stale WindowManager attachment never leaves input authority live. */
  private boolean updatePanelLayout(){
   if(panel==null||layout==null||wm==null||consentPanelDetached||destroying)return false;
@@ -429,7 +627,7 @@ public class PilotService extends AccessibilityService {
      :gate.armed()?"Окно выбрано":"STOP";
    miniState.setText(miniLabel+"\n"+note);
   }
-  if(state!=null)state.setText(profileLabel()+" · "+(manualVisualRoi?"область вручную":visualRoi!=null?"боковые поля убраны":"область авто")+"\n"+note+"\n"+(gate.armed()?targetLabel+" · "+(inputReady?"ввод включён":"наблюдение"):"Нажмите Старт или выберите Окно")+(captureSession>0||playingGrid?"\n"+captureCounters():"")+(collecting?"\nСбор примеров включён":""));
+  if(state!=null)state.setText((strictVision?"Строго":"Мягко")+" · "+profileLabel()+" · "+(manualVisualRoi?"область вручную":visualRoi!=null?"боковые поля убраны":"область авто")+"\n"+note+"\n"+(gate.armed()?targetLabel+" · "+(inputReady?"ввод включён":"наблюдение"):"Нажмите Старт или выберите Окно")+(captureSession>0||playingGrid?"\n"+captureCounters():"")+(collecting?"\nСбор примеров включён":""));
  }
  private AccessibilityNodeInfo windowRoot(AccessibilityWindowInfo window){return Build.VERSION.SDK_INT>=33?window.getRoot(0):window.getRoot();}
  private AccessibilityNodeInfo appRoot(){for(AccessibilityWindowInfo w:getWindows())if(w.getType()==AccessibilityWindowInfo.TYPE_APPLICATION&&w.isFocused()){AccessibilityNodeInfo r=windowRoot(w);if(r!=null){if(r.getWindowId()==w.getId())return r;r.recycle();}}return null;}
@@ -466,6 +664,8 @@ public class PilotService extends AccessibilityService {
   // Save measured physics before reset, including measurements made while no
   // gesture was needed. Stopping a session is not a new round loss.
   if(playingJumper&&jumperCaptureReady)CaptureCleanup.run(()->persistArcadeModel(false));
+  if(visionTraining)persistVisionTraining();
+  visionTraining=false;visionTrainingUntil=0;trainingPreviousGrid=gridAdaptiveCandidate=null;trainingStableGrid=gridAdaptiveFrames=gridUnknownStreak=0;trainingPreviousBubble=null;trainingBubbleStable=0;
   captureStartup.stop(SystemClock.elapsedRealtime());clearDiagnosticFrame();arcadeSceneGeneration++;
   playingGrid=false;gridSession.reset();gridPalette=null;gridPendingDecision=null;gridUnknownReasons="none";bubbleSession.reset();bubbleGeometry=null;
   arcadeLastUsable=null;arcadeController.reset();arcadeFeedback.reset();jumperFeedback.reset();arcadeState=null;arcadeBefore=null;arcadePending=null;arcadeAck=false;
@@ -644,8 +844,8 @@ public class PilotService extends AccessibilityService {
   if(!gate.armed()||!valid(gate.offer(SystemClock.elapsedRealtime())))arm();
   if(!gate.armed()||!unlocked()){note="Откройте игру, выберите её окно и подходящий профиль на панели";update();return;}
   if(!VisualGameTarget.allowed(target,getPackageName())){note="Выберите приложение с игрой вместо системного окна";update();return;}
-  if(!automatic()&&!permit.allows(gate.epoch(),SystemClock.elapsedRealtime())){note="Сначала разрешите ввод для этой сессии";update();return;}
-  if(automatic())permit.grantSession(gate.epoch(),SystemClock.elapsedRealtime());
+  if(!visionTraining&&!automatic()&&!permit.allows(gate.epoch(),SystemClock.elapsedRealtime())){note="Сначала разрешите ввод для этой сессии";update();return;}
+  if(automatic()&&!visionTraining)permit.grantSession(gate.epoch(),SystemClock.elapsedRealtime());
   learningSlot=getSharedPreferences("panel",MODE_PRIVATE).getString("game_slot."+target,"default");JumperPolicy.reset();
   String scope=VisualGameTarget.key(target,learningSlot,profile);
   controlMode=Math.max(0,Math.min(2,getSharedPreferences("controls",MODE_PRIVATE).getInt(scope,0)));
@@ -770,8 +970,8 @@ public class PilotService extends AccessibilityService {
  private String gridKey(){String slot=getSharedPreferences("panel",MODE_PRIVATE).getString("game_slot."+target,"default");return GridPuzzleConfig.key(target,slot,gridMode())+(selectedProfile==11?".protected-skull-swap-v2":"");}
  private void loadGridConfig(){
   String value=getSharedPreferences("grid-puzzle",MODE_PRIVATE).getString(gridKey()+".config",null);
-  try{gridConfig=value==null?new GridPuzzleConfig(6,6,GridProfileRules.minimum(selectedProfile)):GridPuzzleConfig.decode(value);}
-  catch(IllegalArgumentException error){gridConfig=new GridPuzzleConfig(6,6,GridProfileRules.minimum(selectedProfile));visualRoi=null;manualVisualRoi=false;}
+  try{gridConfig=value==null?new GridPuzzleConfig(selectedProfile==6?8:6,selectedProfile==6?7:6,GridProfileRules.minimum(selectedProfile)):GridPuzzleConfig.decode(value);}
+  catch(IllegalArgumentException error){gridConfig=new GridPuzzleConfig(selectedProfile==6?8:6,selectedProfile==6?7:6,GridProfileRules.minimum(selectedProfile));visualRoi=null;manualVisualRoi=false;}
   if(!manualVisualRoi&&gridConfig.fits(armedBounds.width(),armedBounds.height())){
    visualRoi=new Rect(armedBounds.left+Math.round(gridConfig.left*armedBounds.width()),armedBounds.top+Math.round(gridConfig.top*armedBounds.height()),armedBounds.left+Math.round(gridConfig.right*armedBounds.width()),armedBounds.top+Math.round(gridConfig.bottom*armedBounds.height()));manualVisualRoi=true;
   }
@@ -783,7 +983,7 @@ public class PilotService extends AccessibilityService {
  private void configureGrid(){
   if(!gridSelected()){note="Сначала Игра → Фишки: обмен или группы";update();return;}
   if(!bindSelectedWindow())return;loadGridConfig();
-  overlayMenu("Сетка фишек · "+gridConfig.rows+"×"+gridConfig.cols,new String[]{"6×6","7×7","Другой размер / минимум группы"},i->{if(i<2){setGridSize(i==0?6:7,i==0?6:7,GridProfileRules.minimum(selectedProfile));selectVisualRegion();}else showGridSizeForm();});
+  overlayMenu("Сетка фишек · "+gridConfig.rows+"×"+gridConfig.cols,new String[]{"8×7 (Мэтч Ворлд на снимке)","7×7","6×6","Другие строки и столбцы (3–10)"},i->{if(i<3){int rows=i==0?8:i==1?7:6,cols=i==0?7:rows;setGridSize(rows,cols,GridProfileRules.minimum(selectedProfile));selectVisualRegion();}else showGridSizeForm();});
  }
  private void chooseGridGoal(){
   if(!gridSelected()){note="Сначала Игра → Фишки: обмен или группы";update();return;}if(!bindSelectedWindow())return;
@@ -823,6 +1023,7 @@ public class PilotService extends AccessibilityService {
   if(busy||captureBusy||discoveringBoard||autoLeft>0||playing2048||playingMini||playingJumper||playingGrid){note="Сначала остановите текущий режим";update();return;}
   if(!VisualGameTarget.allowed(target,getPackageName())){note="Выберите окно сторонней игры";update();return;}
   loadBubbleRegion();
+  loadVisionTraining();
   if(!manualVisualRoi||visualRoi==null||!armedBounds.contains(visualRoi)){note="Шипучка: выделите всю ширину игры от верхних шаров до пушки";update();selectVisualRegion();return;}
   boardRoi=new Rect(visualRoi);saveBubbleRegion(boardRoi);bubbleSession.reset();bubbleGeometry=null;
   gridMoves=gridVerified=0;gridResultVisible=gridSawAction=false;playingGrid=true;clearDiagnosticFrame();captureFrames=captureReads=captureDecisions=captureSent=captureCompleted=0;
@@ -843,7 +1044,7 @@ public class PilotService extends AccessibilityService {
     gridResultVisible=true;bubbleSession.reset();bubbleGeometry=null;note="Экран результата · нажмите Играть снова";update();scheduleGrid(epoch);return;
    }
    gridResultVisible=false;metrics.attempt(StageMetrics.Stage.READ);long started=SystemClock.elapsedRealtimeNanos();
-   BubbleVision.Read read=BubbleVision.read(pixels::getPixel,pixels.getWidth(),pixels.getHeight(),r.left,r.top,r.right,r.bottom,panel.left,panel.top,panel.right,panel.bottom,bubbleGeometry);
+   BubbleVision.Read read=BubbleVision.read(pixels::getPixel,pixels.getWidth(),pixels.getHeight(),r.left,r.top,r.right,r.bottom,panel.left,panel.top,panel.right,panel.bottom,bubbleGeometry,strictVision,learnedBubbleLauncher);
    bubbleSession.visionReason(read.reason());
    captureReads++;metrics.record(StageMetrics.Stage.READ,SystemClock.elapsedRealtimeNanos()-started);
    long frameAt=SystemClock.elapsedRealtime()-Math.max(0,SystemClock.uptimeMillis()-lastShotTimestamp);
@@ -892,6 +1093,8 @@ public class PilotService extends AccessibilityService {
   if(palette!=null)try{gridPalette=GridPuzzleVision.Palette.decode(palette);}catch(IllegalArgumentException error){note="Типы фишек повреждены · Ещё → Вернуть стандартное распознавание";update();return;}
   learningSlot=getSharedPreferences("panel",MODE_PRIVATE).getString("game_slot."+target,"default");
   try{gridGoal=GridPuzzleGoal.Color.valueOf(getSharedPreferences("grid-puzzle",MODE_PRIVATE).getString(gridKey()+".goal","ANY"));}catch(IllegalArgumentException error){gridGoal=GridPuzzleGoal.Color.ANY;}
+  loadVisionTraining();
+  gridAdaptiveCandidate=null;gridAdaptiveFrames=gridUnknownStreak=0;
   gridSession.reset();clearRetainedGridFrame();gridUnknownReasons="none";gridReasonDetails="none";gridLastStatus="WAIT_STABLE";gridReview="Ожидаю чтение текущей сетки.";gridMoves=gridVerified=0;gridResultVisible=gridSawAction=false;playingGrid=true;clearDiagnosticFrame();captureFrames=captureReads=captureDecisions=captureSent=captureCompleted=0;
   gridPendingDecision=null;gridPendingBoard=null;gridPendingSpecial=null;
   GridOnlineLearning previousLearning=gridLearning;gridLearning=new GridOnlineLearning();
@@ -929,6 +1132,45 @@ public class PilotService extends AccessibilityService {
    gridUnknownReasons=observation.unknownReasonCounts();if(gridUnknownReasons.isEmpty())gridUnknownReasons="none";
    gridReasonDetails=observation.cellReasonDetails();
    int unknownCount=observation.unknownIndices().length;
+   // Unknown objects are remembered across frames and sessions for heuristic
+   // re-evaluation. Their memory IDs are never game-token type IDs.
+   if(unknownCount>0){
+    for(int index:observation.unknownIndices()){
+     GridPuzzleVision.CellReason reason=observation.reason(index/gridConfig.cols,index%gridConfig.cols);
+     if(reason==GridPuzzleVision.CellReason.EXCLUDED_OVERLAY
+       ||reason==GridPuzzleVision.CellReason.PROTECTED_SKULL)continue;
+     observeNovelAppearance(pixels,r,(index%gridConfig.cols+.5f)/gridConfig.cols,
+       (index/gridConfig.cols+.5f)/gridConfig.rows,frameAt);
+    }
+    if(captureReads%8==0)persistVisionTraining();
+   }
+   // Re-learn an outdated game palette only after several independently
+   // fresh and IDENTICAL full-scene reconstructions. The existing read remains
+   // authoritative until this quarantine is complete.
+   if(unknownCount>=2&&gridPalette!=null&&!gridSession.pending()
+       &&observation.reason(0,0)!=GridPuzzleVision.CellReason.EXCLUDED_OVERLAY){
+    gridUnknownStreak++;
+    if(gridUnknownStreak>=3){
+     GridPuzzleVision.Observation refit=GridPuzzleVision.detect(pixels::getPixel,r.left,r.top,r.right,r.bottom,
+       gridConfig.rows,gridConfig.cols,panel.left,panel.top,panel.right,panel.bottom,frameAt,null,
+       GridProfileRules.protectSkulls(selectedProfile),selectedProfile==6);
+     if(refit.usable()&&gridAdaptiveCandidate!=null&&gridAdaptiveCandidate.usable()
+       &&refit.timestampMs>gridAdaptiveCandidate.timestampMs
+       &&refit.signature()==gridAdaptiveCandidate.signature()){
+      gridAdaptiveFrames++;
+     }else gridAdaptiveFrames=refit.usable()?1:0;
+     gridAdaptiveCandidate=refit;
+     if(gridAdaptiveFrames>=3){
+      gridPalette=refit.palette();gridAdaptiveCandidate=null;
+      gridAdaptiveFrames=gridUnknownStreak=0;gridSession.reset();
+      gridPendingDecision=null;gridPendingBoard=null;gridPendingSpecial=null;
+      getSharedPreferences("grid-puzzle",MODE_PRIVATE).edit()
+        .putString(gridKey()+".palette",gridPalette.encode()).apply();
+      note="Палитра уточнена по трём устойчивым полным кадрам · проверяю поле заново без ввода";
+      update();scheduleGrid(epoch);return;
+     }
+    }
+   }else{gridUnknownStreak=gridAdaptiveFrames=0;gridAdaptiveCandidate=null;}
    gridReview=profileLabel()+" · "+observation.rows+"×"+observation.cols+"\nНеизвестно: "+unknownCount+"\n"+(unknownCount==0?"Все клетки распознаны.":observation.unknownSummary(observation.rows*observation.cols))+"\n\nЭто последнее чтение, а не текущее поле. Неизвестные клетки не разрешают ввод.";
    boolean partialGrid=observation.partialUsable();
    int[] observedCells=observation.cells();
@@ -1278,6 +1520,14 @@ public class PilotService extends AccessibilityService {
   if(observation!=null&&observation.usable()){arcadeLastUsable=observation;roundOutcome.game(timestampMs);}
   // Always update temporal physics, including while a previous Android gesture is in flight.
   ArcadePolicy.Decision predictive=observation!=null&&observation.usable()?arcadeController.decide(observation,now):null;
+  if(visionTraining){
+   if(observation!=null&&observation.usable())visionTrainingFrames++;
+   if(visionTrainingFrames%10==0&&visionTrainingFrames>0)persistVisionTraining();
+   note="Обучение "+captureProfile.label+" · кадров "+visionTrainingFrames
+    +" · измеренная физика "+arcadeController.model()
+    +" · осталось "+Math.max(0,(visionTrainingUntil-now+999)/1000)+" с";
+   update();return; // Regardless of readiness, this session cannot send gestures.
+  }
   if(!sceneRecovery.observe(observation!=null&&observation.usable(),timestampMs)){
    advanceArcadeFeedback(null,now);
    if(sceneRecovery.selectionRequired()){note="Сцена пока не распознана · продолжаю наблюдение без ввода. Проверьте профиль и область";update();return;}
@@ -1367,6 +1617,13 @@ public class PilotService extends AccessibilityService {
   }
   jumperConsentPending=false;
   jumperState=state;jumperTracking.observe(state);
+  if(visionTraining){
+   if(state!=null&&state.usable())visionTrainingFrames++;
+   note="Обучение Ари · кадров "+visionTrainingFrames+" · обнаружено платформ "
+    +(state==null?0:state.platforms.size())+" · осталось "
+    +Math.max(0,(visionTrainingUntil-now+999)/1000)+" с · ввод выключен";
+   update();return;
+  }
   if(!sceneRecovery.observe(state!=null&&state.usable(),timestampMs)){
    advanceJumperFeedback(null,now);
    if(sceneRecovery.selectionRequired()){note="Ари пока не распознан · продолжаю наблюдение без ввода. Проверьте профиль и область";update();return;}
@@ -1408,6 +1665,8 @@ public class PilotService extends AccessibilityService {
  private void send(float x,float y,float ex,float ey,ActionGate.Ticket ticket,Runnable done){sendObserved(x,y,ex,ey,ticket,done,-1);}
  private void sendObserved(float x,float y,float ex,float ey,ActionGate.Ticket ticket,Runnable done,long frameAt){sendObserved(x,y,ex,ey,ticket,done,frameAt,50);}
  private void sendObserved(float x,float y,float ex,float ey,ActionGate.Ticket ticket,Runnable done,long frameAt,int holdMs){
+  // Absolute no-input guarantee for manual, arcade and board-game paths.
+  if(visionTraining){note="Обучение: касания запрещены · только чтение";update();return;}
   metrics.attempt(StageMetrics.Stage.ANDROID_ACK);
   if(busy){metrics.failure(StageMetrics.Stage.ANDROID_ACK,"EXECUTOR_BUSY");note="Исполнитель занят";update();return;}String rejection=invalidReason(ticket);if(rejection!=null){if(deferFocus(rejection))return;failStage(StageMetrics.Stage.ANDROID_ACK,rejection,"Привяжите текущее окно заново; ввод не отправлен");return;}
   if(!armedBounds.contains((int)x,(int)y)||!armedBounds.contains((int)ex,(int)ey)){failStage(StageMetrics.Stage.ANDROID_ACK,"OUTSIDE_WINDOW","Жест вне окна");return;}
@@ -1748,7 +2007,8 @@ public class PilotService extends AccessibilityService {
   if(!RegionPickerGeometry.readable2048(new GameViewport.Box(boardRoi.left,boardRoi.top,boardRoi.right,boardRoi.bottom))){
    stop("AUTO_BOARD_GEOMETRY: 2048 требует минимум 160 пикселей и разницу сторон до 8%");return;
   }
-  boardReadGeneration++;boardReadMisses=0;colorSession.reset();before2048=null;colored2048=colored;
+  loadVisionTraining();
+  boardReadGeneration++;boardReadMisses=0;colorSession.reset();colorSession.setStrictMode(strictVision);before2048=null;colored2048=colored;
   if(colored2048){String saved=getSharedPreferences("color-2048",MODE_PRIVATE).getString(color2048PaletteKey(),null);if(saved!=null)try{colorSession.restoreLearned(saved);}catch(IllegalArgumentException invalidPalette){note="Сохранённая цветовая палитра повреждена · начинаю с базовых плиток";}}
   long epoch=gate.epoch(),generation=boardReadGeneration;playing2048=true;compact(true);note=colored2048?"Читаю цветное поле 2048 · изучено цветов "+colorSession.learnedCount():"Читаю поле в памяти…";update();
   afterPanelLayout(()->{

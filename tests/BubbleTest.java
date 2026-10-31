@@ -267,6 +267,18 @@ public final class BubbleTest {
   check(!BubbleVision.read(mixed::getRGB,320,640,0,0,320,640,0,0,0,0,r.board()).usable(),"overlapping mixed-color animation is rejected");
   try{BubbleVision.read((x,y)->0, Integer.MAX_VALUE,640,0,0,Integer.MAX_VALUE,640,0,0,0,0,null);throw new AssertionError("overflow geometry accepted");}catch(IllegalArgumentException expected){checks++;}
   check(!BubbleVision.read((x,y)->0x202020,320,640,0,0,320,640,0,0,0,0,null).usable(),"blank screen cannot authorize a shot");
+  BufferedImage offsetLauncher=synthetic();var outside=offsetLauncher.createGraphics();
+  outside.setColor(new java.awt.Color(COLORS[0]));outside.fillRect(136,576,48,48);
+  outside.setColor(new java.awt.Color(COLORS[1]));outside.fillOval(190-23,600-23,46,46);
+  outside.dispose();
+  check(!BubbleVision.read(offsetLauncher::getRGB,320,640,0,0,320,640,0,0,0,0,null).usable(),
+    "original centered launcher geometry remains strict by default");
+  var soft=BubbleVision.read(offsetLauncher::getRGB,320,640,0,0,320,640,0,0,0,0,null,false);
+  check(soft.usable()&&soft.board().launcherX>180&&soft.board().launcherX<200,
+    "soft geometry recognizes a uniquely positioned bottom loaded ball: "+soft.reason());
+  check(!BubbleVision.read(offsetLauncher::getRGB,320,640,0,0,320,640,10,10,40,40,null,false).usable(),
+    "soft mode still rejects a panel overlapping the selected ROI");
+
   BufferedImage emptyGun=synthetic();var reserve=emptyGun.createGraphics();reserve.setColor(new java.awt.Color(COLORS[0]));reserve.fillRect(136,576,48,48);reserve.setColor(new java.awt.Color(COLORS[3]));reserve.fillOval(101,577,46,46);reserve.dispose();
   check(!BubbleVision.read(emptyGun::getRGB,320,640,0,0,320,640,0,0,0,0,null).usable(),"a spare ball near the gun cannot replace the missing loaded ball");
  }
