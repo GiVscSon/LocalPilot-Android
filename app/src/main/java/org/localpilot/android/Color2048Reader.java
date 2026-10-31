@@ -147,8 +147,8 @@ public final class Color2048Reader {
 
  private static int classify(int r,int g,int b,int row,int col){
   int low=Math.min(r,Math.min(g,b)),high=Math.max(r,Math.max(g,b));
-  int dr=r-(DARK32>>16&255),dg=g-(DARK32>>8&255),db=b-(DARK32&255);
-  if(dr*dr+dg*dg+db*db<=DARK32_MAX_DISTANCE2)return 32;
+  int darkDr=r-(DARK32>>16&255),darkDg=g-(DARK32>>8&255),darkDb=b-(DARK32&255);
+  if(darkDr*darkDr+darkDg*darkDg+darkDb*darkDb<=DARK32_MAX_DISTANCE2)return 32;
   // Actual Market 2048 glass cells are translucent; sampled empty cells
   // include (189,174,193) and (253,222,210). Their low chroma differs
   // from vivid numbered tiles. Do not broaden admission of foreign colors.
