@@ -17,6 +17,8 @@ public class PilotService extends AccessibilityService {
  public void stopOnlineDiagnostics(){if(diagnosticUplink!=null)diagnosticUplink.stop();}
  public String onlineDiagnosticsStatus(){return diagnosticUplink==null?"Выключено":diagnosticUplink.status();}
  public boolean onlineDiagnosticsEnabled(){return diagnosticUplink!=null&&diagnosticUplink.enabled();}
+ /** Same data as opt-in telemetry, used only after explicit confirmation. */
+ public String advisoryDiagnosticSnapshot(){return onlineDiagnosticSnapshot();}
  /** Whitelist-only structured telemetry: no package, user label, ROI origin, pixels, log or free-form note. */
  private String onlineDiagnosticSnapshot(){
   try{
