@@ -58,7 +58,7 @@ public final class BubbleVision {
    // This skin's ordinary loaded ball is centered. The reserve sits only
    // ~15% of the arena width to its left and must never replace a missing gun.
    for(Blob b:blobs)if(b.color<=4&&b.round()&&b.width()>w*(strict?.045f:.04f)&&b.width()<w*(strict?.15f:.18f)
-     &&b.x()>w*(strict?.42f:.34f)&&b.x()<w*(strict?.58f:.66f)
+     &&b.x()>w*(strict?.42f:.40f)&&b.x()<w*(strict?.58f:.60f)
      &&b.y()>h*(strict?.68f:.60f)&&b.y()<h*(strict?.98f:.995f)){
     float s=Math.abs(b.x()-w*.5f)/w+(h-b.y())/h*.2f;
     if(s<score){second=score;score=s;launcher=b;}else second=Math.min(second,s);
