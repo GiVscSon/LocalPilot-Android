@@ -39,7 +39,8 @@ public class PilotService extends AccessibilityService {
  // game/profile. No gesture may be dispatched while this session is active.
  private boolean visionTraining;private long visionTrainingUntil;private int visionTrainingFrames;
  private String visionTrainingScope="";private VisionNoveltyMemory visionMemory=new VisionNoveltyMemory();
- private GridPuzzleVision.Observation trainingPreviousGrid;
+ private GridPuzzleVision.Observation trainingPreviousGrid,gridAdaptiveCandidate;
+ private int gridAdaptiveFrames,gridUnknownStreak;
  private BubbleBoard trainingPreviousBubble;private int trainingBubbleStable;
  private float learnedBubbleLauncher=Float.NaN;
  private boolean playingMini;private int miniKind,miniAction;private long miniMoves;private int[] miniBefore;private Rect boardRoi;private View picker;private boolean playing2048=false,colored2048=false,captureBusy=false;private long moves2048;private long captureCounter,pendingCapture,lastShotTimestamp=-1;private long mergeTotal;private Board2048 before2048;private int direction2048;private AlertDialog preview,overlayDialog;
@@ -652,7 +653,7 @@ public class PilotService extends AccessibilityService {
   // gesture was needed. Stopping a session is not a new round loss.
   if(playingJumper&&jumperCaptureReady)CaptureCleanup.run(()->persistArcadeModel(false));
   if(visionTraining)persistVisionTraining();
-  visionTraining=false;visionTrainingUntil=0;trainingPreviousGrid=null;trainingPreviousBubble=null;trainingBubbleStable=0;
+  visionTraining=false;visionTrainingUntil=0;trainingPreviousGrid=gridAdaptiveCandidate=null;gridAdaptiveFrames=gridUnknownStreak=0;trainingPreviousBubble=null;trainingBubbleStable=0;
   captureStartup.stop(SystemClock.elapsedRealtime());clearDiagnosticFrame();arcadeSceneGeneration++;
   playingGrid=false;gridSession.reset();gridPalette=null;gridPendingDecision=null;gridUnknownReasons="none";bubbleSession.reset();bubbleGeometry=null;
   arcadeLastUsable=null;arcadeController.reset();arcadeFeedback.reset();jumperFeedback.reset();arcadeState=null;arcadeBefore=null;arcadePending=null;arcadeAck=false;
@@ -1081,6 +1082,7 @@ public class PilotService extends AccessibilityService {
   learningSlot=getSharedPreferences("panel",MODE_PRIVATE).getString("game_slot."+target,"default");
   try{gridGoal=GridPuzzleGoal.Color.valueOf(getSharedPreferences("grid-puzzle",MODE_PRIVATE).getString(gridKey()+".goal","ANY"));}catch(IllegalArgumentException error){gridGoal=GridPuzzleGoal.Color.ANY;}
   loadVisionTraining();
+  gridAdaptiveCandidate=null;gridAdaptiveFrames=gridUnknownStreak=0;
   gridSession.reset();clearRetainedGridFrame();gridUnknownReasons="none";gridReasonDetails="none";gridLastStatus="WAIT_STABLE";gridReview="Ожидаю чтение текущей сетки.";gridMoves=gridVerified=0;gridResultVisible=gridSawAction=false;playingGrid=true;clearDiagnosticFrame();captureFrames=captureReads=captureDecisions=captureSent=captureCompleted=0;
   gridPendingDecision=null;gridPendingBoard=null;gridPendingSpecial=null;
   GridOnlineLearning previousLearning=gridLearning;gridLearning=new GridOnlineLearning();
@@ -1118,6 +1120,45 @@ public class PilotService extends AccessibilityService {
    gridUnknownReasons=observation.unknownReasonCounts();if(gridUnknownReasons.isEmpty())gridUnknownReasons="none";
    gridReasonDetails=observation.cellReasonDetails();
    int unknownCount=observation.unknownIndices().length;
+   // Unknown objects are remembered across frames and sessions for heuristic
+   // re-evaluation. Their memory IDs are never game-token type IDs.
+   if(unknownCount>0){
+    for(int index:observation.unknownIndices()){
+     GridPuzzleVision.CellReason reason=observation.reason(index/gridConfig.cols,index%gridConfig.cols);
+     if(reason==GridPuzzleVision.CellReason.EXCLUDED_OVERLAY
+       ||reason==GridPuzzleVision.CellReason.PROTECTED_SKULL)continue;
+     observeNovelAppearance(pixels,r,(index%gridConfig.cols+.5f)/gridConfig.cols,
+       (index/gridConfig.cols+.5f)/gridConfig.rows,frameAt);
+    }
+    if(captureReads%8==0)persistVisionTraining();
+   }
+   // Re-learn an outdated game palette only after several independently
+   // fresh and IDENTICAL full-scene reconstructions. The existing read remains
+   // authoritative until this quarantine is complete.
+   if(unknownCount>=2&&gridPalette!=null&&!gridSession.pending()
+       &&observation.reason(0,0)!=GridPuzzleVision.CellReason.EXCLUDED_OVERLAY){
+    gridUnknownStreak++;
+    if(gridUnknownStreak>=3){
+     GridPuzzleVision.Observation refit=GridPuzzleVision.detect(pixels::getPixel,r.left,r.top,r.right,r.bottom,
+       gridConfig.rows,gridConfig.cols,panel.left,panel.top,panel.right,panel.bottom,frameAt,null,
+       GridProfileRules.protectSkulls(selectedProfile),selectedProfile==6);
+     if(refit.usable()&&gridAdaptiveCandidate!=null&&gridAdaptiveCandidate.usable()
+       &&refit.timestampMs>gridAdaptiveCandidate.timestampMs
+       &&refit.signature()==gridAdaptiveCandidate.signature()){
+      gridAdaptiveFrames++;
+     }else gridAdaptiveFrames=refit.usable()?1:0;
+     gridAdaptiveCandidate=refit;
+     if(gridAdaptiveFrames>=3){
+      gridPalette=refit.palette();gridAdaptiveCandidate=null;
+      gridAdaptiveFrames=gridUnknownStreak=0;gridSession.reset();
+      gridPendingDecision=null;gridPendingBoard=null;gridPendingSpecial=null;
+      getSharedPreferences("grid-puzzle",MODE_PRIVATE).edit()
+        .putString(gridKey()+".palette",gridPalette.encode()).apply();
+      note="Палитра уточнена по трём устойчивым полным кадрам · проверяю поле заново без ввода";
+      update();scheduleGrid(epoch);return;
+     }
+    }
+   }else{gridUnknownStreak=gridAdaptiveFrames=0;gridAdaptiveCandidate=null;}
    gridReview=profileLabel()+" · "+observation.rows+"×"+observation.cols+"\nНеизвестно: "+unknownCount+"\n"+(unknownCount==0?"Все клетки распознаны.":observation.unknownSummary(observation.rows*observation.cols))+"\n\nЭто последнее чтение, а не текущее поле. Неизвестные клетки не разрешают ввод.";
    boolean partialGrid=observation.partialUsable();
    int[] observedCells=observation.cells();
