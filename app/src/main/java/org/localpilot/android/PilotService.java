@@ -512,11 +512,35 @@ public class PilotService extends AccessibilityService {
   }catch(RuntimeException error){return "WINDOW_STATE_UNAVAILABLE";}
   finally{if(root!=null)root.recycle();}
  }
+ /** A non-focused target is visible only if its own application window still
+  * exposes the original bounds. This is observation evidence, not input authority.
+  * Foreign full-screen applications revoke the extended grace immediately. */
+ private boolean unchangedTargetVisible(){
+  if(target.isEmpty()||armedBounds.isEmpty()||!unlocked())return false;
+  try{
+   java.util.List<AccessibilityWindowInfo> windows=getWindows();
+   if(windows==null)return false;
+   boolean targetSeen=false;
+   for(AccessibilityWindowInfo window:windows){
+    if(window==null||window.getType()!=AccessibilityWindowInfo.TYPE_APPLICATION)continue;
+    Rect found=new Rect();window.getBoundsInScreen(found);
+    AccessibilityNodeInfo node=window.getRoot();
+    if(node==null)continue;
+    String pkg;
+    try{pkg=String.valueOf(node.getPackageName());}finally{node.recycle();}
+    if(target.equals(pkg)&&found.equals(armedBounds))targetSeen=true;
+    else if(!target.equals(pkg)&&found.width()>=armedBounds.width()*.95f
+       &&found.height()>=armedBounds.height()*.95f&&Rect.intersects(found,armedBounds))
+       return false;
+   }
+   return targetSeen;
+  }catch(RuntimeException unavailable){return false;}
+ }
  /** Pause retains capture/calibration, but invalidates every pre-pause action ticket. */
  private boolean deferFocus(String reason){
   if("FOCUS_CHANGED".equals(reason))return true; // stale callback/plan, never retry its action
   if(!(playingJumper||playing2048||playingGrid||discoveringBoard)||!WindowFocus.transientLoss(reason))return false;
-  if(windowFocus.observe(gate.epoch(),reason,SystemClock.elapsedRealtime())!=WindowFocus.State.WAITING)return false;
+  if(windowFocus.observe(gate.epoch(),reason,SystemClock.elapsedRealtime(),unchangedTargetVisible())!=WindowFocus.State.WAITING)return false;
   if(WindowFocus.interruptedArcade(playingJumper,arcadePending!=null,jumperAwaitingVerification)||WindowFocus.interrupted2048(playing2048,before2048!=null)){stop("Фокус потерян во время непроверенного жеста · STOP");return true;}
   if(!focusPaused){
    focusPaused=true;gate.pause();boardReadGeneration++;arcadeSceneGeneration++;
@@ -534,9 +558,13 @@ public class PilotService extends AccessibilityService {
  private void watchFocus(long epoch,long watch){
   if(epoch!=gate.epoch()||!focusPaused||watch!=focusWatchId)return;
   String reason=windowRejection(null,false,true);
-  WindowFocus.State state=windowFocus.observe(epoch,reason,SystemClock.elapsedRealtime());
-  if(state==WindowFocus.State.STOP){focusWatch=false;stop("Фокус не восстановлен за 600 мс — STOP ["+reason+"]");return;}
-  if(state==WindowFocus.State.WAITING){handler.postDelayed(()->watchFocus(epoch,watch),75);return;}
+  boolean targetVisible=unchangedTargetVisible();
+  WindowFocus.State state=windowFocus.observe(epoch,reason,SystemClock.elapsedRealtime(),targetVisible);
+  if(state==WindowFocus.State.STOP){focusWatch=false;stop("Фокус не восстановлен за ограниченное окно ожидания — STOP ["+reason+"] visible="+targetVisible);return;}
+  if(state==WindowFocus.State.WAITING){
+   note="WAIT_WINDOW_FOCUS: ввод запрещён, цель "+(targetVisible?"видна":"временно недоступна");update();
+   handler.postDelayed(()->watchFocus(epoch,watch),75);return;
+  }
   gate.resume();focusPaused=false;focusWatch=false;focusWatchId++;focusRecoveredAt=SystemClock.elapsedRealtime();
   note="Прежнее окно восстановлено · ожидаю свежий кадр";update();
   if(playingGrid)scheduleGrid(epoch);
