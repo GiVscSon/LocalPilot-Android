@@ -29,6 +29,8 @@ final class CaptureStartup {
   return "STARTUP_"+clean.substring(0,Math.min(clean.length(),24));
  }
  synchronized void error(long id,String type){if(active(id))record("ERROR "+stage+" "+type);}
+ /** Bounded, non-authorizing worker-liveness evidence for the current session. */
+ synchronized void diagnostic(long id,long now,String code){if(active(id))record(now+" session="+id+" HEALTH "+code); }
  synchronized void stop(long now){if(stage!=Stage.STOPPED)set(Stage.STOPPED,now,"stop");}
  synchronized String label(){return switch(stage){
   case CONSENT -> "Ожидание разрешения захвата…"; case SERVICE -> "2/5 служба";
