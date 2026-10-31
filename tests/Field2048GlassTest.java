@@ -29,6 +29,44 @@ public final class Field2048GlassTest {
   for(int i=0;i<16;i++)
    check(board.cells[i]==EXPECTED[i],"real screenshot 4x4 r"+(i/4+1)+" c"+(i%4+1)+
        " expected="+EXPECTED[i]+" observed="+board.cells[i]);
+  // 31-Oct user's labelled real screen: r2c2=64, nearby r4c2=8.
+  // Only colour summaries derived from the private screenshot are included.
+  // A pastel border/glare at top-left and white numeral at the centre must
+  // not cause the reader to invent a blank tile or turn a real 64 into 8.
+  int[][] october={
+    {rgb(233,96,208),rgb(240,220,219),rgb(236,132,49),rgb(240,220,219)},
+    {rgb(236,132,49),rgb(197,126,124),rgb(240,220,219),rgb(240,220,219)},
+    {rgb(65,53,137),rgb(240,220,219),rgb(240,220,219),rgb(240,220,219)},
+    {rgb(66,57,156),rgb(187,68,108),rgb(237,137,53),rgb(240,220,219)}
+  };
+  final int[] octoberExpected={
+    4,0,2,0, 2,64,0,0, 16,0,0,0, 16,8,2,0
+  };
+  PixelBoardReader.Pixels photoDerived=(x,y)->{
+   int row=Math.min(3,y/160),col=Math.min(3,x/160),value=octoberExpected[row*4+col];
+   double fx=(x%160)/160.0,fy=(y%160)/160.0;
+   if(value>0&&fx>=.18&&fx<.36&&fy>=.18&&fy<.33)
+    return rgb(236,204,214); // top-left translucent raised edge
+   if(value>0&&fx>=.40&&fx<.62&&fy>=.36&&fy<.64)
+    return rgb(255,253,253); // oversized white number; not its identity
+   return october[row][col];
+  };
+  var photographed=Color2048Reader.read(photoDerived,640,640,0,0,640,640);
+  for(int i=0;i<16;i++)
+   check(photographed.cells[i]==octoberExpected[i],
+     "31-Oct board r"+(i/4+1)+"c"+(i%4+1)+" must read "+octoberExpected[i]);
+  var capturedSession=new Color2048Reader.Session();
+  check(capturedSession.read(photoDerived,640,640,0,0,640,640,null,0,450).same(photographed),
+    "session must recognize numbered 64 without a false 8 or a guess at 128");
+  check(capturedSession.learnedCount()==0,"labelled 64 reference is not unsupervised neural learning");
+  // Unknown vivid tile is still rejected, despite the wider inner sample.
+  int[][] foreignColor=new int[4][4];
+  for(int i=0;i<4;i++)foreignColor[i]=october[i].clone();
+  foreignColor[1][1]=rgb(190,170,90);
+  try{
+   new Color2048Reader.Session().read(pixels(foreignColor),640,640,0,0,640,640,null,0,500);
+   throw new AssertionError("foreign first-frame colour was guessed as 64");
+  }catch(IllegalArgumentException expected){assertions++;}
   // A user may choose the generic "2048" profile while the Market renders
   // the glass-colored skin. A strict failed legacy read may try the bounded
   // color reader only at startup, and only an actual complete board switches.
