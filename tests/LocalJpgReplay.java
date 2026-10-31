@@ -91,15 +91,19 @@ public final class LocalJpgReplay {
    }
    case "GRID6":case "GRID7":{
     int size=s.profile.equals("GRID6")?6:7;boolean skulls=size==6;
-    GridPuzzleVision.Observation obs=GridPuzzleVision.detect(image::getRGB,s.l,s.t,s.r,s.b,size,size,s.el,s.et,s.er,s.eb,1000,null,skulls);
+    GridPuzzleVision.Observation obs=GridPuzzleVision.detect(image::getRGB,s.l,s.t,s.r,s.b,size,size,s.el,s.et,s.er,s.eb,1000,null,skulls,size==7);
     int observed=size*size-obs.unknownIndices().length;
     List<String> reasons=new ArrayList<>();
     for(int row=0;row<size;row++)for(int col=0;col<size;col++){
      GridPuzzleVision.CellReason reason=obs.reason(row,col);
      if(reason!=GridPuzzleVision.CellReason.KNOWN)reasons.add("R"+(row+1)+"C"+(col+1)+":"+reason);
     }
-    return "observedCells="+observed+"/"+(size*size)+" complete="+obs.complete()+" usable="+obs.usable()+
+    String detail="observedCells="+observed+"/"+(size*size)+" complete="+obs.complete()+" usable="+obs.usable()+
        " partialUsable="+obs.partialUsable()+" unknowns="+obs.unknownReasonCounts()+" cellReasons="+String.join(";",reasons);
+    // A single offline image cannot supply the independent stability and
+    // post-ACK evidence required to act on a partially observed grid.
+    if(!obs.usable())return "FAIL "+(obs.partialUsable()?"GRID_PARTIAL_SINGLE_FRAME":"GRID_UNUSABLE")+": "+detail;
+    return detail;
    }
    case "2048":{
     String locator;
@@ -123,7 +127,9 @@ public final class LocalJpgReplay {
     if(profile==ArcadeProfile.FLAPPY)detail.append(" counterY_px=").append(s.t+Math.round(found.bottom*(s.b-s.t)));
     detail.append(" acceptedObstacles=");for(ArcadeObservation.Box o:found.obstacles)detail.append(String.format(Locale.ROOT,"(%.2f,%.2f)-(%.2f,%.2f) ",o.left,o.top,o.right,o.bottom));
     if(profile==ArcadeProfile.FLAPPY)detail.append(" belowCounterRejected=not_exposed_by_ArcadeVision");
-    return detail.toString();
+    // The old runner printed usable=false but still reported OBSERVED.
+    // Keep the actual detector decision authoritative for offline acceptance.
+    return found.usable()?detail.toString():"FAIL ARCADE_UNUSABLE: "+detail;
    }
    default:throw new IllegalArgumentException("UNKNOWN_PROFILE "+s.profile);
   }

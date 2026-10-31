@@ -62,6 +62,30 @@ class LocalJpgContractVerify {
      "filename,profile,left,top,right,bottom,excludedLeft,excludedTop,excludedRight,excludedBottom\n"
      +"sample.png,GRID6,0,0,8,8,-1,0,3,4\n");
    replay(cls,invalid,AssertionError.class,"INVALID_EXCLUDED_ROI");
+   // Detection may finish normally while still reporting unusable vision.
+   // Neither incomplete grids nor an absent arcade player are acceptance.
+   for(String profile:List.of("GRID6","GRID7","FLAPPY")){
+    Path rejected=Files.createDirectory(root.resolve("rejected-"+profile));
+    int w=profile.equals("FLAPPY")?240:profile.equals("GRID7")?224:216;
+    int h=profile.equals("FLAPPY")?320:w;
+    ImageIO.write(new BufferedImage(w,h,BufferedImage.TYPE_INT_RGB),"png",
+      rejected.resolve("blank.png").toFile());
+    Files.writeString(rejected.resolve("localpilot-frames.csv"),
+      "filename,profile,left,top,right,bottom\nblank.png,"+profile+",0,0,"+w+","+h+"\n");
+    replay(cls,rejected,AssertionError.class,profile.equals("FLAPPY")?"ARCADE_UNUSABLE":"GRID_UNUSABLE");
+   }
+   // Keep a positive 2048 fixture to prevent an all-reject test harness.
+   Path valid=Files.createDirectory(root.resolve("valid-2048"));
+   BufferedImage color=new BufferedImage(640,640,BufferedImage.TYPE_INT_RGB);
+   int[][] tiles={{0xbdaec1,0xd9b9be,0xf56400,0xe8c2c0},
+      {0xe0d0e7,0xf928be,0xf928be,0xfdded2},
+      {0xebd7f2,0xf1daf0,0xf4dbe9,0xf5dded},
+      {0xecd4f5,0xedd7f3,0xf1d8f0,0xf1d9ef}};
+   for(int y=0;y<640;y++)for(int x=0;x<640;x++)color.setRGB(x,y,tiles[y/160][x/160]);
+   ImageIO.write(color,"png",valid.resolve("board.png").toFile());
+   Files.writeString(valid.resolve("localpilot-frames.csv"),
+     "filename,profile,left,top,right,bottom\nboard.png,2048,0,0,640,640\n");
+   replay(cls,valid,null,"board=4x4");
    Path incomplete=Files.createDirectory(root.resolve("incomplete"));
    ImageIO.write(new BufferedImage(8,8,BufferedImage.TYPE_INT_ARGB),"png",
      incomplete.resolve("present.png").toFile());
