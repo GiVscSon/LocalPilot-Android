@@ -45,13 +45,14 @@ class ReleaseToolsTest(unittest.TestCase):
         source = re.sub(r"versionName\s+'[^']+'", "versionName '8.9.10'", path.read_text())
         path.write_text(re.sub(r'versionCode\s+\d+', 'versionCode 987', source))
         config = common.configuration(self.root)
-        self.assertEqual(('8.9.10-dev-install1029', 987), (config['version'], config['versionCode']))
+        self.assertEqual(('8.9.10-qa-tablet1031', 987), (config['version'], config['versionCode']))
 
-    def test_standalone_is_distinct_from_existing_dev_installation(self):
+    def test_qa_package_is_distinct_from_dev_and_installed_standalone(self):
         config = common.configuration(self.root)
-        self.assertEqual('org.localpilot.android.dev.install1029', config['package'])
+        self.assertEqual('org.localpilot.android.qa.tablet1031', config['package'])
+        self.assertNotEqual('org.localpilot.android.dev.install1029', config['package'])
         self.assertNotEqual('org.localpilot.android.dev', config['package'])
-        self.assertEqual('0.7.34-dev-install1029', config['version'])
+        self.assertEqual('0.7.34-qa-tablet1031', config['version'])
 
     def test_missing_or_ambiguous_version_fails(self):
         path = self.root / 'app/build.gradle'
