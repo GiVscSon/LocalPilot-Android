@@ -13,10 +13,12 @@ public final class WindowFocus {
  public State observe(long session,String reason,long now,boolean unchangedTargetVisible){
   if(now<0)return State.STOP;
   if(epoch!=session){epoch=session;lostAt=-1;}
+  // A recovered window cannot retroactively undo a timed-out focus loss.
+  // This also preserves legacy 600ms semantics without visibility proof.
+  if(lostAt>=0&&(now<lostAt||now-lostAt>=(unchangedTargetVisible?VISIBLE_GRACE_MS:GRACE_MS)))return State.STOP;
   if(reason==null){lostAt=-1;return State.ACTIVE;}
   if(!transientLoss(reason))return State.STOP;
   if(lostAt<0)lostAt=now;
-  if(now<lostAt||now-lostAt>=(unchangedTargetVisible?VISIBLE_GRACE_MS:GRACE_MS))return State.STOP;
   return State.WAITING;
  }
  /** An interrupted arcade gesture cannot be safely recovered by dropping feedback. */
