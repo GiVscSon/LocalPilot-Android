@@ -1,1 +1,26 @@
 plugins { id 'com.android.application' version '8.7.3' apply false }
+
+/**
+ * Explicit opt-in replay against the unmodified local JPG. Never reads a
+ * private screenshot in regular CI or packages it in an APK.
+ *
+ * ./gradlew localJpgReplay -Dlocalpilot.jpgDir=/path/to/dir
+ */
+tasks.register('localJpgReplay', Exec) {
+    group = 'verification'
+    description = 'Probe 2048 R2C4 RGB/HSV from the operator-supplied local JPEG'
+    def jpgDir = providers.systemProperty('localpilot.jpgDir')
+        .orElse(providers.environmentVariable('LOCALPILOT_JPG_DIR'))
+    doFirst {
+        if (!jpgDir.isPresent() || jpgDir.get().trim().isEmpty()) {
+            throw new GradleException('Missing -Dlocalpilot.jpgDir or LOCALPILOT_JPG_DIR')
+        }
+        def folder = file(jpgDir.get())
+        if (!folder.isDirectory()) throw new GradleException('JPEG directory not found: ' + folder)
+        def os = System.getProperty('os.name').toLowerCase(java.util.Locale.ROOT)
+        def javaExe = new File(System.getProperty('java.home'), os.contains('win') ? 'bin/java.exe' : 'bin/java')
+        commandLine(javaExe.absolutePath, '-Djava.awt.headless=true',
+            '-Dlocalpilot.jpgDir=' + folder.absolutePath,
+            new File(rootProject.projectDir, 'tests/LocalJpgVerify.java').absolutePath)
+    }
+}
