@@ -76,14 +76,18 @@ public final class BubbleVision {
       int row=Math.round((b.y()-oy)/(d*.8660254f));if(row<0||row>23)continue;
       int col=Math.round((b.x()-ox)/d-(row%2==parity?.5f:0f));if(col<0||col>15)continue;
       float dx=b.x()-(ox+(col+(row%2==parity?.5f:0f))*d),dy=b.y()-(oy+row*d*.8660254f),e=dx*dx+dy*dy;
-      if(e>d*d*.045f){error+=d*d;continue;}error+=e;matched++;rowPhases|=1<<(row%2);minRow=Math.min(minRow,row);maxRow=Math.max(maxRow,row);
+      if(e>d*d*.045f){continue;}error+=e;matched++;rowPhases|=1<<(row%2);minRow=Math.min(minRow,row);maxRow=Math.max(maxRow,row);
      }
-     if(matched<3||matched<anchors.size()||maxRow<=minRow||rowPhases!=3)continue;
-     error/=matched*d*d;
+     // Gapped islands do not require contiguous balls. A few textured
+     // foreground fragments can be outliers, but geometry still needs
+     // both row phases and at least four independent anchors.
+     int tolerated=Math.min(2,anchors.size()/5);
+     if(matched<Math.max(4,anchors.size()-tolerated)||maxRow<=minRow||rowPhases!=3)continue;
+     error=(error+(anchors.size()-matched)*d*d*.018f)/(anchors.size()*d*d);
      if(error<best){best=error;fit=new float[]{ox,oy,d,parity};}
     }
    }
-   if(fit==null||best>.006f)return new Read(null,"Круглые объекты не образуют устойчивые ряды");
+   if(fit==null||best>.008f)return new Read(null,"Круглые объекты не образуют устойчивые ряды");
    x0=fit[0];y0=fit[1];step=fit[2];shortParity=(int)fit[3];
    cols=(int)Math.floor((w-x0-step*.40f)/step)+1;
    rows=Math.min(24,(int)Math.floor((ly-step*2-y0)/(step*.8660254f))+1);
