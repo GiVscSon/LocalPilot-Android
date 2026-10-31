@@ -983,7 +983,7 @@ public class PilotService extends AccessibilityService {
  private void configureGrid(){
   if(!gridSelected()){note="Сначала Игра → Фишки: обмен или группы";update();return;}
   if(!bindSelectedWindow())return;loadGridConfig();
-  overlayMenu("Сетка фишек · "+gridConfig.rows+"×"+gridConfig.cols,new String[]{"8×7 (Мэтч Ворлд на снимке)","7×7","6×6","Другие строки и столбцы (3–10)"},i->{if(i<3){int rows=i==0?8:i==1?7:6,cols=i==0?7:rows;setGridSize(rows,cols,GridProfileRules.minimum(selectedProfile));selectVisualRegion();}else showGridSizeForm();});
+  overlayMenu("Сетка фишек · "+gridConfig.rows+"×"+gridConfig.cols,new String[]{"8×7 (Мэтч Ворлд)","9×8 (Мэтч Ворлд с ящиками)","7×7","6×6","Другие строки и столбцы (3–10)"},i->{if(i<4){int rows=i==0?8:i==1?9:i==2?7:6,cols=i==0?7:i==1?8:rows;setGridSize(rows,cols,GridProfileRules.minimum(selectedProfile));selectVisualRegion();}else showGridSizeForm();});
  }
  private void chooseGridGoal(){
   if(!gridSelected()){note="Сначала Игра → Фишки: обмен или группы";update();return;}if(!bindSelectedWindow())return;
