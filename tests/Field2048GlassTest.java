@@ -29,6 +29,39 @@ public final class Field2048GlassTest {
   for(int i=0;i<16;i++)
    check(board.cells[i]==EXPECTED[i],"real screenshot 4x4 r"+(i/4+1)+" c"+(i%4+1)+
        " expected="+EXPECTED[i]+" observed="+board.cells[i]);
+  // A user may choose the generic "2048" profile while the Market renders
+  // the glass-colored skin. A strict failed legacy read may try the bounded
+  // color reader only at startup, and only an actual complete board switches.
+  boolean rejectedLegacy=false;
+  try{PixelBoardReader.read(frame,640,640,0,0,640,640);}
+  catch(IllegalArgumentException unknown){rejectedLegacy=true;}
+  check(rejectedLegacy,"legacy reader must not silently accept the Market glass skin");
+  var autoSession=new Color2048Reader.Session();
+  var selected=Game2048AutoReader.read(frame,640,640,0,0,640,640,
+     autoSession,false,true,null,0,450);
+  check(selected.switched()&&selected.colored()&&selected.board().same(board),
+     "known Market board switches to the verified color reader");
+  var nextRead=Game2048AutoReader.read(frame,640,640,0,0,640,640,
+     autoSession,true,false,null,0,550);
+  check(!nextRead.switched()&&nextRead.colored()&&nextRead.board().same(board),
+     "second stable frame stays in the same reader");
+  try{
+   Game2048AutoReader.read(frame,640,640,0,0,640,640,
+     new Color2048Reader.Session(),false,false,null,0,450);
+   throw new AssertionError("fallback occurred without explicit startup permission");
+  }catch(IllegalArgumentException expected){assertions++;}
+  try{
+   Game2048AutoReader.read(frame,640,640,0,0,640,640,
+     new Color2048Reader.Session(),false,true,board,0,450);
+   throw new AssertionError("mid-gesture palette fallback was permitted");
+  }catch(IllegalArgumentException expected){assertions++;}
+  var unknownPixels=(PixelBoardReader.Pixels)(x,y)->0x22cbe0;
+  try{
+   Game2048AutoReader.read(unknownPixels,640,640,0,0,640,640,
+     new Color2048Reader.Session(),false,true,null,0,450);
+   throw new AssertionError("foreign colors were promoted to a Market tile");
+  }catch(IllegalArgumentException expected){assertions++;}
+
   Color2048Reader.Session session=new Color2048Reader.Session();
   Board2048 staged=session.read(frame,640,640,0,0,640,640,null,0,500);
   check(staged.same(board),"game-scoped session must classify the same glass cells");
