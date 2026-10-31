@@ -56,7 +56,17 @@ public final class OnlineDiagnosticsActivity extends Activity {
   paragraph(content,"Введите свой ключ OpenRouter и точное название модели. Для резервной маршрутизации можно указать до трёх моделей через запятую. Сводка отправляется только после вашего подтверждения; OpenRouter и выбранный провайдер получат её и вопрос. Запрос может расходовать платные токены. Ключ не сохраняется.");
   routerKey=field(content,"OpenRouter API key · только для текущего запроса",true);
   models=field(content,"Модель или несколько через запятую",false);
-  models.setText("~openai/gpt-sol-latest");
+  models.setText("openai/gpt-4o-mini");
+  addButton(content,"Проверить API-ключ OpenRouter",()->{
+   if(advisor.busy()){answer.setText("Предыдущий запрос ещё выполняется");return;}
+   String key=routerKey.getText().toString();
+   try{
+    advisor.checkKey(key,result->answer.setText(result));
+    answer.setText("Проверяю ключ на сервере OpenRouter...");
+   }catch(IllegalArgumentException|IllegalStateException error){
+    answer.setText("Проверка ключа: "+error.getMessage());
+   }
+  });
   question=field(content,"Что мешает агенту играть и какие ошибки проверить?",false);
   question.setSingleLine(false);question.setMinLines(2);
   question.setText("Почему игра не делает подтверждённых ходов и какой следующий диагностический тест?");
