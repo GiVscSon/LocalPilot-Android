@@ -918,7 +918,7 @@ public class PilotService extends AccessibilityService {
     }
     if(gridPendingDecision!=null)incrementGridStat("unconfirmed");
     if(gridPendingDecision!=null&&gridSession.acknowledged()){
-     gridLearning.recordNoResponse(gridPendingDecision);saveGridLearning();
+     if(gridSession.unchangedAtTimeout()){gridLearning.recordNoResponse(gridPendingDecision);saveGridLearning();}
      if(gridSession.unchangedAtTimeout()&&gridPendingBoard!=null&&gridPendingSpecial!=null
        &&gridLearning.avoidUnchangedMove(gridPendingBoard,new GridPuzzle(gridConfig.rows,gridConfig.cols,observedCells),gridPendingSpecial,observation.specialCellsMask(),gridPendingDecision))gridAvoidScope=gridPendingScope;
     }
@@ -929,7 +929,16 @@ public class PilotService extends AccessibilityService {
    if(status==GridPuzzleSession.Status.CHANGED){
     gridVerified++;incrementGridStat("visual_changes");
     if(gridPendingDecision!=null){
-     gridLearning.recordVerified(gridPendingDecision);saveGridLearning();gridPendingDecision=null;
+     // Store only the stable, visually verified transition, never raw ACK.
+     if(gridPendingBoard!=null&&gridPendingDecision.mode==GridPuzzlePolicy.Mode.SWAP_MATCH3
+       &&gridConfig.rows==gridConfig.cols&&(gridConfig.rows==6||gridConfig.rows==7)){
+      int[] after=gridSession.stableCells(),before=gridPendingBoard.cells();
+      int from=gridPendingDecision.fromRow*gridConfig.cols+gridPendingDecision.fromCol;
+      int to=gridPendingDecision.toRow*gridConfig.cols+gridPendingDecision.toCol;
+      if(after!=null&&!saveExample("grid"+gridConfig.rows+"-swap",before,from*before.length+to,after))return;
+     }
+     gridLearning.recordVerified(gridPendingDecision);saveGridLearning();
+     gridPendingDecision=null;gridPendingBoard=null;gridPendingSpecial=null;
     }
    }
    if(status!=GridPuzzleSession.Status.READY&&status!=GridPuzzleSession.Status.CHANGED){
@@ -939,32 +948,37 @@ public class PilotService extends AccessibilityService {
     update();scheduleGrid(epoch);return;
    }
    if(targetIsBrowser&&!browserSceneGate.observe(frameAt,observation.usable())){note="Сетка: после изменения браузера нужны 2 стабильных кадра, жестов нет";update();scheduleGrid(epoch);return;}
+   // The second raw observation alone cannot authorize an action on a
+   // flickering partial board. Use only the two-frame common known subset.
+   int[] stableCells=gridSession.stableCells();
+   java.util.BitSet stableSpecial=gridSession.stableSpecialCells();
+   if(stableCells==null){note="Нет подтверждённых двух кадров";update();scheduleGrid(epoch);return;}
+   boolean stablePartial=false;for(int cell:stableCells)if(cell<0){stablePartial=true;break;}
    gridPalette=observation.palette();
-   // Only fully verified observations may overwrite a stored game palette.
-   // Partial observations remain session-local until a complete board appears.
-   if(observation.usable())getSharedPreferences("grid-puzzle",MODE_PRIVATE).edit()
+   // Never persist palette entries learned from an incomplete frame.
+   if(!stablePartial&&observation.usable())getSharedPreferences("grid-puzzle",MODE_PRIVATE).edit()
      .putString(gridKey()+".palette",gridPalette.encode()).apply();
    metrics.attempt(StageMetrics.Stage.POLICY);long policyNs=SystemClock.elapsedRealtimeNanos();
    int targetType=GridPuzzleGoal.targetType(gridPalette,gridGoal);
-   GridPuzzle board=new GridPuzzle(gridConfig.rows,gridConfig.cols,observation.cells());
+   GridPuzzle board=new GridPuzzle(gridConfig.rows,gridConfig.cols,stableCells);
    GridPuzzlePolicy.Decision action=GridPuzzlePolicy.chooseAdaptive(
      board,gridMode(),gridConfig.minGroup,targetType,gridConfig.rows*gridConfig.cols,
-     observation.specialCellsMask(),partialGrid,gridLearning);
+     stableSpecial,stablePartial,gridLearning);
    captureDecisions++;metrics.record(StageMetrics.Stage.POLICY,SystemClock.elapsedRealtimeNanos()-policyNs);
    // Bent four-cell chains are suggestions only: live gestures currently support straight paths.
    boolean shadowChain=gridMode()==GridPuzzlePolicy.Mode.TRACE_LINE
      &&GridChainShadow.findFour(board,observation.specialCellsMask())!=null;
    if(!automatic()){note="Наблюдение: сетка прочитана · "+(shadowChain?"найдена цепочка из 4 (без ввода)":action==null?"совпадений не найдено":"найден ход, фишек "+action.expectedCleared);update();scheduleGrid(epoch);return;}
-   // Incomplete boards remain observational until partial-grid safety is validated.
-   if(partialGrid){note="Частичная сетка · наблюдение без ввода"+(shadowChain?" · найдена цепочка из 4":action==null?"":" · найден возможный ход");update();scheduleGrid(epoch);return;}
+   // Partial actions are legal only on the intersection: policy forbids
+   // UNKNOWN and protected endpoints or predicted clears.
    if(action==null){note="Нет проверяемого хода · продолжаю наблюдение"+(partialGrid?" (неизвестные клетки не трогаю)":"");update();scheduleGrid(epoch);return;}
    if(busy||!valid(ticket)||SystemClock.elapsedRealtime()-frameAt>300){note="Жду свежий кадр для хода";update();scheduleGrid(epoch);return;}
    float x=r.left+(action.fromCol+.5f)*r.width()/gridConfig.cols,y=r.top+(action.fromRow+.5f)*r.height()/gridConfig.rows;
    float ex=r.left+(action.toCol+.5f)*r.width()/gridConfig.cols,ey=r.top+(action.toRow+.5f)*r.height()/gridConfig.rows;
-   long sentBefore=captureSent;gridSession.sent(observation.cells(),SystemClock.elapsedRealtime(),action);
+   long sentBefore=captureSent;gridSession.sent(stableCells,SystemClock.elapsedRealtime(),action);
    sendObserved(x,y,ex,ey,ticket,()->{gridSession.acknowledge(SystemClock.elapsedRealtime());note="Жест доставлен · проверяю поле";update();scheduleGrid(epoch);},frameAt,action.mode==GridPuzzlePolicy.Mode.TAP_GROUP?55:160);
    if(captureSent>sentBefore){
-    gridPendingDecision=action;gridPendingBoard=board;gridPendingSpecial=observation.specialCellsMask();gridPendingScope=gridKey()+"|"+gridConfig.encode()+"|"+gridPalette.encode();gridMoves++;gridSawAction=true;incrementGridStat("dispatched");
+    gridPendingDecision=action;gridPendingBoard=board;gridPendingSpecial=stableSpecial;gridPendingScope=gridKey()+"|"+gridConfig.encode()+"|"+gridPalette.encode();gridMoves++;gridSawAction=true;incrementGridStat("dispatched");
     note="Ход "+gridMoves+" · ожидается фишек "+action.expectedCleared+" · подтверждено "+gridVerified
       +" · обучение "+gridLearning.verifiedCount()+" / "+gridLearning.notConfirmedCount();
     update();

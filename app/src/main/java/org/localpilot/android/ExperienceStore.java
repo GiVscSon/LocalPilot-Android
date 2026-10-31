@@ -11,8 +11,48 @@ public final class ExperienceStore {
  private static byte[] read(File f)throws IOException{if(!f.exists())return HEADER.getBytes(StandardCharsets.UTF_8);if(f.length()>MAX)throw new IOException("experience size");try(InputStream in=new FileInputStream(f)){return bounded(in);}}
  private static String hash(String s)throws IOException{try{byte[] digest=MessageDigest.getInstance("SHA-256").digest(s.getBytes(StandardCharsets.UTF_8));StringBuilder b=new StringBuilder();for(byte x:digest)b.append(String.format(Locale.ROOT,"%02x",x&255));return b.toString();}catch(NoSuchAlgorithmException e){throw new IOException(e);}}
  private static String board(int[] b){StringBuilder s=new StringBuilder();for(int v:b){if(s.length()>0)s.append(',');s.append(v);}return s.toString();}
- private static int[] parse(String s){String[] p=s.split(",",-1);if(p.length>25)throw new IllegalArgumentException();int[] b=new int[p.length];for(int i=0;i<p.length;i++)b[i]=Integer.parseInt(p[i]);return b;}
- private static int reward(String profile,int[] before,int action,int[] after){if(profile.equals("2048")){if(action<0||action>3)throw new IllegalArgumentException();return Verified2048.mergeReward(new Board2048(before),action,new Board2048(after));}int kind=profile.equals("ttt")?0:profile.equals("lights")?1:-1;if(kind==0){MiniPolicy.validate(0,before);int x=0,o=0;for(int v:before){if(v==1)x++;if(v==2)o++;}if(x!=o||MiniPolicy.winner(before)!=0)throw new IllegalArgumentException("not X turn");}if(kind<0||!MiniPolicy.verifies(kind,before,action,after))throw new IllegalArgumentException("unverified transition");return 0;}
+ private static int[] parse(String s){String[] p=s.split(",",-1);if(p.length>49)throw new IllegalArgumentException();int[] b=new int[p.length];for(int i=0;i<p.length;i++)b[i]=Integer.parseInt(p[i]);return b;}
+ private static int gridReward(String profile,int[] before,int action,int[] after){
+  int side=profile.equals("grid6-swap")?6:7, size=side*side;
+  if(before.length!=size||after.length!=size||action<0||action>=size*size)throw new IllegalArgumentException("grid transition geometry");
+  int from=action/size,to=action%size;
+  if(before[from]<=0||before[to]<=0||before[from]==before[to]
+     ||Math.abs(from/side-to/side)+Math.abs(from%side-to%side)!=1)
+   throw new IllegalArgumentException("invalid grid swap");
+  int known=0,changed=0;boolean outside=false;
+  for(int i=0;i<size;i++){
+   if(before[i]<-1||after[i]<-1)throw new IllegalArgumentException("invalid grid value");
+   if(before[i]>=0)known++;
+   if(before[i]>=0&&after[i]>=0&&before[i]!=after[i]){
+    changed++;if(i!=from&&i!=to)outside=true;
+   }
+  }
+  if(known<(size*72+99)/100||changed<2||!outside)throw new IllegalArgumentException("no verified local grid response");
+  // Require a legal match through the swapped endpoints on the recorded
+  // known board. This is structural validation, not a substitute for two
+  // fresh post-ACK visual observations at the call site.
+  int[] swapped=before.clone();int tmp=swapped[from];swapped[from]=swapped[to];swapped[to]=tmp;
+  boolean match=false;
+  for(int endpoint:new int[]{from,to}){
+   int row=endpoint/side,col=endpoint%side,color=swapped[endpoint];
+   if(color<=0)continue;
+   for(int axis=0;axis<2;axis++){
+    int dr=axis==0?0:1,dc=axis==0?1:0,count=1;
+    for(int sign:new int[]{-1,1}){
+     int rr=row+dr*sign,cc=col+dc*sign;
+     while(rr>=0&&rr<side&&cc>=0&&cc<side&&swapped[rr*side+cc]==color){
+      count++;rr+=dr*sign;cc+=dc*sign;
+     }
+    }
+    if(count>=3)match=true;
+   }
+  }
+  if(!match)throw new IllegalArgumentException("swap has no witnessed legal match");
+  return 6;
+ }
+ private static int reward(String profile,int[] before,int action,int[] after){
+  if(profile.equals("grid6-swap")||profile.equals("grid7-swap"))return gridReward(profile,before,action,after);
+  if(profile.equals("2048")){if(action<0||action>3)throw new IllegalArgumentException();return Verified2048.mergeReward(new Board2048(before),action,new Board2048(after));}int kind=profile.equals("ttt")?0:profile.equals("lights")?1:-1;if(kind==0){MiniPolicy.validate(0,before);int x=0,o=0;for(int v:before){if(v==1)x++;if(v==2)o++;}if(x!=o||MiniPolicy.winner(before)!=0)throw new IllegalArgumentException("not X turn");}if(kind<0||!MiniPolicy.verifies(kind,before,action,after))throw new IllegalArgumentException("unverified transition");return 0;}
  /** Header + seq|profile|action|reward|before|after|ppo=false|prev|hash. Imported claims are not authenticated. */
  public static int validate(byte[] data)throws IOException{if(data.length>MAX)throw new IOException("size");String text=new String(data,StandardCharsets.UTF_8);if(!Arrays.equals(data,text.getBytes(StandardCharsets.UTF_8))||!text.startsWith(HEADER)||!text.endsWith("\n"))throw new IOException("format/truncated");String rest=text.substring(HEADER.length());if(rest.isEmpty())return 0;String previous="0";int count=0;for(String line:rest.substring(0,rest.length()-1).split("\n",-1)){if(line.isEmpty())throw new IOException("blank record");String[] p=line.split("\\|",-1);try{if(p.length!=9||Integer.parseInt(p[0])!=count+1||!p[6].equals("ppo=false")||!p[7].equals(previous)||Integer.parseInt(p[3])!=reward(p[1],parse(p[4]),Integer.parseInt(p[2]),parse(p[5])))throw new IllegalArgumentException();String body=line.substring(0,line.lastIndexOf('|'));if(!hash(body).equals(p[8]))throw new IllegalArgumentException();previous=p[8];if(++count>MAX_ROWS)throw new IllegalArgumentException();}catch(IllegalArgumentException e){throw new IOException("invalid sample",e);}}return count;}
  public synchronized byte[] snapshot()throws IOException{byte[] b=read(file);validate(b);return b;}
