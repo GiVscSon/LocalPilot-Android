@@ -48,6 +48,9 @@ public final class Color2048Reader {
  public static final class Session {
   private final int[] learned=new int[12];
   private int[] pending;private Board2048 pendingBoard,pendingBefore;private int pendingAction,stableReads;
+  private boolean strictMode=true;
+  /** Visual tolerance only; no inferred value can bypass a verified transition. */
+  public void setStrictMode(boolean enabled){if(strictMode!=enabled){strictMode=enabled;discard();}}
   private long pendingAt=-1;
   public Session(){reset();}
   public void reset(){java.util.Arrays.fill(learned,-1);discard();}
@@ -87,10 +90,10 @@ public final class Color2048Reader {
    Board2048 expected=before==null?null:Verified2048.beforeSpawn(before,action);
    int[] colors=learned.clone(),values=new int[16];boolean added=false;
    for(int i=0;i<16;i++){
-    int[] sample=sample(pixels,left,top,right,bottom,i);int rgb=sample[0],value=known(rgb,colors);
+    int[] sample=sample(pixels,left,top,right,bottom,i);int rgb=sample[0],value=known(rgb,colors,strictMode);
     if(value<0){
      int target=expected==null?0:expected.cells[i];
-     if(target<32||target>2048||sample[1]>24)throw new IllegalArgumentException(
+     if(target<32||target>2048||sample[1]>(strictMode?24:30))throw new IllegalArgumentException(
       "Неизвестная или анимированная плитка: строка "+(i/4+1)+", столбец "+(i%4+1)
       +". Ожидайте остановки анимации; плитки 32 и выше изучаются после подтверждённого слияния.");
      int rank=Integer.numberOfTrailingZeros(target);
@@ -126,9 +129,13 @@ public final class Color2048Reader {
    if(stableReads<2||!pendingBoard.same(stable))throw new IllegalStateException("palette requires two stable frames");
    System.arraycopy(pending,0,learned,0,learned.length);discard();
   }
-  private static int known(int rgb,int[] palette){
+  private static int known(int rgb,int[] palette,boolean strict){
    int r=rgb>>16&255,g=rgb>>8&255,b=rgb&255;
    int result=-1;try{result=classify(r,g,b,0,0);}catch(IllegalArgumentException ignored){}
+   // The known dark 32 tile may have a slightly shifted glass/shadow tone.
+   // A new 64+ tile is accepted at startup only with its previously learned
+   // game-scoped palette. Arbitrary colours never imply a guessed exponent.
+   if(!strict&&result<0&&distance(rgb,DARK32)<=32*32)result=32;
    if(palette[5]>=0&&result==32&&distance(rgb,palette[5])>24*24)result=-1;
     for(int i=5;i<=11;i++)if(palette[i]>=0&&distance(rgb,palette[i])<=24*24){if(result>=0&&result!=(1<<i))return -1;result=1<<i;}
    return result;
