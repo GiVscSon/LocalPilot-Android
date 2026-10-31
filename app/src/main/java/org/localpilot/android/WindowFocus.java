@@ -3,16 +3,20 @@ package org.localpilot.android;
 public final class WindowFocus {
  public enum State { ACTIVE, WAITING, STOP }
  public static final long GRACE_MS=600;
+ /** Extra read-only grace is allowed only while the same target window remains
+  * visible at its originally bound bounds, without a foreign full-screen app. */
+ public static final long VISIBLE_GRACE_MS=2500;
  private long epoch=-1,lostAt=-1;
  public void reset(){epoch=lostAt=-1;}
  public boolean waiting(){return lostAt>=0;}
- public State observe(long session,String reason,long now){
+ public State observe(long session,String reason,long now){return observe(session,reason,now,false);}
+ public State observe(long session,String reason,long now,boolean unchangedTargetVisible){
   if(now<0)return State.STOP;
   if(epoch!=session){epoch=session;lostAt=-1;}
-  if(lostAt>=0&&(now<lostAt||now-lostAt>=GRACE_MS))return State.STOP;
   if(reason==null){lostAt=-1;return State.ACTIVE;}
   if(!transientLoss(reason))return State.STOP;
   if(lostAt<0)lostAt=now;
+  if(now<lostAt||now-lostAt>=(unchangedTargetVisible?VISIBLE_GRACE_MS:GRACE_MS))return State.STOP;
   return State.WAITING;
  }
  /** An interrupted arcade gesture cannot be safely recovered by dropping feedback. */
