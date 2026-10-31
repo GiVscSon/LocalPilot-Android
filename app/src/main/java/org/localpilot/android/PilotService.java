@@ -33,6 +33,8 @@ public class PilotService extends AccessibilityService {
  private final WindowFocus.RebindStability rebindStability=new WindowFocus.RebindStability();
  private long rebindGeneration;private final InputPermit permit=new InputPermit();private RotatingJournal journal;private final GestureFlight gestureFlight=new GestureFlight();
  private final Color2048Reader.Session colorSession=new Color2048Reader.Session();
+ // Session-scoped visual tolerance only. Never changes input authorization.
+ private boolean strictVision=true;private Button strictVisionButton;
  private boolean playingMini;private int miniKind,miniAction;private long miniMoves;private int[] miniBefore;private Rect boardRoi;private View picker;private boolean playing2048=false,colored2048=false,captureBusy=false;private long moves2048;private long captureCounter,pendingCapture,lastShotTimestamp=-1;private long mergeTotal;private Board2048 before2048;private int direction2048;private AlertDialog preview,overlayDialog;
  private final CaptureStartup captureStartup=new CaptureStartup();
  private final SceneRecovery sceneRecovery=new SceneRecovery();
@@ -379,6 +381,7 @@ public class PilotService extends AccessibilityService {
   row("Окно",this::chooseWindow,"Игра",this::chooseProfile);
   row("Область",this::chooseRegion,"Старт",this::startSelected);
   row("Ещё",this::moreOptions,"Свернуть",()->compact(true));
+  visionControlsRow();
   Button stopButton=new Button(this);stopButton.setText("STOP");stopButton.setOnClickListener(v->stop("STOP"));panel.addView(stopButton,new LinearLayout.LayoutParams(-1,dp(44)));
   miniBar=new LinearLayout(this);miniBar.setOrientation(LinearLayout.HORIZONTAL);miniBar.setVisibility(View.GONE);
   miniState=new TextView(this);miniState.setTextColor(Color.WHITE);miniState.setTextSize(9);miniState.setMaxLines(2);miniBar.addView(miniState,new LinearLayout.LayoutParams(0,dp(48),1));
@@ -390,8 +393,35 @@ public class PilotService extends AccessibilityService {
   panel.addOnLayoutChangeListener((view,l,t,r,b,ol,ot,or,ob)->{if(r-l!=or-ol||b-t!=ob-ot)handler.post(()->{if(panel==view)updatePanelLayout();});});
   updatePanelLayout();update();
  }
+ private void visionControlsRow(){
+  LinearLayout line=new LinearLayout(this);
+  strictVisionButton=new Button(this);strictVisionButton.setTextSize(11);
+  strictVisionButton.setOnClickListener(v->setStrictMode(!strictVision));
+  line.addView(strictVisionButton,new LinearLayout.LayoutParams(0,dp(40),1));
+  Button roi=new Button(this);roi.setText("ROI заново");roi.setTextSize(11);
+  roi.setOnClickListener(v->rebindVisionRoi());
+  line.addView(roi,new LinearLayout.LayoutParams(0,dp(40),1));
+  controls.addView(line);updateStrictVisionButton();
+ }
+ private void updateStrictVisionButton(){if(strictVisionButton!=null)strictVisionButton.setText(strictVision?"Зрение: строго":"Зрение: мягко");}
+ /** Public service control for the existing native panel. STOP revokes pending gestures. */
+ public void setStrictMode(boolean enabled){
+  if(strictVision==enabled)return;
+  stop("Режим распознавания изменён · STOP");
+  strictVision=enabled;colorSession.setStrictMode(enabled);
+  bubbleGeometry=null;gridPalette=null;clearDiagnosticFrame();sceneRecovery.reset();
+  note=enabled?"Строгое распознавание включено":"Мягкое распознавание: только визуальные допуски; STOP и ROI обязательны";
+  updateStrictVisionButton();update();
+ }
+ private void rebindVisionRoi(){
+  stop("Перепривязка ROI · STOP");bubbleGeometry=null;gridPalette=null;
+  visualRoi=null;manualVisualRoi=false;boardRoi=null;clearDiagnosticFrame();sceneRecovery.reset();
+  if(!bindSelectedWindow())return;
+  if(gridSelected())loadGridConfig();
+  selectVisualRegion();
+ }
  private void removeOverlay(View view){if(view!=null&&wm!=null)CaptureCleanup.run(()->wm.removeViewImmediate(view));}
- private void clearPanel(){View old=panel;panel=null;controls=null;state=null;miniBar=null;miniState=null;collapseButton=null;layout=null;consentPanelDetached=false;panelRegistered=false;panelCompact=false;manualControls.clear();removeOverlay(old);}
+ private void clearPanel(){View old=panel;panel=null;controls=null;state=null;miniBar=null;miniState=null;collapseButton=null;strictVisionButton=null;layout=null;consentPanelDetached=false;panelRegistered=false;panelCompact=false;manualControls.clear();removeOverlay(old);}
  /** A missing/stale WindowManager attachment never leaves input authority live. */
  private boolean updatePanelLayout(){
   if(panel==null||layout==null||wm==null||consentPanelDetached||destroying)return false;
@@ -429,7 +459,7 @@ public class PilotService extends AccessibilityService {
      :gate.armed()?"Окно выбрано":"STOP";
    miniState.setText(miniLabel+"\n"+note);
   }
-  if(state!=null)state.setText(profileLabel()+" · "+(manualVisualRoi?"область вручную":visualRoi!=null?"боковые поля убраны":"область авто")+"\n"+note+"\n"+(gate.armed()?targetLabel+" · "+(inputReady?"ввод включён":"наблюдение"):"Нажмите Старт или выберите Окно")+(captureSession>0||playingGrid?"\n"+captureCounters():"")+(collecting?"\nСбор примеров включён":""));
+  if(state!=null)state.setText((strictVision?"Строго":"Мягко")+" · "+profileLabel()+" · "+(manualVisualRoi?"область вручную":visualRoi!=null?"боковые поля убраны":"область авто")+"\n"+note+"\n"+(gate.armed()?targetLabel+" · "+(inputReady?"ввод включён":"наблюдение"):"Нажмите Старт или выберите Окно")+(captureSession>0||playingGrid?"\n"+captureCounters():"")+(collecting?"\nСбор примеров включён":""));
  }
  private AccessibilityNodeInfo windowRoot(AccessibilityWindowInfo window){return Build.VERSION.SDK_INT>=33?window.getRoot(0):window.getRoot();}
  private AccessibilityNodeInfo appRoot(){for(AccessibilityWindowInfo w:getWindows())if(w.getType()==AccessibilityWindowInfo.TYPE_APPLICATION&&w.isFocused()){AccessibilityNodeInfo r=windowRoot(w);if(r!=null){if(r.getWindowId()==w.getId())return r;r.recycle();}}return null;}
@@ -843,7 +873,7 @@ public class PilotService extends AccessibilityService {
     gridResultVisible=true;bubbleSession.reset();bubbleGeometry=null;note="Экран результата · нажмите Играть снова";update();scheduleGrid(epoch);return;
    }
    gridResultVisible=false;metrics.attempt(StageMetrics.Stage.READ);long started=SystemClock.elapsedRealtimeNanos();
-   BubbleVision.Read read=BubbleVision.read(pixels::getPixel,pixels.getWidth(),pixels.getHeight(),r.left,r.top,r.right,r.bottom,panel.left,panel.top,panel.right,panel.bottom,bubbleGeometry);
+   BubbleVision.Read read=BubbleVision.read(pixels::getPixel,pixels.getWidth(),pixels.getHeight(),r.left,r.top,r.right,r.bottom,panel.left,panel.top,panel.right,panel.bottom,bubbleGeometry,strictVision);
    bubbleSession.visionReason(read.reason());
    captureReads++;metrics.record(StageMetrics.Stage.READ,SystemClock.elapsedRealtimeNanos()-started);
    long frameAt=SystemClock.elapsedRealtime()-Math.max(0,SystemClock.uptimeMillis()-lastShotTimestamp);
