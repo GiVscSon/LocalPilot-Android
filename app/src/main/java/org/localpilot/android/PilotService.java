@@ -35,6 +35,13 @@ public class PilotService extends AccessibilityService {
  private final Color2048Reader.Session colorSession=new Color2048Reader.Session();
  // Session-scoped visual tolerance only. Never changes input authorization.
  private boolean strictVision=true;private Button strictVisionButton;
+ // One-minute, read-only, cumulative appearance learning scoped to the selected
+ // game/profile. No gesture may be dispatched while this session is active.
+ private boolean visionTraining;private long visionTrainingUntil;private int visionTrainingFrames;
+ private String visionTrainingScope="";private VisionNoveltyMemory visionMemory=new VisionNoveltyMemory();
+ private GridPuzzleVision.Observation trainingPreviousGrid;
+ private BubbleBoard trainingPreviousBubble;private int trainingBubbleStable;
+ private float learnedBubbleLauncher=Float.NaN;
  private boolean playingMini;private int miniKind,miniAction;private long miniMoves;private int[] miniBefore;private Rect boardRoi;private View picker;private boolean playing2048=false,colored2048=false,captureBusy=false;private long moves2048;private long captureCounter,pendingCapture,lastShotTimestamp=-1;private long mergeTotal;private Board2048 before2048;private int direction2048;private AlertDialog preview,overlayDialog;
  private final CaptureStartup captureStartup=new CaptureStartup();
  private final SceneRecovery sceneRecovery=new SceneRecovery();
@@ -382,6 +389,7 @@ public class PilotService extends AccessibilityService {
   row("Область",this::chooseRegion,"Старт",this::startSelected);
   row("Ещё",this::moreOptions,"Свернуть",()->compact(true));
   visionControlsRow();
+  row("Обучение 60 с",this::startVisionTraining,"Журнал",this::showVisionTrainingReport);
   Button stopButton=new Button(this);stopButton.setText("STOP");stopButton.setOnClickListener(v->stop("STOP"));panel.addView(stopButton,new LinearLayout.LayoutParams(-1,dp(44)));
   miniBar=new LinearLayout(this);miniBar.setOrientation(LinearLayout.HORIZONTAL);miniBar.setVisibility(View.GONE);
   miniState=new TextView(this);miniState.setTextColor(Color.WHITE);miniState.setTextSize(9);miniState.setMaxLines(2);miniBar.addView(miniState,new LinearLayout.LayoutParams(0,dp(48),1));
@@ -419,6 +427,147 @@ public class PilotService extends AccessibilityService {
   if(!bindSelectedWindow())return;
   if(gridSelected())loadGridConfig();
   selectVisualRegion();
+ }
+ private String visionScope(){
+  return profileChoiceKey(target)+".vision."+selectedProfile
+    +(gridSelected()?"."+gridConfig.rows+"x"+gridConfig.cols:"");
+ }
+ private void loadVisionTraining(){
+  visionTrainingScope=visionScope();
+  String data=getSharedPreferences("vision-training",MODE_PRIVATE).getString(visionTrainingScope+".novel",null);
+  try{visionMemory=data==null?new VisionNoveltyMemory():VisionNoveltyMemory.decode(data);}
+  catch(IllegalArgumentException invalid){visionMemory=new VisionNoveltyMemory();}
+  learnedBubbleLauncher=Float.NaN;
+  if(selectedProfile==9){
+   float value=getSharedPreferences("vision-training",MODE_PRIVATE).getFloat(visionTrainingScope+".launcher",Float.NaN);
+   if(Float.isFinite(value)&&value>=.35f&&value<=.65f)learnedBubbleLauncher=value;
+  }
+ }
+ private void persistVisionTraining(){
+  if(visionTrainingScope.isEmpty())return;
+  getSharedPreferences("vision-training",MODE_PRIVATE).edit()
+    .putString(visionTrainingScope+".novel",visionMemory.encode()).apply();
+ }
+ private void observeNovelAppearance(Bitmap image,Rect roi,float cx,float cy,long frameAt){
+  if(roi==null||roi.isEmpty())return;
+  int x=Math.max(roi.left+2,Math.min(roi.right-3,Math.round(roi.left+roi.width()*cx)));
+  int y=Math.max(roi.top+3,Math.min(roi.bottom-4,Math.round(roi.top+roi.height()*cy)));
+  if(x<0||y<0||x>=image.getWidth()||y>=image.getHeight())return;
+  int[] visual=VisionNoveltyMemory.appearance(image.getPixel(x,y),image.getPixel(x,y-2),image.getPixel(x,y+2));
+  visionMemory.observe(visual[0],visual[1],frameAt);
+ }
+ private void showVisionTrainingReport(){
+  stop("Журнал обучения · STOP");
+  if(target.isEmpty()){note="Сначала выберите окно и профиль игры";update();return;}
+  loadVisionTraining();
+  showServiceDialog(new AlertDialog.Builder(this).setTitle("Обучение · "+profileLabel())
+   .setMessage("Накоплено форм: "+visionMemory.size()+"\nПовторяются в кадрах: "+visionMemory.stableCount()
+   +"\nШипучка · обученная позиция пушки: "+(Float.isFinite(learnedBubbleLauncher)?Math.round(learnedBubbleLauncher*100)+"%":"не подтверждена")
+   +"\nСохранённые формы помогают повторно узнавать объекты. Неизвестному объекту нельзя автоматически назначать номинал или безопасность.")
+   .setPositiveButton("Закрыть",null).create());
+ }
+ /** Start ONLY after game+ROI have been selected; observation grants no input. */
+ public void startVisionTraining(){
+  if(busy||captureBusy||visionTraining){note="Завершите текущий жест/режим";update();return;}
+  stop("Подготовка обучения · STOP");
+  if(!bindSelectedWindow())return;
+  if(visualRoi==null||!armedBounds.contains(visualRoi)||visualRoi.isEmpty()){
+   note="Обучение: сначала выберите Область для "+profileLabel();update();return;
+  }
+  if(selectedProfile>=4&&selectedProfile<=5&&!RegionPickerGeometry.readable2048(
+      new GameViewport.Box(visualRoi.left,visualRoi.top,visualRoi.right,visualRoi.bottom))){
+   note="Обучение 2048: выделите квадрат 4×4";update();return;
+  }
+  if(gridSelected())loadGridConfig();
+  loadVisionTraining();
+  visionTraining=true;visionTrainingFrames=0;trainingPreviousGrid=null;
+  trainingPreviousBubble=null;trainingBubbleStable=0;
+  visionTrainingUntil=SystemClock.elapsedRealtime()+60_000;
+  permit.revoke(); // Never dispatch learning gestures.
+  long epoch=gate.epoch();
+  if(selectedProfile<4){
+   startVisualArcade(ArcadeProfile.values()[selectedProfile]);
+   if(!playingJumper){visionTraining=false;return;}
+  }else{
+   boardRoi=new Rect(visualRoi);playingGrid=selectedProfile==9||gridSelected();
+   playing2048=selectedProfile==4||selectedProfile==5;
+   compact(true);
+   afterPanelLayout(()->{
+    if(!visionTraining||epoch!=gate.epoch())return;
+    if(!movePanelAway(boardRoi)){stop("Обучение: панель перекрывает поле");return;}
+    afterPanelLayout(()->{if(visionTraining&&epoch==gate.epoch()&&panelOutsideRoi(boardRoi))trainingBoardFrame(epoch);
+      else if(visionTraining&&epoch==gate.epoch())stop("Обучение: панель закрывает ROI");});
+   });
+  }
+  handler.postDelayed(()->{
+   if(visionTraining&&epoch==gate.epoch()&&SystemClock.elapsedRealtime()>=visionTrainingUntil)
+    stop("Обучение 60 секунд завершено · признаки сохранены");
+  },60_000);
+  note="Обучение "+profileLabel()+" · 60 секунд · только наблюдение";update();
+ }
+ private void trainingBoardFrame(long epoch){
+  if(!visionTraining||epoch!=gate.epoch()||focusPaused)return;
+  if(SystemClock.elapsedRealtime()>=visionTrainingUntil){stop("Обучение завершено · модель сохранена");return;}
+  captureImage(epoch,(image,ticket,ms)->{
+   if(!visionTraining||epoch!=gate.epoch())return;
+   Rect r=new Rect(boardRoi),excluded=panelBounds();
+   long frameAt=lastShotTimestamp;
+   visionTrainingFrames++;
+   if(selectedProfile==9){
+    BubbleVision.Read read=BubbleVision.read(image::getPixel,image.getWidth(),image.getHeight(),
+      r.left,r.top,r.right,r.bottom,excluded.left,excluded.top,excluded.right,excluded.bottom,
+      trainingPreviousBubble,strictVision,learnedBubbleLauncher);
+    if(read.usable()){
+     BubbleBoard board=read.board();float fraction=board.launcherX/r.width();
+     if(trainingPreviousBubble!=null&&trainingPreviousBubble.sameGeometry(board)){
+      if(++trainingBubbleStable>=2&&fraction>=.35f&&fraction<=.65f){
+       learnedBubbleLauncher=fraction;
+       getSharedPreferences("vision-training",MODE_PRIVATE).edit()
+        .putFloat(visionTrainingScope+".launcher",fraction).apply();
+      }
+     }else trainingBubbleStable=0;
+     trainingPreviousBubble=board;
+    }else{
+     trainingPreviousBubble=null;trainingBubbleStable=0;
+     for(int i=0;i<3;i++)observeNovelAppearance(image,r,.42f+i*.08f,.87f,frameAt);
+    }
+   }else if(gridSelected()){
+    GridPuzzleVision.Observation obs=GridPuzzleVision.detect(image::getPixel,r.left,r.top,r.right,r.bottom,
+      gridConfig.rows,gridConfig.cols,excluded.left,excluded.top,excluded.right,excluded.bottom,frameAt,
+      gridPalette,GridProfileRules.protectSkulls(selectedProfile),selectedProfile==6);
+    if(obs.usable()&&trainingPreviousGrid!=null&&trainingPreviousGrid.usable()
+      &&obs.signature()==trainingPreviousGrid.signature()&&obs.timestampMs>trainingPreviousGrid.timestampMs){
+      gridPalette=obs.palette();
+      getSharedPreferences("grid-puzzle",MODE_PRIVATE).edit().putString(gridKey()+".palette",gridPalette.encode()).apply();
+    }
+    trainingPreviousGrid=obs;
+    for(int index:obs.unknownIndices()){
+     GridPuzzleVision.CellReason reason=obs.reason(index/gridConfig.cols,index%gridConfig.cols);
+     if(reason==GridPuzzleVision.CellReason.EXCLUDED_OVERLAY||reason==GridPuzzleVision.CellReason.PROTECTED_SKULL)continue;
+     observeNovelAppearance(image,r,(index%gridConfig.cols+.5f)/gridConfig.cols,
+       (index/gridConfig.cols+.5f)/gridConfig.rows,frameAt);
+    }
+   }else{
+    try{
+     Color2048Reader.read(image::getPixel,image.getWidth(),image.getHeight(),r.left,r.top,r.right,r.bottom);
+    }catch(IllegalArgumentException unknown){
+     // Repeated unknowns become appearance exemplars, NOT guessed tile values.
+     for(int row=0;row<4;row++)for(int col=0;col<4;col++){
+      float x=(col+.30f)/4,y=(row+.24f)/4;
+      int color=image.getPixel(r.left+Math.round(x*r.width()),r.top+Math.round(y*r.height()));
+      int high=Math.max(color>>16&255,Math.max(color>>8&255,color&255));
+      int low=Math.min(color>>16&255,Math.min(color>>8&255,color&255));
+      if(high-low>40||high<140)observeNovelAppearance(image,r,x,y,frameAt);
+     }
+    }
+   }
+   if(visionTrainingFrames%5==0)persistVisionTraining();
+   note="Учу распознавание · кадров "+visionTrainingFrames+" · новых форм "+visionMemory.size()
+    +" · устойчивых "+visionMemory.stableCount()+" · осталось "
+    +Math.max(0,(visionTrainingUntil-SystemClock.elapsedRealtime()+999)/1000)+" с";
+   update();
+   if(visionTraining&&epoch==gate.epoch())postBoardTask(epoch,captureDelay(),()->trainingBoardFrame(epoch));
+  });
  }
  private void removeOverlay(View view){if(view!=null&&wm!=null)CaptureCleanup.run(()->wm.removeViewImmediate(view));}
  private void clearPanel(){View old=panel;panel=null;controls=null;state=null;miniBar=null;miniState=null;collapseButton=null;strictVisionButton=null;layout=null;consentPanelDetached=false;panelRegistered=false;panelCompact=false;manualControls.clear();removeOverlay(old);}
