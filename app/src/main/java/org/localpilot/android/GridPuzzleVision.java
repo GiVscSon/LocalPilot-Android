@@ -41,10 +41,11 @@ public final class GridPuzzleVision {
   private final boolean usable,partialUsable;
   private final java.util.BitSet specialCellsMask;
   private final CellReason[] cellReasons;
-  private Observation(int rows,int cols,long time,int[] cells,Palette palette,float confidence,boolean usable,boolean partialUsable,java.util.BitSet special,CellReason[] reasons){
+  private final String[] cellSamples;
+  private Observation(int rows,int cols,long time,int[] cells,Palette palette,float confidence,boolean usable,boolean partialUsable,java.util.BitSet special,CellReason[] reasons,String[] samples){
    specialCellsMask=(java.util.BitSet)special.clone();this.rows=rows;this.cols=cols;timestampMs=time;
    values=cells.clone();this.palette=palette;this.confidence=confidence;this.usable=usable;this.partialUsable=partialUsable;
-   cellReasons=reasons.clone();
+   cellReasons=reasons.clone();cellSamples=samples.clone();
   }
   public CellReason reason(int row,int col){
    if(row<0||row>=rows||col<0||col>=cols)throw new IllegalArgumentException("cell");
@@ -81,6 +82,17 @@ public final class GridPuzzleVision {
     if(out.length()>0)out.append(", ");out.append(reason).append("=").append(counts[reason.ordinal()]);
    }
    return out.toString();
+  }
+  /** For every refused or protected cell, report one-based row/column and bounded
+   * center/ring RGB+HSV evidence. Does not change any cell classification. */
+  public String cellReasonDetails(){
+   StringBuilder out=new StringBuilder();
+   for(int i=0;i<values.length;i++)if(cellReasons[i]!=CellReason.KNOWN&&cellReasons[i]!=CellReason.KNOWN_SPECIAL){
+    if(out.length()>0)out.append("; ");
+    out.append("R").append(i/cols+1).append("C").append(i%cols+1)
+       .append(":").append(cellReasons[i]).append(" ").append(cellSamples[i]);
+   }
+   return out.length()==0?"none":out.toString();
   }
   public java.util.BitSet specialCellsMask(){return (java.util.BitSet)specialCellsMask.clone();}
   public int[] cells(){return values.clone();}
@@ -173,9 +185,45 @@ public final class GridPuzzleVision {
     &&known>=Math.max(6,(cells.length*72+99)/100);
   float resultConfidence=usable?.72f+.23f*quality/samples.length:
     partialUsable?.60f+.20f*quality/samples.length:0f;
-  return new Observation(rows,cols,timestampMs,cells,new Palette(prototypes),resultConfidence,usable,partialUsable,special,reasons);
+  // Snapshot compact sample statistics only for failures / protected objects.
+  // Unknown values remain -1; these statistics grant no policy authority.
+  String[] sampleDiagnostics=new String[cells.length];
+  for(int row=0;row<rows;row++)for(int col=0;col<cols;col++){
+   int index=row*cols+col;
+   if(reasons[index]==CellReason.KNOWN||reasons[index]==CellReason.KNOWN_SPECIAL)continue;
+   if(reasons[index]==CellReason.EXCLUDED_OVERLAY){sampleDiagnostics[index]="center=masked ring=masked";continue;}
+   float l=left+col*(right-left)/(float)cols,t=top+row*(bottom-top)/(float)rows;
+   float r=left+(col+1)*(right-left)/(float)cols,b=top+(row+1)*(bottom-top)/(float)rows;
+   sampleDiagnostics[index]=diagnosticSamples(pixels,l,t,r,b);
+  }
+  return new Observation(rows,cols,timestampMs,cells,new Palette(prototypes),resultConfidence,usable,partialUsable,special,reasons,sampleDiagnostics);
  }
 
+ /** Same 7x7 ring and 3x3 center positions used by ring(), reported as means. */
+ private static String diagnosticSamples(Pixels pixels,float l,float t,float r,float b){
+  long[] center=new long[3],ring=new long[3];int nc=0,nr=0;
+  for(int yy=0;yy<7;yy++)for(int xx=0;xx<7;xx++){
+   float x=.2f+xx*.1f,y=.2f+yy*.1f;
+   int rgb=sample(pixels,l,t,r,b,x,y);
+   long[] into=xx>=2&&xx<=4&&yy>=2&&yy<=4?center:ring;
+   for(int ch=0;ch<3;ch++)into[ch]+=(rgb>>(16-8*ch))&255;
+   if(into==center)nc++;else nr++;
+  }
+  return "center="+colorDiagnostic(center,nc)+" ring="+colorDiagnostic(ring,nr);
+ }
+ private static String colorDiagnostic(long[] sum,int count){
+  int r=(int)((sum[0]+count/2)/count),g=(int)((sum[1]+count/2)/count),b=(int)((sum[2]+count/2)/count);
+  int hi=Math.max(r,Math.max(g,b)),lo=Math.min(r,Math.min(g,b)),delta=hi-lo;
+  float hue=0;
+  if(delta>0){
+   if(hi==r)hue=((g-b)/(float)delta+6)%6;
+   else if(hi==g)hue=(b-r)/(float)delta+2;
+   else hue=(r-g)/(float)delta+4;
+   hue*=60;
+  }
+  int sat=hi==0?0:Math.round(delta*100f/hi),val=Math.round(hi*100f/255f);
+  return "RGB("+r+","+g+","+b+") HSV("+Math.round(hue)+","+sat+"%,"+val+"%)";
+ }
  private static int sample(Pixels pixels,float l,float t,float r,float b,float x,float y){return pixels.get((int)(l+x*(r-l)),(int)(t+y*(b-t)));}
  private static int brightness(int rgb){return Math.max(rgb>>16&255,Math.max(rgb>>8&255,rgb&255));}
  private static boolean bone(int rgb){int high=brightness(rgb),low=Math.min(rgb>>16&255,Math.min(rgb>>8&255,rgb&255));return high>=75&&high-low<high*.32f;}
