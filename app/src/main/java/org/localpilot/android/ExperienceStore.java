@@ -12,6 +12,26 @@ public final class ExperienceStore {
  private static String hash(String s)throws IOException{try{byte[] digest=MessageDigest.getInstance("SHA-256").digest(s.getBytes(StandardCharsets.UTF_8));StringBuilder b=new StringBuilder();for(byte x:digest)b.append(String.format(Locale.ROOT,"%02x",x&255));return b.toString();}catch(NoSuchAlgorithmException e){throw new IOException(e);}}
  private static String board(int[] b){StringBuilder s=new StringBuilder();for(int v:b){if(s.length()>0)s.append(',');s.append(v);}return s.toString();}
  private static int[] parse(String s){String[] p=s.split(",",-1);if(p.length>49)throw new IllegalArgumentException();int[] b=new int[p.length];for(int i=0;i<p.length;i++)b[i]=Integer.parseInt(p[i]);return b;}
+ /** Weak palette identity invariant before recording a VERIFIED grid transition.
+  * Grid cell IDs are visual prototype identifiers, not game rewards: a new
+  * palette may renumber every cell and mimic a successful cascade. Such a
+  * pair must not train a policy. At least two positive symbols must retain
+  * identity across the snapshots; never infer identity from matching coords.
+  *
+  * Existing v1 import/validate is intentionally unchanged: rejecting historical
+  * samples at load time would disable the entire ExperienceStore and risk data.
+  */
+ public static boolean sharedGridPaletteIdentity(int[] before,int[] after){
+  if(before==null||after==null||before.length!=after.length||before.length<9)return false;
+  java.util.HashSet<Integer> a=new java.util.HashSet<>(),b=new java.util.HashSet<>();
+  for(int i=0;i<before.length;i++){
+   if(before[i]>0)a.add(before[i]);
+   if(after[i]>0)b.add(after[i]);
+  }
+  if(a.size()<2||b.size()<2)return false;
+  int overlap=0;for(int type:a)if(b.contains(type))overlap++;
+  return overlap>=2;
+ }
  private static int gridReward(String profile,int[] before,int action,int[] after){
   int side=profile.equals("grid6-swap")?6:7, size=side*side;
   if(before.length!=size||after.length!=size||action<0||action>=size*size)throw new IllegalArgumentException("grid transition geometry");

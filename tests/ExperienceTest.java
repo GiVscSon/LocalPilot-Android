@@ -2,6 +2,7 @@ package org.localpilot.android;
 import java.io.*;import java.nio.file.*;import java.nio.charset.StandardCharsets;import java.util.*;
 public class ExperienceTest {
  static int checks;static void check(boolean b){checks++;if(!b)throw new AssertionError("check "+checks);}
+ static void check(boolean b,String message){checks++;if(!b)throw new AssertionError(message+" (check "+checks+")");}
  interface Failure{void run()throws Exception;}static void refuses(Failure f)throws Exception{boolean fail=false;try{f.run();}catch(IOException e){fail=true;}check(fail);}
  public static void main(String[] args)throws Exception{
   Path dir=Files.createTempDirectory("experience-");File file=dir.resolve("data.log").toFile();ExperienceStore store=new ExperienceStore(file);check(ExperienceStore.validate(store.snapshot())==0);
@@ -38,6 +39,24 @@ public class ExperienceTest {
    refuses(()->gridStore.append(profile,gridBefore,0,gridAfter));
   }
   check(ExperienceStore.validate(new ExperienceStore(dir.resolve("verified-grids.log").toFile()).snapshot())==2);
+  // Real-device failure signature: an entire 6x6 board changes token
+  // namespace (before 8..14; after 1..7), yet the old structural verifier
+  // could see a legal match. Never use this as post-ACK learning evidence.
+  int[] suspectedBefore={8,9,0,10,9,10,11,8,8,12,-1,13,8,9,12,14,9,10,9,14,8,14,13,12,9,-1,4,4,10,9,10,11,11,9,4,12};
+  int[] suspectedAfter={4,6,0,-1,2,4,5,1,3,-1,2,5,-1,5,4,5,-1,4,-1,3,1,2,2,7,2,-1,-1,3,5,2,2,6,6,2,4,7};
+  check(!ExperienceStore.sharedGridPaletteIdentity(suspectedBefore,suspectedAfter),
+    "suspected global palette relabel cannot count as a verified game response");
+  int[] stableAfter=suspectedBefore.clone();stableAfter[0]=12;stableAfter[7]=11;stableAfter[14]=8;
+  check(ExperienceStore.sharedGridPaletteIdentity(suspectedBefore,stableAfter),
+    "ordinary local changes retain enough shared palette IDs");
+  check(!ExperienceStore.sharedGridPaletteIdentity(suspectedBefore,null),
+    "missing response is never valid evidence");
+  // Keep v1 historical files readable: do not retroactively invalidate
+  // a user's existing archive or make ExperienceStore fail at startup.
+  gridStore.append("grid6-swap",suspectedBefore,6,suspectedAfter);
+  check(ExperienceStore.validate(gridStore.snapshot())==3,
+    "existing v1 export remains importable while live learning is quarantined");
+
   System.out.println("PASS "+checks+" experience persistence/import/limits assertions");
  }
 }
