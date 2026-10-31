@@ -725,7 +725,8 @@ public class PilotService extends AccessibilityService {
   synchronized(jumperFrameLock){Bitmap queued;while((queued=jumperQueuedFrames.poll())!=null)if(!queued.isRecycled())queued.recycle();}
   View calibration=jumperCalibrationOverlay;jumperCalibrationOverlay=null;removeOverlay(calibration);
   if(stopJumper)CaptureCleanup.run(()->stopService(new Intent(this,JumperCaptureService.class)));
-  audit(SafeJournal.Event.STOP,0,0);boardSearch.reset();boardReadMisses=0;boardReadGeneration++;windowFocus.reset();focusPaused=false;focusWatch=false;focusWatchId++;autoLeft=0;playing2048=false;colored2048=false;colorSession.reset();playingMini=false;discoveringBoard=false;boardRoi=null;
+  // The stop belongs to the epoch being disarmed, not the new epoch.
+  auditAt(SafeJournal.Event.STOP,0,AuditStopCode.from(reason),stopEpoch);boardSearch.reset();boardReadMisses=0;boardReadGeneration++;windowFocus.reset();focusPaused=false;focusWatch=false;focusWatchId++;autoLeft=0;playing2048=false;colored2048=false;colorSession.reset();playingMini=false;discoveringBoard=false;boardRoi=null;
   if(visionPending){visionPending=false;visionRequest++;if(visionTask!=null)visionTask.cancel(true);visionTask=null;metrics.cancelled(StageMetrics.Stage.READ);}
   if(captureBusy){metrics.cancelled(StageMetrics.Stage.CAPTURE);captureBusy=false;pendingCapture=++captureCounter;}
   if(overlayDialog!=null){AlertDialog old=overlayDialog;overlayDialog=null;CaptureCleanup.run(old::dismiss);}
