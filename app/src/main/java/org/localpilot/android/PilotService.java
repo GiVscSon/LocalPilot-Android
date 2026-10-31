@@ -358,8 +358,8 @@ public class PilotService extends AccessibilityService {
  }
  private void moreOptions(){
   stop("Дополнительные действия · STOP");
-  final int[] actions={0,3,4,5,7,8,9,10,11,12,13,14,15};
-  overlayMenu("Ещё",new String[]{"Диагностика сеанса","Выбрать установленную игру","Только чтение","Включить автоуправление","Скрыть панель","Отключить службу","Настроить распознавание","Способ управления","Вернуть стандартное распознавание","Размер сетки фишек","Приоритетный цвет фишек","Помощь по панели и играм","Неизвестные клетки"},i->{switch(actions[i]){
+  final int[] actions={0,3,4,5,7,8,9,10,11,12,13,14,15,16};
+  overlayMenu("Ещё",new String[]{"Диагностика сеанса","Выбрать установленную игру","Только чтение","Включить автоуправление","Скрыть панель","Отключить службу","Настроить распознавание","Способ управления","Вернуть стандартное распознавание","Размер сетки фишек","Приоритетный цвет фишек","Помощь по панели и играм","Неизвестные клетки","Журнал обучения"},i->{switch(actions[i]){
    case 0->showServiceDialog(new AlertDialog.Builder(this).setTitle("Последний сеанс").setMessage(lastSessionReport+"\n"+captureStartup.report()).setPositiveButton("Закрыть",null).create());
    case 3->startActivity(new Intent(this,GamePickerActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));case 4->setAutomatic(false);case 5->setAutomatic(true);case 7->hidePanel();case 8->disableSelf();
    case 9->startCustomCalibration();case 10->chooseControlMode();case 11->resetCustomVision();
@@ -367,6 +367,7 @@ public class PilotService extends AccessibilityService {
    case 13->chooseGridGoal();
    case 14->showPanelHelp();
    case 15->showServiceDialog(new AlertDialog.Builder(this).setTitle("Последнее чтение сетки").setMessage(gridReview).setPositiveButton("Закрыть",null).create());
+   case 16->showVisionTrainingReport();
   }});
  }
 
@@ -389,7 +390,6 @@ public class PilotService extends AccessibilityService {
   row("Область",this::chooseRegion,"Старт",this::startSelected);
   row("Ещё",this::moreOptions,"Свернуть",()->compact(true));
   visionControlsRow();
-  row("Обучение 60 с",this::startVisionTraining,"Журнал",this::showVisionTrainingReport);
   Button stopButton=new Button(this);stopButton.setText("STOP");stopButton.setOnClickListener(v->stop("STOP"));panel.addView(stopButton,new LinearLayout.LayoutParams(-1,dp(44)));
   miniBar=new LinearLayout(this);miniBar.setOrientation(LinearLayout.HORIZONTAL);miniBar.setVisibility(View.GONE);
   miniState=new TextView(this);miniState.setTextColor(Color.WHITE);miniState.setTextSize(9);miniState.setMaxLines(2);miniBar.addView(miniState,new LinearLayout.LayoutParams(0,dp(48),1));
@@ -403,12 +403,12 @@ public class PilotService extends AccessibilityService {
  }
  private void visionControlsRow(){
   LinearLayout line=new LinearLayout(this);
+  Button train=new Button(this);train.setText("Обучение 60 с");train.setTextSize(11);
+  train.setOnClickListener(v->startVisionTraining());
+  line.addView(train,new LinearLayout.LayoutParams(0,dp(40),1));
   strictVisionButton=new Button(this);strictVisionButton.setTextSize(11);
   strictVisionButton.setOnClickListener(v->setStrictMode(!strictVision));
   line.addView(strictVisionButton,new LinearLayout.LayoutParams(0,dp(40),1));
-  Button roi=new Button(this);roi.setText("ROI заново");roi.setTextSize(11);
-  roi.setOnClickListener(v->rebindVisionRoi());
-  line.addView(roi,new LinearLayout.LayoutParams(0,dp(40),1));
   controls.addView(line);updateStrictVisionButton();
  }
  private void updateStrictVisionButton(){if(strictVisionButton!=null)strictVisionButton.setText(strictVision?"Зрение: строго":"Зрение: мягко");}
