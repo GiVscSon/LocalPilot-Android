@@ -115,6 +115,23 @@ public final class ArcadeProfilesTest {
   ArcadeObservation withFuel=pickup.read(ArcadeProfile.TRAFFIC,1000,null);
   check(withFuel.usable()&&withFuel.player.x()>.4f&&withFuel.player.x()<.6f,"green player car is acquired independently of red fuel");
   check(withFuel.collectibles.size()==1&&withFuel.obstacles.isEmpty(),"red body and dark handle form fuel pickup rather than obstacle");
+  // Rotated handle protrudes above the red body's upper-left, as on
+  // the provided Market Rush screen. It is a pickup, never a hazard.
+  Scene raised=new Scene(480,720,0x3d8f28);raised.rect(.2f,0,.8f,1,0x7b7578);
+  raised.rect(.44f,.77f,.56f,.94f,0x42d039);
+  raised.rect(.63f,.57f,.72f,.65f,0xd42c17);
+  raised.rect(.615f,.551f,.649f,.585f,0x303030);
+  ArcadeObservation angledFuel=raised.read(ArcadeProfile.TRAFFIC,1000,null);
+  check(angledFuel.usable()&&angledFuel.collectibles.size()==1,
+    "protruding upper-left handle classifies a red can as fuel");
+  check(angledFuel.obstacles.isEmpty(),"fuel pickup does not leak into car obstacles");
+  Scene redCar=new Scene(480,720,0x3d8f28);redCar.rect(.2f,0,.8f,1,0x7b7578);
+  redCar.rect(.44f,.77f,.56f,.94f,0x42d039);
+  redCar.rect(.63f,.50f,.74f,.615f,0xd42c17);
+  redCar.rect(.652f,.534f,.718f,.565f,0x303030);
+  ArcadeObservation carNotFuel=redCar.read(ArcadeProfile.TRAFFIC,1000,null);
+  check(carNotFuel.usable()&&carNotFuel.collectibles.isEmpty()&&!carNotFuel.obstacles.isEmpty(),
+    "red windshield car must remain an obstacle");
   pickup.rect(.24f,.62f,.34f,.685f,0x2474df);pickup.rect(.27f,.625f,.31f,.64f,0x303030);
   ArcadeObservation blueSmallCar=pickup.read(ArcadeProfile.TRAFFIC,1200,withFuel);
   check(blueSmallCar.collectibles.isEmpty()&&!blueSmallCar.obstacles.isEmpty(),"small blue vehicle with windshield cannot be reclassified as red fuel");
