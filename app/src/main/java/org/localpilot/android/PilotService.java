@@ -45,6 +45,8 @@ public class PilotService extends AccessibilityService {
  private float learnedBubbleLauncher=Float.NaN;
  private boolean playingMini;private int miniKind,miniAction;private long miniMoves;private int[] miniBefore;private Rect boardRoi;private View picker;private boolean playing2048=false,colored2048=false,captureBusy=false;private long moves2048;private long captureCounter,pendingCapture,lastShotTimestamp=-1;private long mergeTotal;private Board2048 before2048;private int direction2048;private AlertDialog preview,overlayDialog;
  private final CaptureStartup captureStartup=new CaptureStartup();
+ private final ArcadeCaptureHealth arcadeCaptureHealth=new ArcadeCaptureHealth();
+ private String arcadeLastHeartbeatState="";
  private final SceneRecovery sceneRecovery=new SceneRecovery();
  private final PixelBoardLocator.Stability boardSearch=new PixelBoardLocator.Stability();
  private int boardReadMisses;private long boardReadGeneration;
@@ -160,6 +162,7 @@ public class PilotService extends AccessibilityService {
     .append(" last_stop_uptime_ms=").append(lastStopUptimeMs)
     .append("\nTARGET_BOUNDS_CHANGED_DETAIL=").append(lastBoundsRejection).append("\nlast_gesture=").append(lastGestureContext).append('\n').append(captureCounters()).append('\n').append(captureTiming.report())
     .append("\nframe_age_ms=").append(diagnosticFrameAt<0?-1:Math.max(0,now-diagnosticFrameAt)).append('\n').append(diagnosticFrameGeometry)
+     .append('\n').append(arcadeCaptureHealth.snapshot(captureSession,now).report())
     .append('\n').append(gestureFlight.report(now)).append('\n').append(sceneRecovery.report())
     .append('\n').append(arcadeFeedback.report()).append('\n').append(jumperFeedback.report()).append("\nMOTION MODEL: ").append(arcadeController.model())
     .append('\n').append(roundOutcome.report()).append("\nLEARNING: ").append(learningStatus)
@@ -866,6 +869,7 @@ public class PilotService extends AccessibilityService {
   captureFrames=captureReads=captureDecisions=captureSent=captureCompleted=0;
   captureAcceptedFrames=captureSkippedFrames=captureSkippedThrottle=captureSkippedUnwanted=captureSkippedClock=0;
   captureSession=captureStartup.begin(SystemClock.elapsedRealtime());
+  arcadeCaptureHealth.begin(captureSession,SystemClock.elapsedRealtime());arcadeLastHeartbeatState="";
   watchCaptureStartup(captureSession);
   note="1/5 · Подтвердите захват всего экрана Android";update();
   // Android/OEM consent buttons may reject touches while another window overlays them.
@@ -1357,7 +1361,8 @@ public class PilotService extends AccessibilityService {
   handler.post(()->{if(captureSessionActive(id)){note="2/5 · Разрешение получено, запускаю службу захвата";update();}});return true;
  }
  public void onCaptureStartupError(long id,String reason,String type){
-  handler.post(()->{if(!captureSessionActive(id))return;captureStartup.error(id,type);failStage(StageMetrics.Stage.CAPTURE,CaptureStartup.errorCode(type),reason);});
+  handler.post(()->{if(!captureSessionActive(id))return;captureStartup.error(id,type);
+    failStage(StageMetrics.Stage.CAPTURE,"PROJECTION_STOPPED".equals(type)?"PROJECTION_STOPPED":CaptureStartup.errorCode(type),reason);});
  }
  private void watchCaptureStartup(long id){handler.postDelayed(()->{
   if(!captureSessionActive(id)||!captureStartup.waiting(id))return;String error=captureStartup.timeout(id,SystemClock.elapsedRealtime());
@@ -1377,12 +1382,12 @@ public class PilotService extends AccessibilityService {
  };if(Looper.myLooper()==Looper.getMainLooper())ready.run();else handler.post(ready);}
 
  public void onJumperCaptureDenied(long id,String reason){onCaptureStartupError(id,reason,"CONSENT_DENIED");}
- public void onJumperCaptureLost(long id,String reason){onCaptureStartupError(id,reason,"CAPTURE_LOST");}
+ public void onJumperCaptureLost(long id,String reason){arcadeCaptureHealth.projectionStopped(id);onCaptureStartupError(id,reason,"PROJECTION_STOPPED");}
  public void stopJumperFromNotification(long id){handler.post(()->{if(captureSessionActive(id))stop("STOP из уведомления Android");});}
 
  /** Takes ownership of each frame; frames are discarded immediately when the analyzer is busy. */
- public void onCapturePacing(long id,long accepted,long skipped,long throttled,long unwanted,long invalidClock){if(id>0&&id==captureSession){captureAcceptedFrames=accepted;captureSkippedFrames=skipped;captureSkippedThrottle=throttled;captureSkippedUnwanted=unwanted;captureSkippedClock=invalidClock;}}
- public boolean wantsJumperFrame(long id){synchronized(jumperFrameLock){return id>0&&id==captureSession&&playingJumper&&jumperCaptureReady&&!focusPaused&&!jumperVisionPending&&jumperQueuedFrames.isEmpty();}}
+ public void onCapturePacing(long id,long accepted,long skipped,long throttled,long unwanted,long invalidClock){if(id>0&&id==captureSession){arcadeCaptureHealth.callback(id,SystemClock.elapsedRealtime(),accepted,skipped,throttled,unwanted,invalidClock);captureAcceptedFrames=accepted;captureSkippedFrames=skipped;captureSkippedThrottle=throttled;captureSkippedUnwanted=unwanted;captureSkippedClock=invalidClock;}}
+ public boolean wantsJumperFrame(long id){synchronized(jumperFrameLock){return id>0&&id==captureSession&&playingJumper&&jumperCaptureReady&&!arcadeCaptureHealth.isProjectionStopped(id)&&!focusPaused&&!jumperVisionPending&&jumperQueuedFrames.isEmpty();}}
  public void onJumperFrame(long id,Bitmap frame,long timestampMs){
   if(frame==null)return;
   synchronized(jumperFrameLock){
@@ -1396,7 +1401,7 @@ public class PilotService extends AccessibilityService {
    if(!captureSessionActive(id)||focusPaused||timestampMs<focusRecoveredAt){if(!frame.isRecycled())frame.recycle();return;}
    try{
    if(captureStartup.move(id,CaptureStartup.Stage.FIRST_FRAME,CaptureStartup.Stage.RUNNING,SystemClock.elapsedRealtime())){note="4/5 · Кадр получен, запускаю распознавание";update();}
-   captureFrames++;
+   captureFrames++;arcadeCaptureHealth.delivered(id,SystemClock.elapsedRealtime());
    if(customCalibrationOverlay!=null){frame.recycle();return;}
    try{resolveVisualRegion(frame);}catch(RuntimeException error){/* Preserve full window when optional crop is unavailable. */}
    if(customVision!=null&&!customCalibrationPending&&customCalibrationOverlay==null){
@@ -1462,9 +1467,19 @@ public class PilotService extends AccessibilityService {
    long now=SystemClock.elapsedRealtime();
    if(now-jumperLastFrameMs>700){if(captureProfile==ArcadeProfile.ARI)advanceJumperFeedback(null,now);else advanceArcadeFeedback(null,now);}
    if(now-jumperLastFrameMs>1800){
-    // MediaProjection may emit no frames for an unchanged result screen.
-    // Keep the projection; never synthesize frames or issue input on old pixels.
-    note=roundOutcome.waitingForReplay()?"Раунд завершён · нажмите Играть снова. Захват сохранён":"Нет свежего кадра · ввод приостановлен, ожидаю обновления экрана";update();watchArcadeCapture(epoch);return;
+    // A missing callback is not proof that MediaProjection stopped. Only its
+    // onStop callback can report PROJECTION_STOPPED. Never synthesize frames.
+    ArcadeCaptureHealth.Snapshot health=arcadeCaptureHealth.snapshot(captureSession,now);
+    String code=health.state.name();
+    if(!code.equals(arcadeLastHeartbeatState)){
+     arcadeLastHeartbeatState=code;captureStartup.diagnostic(captureSession,now,code);
+    }
+    note=roundOutcome.waitingForReplay()?"Раунд завершён · нажмите Играть снова. Захват сохранён":
+      "Нет свежего кадра ["+code+"] · ввод приостановлен; проверьте диагностику";
+    update();watchArcadeCapture(epoch);return;
+   }
+   if(!arcadeLastHeartbeatState.isEmpty()){
+    arcadeLastHeartbeatState="";captureStartup.diagnostic(captureSession,now,"FRESH_AGAIN");
    }
    watchArcadeCapture(epoch);
   },600);
@@ -1678,6 +1693,11 @@ public class PilotService extends AccessibilityService {
  private void sendObserved(float x,float y,float ex,float ey,ActionGate.Ticket ticket,Runnable done,long frameAt,int holdMs){
   // Absolute no-input guarantee for manual, arcade and board-game paths.
   if(visionTraining){note="Обучение: касания запрещены · только чтение";update();return;}
+  // A worker-thread MediaProjection onStop must block new input immediately,
+  // even if its main-thread STOP callback has not yet run.
+  if(playingJumper&&arcadeCaptureHealth.isProjectionStopped(captureSession)){
+   failStage(StageMetrics.Stage.CAPTURE,"PROJECTION_STOPPED","Android завершил захват экрана; заново разрешите запись");return;
+  }
   metrics.attempt(StageMetrics.Stage.ANDROID_ACK);
   if(busy){metrics.failure(StageMetrics.Stage.ANDROID_ACK,"EXECUTOR_BUSY");note="Исполнитель занят";update();return;}String rejection=invalidReason(ticket);if(rejection!=null){if(deferFocus(rejection))return;failStage(StageMetrics.Stage.ANDROID_ACK,rejection,"Привяжите текущее окно заново; ввод не отправлен");return;}
   if(!armedBounds.contains((int)x,(int)y)||!armedBounds.contains((int)ex,(int)ey)){failStage(StageMetrics.Stage.ANDROID_ACK,"OUTSIDE_WINDOW","Жест вне окна");return;}
