@@ -8,6 +8,50 @@ public class PilotService extends AccessibilityService {
  public byte[] exportExamples()throws java.io.IOException{stop("Экспорт примеров: STOP");if(experience==null)throw new java.io.IOException("Хранилище недоступно");return experience.snapshot();}
  public int restoreExamples(byte[] data)throws java.io.IOException{collecting=false;stop("Восстановление: STOP");if(experience==null)throw new java.io.IOException("Хранилище недоступно; исходник сохранён");return experience.restoreEmpty(data);}
  private boolean saveExample(String profile,int[] before,int action,int[] after){if(!collecting)return true;try{if(experience==null)throw new java.io.IOException();experience.append(profile,before,action,after);return true;}catch(ExperienceStore.Full full){collecting=false;uiStats="Хранилище примеров заполнено; сбор выключен, игра продолжается";Toast.makeText(this,uiStats,Toast.LENGTH_LONG).show();update();return true;}catch(java.io.IOException|RuntimeException e){collecting=false;stop("Пример не записан: сбор и ввод остановлены. Экспортируйте данные");return false;}}
+ private DiagnosticUplink diagnosticUplink;
+ /** Online transport is session-only, never armed by default or by game start. */
+ public void startOnlineDiagnostics(String endpoint,String token){
+  if(diagnosticUplink==null)diagnosticUplink=new DiagnosticUplink();
+  diagnosticUplink.start(endpoint,token,this::onlineDiagnosticSnapshot);
+ }
+ public void stopOnlineDiagnostics(){if(diagnosticUplink!=null)diagnosticUplink.stop();}
+ public String onlineDiagnosticsStatus(){return diagnosticUplink==null?"Выключено":diagnosticUplink.status();}
+ public boolean onlineDiagnosticsEnabled(){return diagnosticUplink!=null&&diagnosticUplink.enabled();}
+ /** Whitelist-only structured telemetry: no package, user label, ROI origin, pixels, log or free-form note. */
+ private String onlineDiagnosticSnapshot(){
+  try{
+   org.json.JSONObject report=new org.json.JSONObject();
+   report.put("schema","localpilot-telemetry-v1");
+   report.put("uptime_ms",SystemClock.elapsedRealtime());
+   report.put("profile",selectedProfile);
+   report.put("game_active",playingGrid||playing2048||playingJumper||playingMini);
+   report.put("strict_vision",strictVision);
+   report.put("training",visionTraining);
+   report.put("window_armed",gate.armed());
+   report.put("roi_selected",visualRoi!=null&&!visualRoi.isEmpty());
+   report.put("frames",captureFrames);
+   report.put("reads",captureReads);
+   report.put("decisions",captureDecisions);
+   report.put("gestures_sent",captureSent);
+   report.put("android_ack",captureCompleted);
+   report.put("grid_verified",gridVerified);
+   report.put("arcade_verified",arcadeVerified);
+   report.put("bubble_verified",bubbleSession.verified());
+   report.put("capture_busy",captureBusy);
+   report.put("grid_status",gridLastStatus==null?"NONE":gridLastStatus);
+   report.put("bubble_decision",bubbleDecisionReason);
+   // Only allow exact known enum-like categories. Never export a STOP text
+   // because it can include target names or raw Android window details.
+   String stop=lastStopReason==null?"":lastStopReason;
+   String stopCode="OTHER";
+   for(String label:new String[]{"TARGET_BOUNDS_CHANGED","PANEL_COVERS_ROI",
+      "SCREENSHOT_TIMEOUT","PARSE_REJECTED","GRID_PALETTE_IDENTITY_DRIFT",
+      "ROI_CHANGED","ANDROID_SCREENSHOT_ERROR","STOP"})
+    if(stop.contains(label)){stopCode=label;break;}
+   report.put("last_stop_code",stopCode);
+   return report.toString();
+  }catch(org.json.JSONException invalid){return "{\"schema\":\"localpilot-telemetry-v1\",\"error\":\"ENCODING_FAILED\"}";}
+ }
  private final StageMetrics metrics=new StageMetrics();
  private final CaptureTimingTrace captureTiming=new CaptureTimingTrace();
  public String captureTimingReport(){return captureTiming.report();}
@@ -2134,5 +2178,5 @@ public class PilotService extends AccessibilityService {
   // target window remain the same. The normal per-frame window gate still applies.
   if(!changed){update();return;}
   stop("Поворот/конфигурация — STOP. Выберите окно игры заново");explicitWindow=false;browserProfileConfirmed=false;visualRoi=null;manualVisualRoi=false;visualOwner="";visualWindow=-1;visualWindowBounds.setEmpty();if(layout!=null){layout.x=0;layout.y=dp(48);updatePanelLayout();}}
- @Override public void onDestroy(){destroying=true;CrashDiagnostics.phase("SERVICE_DESTROYED");permit.revoke();gate.stop();if(instance==this)instance=null;try{CaptureCleanup.run(this::hidePanel,this::clearDiagnosticFrame,this::clearRetainedGridFrame,gestureFlight::clear,()->gestureHandler.removeCallbacksAndMessages(null),()->handler.removeCallbacksAndMessages(null),()->visionWorker.shutdownNow());}finally{busy=false;super.onDestroy();}}
+ @Override public void onDestroy(){destroying=true;if(diagnosticUplink!=null)diagnosticUplink.close();CrashDiagnostics.phase("SERVICE_DESTROYED");permit.revoke();gate.stop();if(instance==this)instance=null;try{CaptureCleanup.run(this::hidePanel,this::clearDiagnosticFrame,this::clearRetainedGridFrame,gestureFlight::clear,()->gestureHandler.removeCallbacksAndMessages(null),()->handler.removeCallbacksAndMessages(null),()->visionWorker.shutdownNow());}finally{busy=false;super.onDestroy();}}
 }
