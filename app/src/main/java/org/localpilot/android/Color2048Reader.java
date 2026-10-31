@@ -197,7 +197,7 @@ public final class Color2048Reader {
   }
   // Gradients and texture shift the samples, but the four known colours remain
   // well separated. A close tie or a distant colour is UNKNOWN.
-  if(best<0||bestDistance>85*85||secondDistance-bestDistance<18*18)
+  if(best<0||bestDistance>(best==4?34*34:85*85)||secondDistance-bestDistance<18*18)
    throw new IllegalArgumentException("Неизвестная плитка в клетке "+(row+1)+","+(col+1)
      +" · профиль распознаёт 2, 4, 8, 16, серую 32 и обученные плитки 64+");
   return VALUES[best];
