@@ -13,6 +13,9 @@ public final class Color2048Reader {
    {53,38,140}   // 16: blue
  };
  private static final int[] VALUES={2,4,8,16};
+ // Narrow reference fingerprint: this tile is not a license to guess dark
+ // UNKNOWN cells from arbitrary low-saturation backgrounds.
+ private static final int DARK32=0x323233,DARK32_MAX_DISTANCE2=24*24;
 
  private Color2048Reader(){}
 
@@ -126,7 +129,8 @@ public final class Color2048Reader {
   private static int known(int rgb,int[] palette){
    int r=rgb>>16&255,g=rgb>>8&255,b=rgb&255;
    int result=-1;try{result=classify(r,g,b,0,0);}catch(IllegalArgumentException ignored){}
-   for(int i=5;i<=11;i++)if(palette[i]>=0&&distance(rgb,palette[i])<=24*24){if(result>=0)return -1;result=1<<i;}
+   if(palette[5]>=0&&result==32&&distance(rgb,palette[5])>24*24)result=-1;
+    for(int i=5;i<=11;i++)if(palette[i]>=0&&distance(rgb,palette[i])<=24*24){if(result>=0&&result!=(1<<i))return -1;result=1<<i;}
    return result;
   }
   private static int distance(int a,int b){int r=(a>>16&255)-(b>>16&255),g=(a>>8&255)-(b>>8&255),v=(a&255)-(b&255);return r*r+g*g+v*v;}
@@ -143,6 +147,8 @@ public final class Color2048Reader {
 
  private static int classify(int r,int g,int b,int row,int col){
   int low=Math.min(r,Math.min(g,b)),high=Math.max(r,Math.max(g,b));
+  int darkDr=r-(DARK32>>16&255),darkDg=g-(DARK32>>8&255),darkDb=b-(DARK32&255);
+  if(darkDr*darkDr+darkDg*darkDg+darkDb*darkDb<=DARK32_MAX_DISTANCE2)return 32;
   // Actual Market 2048 glass cells are translucent; sampled empty cells
   // include (189,174,193) and (253,222,210). Their low chroma differs
   // from vivid numbered tiles. Do not broaden admission of foreign colors.
@@ -159,7 +165,7 @@ public final class Color2048Reader {
   // well separated. A close tie or a distant colour is UNKNOWN.
   if(best<0||bestDistance>85*85||secondDistance-bestDistance<18*18)
    throw new IllegalArgumentException("Неизвестная плитка в клетке "+(row+1)+","+(col+1)
-     +" · цветной профиль пока распознаёт только 2, 4, 8 и 16");
+     +" · профиль распознаёт 2, 4, 8, 16, серую 32 и обученные плитки 64+");
   return VALUES[best];
  }
 }

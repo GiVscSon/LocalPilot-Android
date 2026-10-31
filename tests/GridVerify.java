@@ -11,7 +11,7 @@ class GridVerify {
   Path out=Files.createTempDirectory("pilot-grid-");ArrayList<String> sources=new ArrayList<>();
   sources.add("--release");sources.add("17");sources.add("-d");sources.add(out.toString());
   for(String name:new String[]{"GridPuzzle","GridChainShadow","GridPuzzlePolicy","GridProfileRules","GridOnlineLearning","GridPuzzleVision","GridPuzzleSession","GridPuzzleConfig","GridPuzzleGoal"})sources.add("app/src/main/java/org/localpilot/android/"+name+".java");
-  String[] tests={"GridChainShadowTest","GridPuzzlePolicyTest","GridProfileRulesTest","GridPuzzleVisionTest","GridPuzzleSessionTest","GridPuzzleConfigTest","GridPuzzleLoopTest","GridPuzzleGoalTest","GridRecordedTest","GridPartialVerifyTest","GridOnlineLearningTest","GridStage3Test"};
+  String[] tests={"GridChainShadowTest","GridPuzzlePolicyTest","GridProfileRulesTest","GridPuzzleVisionTest","GridPuzzleSessionTest","GridPuzzleConfigTest","GridPuzzleLoopTest","GridPuzzleGoalTest","GridRecordedTest","GridPartialVerifyTest","GridOnlineLearningTest","GridStage3Test","MatchWorldObjectsTest"};
   for(String name:tests)sources.add("tests/"+name+".java");
   if(ToolProvider.getSystemJavaCompiler()==null)throw new IllegalStateException("JDK required for grid verification");
   if(ToolProvider.getSystemJavaCompiler().run(null,System.out,System.err,sources.toArray(String[]::new))!=0)throw new AssertionError("grid verification compile failed");

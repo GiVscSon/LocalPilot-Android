@@ -43,6 +43,16 @@ public final class ArcadeVisionTemporalTest {
    ArcadeObservation next=flying.read(ArcadeProfile.FLAPPY,1125,s);
    check(next.tracked,"position tracking retained across distinct frames");
   }
+  // Counter fruit near y=.80 must never enter the playable obstacle column.
+  Scene shop=new Scene(480,720,0xffdfba);
+  shop.rect(0,.68f,1,1,0x9e5428);
+  shop.circle(.1f,.26f,.025f,0x454545);shop.rect(.08f,.215f,.13f,.235f,0xc93020);
+  shop.rect(.58f,.39f,.67f,.402f,0x387e25); // active food skewer
+  shop.rect(.76f,.79f,.86f,.81f,0x387e25);  // background produce below counter
+  shop.rect(.82f,.82f,.90f,.84f,0x387e25);
+  ArcadeObservation confined=shop.read(ArcadeProfile.FLAPPY,1000,null);
+  check(confined.usable()&&confined.bottom<=.68f+.005f,"counter defines strict upper gameplay region");
+  check(confined.obstacles.size()==1,"fruit shop below counter never becomes extra obstacle");
   if(args.length>0){
    for(int n:new int[]{26,27,28,29,30,32,36,37,38,39}){
     var path=java.nio.file.Path.of(args[0],"FLAPPY",String.format(java.util.Locale.ROOT,"%04d.jpg",n));

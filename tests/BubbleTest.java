@@ -222,7 +222,25 @@ public final class BubbleTest {
   check(!BubbleVision.read(ambiguous::getRGB,320,640,0,0,320,640,0,0,0,0,null).usable(),"one observed row phase cannot infer alternating lattice");
   System.out.println("Reversed stagger fixture: "+read.reason());
  }
- private static void perception(){
+ private static void gappedIslandsFixture(){
+  BufferedImage im=new BufferedImage(320,640,BufferedImage.TYPE_INT_RGB);
+  var g=im.createGraphics();g.setColor(new java.awt.Color(COLORS[0]));g.fillRect(0,0,320,640);
+  // Two disjoint ceiling-attached groups: no adjacent bubbles at cols 2/3.
+  for(int row=0;row<3;row++)for(int col=0;col<6-row%2;col++){
+   if(col==2||col==3)continue;
+   int x=Math.round(26+(col+row%2*.5f)*48),y=Math.round(80+row*48*.8660254f);
+   g.setColor(new java.awt.Color(COLORS[1+(col+row)%4]));g.fillOval(x-23,y-23,46,46);
+  }
+  g.setColor(new java.awt.Color(COLORS[1]));g.fillOval(137,577,46,46);g.dispose();
+  var found=BubbleVision.read(im::getRGB,320,640,0,0,320,640,0,0,0,0,null);
+  check(found.usable(),"two isolated candy islands stay on same lattice: "+found.reason());
+  check(found.board().ceilingConnected(),"both separated islands attach to ceiling");
+  check(found.board().color(2)==0&&found.board().color(3)==0&&found.board().color(8)==0,
+    "missing interior columns remain empty, not guessed");
+  var cached=BubbleVision.read(im::getRGB,320,640,0,0,320,640,0,0,0,0,found.board());
+  check(cached.usable()&&cached.board().same(found.board()),"gapped islands persist across stable reads");
+ }
+  private static void perception(){
   BufferedImage im=synthetic();var r=BubbleVision.read(im::getRGB,320,640,0,0,320,640,0,0,0,0,null);
   check(r.usable(),"ordinary synthetic field: "+r.reason());check(r.board().count()==17&&r.board().loadedColor==1,"reserve and bonus do not become launched bubble");
   check(Math.abs(r.board().step-48)<2&&Math.abs(r.board().x0-26)<3&&Math.abs(r.board().y0-80)<3,"lattice fitted in source pixels");
@@ -273,5 +291,5 @@ public final class BubbleTest {
    System.out.printf(java.util.Locale.ROOT,"Recorded bubble frame scale=%.2f count=%d x0=%.2f y0=%.2f step=%.2f; cloud JVM acquire=%.2fms cached-p50=%.2fms cached-max=%.2fms policy=%.2fms%n",scale,b.count(),b.x0/scale,b.y0/scale,b.step/scale,coldNs/1e6,elapsed[4]/1e6,elapsed[7]/1e6,policyNs/1e6);
   }
  }
- public static void main(String[] args)throws Exception{geometryAndPolicy();singleRemaining();directShotGeometry();session();lateVerification();diagnostics();perception();reversedStaggerFixture();if(args.length>0)recorded(Path.of(args[0]));System.out.println("Bubble board/policy/feedback: "+checks+" assertions PASS; no physical-device claim");}
+ public static void main(String[] args)throws Exception{geometryAndPolicy();singleRemaining();directShotGeometry();session();lateVerification();diagnostics();perception();reversedStaggerFixture();gappedIslandsFixture();if(args.length>0)recorded(Path.of(args[0]));System.out.println("Bubble board/policy/feedback: "+checks+" assertions PASS; no physical-device claim");}
 }

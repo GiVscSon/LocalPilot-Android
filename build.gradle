@@ -1,1 +1,20 @@
 plugins { id 'com.android.application' version '8.7.3' apply false }
+
+
+// Local-only, read-only replay. No JPG is bundled into the repository or CI artifacts.
+tasks.register('localJpgReplay', Exec) {
+  workingDir rootDir
+  def jpgDir = System.getProperty('localpilot.jpgDir') ?: System.getenv('LOCALPILOT_JPG_DIR')
+  def javaBin = new File(System.getProperty('java.home'), 'bin/java').absolutePath
+  def cmd = [javaBin, '-Djava.awt.headless=true']
+  if (jpgDir) cmd.add('-Dlocalpilot.jpgDir=' + jpgDir)
+  cmd.add('tests/LocalJpgVerify.java')
+  commandLine cmd
+}
+
+// Honour the requested ./gradlew testDebugUnitTest -Dlocalpilot.jpgDir=... invocation.
+gradle.projectsEvaluated {
+  project(':app').tasks.matching { it.name == 'testDebugUnitTest' }.configureEach {
+    finalizedBy(rootProject.tasks.named('localJpgReplay'))
+  }
+}
