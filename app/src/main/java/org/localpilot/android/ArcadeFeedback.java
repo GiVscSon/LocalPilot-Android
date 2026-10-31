@@ -24,7 +24,7 @@ public final class ArcadeFeedback {
   // Missing ACKs or unusable frames are not success evidence, but must not
   // suspend the deadline forever. In particular a stale screen can continue
   // arriving after Android completed a gesture that the game ignored.
-  long limit=before.profile==ArcadeProfile.FLAPPY?300:450;
+  long limit=before.profile==ArcadeProfile.FLAPPY?240:450;
   boolean fresh=acknowledged&&after!=null&&after.usable()&&after.profile==before.profile
     &&after.timestampMs>dispatchedAt&&after.timestampMs-dispatchedAt<=limit&&after.timestampMs<=now&&now-after.timestampMs<=300;
   if(fresh&&ArcadePolicy.response(pending,before,after)){
