@@ -1386,7 +1386,8 @@ public class PilotService extends AccessibilityService {
  public void stopJumperFromNotification(long id){handler.post(()->{if(captureSessionActive(id))stop("STOP из уведомления Android");});}
 
  /** Takes ownership of each frame; frames are discarded immediately when the analyzer is busy. */
- public void onCapturePacing(long id,long accepted,long skipped,long throttled,long unwanted,long invalidClock){if(id>0&&id==captureSession){arcadeCaptureHealth.callback(id,SystemClock.elapsedRealtime(),accepted,skipped,throttled,unwanted,invalidClock);captureAcceptedFrames=accepted;captureSkippedFrames=skipped;captureSkippedThrottle=throttled;captureSkippedUnwanted=unwanted;captureSkippedClock=invalidClock;}}
+ public void onCaptureImageCallback(long id,long at){if(id>0&&id==captureSession)arcadeCaptureHealth.imageCallback(id,at);}
+ public void onCapturePacing(long id,long accepted,long skipped,long throttled,long unwanted,long invalidClock){if(id>0&&id==captureSession){arcadeCaptureHealth.acquired(id,SystemClock.elapsedRealtime(),accepted,skipped,throttled,unwanted,invalidClock);captureAcceptedFrames=accepted;captureSkippedFrames=skipped;captureSkippedThrottle=throttled;captureSkippedUnwanted=unwanted;captureSkippedClock=invalidClock;}}
  public boolean wantsJumperFrame(long id){synchronized(jumperFrameLock){return id>0&&id==captureSession&&playingJumper&&jumperCaptureReady&&!arcadeCaptureHealth.isProjectionStopped(id)&&!focusPaused&&!jumperVisionPending&&jumperQueuedFrames.isEmpty();}}
  public void onJumperFrame(long id,Bitmap frame,long timestampMs){
   if(frame==null)return;
