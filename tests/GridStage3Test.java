@@ -39,7 +39,7 @@ public final class GridStage3Test {
   check(RIGHT-LEFT==996&&BOTTOM-TOP==1021,"recorded ROI exactly reproduced");
   check((RIGHT-LEFT)/6==166&&(BOTTOM-TOP)/6==170,"cell geometry");
   var read=GridPuzzleVision.detect(GridStage3Test::rgb,LEFT,TOP,RIGHT,BOTTOM,6,6,0,0,0,0,1000,null,true);
-  check(read.unknownIndices().length==5,"exactly 5 unknown observations; got="+read.unknownIndices().length+" reasons="+read.unknownReasonCounts()+" cells="+read.unknownSummary(36));
+  check(read.unknownIndices().length==5,"exactly 5 unknown observations; got="+read.unknownIndices().length+" reasons="+read.unknownReasonCounts()+" ringReasons="+read.reason(3,5)+","+read.reason(4,5)+","+read.reason(5,0)+" cells="+read.unknownSummary(36));
   check(read.unknownReasonCounts().contains("RING_NO_MATCH=3"),"3 ring rejections");
   check(read.unknownReasonCounts().contains("NO_SAMPLE=2"),"2 absent samples");
   check(read.partialUsable()&&!read.usable(),"31/36 known supports partial classification only");
