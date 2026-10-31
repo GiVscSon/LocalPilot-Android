@@ -18,3 +18,8 @@ __pycache__/
 *.egg-info/
 .venv/
 .venv-rl/
+
+# Private offline replay input: never publish screenshot/ROI datasets
+**/localpilot-frames.csv
+local-jpg/
+local-frames/
