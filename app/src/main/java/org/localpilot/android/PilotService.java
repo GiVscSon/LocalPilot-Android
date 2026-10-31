@@ -93,6 +93,7 @@ public class PilotService extends AccessibilityService {
  private final CaptureStartup captureStartup=new CaptureStartup();
  private final SceneRecovery sceneRecovery=new SceneRecovery();
  private final PixelBoardLocator.Stability boardSearch=new PixelBoardLocator.Stability();
+ private int panelCoverRecoveryAttempts;
  private int boardReadMisses;private long boardReadGeneration;
  private final WindowFocus windowFocus=new WindowFocus();
  private volatile boolean focusPaused;private boolean focusWatch;private long focusRecoveredAt,focusWatchId;
@@ -726,6 +727,7 @@ public class PilotService extends AccessibilityService {
   View calibration=jumperCalibrationOverlay;jumperCalibrationOverlay=null;removeOverlay(calibration);
   if(stopJumper)CaptureCleanup.run(()->stopService(new Intent(this,JumperCaptureService.class)));
   // The stop belongs to the epoch being disarmed, not the new epoch.
+  panelCoverRecoveryAttempts=0;
   auditAt(SafeJournal.Event.STOP,0,AuditStopCode.from(reason),stopEpoch);boardSearch.reset();boardReadMisses=0;boardReadGeneration++;windowFocus.reset();focusPaused=false;focusWatch=false;focusWatchId++;autoLeft=0;playing2048=false;colored2048=false;colorSession.reset();playingMini=false;discoveringBoard=false;boardRoi=null;
   if(visionPending){visionPending=false;visionRequest++;if(visionTask!=null)visionTask.cancel(true);visionTask=null;metrics.cancelled(StageMetrics.Stage.READ);}
   if(captureBusy){metrics.cancelled(StageMetrics.Stage.CAPTURE);captureBusy=false;pendingCapture=++captureCounter;}
@@ -1315,7 +1317,20 @@ public class PilotService extends AccessibilityService {
    if(!automatic()){note="Наблюдение: сетка прочитана · "+(shadowChain?"найдена цепочка из 4 (без ввода)":action==null?"совпадений не найдено":"найден ход, фишек "+action.expectedCleared);update();scheduleGrid(epoch);return;}
    // Partial actions are legal only on the intersection: policy forbids
    // UNKNOWN and protected endpoints or predicted clears.
-   if(action==null){note="Нет проверяемого хода · продолжаю наблюдение"+(partialGrid?" (неизвестные клетки не трогаю)":"");update();scheduleGrid(epoch);return;}
+   if(action==null){
+    // Distinguish visual/semantic exclusion from learned no-response avoidance.
+    // Probe the pure baseline policy ONLY for diagnostics. It can never
+    // override a rejected action or authorize a gesture.
+    GridPuzzlePolicy.Decision unweighted=GridPuzzlePolicy.chooseAdaptive(
+      board,gridMode(),gridConfig.minGroup,targetType,gridConfig.rows*gridConfig.cols,
+      stableSpecial,stablePartial,null);
+    int unknown=0;for(int cell:stableCells)if(cell<0)unknown++;
+    note=(unweighted!=null?"Ход на поле есть, но память неудачных попыток исключила его":
+      "Нет безопасного хода в распознанной сетке")
+      +" · UNKNOWN="+unknown+" · особые/защищённые="+stableSpecial.cardinality()
+      +" · ввод не выполняю";
+    update();scheduleGrid(epoch);return;
+   }
    if(busy||!valid(ticket)||SystemClock.elapsedRealtime()-frameAt>300){note="Жду свежий кадр для хода";update();scheduleGrid(epoch);return;}
    float x=r.left+(action.fromCol+.5f)*r.width()/gridConfig.cols,y=r.top+(action.fromRow+.5f)*r.height()/gridConfig.rows;
    float ex=r.left+(action.toCol+.5f)*r.width()/gridConfig.cols,ey=r.top+(action.toRow+.5f)*r.height()/gridConfig.rows;
@@ -2049,7 +2064,26 @@ public class PilotService extends AccessibilityService {
   metrics.attempt(StageMetrics.Stage.CAPTURE);
   ActionGate.Ticket ticket=gate.offer(SystemClock.elapsedRealtime());if(!valid(ticket)||boardRoi==null){if(deferFocus(invalidReason(ticket)))return;failStage(StageMetrics.Stage.CAPTURE,"BINDING_OR_ROI_MISSING","Нет привязки/поля");return;}
   if(captureBusy){failStage(StageMetrics.Stage.CAPTURE,"CAPTURE_INFLIGHT","Предыдущий захват ещё выполняется");return;}final Rect roi=new Rect(boardRoi);
-  if(!discoveringBoard&&Rect.intersects(panelBounds(),roi)){failStage(StageMetrics.Stage.CAPTURE,"PANEL_COVERS_ROI","Панель закрывает поле: передвиньте её");return;}
+  if(!discoveringBoard&&Rect.intersects(panelBounds(),roi)){
+   // A user can drag the STOP panel back over the active board. Recover once
+   // per armed session without making a gesture, without reading masked cells,
+   // and only after the actual WindowManager layout no longer overlaps ROI.
+   if(panelCoverRecoveryAttempts++==0&&!busy&&movePanelAway(roi)){
+    final long generation=boardReadGeneration;
+    note="Панель перекрыла поле · перемещаю STOP за пределы сетки без ввода";update();
+    afterPanelLayout(()->{
+     if(epoch!=gate.epoch()||generation!=boardReadGeneration||!captureEnabled()||focusPaused)return;
+     if(!panelOutsideRoi(roi)){failStage(StageMetrics.Stage.CAPTURE,"PANEL_COVERS_ROI","Панель не удалось вынести за ROI");return;}
+     postBoardTask(epoch,captureDelay(),()->{
+      if(epoch==gate.epoch()&&generation==boardReadGeneration&&!captureBusy&&captureEnabled())
+       captureImage(epoch,result);
+     });
+    });
+    return;
+   }
+   failStage(StageMetrics.Stage.CAPTURE,"PANEL_COVERS_ROI","Панель закрывает поле; безопасное перемещение не удалось");
+   return;
+  }
   final long captureNs=SystemClock.elapsedRealtimeNanos();captureBusy=true;long request=SystemClock.elapsedRealtime();final long requestedUptime=SystemClock.uptimeMillis();final long requestId=++captureCounter;pendingCapture=requestId;captureTiming.request(requestId,request);
   TakeScreenshotCallback callback=new TakeScreenshotCallback(){
    @Override public void onSuccess(ScreenshotResult shot){captureTiming.callback(requestId,request,SystemClock.elapsedRealtime(),true,pendingCapture==requestId);android.hardware.HardwareBuffer buffer=shot.getHardwareBuffer();if(pendingCapture!=requestId){CaptureCleanup.run(buffer::close);return;}captureBusy=false;Bitmap hardware=null,bitmap=null;boolean captured=false;

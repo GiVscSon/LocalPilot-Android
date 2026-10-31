@@ -5,8 +5,8 @@ android {
  defaultConfig { applicationId 'org.localpilot.android'; minSdk 30; targetSdk 35; versionCode 50; versionName '0.7.34'; testInstrumentationRunner 'org.localpilot.android.PilotUiInstrumentation' }
  buildTypes {
   debug {
-   applicationIdSuffix '.dev.install1032'
-   versionNameSuffix '-dev-install1032'
+   applicationIdSuffix '.dev.install1033'
+   versionNameSuffix '-dev-install1033'
    debuggable false
   }
  }

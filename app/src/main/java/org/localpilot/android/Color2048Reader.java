@@ -2,17 +2,18 @@ package org.localpilot.android;
 
 /**
  * Experimental reader for the colorful 4x4 "2048" skin shown in the user's
- * recordings. Known colors cover 2, 4, 8 and 16; higher ranks are learned only
- * from a deterministic merge in a visually validated move.
+ * recordings. Known colors cover 2, 4, 8, 16 and a narrow, user-labelled
+ * 64 reference. Other higher ranks require a verified merge or stored palette.
  */
 public final class Color2048Reader {
  private static final int[][] COLORS={
    {245,100,0},  // 2: orange
    {249,40,190}, // 4: pink
    {192,42,100}, // 8: rose
-   {53,38,140}   // 16: blue
+   {53,38,140},  // 16: blue
+   {197,126,124} // 64: muted salmon, reference labelled 64 in 31 Oct field image
  };
- private static final int[] VALUES={2,4,8,16};
+ private static final int[] VALUES={2,4,8,16,64};
  // Narrow reference fingerprint: this tile is not a license to guess dark
  // UNKNOWN cells from arbitrary low-saturation backgrounds.
  private static final int DARK32=0x323233,DARK32_MAX_DISTANCE2=24*24;
@@ -27,17 +28,9 @@ public final class Color2048Reader {
    throw new IllegalArgumentException("Выделите квадратное цветное поле 4×4 без заголовка");
 
   int[] cells=new int[16];
-  double[] xOffsets={.23,.29,.35};
   for(int row=0;row<4;row++)for(int col=0;col<4;col++){
-   int red=0,green=0,blue=0;
-   for(double xOffset:xOffsets){
-    int x=left+(int)((col+xOffset)*(right-left)/4.0);
-    int y=top+(int)((row+.24)*(bottom-top)/4.0);
-    int rgb=pixels.rgb(x,y);
-    red+=(rgb>>16)&255;green+=(rgb>>8)&255;blue+=rgb&255;
-   }
-   int r=red/xOffsets.length,g=green/xOffsets.length,b=blue/xOffsets.length;
-   cells[row*4+col]=classify(r,g,b,row,col);
+   int rgb=Session.sample(pixels,left,top,right,bottom,row*4+col)[0];
+   cells[row*4+col]=classify(rgb>>16&255,rgb>>8&255,rgb&255,row,col);
   }
   Board2048 board=new Board2048(cells);
   if(board.max()==0)throw new IllegalArgumentException("Плитки не распознаны");
@@ -91,6 +84,7 @@ public final class Color2048Reader {
    int[] colors=learned.clone(),values=new int[16];boolean added=false;
    for(int i=0;i<16;i++){
     int[] sample=sample(pixels,left,top,right,bottom,i);int rgb=sample[0],value=known(rgb,colors,strictMode);
+    boolean inferredFromMerge=false;
     if(value<0){
      int target=expected==null?0:expected.cells[i];
      if(target<32||target>2048||sample[1]>(strictMode?24:30))throw new IllegalArgumentException(
@@ -106,10 +100,10 @@ public final class Color2048Reader {
       throw new IllegalArgumentException("merged colour conflicts with learned palette");
      int low=Math.min(rgb>>16&255,Math.min(rgb>>8&255,rgb&255)),high=Math.max(rgb>>16&255,Math.max(rgb>>8&255,rgb&255));
      if(high-low<60||high<70)throw new IllegalArgumentException("background cannot teach a tile");
-     colors[rank]=rgb;value=target;added=true;
+     colors[rank]=rgb;value=target;added=true;inferredFromMerge=true;
     }
     // Newly inferred tiles must be homogeneous at every occurrence in this frame.
-    if(value>=32&&learned[Integer.numberOfTrailingZeros(value)]<0&&sample[1]>24)
+    if(inferredFromMerge&&value>=32&&learned[Integer.numberOfTrailingZeros(value)]<0&&sample[1]>24)
      throw new IllegalArgumentException("animated merged tile");
     values[i]=value;
    }
@@ -142,13 +136,47 @@ public final class Color2048Reader {
   }
   private static int distance(int a,int b){int r=(a>>16&255)-(b>>16&255),g=(a>>8&255)-(b>>8&255),v=(a&255)-(b&255);return r*r+g*g+v*v;}
   private static int[] sample(PixelBoardReader.Pixels pixels,int l,int t,int r,int b,int cell){
+   // Real Market tiles have a pale frame and white large numerals. Sampling
+   // only their upper-left 3x3 patch can read the transparent background
+   // instead of the object itself. Use a bounded interior chroma median.
+   final int[] rr=new int[49],gg=new int[49],bb=new int[49];
+   int painted=0,empty=0;int neutralR=0,neutralG=0,neutralB=0;
+   for(int y=0;y<7;y++)for(int x=0;x<7;x++){
+    int rgb=pixels.rgb(l+(int)((cell%4+.18+x*.64/6)*(r-l)/4.0),
+                       t+(int)((cell/4+.18+y*.64/6)*(b-t)/4.0));
+    int red=rgb>>16&255,green=rgb>>8&255,blue=rgb&255;
+    int low=Math.min(red,Math.min(green,blue)),high=Math.max(red,Math.max(green,blue));
+    if(high-low>=52&&high>70&&high<254){
+     rr[painted]=red;gg[painted]=green;bb[painted]=blue;painted++;
+    }else if(low>=150&&high-low<=90){
+     neutralR+=red;neutralG+=green;neutralB+=blue;empty++;
+    }
+   }
+   if(painted>=12){
+    java.util.Arrays.sort(rr,0,painted);java.util.Arrays.sort(gg,0,painted);
+    java.util.Arrays.sort(bb,0,painted);
+    int red=rr[painted/2],green=gg[painted/2],blue=bb[painted/2];
+    int[] deviations=new int[painted];
+    for(int i=0;i<painted;i++)deviations[i]=Math.max(Math.abs(rr[i]-red),
+       Math.max(Math.abs(gg[i]-green),Math.abs(bb[i]-blue)));
+    java.util.Arrays.sort(deviations);
+    return new int[]{red<<16|green<<8|blue,Math.min(255,2*deviations[painted/2])};
+   }
+   if(empty>=30&&painted<12)
+    return new int[]{(neutralR/empty)<<16|(neutralG/empty)<<8|(neutralB/empty),0};
+   // Dark 32 and genuinely unknown ambiguous cells retain the original
+   // conservative 3x3 path. An unmatched saturated median is NOT re-labelled.
    int sr=0,sg=0,sb=0;int[] min={255,255,255},max={0,0,0};
    for(int y=0;y<3;y++)for(int x=0;x<3;x++){
-    int rgb=pixels.rgb(l+(int)((cell%4+.20+x*.05)*(r-l)/4),t+(int)((cell/4+.18+y*.05)*(b-t)/4));
+    int rgb=pixels.rgb(l+(int)((cell%4+.20+x*.05)*(r-l)/4),
+      t+(int)((cell/4+.18+y*.05)*(b-t)/4));
     int red=rgb>>16&255,green=rgb>>8&255,blue=rgb&255;sr+=red;sg+=green;sb+=blue;
-    min[0]=Math.min(min[0],red);max[0]=Math.max(max[0],red);min[1]=Math.min(min[1],green);max[1]=Math.max(max[1],green);min[2]=Math.min(min[2],blue);max[2]=Math.max(max[2],blue);
+    min[0]=Math.min(min[0],red);max[0]=Math.max(max[0],red);
+    min[1]=Math.min(min[1],green);max[1]=Math.max(max[1],green);
+    min[2]=Math.min(min[2],blue);max[2]=Math.max(max[2],blue);
    }
-   return new int[]{(sr/9<<16)|(sg/9<<8)|sb/9,Math.max(max[0]-min[0],Math.max(max[1]-min[1],max[2]-min[2]))};
+   return new int[]{(sr/9<<16)|(sg/9<<8)|sb/9,
+      Math.max(max[0]-min[0],Math.max(max[1]-min[1],max[2]-min[2]))};
   }
  }
 
@@ -170,7 +198,7 @@ public final class Color2048Reader {
   }
   // Gradients and texture shift the samples, but the four known colours remain
   // well separated. A close tie or a distant colour is UNKNOWN.
-  if(best<0||bestDistance>85*85||secondDistance-bestDistance<18*18)
+  if(best<0||bestDistance>(best==4?34*34:85*85)||secondDistance-bestDistance<18*18)
    throw new IllegalArgumentException("Неизвестная плитка в клетке "+(row+1)+","+(col+1)
      +" · профиль распознаёт 2, 4, 8, 16, серую 32 и обученные плитки 64+");
   return VALUES[best];

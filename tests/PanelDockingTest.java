@@ -27,6 +27,14 @@ public final class PanelDockingTest {
    PanelDocking.Area old=a(170,430,466,560);
    assertDock(phone,old,roi,16);
   }
+  // 31 Oct 1536x1025 field layout: game has large sidebars. The expanded
+  // STOP panel is dragged over the left part of an active 6x6 grid.
+  // A re-dock must select a side region without masking any board pixels.
+  var landscape=PanelDocking.choose(a(0,24,1536,996),a(418,108,734,552),
+    a(507,249,1000,754),16);
+  check(landscape!=null&&!landscape.intersects(a(507,249,1000,754)),
+    "active field's dragged panel can dock outside actual 6x6 ROI");
+  check(landscape.width()==316&&landscape.height()==444,"recovery keeps STOP visible");
   // Phone diagnostic: 1220x2712, manual 6x6 ROI [103,1241][1099,2262].
   var phoneRoi=a(103,1241,1099,2262);
   var dock=PanelDocking.choose(a(0,82,1220,2630),a(310,2280,430,2350),phoneRoi,24);
