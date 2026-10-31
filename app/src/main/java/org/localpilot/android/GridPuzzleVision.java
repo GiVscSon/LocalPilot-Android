@@ -11,7 +11,7 @@ public final class GridPuzzleVision {
  public interface Pixels { int get(int x,int y); }
  /** Trace-only reasons; these labels do not authorize a game gesture. */
  public enum CellReason {
-  KNOWN, KNOWN_SPECIAL, PROTECTED_SKULL, EXCLUDED_OVERLAY,
+  KNOWN, KNOWN_SPECIAL, PROTECTED_SKULL, EMPTY_HOLE, BLOCKER_CRATE, EXCLUDED_OVERLAY,
   RING_NO_MATCH, RING_AMBIGUOUS, COLOR_NO_MATCH, COLOR_AMBIGUOUS, NO_SAMPLE
  }
  private static final int FEATURES=42,MAX_TYPES=24;
@@ -117,6 +117,11 @@ public final class GridPuzzleVision {
   * A confirmed skull is an unplayable zero cell, never an ordinary colour token. */
  public static Observation detect(Pixels pixels,int left,int top,int right,int bottom,int rows,int cols,
    int excludedLeft,int excludedTop,int excludedRight,int excludedBottom,long timestampMs,Palette previous,boolean protectSkulls){
+  return detect(pixels,left,top,right,bottom,rows,cols,excludedLeft,excludedTop,excludedRight,excludedBottom,timestampMs,previous,protectSkulls,false);
+ }
+ /** Special object detection is opted in ONLY for Match World 7x7. */
+ public static Observation detect(Pixels pixels,int left,int top,int right,int bottom,int rows,int cols,
+   int excludedLeft,int excludedTop,int excludedRight,int excludedBottom,long timestampMs,Palette previous,boolean protectSkulls,boolean matchWorld){
   if(pixels==null||rows<3||rows>10||cols<3||cols>10||left<0||top<0||right-left<cols*12||bottom-top<rows*12||timestampMs<0)throw new IllegalArgumentException("grid geometry");
   float[][] rings=new float[rows*cols][];java.util.BitSet special=new java.util.BitSet(rows*cols);
   float[][] samples=new float[rows*cols][];int[] cells=new int[samples.length];java.util.Arrays.fill(cells,-1);
@@ -128,6 +133,12 @@ public final class GridPuzzleVision {
    int index=row*cols+col;
    if(excludedRight>excludedLeft&&excludedBottom>excludedTop&&Math.max(l,excludedLeft)<Math.min(r,excludedRight)&&Math.max(t,excludedTop)<Math.min(b,excludedBottom)){
     reasons[index]=CellReason.EXCLUDED_OVERLAY;continue;
+   }
+   if(matchWorld&&rows==7&&cols==7&&matchWorldHole(row,col)&&matchWorldFlatBlue(pixels,l,t,r,b)){
+    cells[index]=0;special.set(index);reasons[index]=CellReason.EMPTY_HOLE;continue;
+   }
+   if(matchWorld&&rows==7&&cols==7&&matchWorldWoodCrate(pixels,l,t,r,b)){
+    cells[index]=0;special.set(index);reasons[index]=CellReason.BLOCKER_CRATE;continue;
    }
    if(protectSkulls&&protectedSkull(pixels,l,t,r,b)){
     cells[index]=0;special.set(index);reasons[index]=CellReason.PROTECTED_SKULL;continue;
@@ -199,6 +210,38 @@ public final class GridPuzzleVision {
   return new Observation(rows,cols,timestampMs,cells,new Palette(prototypes),resultConfidence,usable,partialUsable,special,reasons,sampleDiagnostics);
  }
 
+ /** Twelve diamond corner slots are eligible only if visually flat and pale blue. */
+ static boolean matchWorldHole(int row,int col){
+  return (row==0||row==6)&&(col<=1||col>=5)||(row==1||row==5)&&(col==0||col==6);
+ }
+ private static boolean matchWorldFlatBlue(Pixels pixels,float l,float t,float r,float b){
+  long rs=0,gs=0,bs=0;int[] colors=new int[25];int k=0;
+  for(int y=0;y<5;y++)for(int x=0;x<5;x++){
+   int rgb=sampleSquare(pixels,l,t,r,b,.2f+x*.15f,.2f+y*.15f);
+   colors[k++]=rgb;rs+=rgb>>16&255;gs+=rgb>>8&255;bs+=rgb&255;
+  }
+  int red=(int)(rs/25),green=(int)(gs/25),blue=(int)(bs/25);
+  if(red<115||green-red<6||blue-green<6||blue-red>125)return false;
+  for(int rgb:colors){
+   int dr=(rgb>>16&255)-red,dg=(rgb>>8&255)-green,db=(rgb&255)-blue;
+   if(dr*dr+dg*dg+db*db>20*20)return false;
+  }
+  return true;
+ }
+ /** Wooden square needs textured brown material including four corners:
+  * flat brown or round orange tokens are never recognized as crates. */
+ private static boolean matchWorldWoodCrate(Pixels pixels,float l,float t,float r,float b){
+  int count=0,lo=255,hi=0;boolean corners=true;
+  for(int y=0;y<9;y++)for(int x=0;x<9;x++){
+   int rgb=sampleSquare(pixels,l,t,r,b,.15f+x*.0875f,.15f+y*.0875f);
+   int red=rgb>>16&255,green=rgb>>8&255,blue=rgb&255;
+   boolean wood=red>=76&&red<=240&&green>=38&&green<=188&&blue<145
+      &&red>green*1.12f&&green>blue*1.12f;
+   if(wood){count++;int bright=(red+green+blue)/3;lo=Math.min(lo,bright);hi=Math.max(hi,bright);}
+   if((x==0||x==8)&&(y==0||y==8)&&!wood)corners=false;
+  }
+  return corners&&count>=65&&hi-lo>=22;
+ }
  /** Same 7x7 ring and 3x3 center positions used by ring(), reported as means. */
  private static String diagnosticSamples(Pixels pixels,float l,float t,float r,float b){
   long[] center=new long[3],ring=new long[3];int nc=0,nr=0;
