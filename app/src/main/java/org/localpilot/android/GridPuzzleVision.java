@@ -119,7 +119,7 @@ public final class GridPuzzleVision {
    int excludedLeft,int excludedTop,int excludedRight,int excludedBottom,long timestampMs,Palette previous,boolean protectSkulls){
   return detect(pixels,left,top,right,bottom,rows,cols,excludedLeft,excludedTop,excludedRight,excludedBottom,timestampMs,previous,protectSkulls,false);
  }
- /** Special object detection is opted in ONLY for Match World 7x7. */
+ /** Object-based crates apply to Match World rectangular grids.\n  * The historically verified 7x7 hole layout remains restricted to 7x7. */
  public static Observation detect(Pixels pixels,int left,int top,int right,int bottom,int rows,int cols,
    int excludedLeft,int excludedTop,int excludedRight,int excludedBottom,long timestampMs,Palette previous,boolean protectSkulls,boolean matchWorld){
   if(pixels==null||rows<3||rows>10||cols<3||cols>10||left<0||top<0||right-left<cols*12||bottom-top<rows*12||timestampMs<0)throw new IllegalArgumentException("grid geometry");
@@ -137,7 +137,7 @@ public final class GridPuzzleVision {
    if(matchWorld&&rows==7&&cols==7&&matchWorldHole(row,col)&&matchWorldFlatBlue(pixels,l,t,r,b)){
     cells[index]=0;special.set(index);reasons[index]=CellReason.EMPTY_HOLE;continue;
    }
-   if(matchWorld&&rows==7&&cols==7&&matchWorldWoodCrate(pixels,l,t,r,b)){
+   if(matchWorld&&matchWorldWoodCrate(pixels,l,t,r,b)){
     cells[index]=0;special.set(index);reasons[index]=CellReason.BLOCKER_CRATE;continue;
    }
    if(protectSkulls&&protectedSkull(pixels,l,t,r,b)){
