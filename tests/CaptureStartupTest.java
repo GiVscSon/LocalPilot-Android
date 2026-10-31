@@ -17,6 +17,8 @@ public class CaptureStartupTest {
   check(s.move(a,CaptureStartup.Stage.FIRST_FRAME,CaptureStartup.Stage.RUNNING,300));
   check(s.consentMayClose(a));check(!s.waiting(a));check(s.timeout(a,1000000)==null);
   check(s.recognized(a,301));check(!s.recognized(a,302));
+  s.diagnostic(a,350,"IMAGE_CALLBACKS_IDLE");check(s.report().contains("session="+a+" HEALTH IMAGE_CALLBACKS_IDLE"));
+  s.diagnostic(a+1,350,"PROJECTION_STOPPED");check(!s.report().contains("HEALTH PROJECTION_STOPPED"));
   check("STARTUP_SECURITYEXCEPTION".equals(CaptureStartup.errorCode("SecurityException")));
   new StageMetrics().failure(StageMetrics.Stage.CAPTURE,CaptureStartup.errorCode("ForegroundServiceStartNotAllowedException"));
   new StageMetrics().failure(StageMetrics.Stage.CAPTURE,CaptureStartup.errorCode("bad error/value"));

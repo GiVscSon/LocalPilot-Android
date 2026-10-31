@@ -84,7 +84,7 @@ public final class JumperCaptureService extends Service {
                     if (!closing) {
                         closing = true;
                         PilotService pilot = PilotService.instance;
-                        if (pilot != null) pilot.onJumperCaptureLost(session,"Android завершил захват экрана");
+                        if (pilot != null) pilot.onJumperCaptureLost(session,"MediaProjection.Callback.onStop: Android завершил или отозвал захват; повторное разрешение требуется");
                     }
                     stopSelf();
                 }
@@ -159,6 +159,9 @@ public final class JumperCaptureService extends Service {
     private synchronized void onImage(ImageReader source) {
         // onDestroy must not close native plane storage while this callback reads it.
         if (closing || source != reader) return;
+        // Even a callback with acquireLatestImage()==null is a live callback.
+        PilotService observer=PilotService.instance;
+        if(observer!=null)observer.onCaptureImageCallback(session,SystemClock.elapsedRealtime());
         Image image = null;
         Bitmap frame = null;
         try {
