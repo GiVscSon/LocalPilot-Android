@@ -478,7 +478,13 @@ public class PilotService extends AccessibilityService {
       new GameViewport.Box(visualRoi.left,visualRoi.top,visualRoi.right,visualRoi.bottom))){
    note="Обучение 2048: выделите квадрат 4×4";update();return;
   }
-  if(gridSelected())loadGridConfig();
+  if(gridSelected()){
+   loadGridConfig();
+   String savedPalette=getSharedPreferences("grid-puzzle",MODE_PRIVATE).getString(gridKey()+".palette",null);
+   gridPalette=null;
+   if(savedPalette!=null)try{gridPalette=GridPuzzleVision.Palette.decode(savedPalette);}
+    catch(IllegalArgumentException ignored){gridPalette=null;}
+  }
   loadVisionTraining();
   visionTraining=true;visionTrainingFrames=0;trainingPreviousGrid=null;
   trainingPreviousBubble=null;trainingBubbleStable=0;
@@ -645,6 +651,8 @@ public class PilotService extends AccessibilityService {
   // Save measured physics before reset, including measurements made while no
   // gesture was needed. Stopping a session is not a new round loss.
   if(playingJumper&&jumperCaptureReady)CaptureCleanup.run(()->persistArcadeModel(false));
+  if(visionTraining)persistVisionTraining();
+  visionTraining=false;visionTrainingUntil=0;trainingPreviousGrid=null;trainingPreviousBubble=null;trainingBubbleStable=0;
   captureStartup.stop(SystemClock.elapsedRealtime());clearDiagnosticFrame();arcadeSceneGeneration++;
   playingGrid=false;gridSession.reset();gridPalette=null;gridPendingDecision=null;gridUnknownReasons="none";bubbleSession.reset();bubbleGeometry=null;
   arcadeLastUsable=null;arcadeController.reset();arcadeFeedback.reset();jumperFeedback.reset();arcadeState=null;arcadeBefore=null;arcadePending=null;arcadeAck=false;
@@ -823,8 +831,8 @@ public class PilotService extends AccessibilityService {
   if(!gate.armed()||!valid(gate.offer(SystemClock.elapsedRealtime())))arm();
   if(!gate.armed()||!unlocked()){note="Откройте игру, выберите её окно и подходящий профиль на панели";update();return;}
   if(!VisualGameTarget.allowed(target,getPackageName())){note="Выберите приложение с игрой вместо системного окна";update();return;}
-  if(!automatic()&&!permit.allows(gate.epoch(),SystemClock.elapsedRealtime())){note="Сначала разрешите ввод для этой сессии";update();return;}
-  if(automatic())permit.grantSession(gate.epoch(),SystemClock.elapsedRealtime());
+  if(!visionTraining&&!automatic()&&!permit.allows(gate.epoch(),SystemClock.elapsedRealtime())){note="Сначала разрешите ввод для этой сессии";update();return;}
+  if(automatic()&&!visionTraining)permit.grantSession(gate.epoch(),SystemClock.elapsedRealtime());
   learningSlot=getSharedPreferences("panel",MODE_PRIVATE).getString("game_slot."+target,"default");JumperPolicy.reset();
   String scope=VisualGameTarget.key(target,learningSlot,profile);
   controlMode=Math.max(0,Math.min(2,getSharedPreferences("controls",MODE_PRIVATE).getInt(scope,0)));
@@ -1002,6 +1010,7 @@ public class PilotService extends AccessibilityService {
   if(busy||captureBusy||discoveringBoard||autoLeft>0||playing2048||playingMini||playingJumper||playingGrid){note="Сначала остановите текущий режим";update();return;}
   if(!VisualGameTarget.allowed(target,getPackageName())){note="Выберите окно сторонней игры";update();return;}
   loadBubbleRegion();
+  loadVisionTraining();
   if(!manualVisualRoi||visualRoi==null||!armedBounds.contains(visualRoi)){note="Шипучка: выделите всю ширину игры от верхних шаров до пушки";update();selectVisualRegion();return;}
   boardRoi=new Rect(visualRoi);saveBubbleRegion(boardRoi);bubbleSession.reset();bubbleGeometry=null;
   gridMoves=gridVerified=0;gridResultVisible=gridSawAction=false;playingGrid=true;clearDiagnosticFrame();captureFrames=captureReads=captureDecisions=captureSent=captureCompleted=0;
@@ -1022,7 +1031,7 @@ public class PilotService extends AccessibilityService {
     gridResultVisible=true;bubbleSession.reset();bubbleGeometry=null;note="Экран результата · нажмите Играть снова";update();scheduleGrid(epoch);return;
    }
    gridResultVisible=false;metrics.attempt(StageMetrics.Stage.READ);long started=SystemClock.elapsedRealtimeNanos();
-   BubbleVision.Read read=BubbleVision.read(pixels::getPixel,pixels.getWidth(),pixels.getHeight(),r.left,r.top,r.right,r.bottom,panel.left,panel.top,panel.right,panel.bottom,bubbleGeometry,strictVision);
+   BubbleVision.Read read=BubbleVision.read(pixels::getPixel,pixels.getWidth(),pixels.getHeight(),r.left,r.top,r.right,r.bottom,panel.left,panel.top,panel.right,panel.bottom,bubbleGeometry,strictVision,learnedBubbleLauncher);
    bubbleSession.visionReason(read.reason());
    captureReads++;metrics.record(StageMetrics.Stage.READ,SystemClock.elapsedRealtimeNanos()-started);
    long frameAt=SystemClock.elapsedRealtime()-Math.max(0,SystemClock.uptimeMillis()-lastShotTimestamp);
@@ -1071,6 +1080,7 @@ public class PilotService extends AccessibilityService {
   if(palette!=null)try{gridPalette=GridPuzzleVision.Palette.decode(palette);}catch(IllegalArgumentException error){note="Типы фишек повреждены · Ещё → Вернуть стандартное распознавание";update();return;}
   learningSlot=getSharedPreferences("panel",MODE_PRIVATE).getString("game_slot."+target,"default");
   try{gridGoal=GridPuzzleGoal.Color.valueOf(getSharedPreferences("grid-puzzle",MODE_PRIVATE).getString(gridKey()+".goal","ANY"));}catch(IllegalArgumentException error){gridGoal=GridPuzzleGoal.Color.ANY;}
+  loadVisionTraining();
   gridSession.reset();clearRetainedGridFrame();gridUnknownReasons="none";gridReasonDetails="none";gridLastStatus="WAIT_STABLE";gridReview="Ожидаю чтение текущей сетки.";gridMoves=gridVerified=0;gridResultVisible=gridSawAction=false;playingGrid=true;clearDiagnosticFrame();captureFrames=captureReads=captureDecisions=captureSent=captureCompleted=0;
   gridPendingDecision=null;gridPendingBoard=null;gridPendingSpecial=null;
   GridOnlineLearning previousLearning=gridLearning;gridLearning=new GridOnlineLearning();
@@ -1457,6 +1467,14 @@ public class PilotService extends AccessibilityService {
   if(observation!=null&&observation.usable()){arcadeLastUsable=observation;roundOutcome.game(timestampMs);}
   // Always update temporal physics, including while a previous Android gesture is in flight.
   ArcadePolicy.Decision predictive=observation!=null&&observation.usable()?arcadeController.decide(observation,now):null;
+  if(visionTraining){
+   if(observation!=null&&observation.usable())visionTrainingFrames++;
+   if(visionTrainingFrames%10==0&&visionTrainingFrames>0)persistVisionTraining();
+   note="Обучение "+captureProfile.label+" · кадров "+visionTrainingFrames
+    +" · измеренная физика "+arcadeController.model()
+    +" · осталось "+Math.max(0,(visionTrainingUntil-now+999)/1000)+" с";
+   update();return; // Regardless of readiness, this session cannot send gestures.
+  }
   if(!sceneRecovery.observe(observation!=null&&observation.usable(),timestampMs)){
    advanceArcadeFeedback(null,now);
    if(sceneRecovery.selectionRequired()){note="Сцена пока не распознана · продолжаю наблюдение без ввода. Проверьте профиль и область";update();return;}
@@ -1927,7 +1945,8 @@ public class PilotService extends AccessibilityService {
   if(!RegionPickerGeometry.readable2048(new GameViewport.Box(boardRoi.left,boardRoi.top,boardRoi.right,boardRoi.bottom))){
    stop("AUTO_BOARD_GEOMETRY: 2048 требует минимум 160 пикселей и разницу сторон до 8%");return;
   }
-  boardReadGeneration++;boardReadMisses=0;colorSession.reset();before2048=null;colored2048=colored;
+  loadVisionTraining();
+  boardReadGeneration++;boardReadMisses=0;colorSession.reset();colorSession.setStrictMode(strictVision);before2048=null;colored2048=colored;
   if(colored2048){String saved=getSharedPreferences("color-2048",MODE_PRIVATE).getString(color2048PaletteKey(),null);if(saved!=null)try{colorSession.restoreLearned(saved);}catch(IllegalArgumentException invalidPalette){note="Сохранённая цветовая палитра повреждена · начинаю с базовых плиток";}}
   long epoch=gate.epoch(),generation=boardReadGeneration;playing2048=true;compact(true);note=colored2048?"Читаю цветное поле 2048 · изучено цветов "+colorSession.learnedCount():"Читаю поле в памяти…";update();
   afterPanelLayout(()->{
