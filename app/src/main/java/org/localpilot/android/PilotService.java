@@ -2031,7 +2031,7 @@ public class PilotService extends AccessibilityService {
    stop("AUTO_BOARD_GEOMETRY: 2048 требует минимум 160 пикселей и разницу сторон до 8%");return;
   }
   loadVisionTraining();
-  boardReadGeneration++;boardReadMisses=0;colorSession.reset();colorSession.setStrictMode(strictVision);before2048=null;colored2048=colored;
+  boardReadGeneration++;boardReadMisses=0;moves2048=0;colorSession.reset();colorSession.setStrictMode(strictVision);before2048=null;colored2048=colored;
   if(colored2048||selectedProfile==4&&VisualGameTarget.legacyMarket(target)){String saved=getSharedPreferences("color-2048",MODE_PRIVATE).getString(color2048PaletteKey(),null);if(saved!=null)try{colorSession.restoreLearned(saved);}catch(IllegalArgumentException invalidPalette){note="Сохранённая цветовая палитра повреждена · начинаю с базовых плиток";}}
   long epoch=gate.epoch(),generation=boardReadGeneration;playing2048=true;compact(true);note=colored2048?"Читаю цветное поле 2048 · изучено цветов "+colorSession.learnedCount():"Читаю поле в памяти…";update();
   afterPanelLayout(()->{
