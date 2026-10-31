@@ -135,7 +135,7 @@ public final class Color2048Reader {
    // The known dark 32 tile may have a slightly shifted glass/shadow tone.
    // A new 64+ tile is accepted at startup only with its previously learned
    // game-scoped palette. Arbitrary colours never imply a guessed exponent.
-   if(!strict&&result<0&&distance(rgb,DARK32)<=32*32)result=32;
+   if(!strict&&distance(rgb,DARK32)<=32*32)result=32;
    if(palette[5]>=0&&result==32&&distance(rgb,palette[5])>24*24)result=-1;
     for(int i=5;i<=11;i++)if(palette[i]>=0&&distance(rgb,palette[i])<=24*24){if(result>=0&&result!=(1<<i))return -1;result=1<<i;}
    return result;
