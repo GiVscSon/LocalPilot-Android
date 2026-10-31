@@ -21,6 +21,23 @@ public class ExperienceTest {
   ExperienceStore stale=new ExperienceStore(dir.resolve("stale.log").toFile());ExperienceStore other=new ExperienceStore(dir.resolve("stale.log").toFile());stale.append("lights",before,12,after);other.append("lights",before,12,after);check(ExperienceStore.validate(stale.snapshot())==2);
   byte[] beforeInvalid=empty.snapshot();refuses(()->empty.append("ttt",new int[]{1,0,0,0,0,0,0,0,0},1,new int[]{1,1,2,0,0,0,0,0,0}));check(Arrays.equals(beforeInvalid,empty.snapshot()));
   refuses(()->empty.restoreEmpty("wrong header\n".getBytes(StandardCharsets.UTF_8)));check(Arrays.equals(beforeInvalid,empty.snapshot()));
+  // Grid records are accepted only after a separate visual CHANGED gate
+  // (enforced by PilotService), and structurally validated on import.
+  ExperienceStore gridStore=new ExperienceStore(dir.resolve("verified-grids.log").toFile());
+  for(int side:new int[]{6,7}){
+   int total=side*side;int[] gridBefore=new int[total];
+   for(int i=0;i<total;i++)gridBefore[i]=100+i;
+   gridBefore[0]=1;gridBefore[1]=2;gridBefore[2]=1;gridBefore[side+1]=1;
+   int from=1,to=side+1,code=from*total+to;
+   int[] gridAfter=gridBefore.clone();gridAfter[0]=90;gridAfter[1]=91;
+   String profile="grid"+side+"-swap";
+   gridStore.append(profile,gridBefore,code,gridAfter);
+   check(ExperienceStore.validate(gridStore.snapshot())==side-5);
+   int[] oneFrame=gridBefore.clone();oneFrame[0]=90;
+   refuses(()->gridStore.append(profile,gridBefore,code,oneFrame));
+   refuses(()->gridStore.append(profile,gridBefore,0,gridAfter));
+  }
+  check(ExperienceStore.validate(new ExperienceStore(dir.resolve("verified-grids.log").toFile()).snapshot())==2);
   System.out.println("PASS "+checks+" experience persistence/import/limits assertions");
  }
 }
