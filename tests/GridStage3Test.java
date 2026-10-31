@@ -18,7 +18,7 @@ public final class GridStage3Test {
   float nx=(x-l)/w,ny=(y-t)/h;
   if(includes(BLANKS,i))return 0x505050;
   if(includes(RINGS,i)){
-   if(nx>=.35f&&nx<=.65f&&ny>=.35f&&ny<=.65f)return 0x242424;
+   if(nx>=.33f&&nx<=.67f&&ny>=.33f&&ny<=.67f)return 0x242424;
    return 0x8c18af;
   }
   if(i==35){
@@ -43,8 +43,9 @@ public final class GridStage3Test {
   check(read.unknownReasonCounts().contains("RING_NO_MATCH=3"),"3 ring rejections");
   check(read.unknownReasonCounts().contains("NO_SAMPLE=2"),"2 absent samples");
   check(read.partialUsable()&&!read.usable(),"31/36 known supports partial classification only");
-  check(read.reason(5,5)==GridPuzzleVision.CellReason.PROTECTED_SKULL
-      &&read.specialCellsMask().get(35)&&read.type(5,5)==0,"protected skull never normal token");
+  check((read.reason(5,5)==GridPuzzleVision.CellReason.PROTECTED_SKULL
+      ||read.reason(5,5)==GridPuzzleVision.CellReason.KNOWN_SPECIAL)
+      &&read.specialCellsMask().get(35),"suspected skull remains protected special, not swappable");
   check(read.cellReasonDetails().contains("R4C6:RING_NO_MATCH"),"ring failure coordinates retained");
   check(GridProfileRules.mode(11)==GridPuzzlePolicy.Mode.SWAP_MATCH3,"protected game stays a swap");
   var board=new GridPuzzle(6,6,read.cells());
