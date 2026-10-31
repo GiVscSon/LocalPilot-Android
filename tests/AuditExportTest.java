@@ -31,8 +31,34 @@ public final class AuditExportTest {
   return file;
  }
  public static void main(String[]args)throws Exception{
-  noLogs();legacyOnly();rotating();invalidSources();liveWriter();busyFailure();
+  noLogs();legacyOnly();rotating();invalidSources();liveWriter();busyFailure();newWitnessEvents();
   System.out.println("Audit export: "+checks+" assertions PASS; real temporary files and locks, no Android UI test");
+ }
+ private static void newWitnessEvents()throws Exception{
+  Path folder=Files.createTempDirectory("pilot-audit-witness-");
+  SafeJournal journal=new SafeJournal(folder.resolve("segment-0.log").toFile());
+  journal.append(SafeJournal.Event.PROPOSED,7,1,100,0);
+  journal.append(SafeJournal.Event.ANDROID_COMPLETED,7,1,200,0);
+  journal.append(SafeJournal.Event.VERIFIED_GRID,7,0,300,1);
+  journal.append(SafeJournal.Event.VERIFIED_BUBBLE,7,0,400,2);
+  journal.append(SafeJournal.Event.VERIFIED_ARCADE,7,0,500,3);
+  journal.append(SafeJournal.Event.STOP,7,0,600,AuditStopCode.PANEL_COVERS_ROI);
+  String raw=new String(journal.snapshot(),StandardCharsets.UTF_8);
+  check(raw.contains("|VERIFIED_GRID|7|0|300|1|"),"separate grid visual witness");
+  check(raw.contains("|VERIFIED_BUBBLE|7|0|400|2|"),"separate bubble visual witness");
+  check(raw.contains("|VERIFIED_ARCADE|7|0|500|3|"),"separate arcade visual witness");
+  check(AuditStopCode.from("PANEL_COVERS_ROI: STOP")==AuditStopCode.PANEL_COVERS_ROI,
+    "bounded STOP category preserves reason without private labels");
+  check(AuditStopCode.from("Экспорт отчёта: STOP")==AuditStopCode.EXPORT,
+    "exports distinguished from gameplay failures");
+  check(AuditStopCode.from("Потенциально приватное имя приложения")==0,
+    "unknown text cannot be exported in STOP metrics");
+  SafeJournal.validateSnapshot(journal.snapshot());
+  // Historic STOP metric=0 remains fully readable and chain validated.
+  SafeJournal old=new SafeJournal(folder.resolve("legacy-v1.log").toFile());
+  old.append(SafeJournal.Event.STOP,3,0,70,0);
+  SafeJournal.validateSnapshot(old.snapshot());
+  checks++;
  }
  private static void noLogs()throws Exception{
   Path parent=Files.createTempDirectory("pilot-audit-empty-"),missing=parent.resolve("not-created");
