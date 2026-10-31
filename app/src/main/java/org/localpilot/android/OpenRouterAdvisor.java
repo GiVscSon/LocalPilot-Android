@@ -122,7 +122,9 @@ public final class OpenRouterAdvisor {
     final String result=answer;
     if(!closed)main.post(()->{if(!closed)callback.complete(result);});
    });
-  }catch(JSONException|RuntimeException problem){
+  }catch(JSONException problem){
+   busy.set(false);throw new IllegalArgumentException("Не удалось сформировать запрос модели",problem);
+  }catch(RuntimeException problem){
    busy.set(false);throw problem;
   }
  }
