@@ -1060,7 +1060,11 @@ public class PilotService extends AccessibilityService {
    captureDecisions++;metrics.record(StageMetrics.Stage.POLICY,SystemClock.elapsedRealtimeNanos()-started);
    uiStats="Шипучка · шаров "+bubbleGeometry.count()+" · выстрелов "+gridMoves+" · подтверждено "+gridVerified;
    if(shot==null||!automatic()){bubbleDecisionReason=shot==null?"NO_VERIFIABLE_TRAJECTORY":"INPUT_DISABLED";note=shot==null?"Безопасная траектория не найдена · ожидаю поле":(shot.bounces==0?"Наблюдение: найден прямой выстрел":"Наблюдение: найден один рикошет");update();scheduleGrid(epoch);return;}
-   if(bubbleGeometry.shortRowParity==0){bubbleDecisionReason="UNSUPPORTED_ROW_PARITY";note="Шипучка: обратное чередование рядов · наблюдение без ввода";update();scheduleGrid(epoch);return;}
+   // Both stagger phases have a validated lattice, neighbor geometry,
+   // BubblePolicy shot and predicted-board verifier. Do not strand a real
+   // reversed lattice merely because shortRowParity==0. All normal ticket,
+   // freshness, action-gate and two-frame post-ACK guards still apply.
+   if(bubbleGeometry.shortRowParity==0)bubbleDecisionReason="REVERSED_STAGGER_READY";
    if(busy||!valid(ticket)||SystemClock.elapsedRealtime()-frameAt>300){bubbleDecisionReason="STALE_TICKET_OR_BUSY";note="Шипучка: жду свежий кадр для выстрела";update();scheduleGrid(epoch);return;}
    long sentBefore=captureSent;bubbleSession.sent(bubbleGeometry,shot,SystemClock.elapsedRealtime());
    sendObserved(r.left+bubbleGeometry.launcherX,r.top+bubbleGeometry.launcherY,r.left+shot.aimX,r.top+shot.aimY,ticket,()->{
