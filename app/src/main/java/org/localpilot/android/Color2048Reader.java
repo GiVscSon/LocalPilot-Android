@@ -84,6 +84,7 @@ public final class Color2048Reader {
    int[] colors=learned.clone(),values=new int[16];boolean added=false;
    for(int i=0;i<16;i++){
     int[] sample=sample(pixels,left,top,right,bottom,i);int rgb=sample[0],value=known(rgb,colors,strictMode);
+    boolean inferredFromMerge=false;
     if(value<0){
      int target=expected==null?0:expected.cells[i];
      if(target<32||target>2048||sample[1]>(strictMode?24:30))throw new IllegalArgumentException(
@@ -99,10 +100,10 @@ public final class Color2048Reader {
       throw new IllegalArgumentException("merged colour conflicts with learned palette");
      int low=Math.min(rgb>>16&255,Math.min(rgb>>8&255,rgb&255)),high=Math.max(rgb>>16&255,Math.max(rgb>>8&255,rgb&255));
      if(high-low<60||high<70)throw new IllegalArgumentException("background cannot teach a tile");
-     colors[rank]=rgb;value=target;added=true;
+     colors[rank]=rgb;value=target;added=true;inferredFromMerge=true;
     }
     // Newly inferred tiles must be homogeneous at every occurrence in this frame.
-    if(value>=32&&learned[Integer.numberOfTrailingZeros(value)]<0&&sample[1]>24)
+    if(inferredFromMerge&&value>=32&&learned[Integer.numberOfTrailingZeros(value)]<0&&sample[1]>24)
      throw new IllegalArgumentException("animated merged tile");
     values[i]=value;
    }
