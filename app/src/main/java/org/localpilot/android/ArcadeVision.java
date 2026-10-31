@@ -71,7 +71,13 @@ public final class ArcadeVision {
   for(Blob b:red)if(fuelCan(f,b,left,right))addVehicle(collectibles,b.box);
   List<Blob> cars=new ArrayList<>(colored);cars.addAll(f.blobs(LIGHT));cars.addAll(f.blobs(DARK_CAR));
   for(Blob b:cars)if(vehicle(b,left,right)&&b.box.top>.13f&&!fuelCan(f,b,left,right)
-    &&(player==null||overlap(b.box,player)<.45f))addVehicle(obstacles,b.box);
+    &&(player==null||overlap(b.box,player)<.45f)){
+    // The same pickup may appear in several colour masks. A dark edge or
+    // saturated body must not return as a collision hazard.
+    boolean isPickup=false;
+    for(ArcadeObservation.Box fuel:collectibles)if(overlap(fuel,b.box)>.38f){isPickup=true;break;}
+    if(!isPickup)addVehicle(obstacles,b.box);
+  }
   // A large pale result dialog covers the bottom road, unlike narrow lane marks.
   boolean terminal=right-left>.4f&&f.fraction(LIGHT,Math.max(left,.28f),.65f,Math.min(right,.75f),.95f)>.30f;
   ArcadeObservation base=observation(ArcadeProfile.TRAFFIC,time,player,player,obstacles,left,.13f,right,.97f,0,0,
@@ -128,14 +134,20 @@ public final class ArcadeVision {
       car.box.right-car.box.width()*.2f,car.box.top+car.box.height()*.42f)>.12f;
   return paint|(hood?256:0);
  }
- /** A small, nearly square red body with a dark handle is a fuel pickup, not a car. */
+ /** A red fuel body has a dark handle, often protruding from the upper-left.
+  * Cars have wide dark windshields centered across their upper half. */
  private static boolean fuelCan(Frame f,Blob b,float left,float right){
   if(b.box.x()<left+.025f||b.box.x()>right-.025f||b.box.width()<.055f||b.box.width()>.16f
-    ||b.box.height()<.04f||b.box.height()>.13f||b.aspect()<.82f||b.aspect()>2.1f||b.density()<.22f)return false;
+    ||b.box.height()<.04f||b.box.height()>.13f||b.aspect()<.65f||b.aspect()>2.1f||b.density()<.22f)return false;
   if(f.fraction(RED,b.box.left,b.box.top,b.box.right,b.box.bottom)<.28f)return false;
-  float x0=b.box.left+b.box.width()*.22f,x1=b.box.right-b.box.width()*.22f;
-  float y0=b.box.top+b.box.height()*.02f,y1=b.box.top+b.box.height()*.36f;
-  return f.fraction(DARK,x0,y0,x1,y1)>.035f;
+  float w=b.box.width(),h=b.box.height();
+  float inset=f.fraction(DARK,b.box.left+w*.22f,b.box.top+h*.02f,
+    b.box.right-w*.22f,b.box.top+h*.36f);
+  float handle=f.fraction(DARK,b.box.left-w*.25f,b.box.top-h*.30f,
+    b.box.left+w*.40f,b.box.top+h*.26f);
+  float windshield=f.fraction(DARK,b.box.left+w*.22f,b.box.top+h*.20f,
+    b.box.right-w*.22f,b.box.top+h*.49f);
+  return (inset>.035f||handle>.055f)&&windshield<.30f;
  }
  private static boolean vehicle(Blob b,float left,float right){
   return b.box.x()>left+.025f&&b.box.x()<right-.025f
@@ -180,7 +192,7 @@ public final class ArcadeVision {
    }
   }
   List<Blob> dark=f.blobs(DARK),red=f.blobs(RED),players=new ArrayList<>();
-  for(Blob b:dark)if(b.box.x()<.25f&&b.box.width()>.035f&&b.box.width()<.18f
+  for(Blob b:dark)if(b.box.x()<.38f&&b.box.width()>.035f&&b.box.width()<.22f
     &&b.box.top>.035f&&b.box.bottom<floor&&b.box.height()>.012f
     &&b.box.height()<.11f&&b.aspect()>.4f&&b.aspect()<3.0f&&b.density()>.25f){
    for(Blob hat:red)if(hat.box.x()<.28f&&hat.box.width()>.012f&&hat.box.width()<.12f
@@ -232,7 +244,7 @@ public final class ArcadeVision {
      obstacles.add(new ArcadeObservation.Box(Math.max(0,c.x-.045f),interval[0],Math.min(1,c.x+.045f),interval[1]));
     }
    }
-   if(!gapFound&&player!=null&&c.x+.045f>player.left-.015f&&bestHi-bestLo>clearance*2){
+   if(!gapFound&&player!=null&&c.x+.045f>=player.right-.01f&&bestHi-bestLo>clearance*2){
     gapTop=bestLo;gapBottom=bestHi;gapFound=true;
    }
   }
