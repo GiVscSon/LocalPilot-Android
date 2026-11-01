@@ -44,11 +44,14 @@ public final class ArcadeVision {
   for(Blob b:f.blobs(BALL))if(b.box.top>.065f&&b.box.bottom<.955f
     &&b.box.width()>=.014f&&b.box.width()<=.09f&&b.box.height()>=.008f
     &&b.aspect()>=.50f&&b.aspect()<=1.8f&&b.density()>.3f)balls.add(b);
-  for(Blob b:f.blobs(WOOD))if(b.box.top>.76f&&b.box.bottom<.965f
-    &&b.box.width()>.14f&&b.box.width()<.43f&&b.box.height()>.012f
+  for(Blob b:f.blobs(WOOD))if(b.box.top>.75f&&b.box.bottom<.995f
+    &&b.box.width()>.13f&&b.box.width()<.48f&&b.box.height()>.009f
     &&b.box.height()<.095f&&b.aspect()>1.8f&&b.density()>.18f)paddles.add(b);
   ArcadeObservation.Box ball=choose(balls,previous==null?null:previous.player,.5f,.55f);
   ArcadeObservation.Box paddle=choose(paddles,previous==null?null:previous.control,.5f,.86f);
+   // Real woven baskets can fragment into many brown strands instead of one
+   // connected wooden blob. Require a long coherent multi-row lower band.
+   if(paddle==null)paddle=f.paddleBand();
   return observation(ArcadeProfile.PADDLE,time,ball,paddle,List.of(),0,.07f,1,.96f,0,0,
     ball!=null&&paddle!=null?.88f:0,false,previous);
  }
@@ -318,6 +321,39 @@ public final class ArcadeVision {
     if(green>50&&green>red*1.12f&&green>blue*1.15f)mask[index]|=GREEN;
     if(high>100&&high-low>48)mask[index]|=SATURATED;
    }}
+  }
+  ArcadeObservation.Box paddleBand(){
+   // Only the observed bottom basket zone, never wooden platforms at the top.
+   int first=(int)(h*.79f),end=(int)(h*.968f);
+   int window=Math.max(15,(int)(w*.14f)),best=-1,bestX=-1,bestY=-1;
+   for(int y=first;y<end;y+=3){
+    for(int x=0;x+window<w;x+=3){
+     int hits=0,rows=0;
+     for(int yy=y;yy<Math.min(y+8,h);yy+=2){
+      int rowHits=0;
+      for(int xx=x;xx<x+window;xx++)if((mask[yy*w+xx]&WOOD)!=0)rowHits++;
+      if(rowHits>=window*.47f)rows++;
+      hits+=rowHits;
+     }
+     if(rows>=3&&hits>best){best=hits;bestX=x;bestY=y;}
+    }
+   }
+   if(bestX<0)return null;
+   // Extend horizontally only while brown material stays coherent; do not
+   // extrapolate arbitrary basket sizes from an isolated wood-grain dot.
+   int left=bestX,right=bestX+window;
+   for(int x=left-2;x>=0;x-=2){
+    int count=0;for(int y=bestY;y<Math.min(bestY+8,h);y+=2)if((mask[y*w+x]&WOOD)!=0)count++;
+    if(count<2)break;left=x;
+   }
+   for(int x=right;x<w;x+=2){
+    int count=0;for(int y=bestY;y<Math.min(bestY+8,h);y+=2)if((mask[y*w+x]&WOOD)!=0)count++;
+    if(count<2)break;right=x;
+   }
+   if(right-left<w*.14f||right-left>w*.46f)return null;
+   float l=left/(float)w,r=right/(float)w,t=bestY/(float)h,b=Math.min(.995f,(bestY+12f)/h);
+   if(r<=l||b<=t)return null;
+   return new ArcadeObservation.Box(l,t,r,b);
   }
   float fraction(int bit,float l,float t,float r,float b){
    int x0=Math.max(0,(int)(l*w)),x1=Math.min(w,(int)(r*w));
