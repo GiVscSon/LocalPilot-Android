@@ -60,6 +60,7 @@ class VlmApiClient(
         val conn = runCatching { url.openConnection() as HttpsURLConnection }.getOrNull()
             ?: return@withContext null
         try {
+            conn.instanceFollowRedirects = false // do not forward game screenshots to redirect hosts
             conn.requestMethod = "POST"
             conn.connectTimeout = 10000
             conn.readTimeout = 25000
