@@ -1081,11 +1081,30 @@ public class PilotService extends AccessibilityService {
   gridMoves=gridVerified=0;gridResultVisible=gridSawAction=false;playingGrid=true;clearDiagnosticFrame();captureFrames=captureReads=captureDecisions=captureSent=captureCompleted=0;
   if(automatic())permit.grantSession(gate.epoch(),SystemClock.elapsedRealtime());
   compact(true);note="Шипучка · проверяю обычные шары и пушку";update();long epoch=gate.epoch(),generation=boardReadGeneration;
-  afterPanelLayout(()->{if(epoch!=gate.epoch()||generation!=boardReadGeneration||!playingGrid||focusPaused)return;
-   if(!movePanelAway(boardRoi)){stop("Панель STOP закрывает область: безопасного места нет");return;}
-   afterPanelLayout(()->{if(epoch!=gate.epoch()||generation!=boardReadGeneration||!playingGrid||focusPaused)return;
-    if(!panelOutsideRoi(boardRoi)){stop("PANEL_COVERS_ROI: панель после перемещения перекрывает Шипучку");return;}
-    scheduleGrid(epoch);});});
+  prepareBubblePanel(epoch,generation,2);
+ }
+ /** The compact STOP may sit in letterboxing outside the game window.
+  * A transient expanded-panel measurement must not become a false overlap.
+  * Each attempt waits for an actual layout, and capture is never armed while
+  * the measured panel still intersects the entire selected Bubble ROI. */
+ private void prepareBubblePanel(long epoch,long generation,int retries){
+  afterPanelLayout(()->{
+   if(epoch!=gate.epoch()||generation!=boardReadGeneration||!playingGrid||selectedProfile!=9||focusPaused)return;
+   boolean moved=movePanelAway(boardRoi,displayDockBounds());
+   afterPanelLayout(()->{
+    if(epoch!=gate.epoch()||generation!=boardReadGeneration||!playingGrid||selectedProfile!=9||focusPaused)return;
+    if(moved&&panelOutsideRoi(boardRoi)){
+     note="Шипучка · компактная STOP вне поля, проверяю кадры";
+     update();scheduleGrid(epoch);return;
+    }
+    if(retries>0){
+     note="Шипучка · ожидаю фактическое положение панели, жестов нет";
+     update();handler.postDelayed(()->prepareBubblePanel(epoch,generation,retries-1),120);
+     return;
+    }
+    stop("PANEL_COVERS_ROI: нет проверенного свободного места для STOP вне области Шипучки");
+   });
+  });
  }
  private void bubbleStep(long epoch){
   if(epoch!=gate.epoch()||!playingGrid||selectedProfile!=9||focusPaused)return;
@@ -1980,6 +1999,13 @@ public class PilotService extends AccessibilityService {
     discoveringBoard=false;uiStats="Автополе: "+selected.profile+" · "+boardRoi.width()+"×"+boardRoi.height();if(selected.profile==BoardSelection.Profile.GAME_2048)start2048();else startMini(selected.profile==BoardSelection.Profile.TTT?0:1);});
   });
  }
+ /** Physical display is a safe place for the STOP overlay, even when the
+  * game's selected window is smaller (e.g. landscape letterboxing). Its
+  * screen-relative placement is verified later against the actual ROI. */
+ private Rect displayDockBounds(){
+  Point size=new Point();wm.getDefaultDisplay().getRealSize(size);
+  return new Rect(0,0,size.x,size.y);
+ }
  /** Dock a measured compact STOP panel outside the ROI; fail if no safe place exists. */
  private boolean movePanelAway(Rect roi){return movePanelAway(roi,armedBounds);}
  private boolean movePanelAway(Rect roi,Rect safeBounds){
@@ -2068,7 +2094,8 @@ public class PilotService extends AccessibilityService {
    // A user can drag the STOP panel back over the active board. Recover once
    // per armed session without making a gesture, without reading masked cells,
    // and only after the actual WindowManager layout no longer overlaps ROI.
-   if(panelCoverRecoveryAttempts++==0&&!busy&&movePanelAway(roi)){
+   if(panelCoverRecoveryAttempts++==0&&!busy&&
+      (playingGrid&&selectedProfile==9?movePanelAway(roi,displayDockBounds()):movePanelAway(roi))){
     final long generation=boardReadGeneration;
     note="Панель перекрыла поле · перемещаю STOP за пределы сетки без ввода";update();
     afterPanelLayout(()->{
