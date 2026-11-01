@@ -34,7 +34,7 @@ class LocalJpgContractVerify {
   Path classes=Files.createTempDirectory("jpg-contract-classes-");
   List<String> sources=new ArrayList<>(List.of("--release","17","-d",classes.toString()));
   for(String name:List.of("Board2048","PixelBoardReader","BoardSelection","PixelBoardLocator","Verified2048",
-    "Color2048Reader","BubbleBoard","BubbleVision","GridPuzzleVision","ArcadeProfile",
+    "Color2048Reader","BubbleBoard","BubblePanelSafety","BubbleVision","GridPuzzleVision","ArcadeProfile",
     "ArcadeObservation","ArcadeVision","SceneRecovery"))
    sources.add("app/src/main/java/org/localpilot/android/"+name+".java");
   sources.add("tests/LocalJpgReplay.java");
