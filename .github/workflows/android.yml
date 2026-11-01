@@ -41,6 +41,7 @@ jobs:
       java tests/CaptureMatrixVerify.java
       java tests/PanelDockingVerify.java
       java tests/BubbleVerify.java
+      java tests/FieldSafetyVerify.java
       java tests/LearningVerify.java
       java tests/ProcessExitVerify.java
       java tests/AuditVerify.java
