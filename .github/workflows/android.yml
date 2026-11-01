@@ -35,6 +35,7 @@ jobs:
       java tests/Field2048GlassVerify.java
       java -Djava.awt.headless=true tests/LocalJpgContractVerify.java
       java tests/ReflexIntegrationContractVerify.java
+      java tests/ReflexVlmReviewContractVerify.java
       java tests/CaptureTimingVerify.java
       java tests/CaptureRetryVerify.java
       java tests/CaptureMatrixVerify.java
