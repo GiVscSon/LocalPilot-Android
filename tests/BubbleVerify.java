@@ -3,7 +3,7 @@ import java.net.*;import java.nio.file.*;import java.util.*;
 class BubbleVerify {
  public static void main(String[] args)throws Exception{
   Path out=Files.createTempDirectory("localpilot-bubbles-");List<String> command=new ArrayList<>(List.of("--release","17","-d",out.toString()));
-  for(String name:List.of("BubbleBoard","BubblePolicy","BubbleSession","BubbleVision"))command.add("app/src/main/java/org/localpilot/android/"+name+".java");
+  for(String name:List.of("BubbleBoard","BubblePolicy","BubbleSession","BubblePanelSafety","BubbleVision"))command.add("app/src/main/java/org/localpilot/android/"+name+".java");
   command.add("tests/BubbleTest.java");
   command.add("tests/BubbleBounceTest.java");
   if(ToolProvider.getSystemJavaCompiler().run(null,System.out,System.err,command.toArray(String[]::new))!=0)throw new AssertionError("bubble compilation");

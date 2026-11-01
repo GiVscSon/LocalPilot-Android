@@ -81,6 +81,17 @@ public final class ArcadeProfilesTest {
  private static void perception(){
   for(ArcadeProfile p:List.of(ArcadeProfile.PADDLE,ArcadeProfile.TRAFFIC,ArcadeProfile.FLAPPY))
    check(!new Scene(480,720,0).read(p,1000,null).usable(),"black capture rejected "+p);
+  // Real-world basket mesh: brown horizontal filaments can be disjoint,
+  // so a connected-component-only reader loses the paddle at the waterline.
+  Scene woven=new Scene(480,800,0x80c9ec);
+  woven.circle(.50f,.47f,.026f,0xc00c0e);
+  for(int y=(int)(800*.85f);y<(int)(800*.90f);y+=2)
+   for(int x=(int)(480*.38f);x<(int)(480*.66f);x++)
+    woven.pixels[y*480+x]=0xb56d32;
+  ArcadeObservation recovered=woven.read(ArcadeProfile.PADDLE,1000,null);
+  check(recovered.usable()&&recovered.control!=null
+    &&recovered.control.y()>.79f&&recovered.control.y()<.97f,
+    "fragmented woven basket must remain a confirmed lower paddle");
   for(int width:new int[]{480,960}){
    Scene scene=new Scene(width,width*3/2,0x80c9ec);scene.circle(.7f,.5f,.025f,0xb40d18);scene.rect(.4f,.82f,.68f,.87f,0xb56d32);
    ArcadeObservation s=scene.read(ArcadeProfile.PADDLE,1000,null);check(s.usable(),"paddle scene detected "+width);

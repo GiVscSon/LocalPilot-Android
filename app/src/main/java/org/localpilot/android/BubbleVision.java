@@ -12,12 +12,20 @@ public final class BubbleVision {
   final int[] rgb=new int[240*480],queue=new int[240*480],stamp=new int[240*480];
   final byte[] strong=new byte[240*480],color=new byte[240*480];
   final boolean[] seen=new boolean[240*480];
-  Pixels pixels;int sampleWidth,left,top,scale,generation;
-  void begin(Pixels pixels,int sampleWidth,int left,int top,int scale){
+  Pixels pixels;int sampleWidth,left,top,scale,generation,el,et,er,eb;
+  void begin(Pixels pixels,int sampleWidth,int left,int top,int scale,int el,int et,int er,int eb){
    this.pixels=pixels;this.sampleWidth=sampleWidth;this.left=left;this.top=top;this.scale=scale;
+   this.el=el;this.et=et;this.er=er;this.eb=eb;
    if(generation==Integer.MAX_VALUE){Arrays.fill(stamp,0);generation=1;}else generation++;
   }
-  void sample(int at){if(stamp[at]==generation)return;int c=pixels.get(left+(at%sampleWidth)*scale,top+(at/sampleWidth)*scale);
+  void sample(int at){if(stamp[at]==generation)return;
+   int px=left+(at%sampleWidth)*scale,py=top+(at/sampleWidth)*scale;
+   // Keep the compact STOP accessible while masking its pixels from blob and
+   // circle classification. Active ceiling/launcher overlap was rejected earlier.
+   if(er>el&&eb>et&&px>=el&&px<er&&py>=et&&py<eb){
+    rgb[at]=0;color[at]=0;strong[at]=0;stamp[at]=generation;return;
+   }
+   int c=pixels.get(px,py);
    rgb[at]=c;color[at]=(byte)color(c,false);strong[at]=(byte)color(c,true);stamp[at]=generation;}
  }
  private static final ThreadLocal<Scratch> WORK=ThreadLocal.withInitial(Scratch::new);
@@ -41,11 +49,13 @@ public final class BubbleVision {
    int excludedLeft,int excludedTop,int excludedRight,int excludedBottom,BubbleBoard previous,boolean strict,float learnedLauncherFraction){
   if(pixels==null||width<1||height<1||width>16_384||height>16_384||left<0||top<0||right>width||bottom>height||right-left<80||bottom-top<120)
    throw new IllegalArgumentException("bubble image bounds");
-  if(excludedLeft<right&&excludedRight>left&&excludedTop<bottom&&excludedBottom>top)
-   return new Read(null,"Панель перекрывает игровую область");
+  if(excludedLeft<right&&excludedRight>left&&excludedTop<bottom&&excludedBottom>top
+    &&BubblePanelSafety.blocks(new BubblePanelSafety.Area(left,top,right,bottom),
+      new BubblePanelSafety.Area(excludedLeft,excludedTop,excludedRight,excludedBottom)))
+   return new Read(null,"STOP перекрывает шары, пушку или траекторию");
   int rw=right-left,rh=bottom-top,scale=Math.max(1,Math.max((rw+239)/240,(rh+479)/480));
   int w=(rw+scale-1)/scale,h=(rh+scale-1)/scale,n=w*h;Scratch work=WORK.get();
-  work.begin(pixels,w,left,top,scale);
+  work.begin(pixels,w,left,top,scale,excludedLeft,excludedTop,excludedRight,excludedBottom);
   try{
   // Initial acquisition needs components; a tracked board samples only the
   // bounded circle probes. Never copy/parse an entire screen for cached geometry.
