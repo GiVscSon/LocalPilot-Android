@@ -121,6 +121,15 @@ class DeadlockDetector(
         return Decision.VerifiedProgress(ruleId)
     }
 
+    /**
+     * A verified outcome from an EXISTING game-specific verifier may renew the
+     * stasis timer, but cannot verify/commit any proposed VLM reflex.
+     */
+    fun observedGameProgress(nowMs: Long) {
+        if (nowMs >= 0 && (lastChangeAt < 0 || nowMs >= lastChangeAt))
+            lastChangeAt = nowMs
+    }
+
     fun rejectPending(reason: String): Decision? {
         val p = pending ?: return null
         pending = null
