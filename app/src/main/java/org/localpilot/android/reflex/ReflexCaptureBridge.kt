@@ -11,6 +11,10 @@ import android.graphics.Bitmap
  */
 class ReflexCaptureBridge {
     private val detector = DeadlockDetector(stasisThresholdMs = 4500L)
+    private val stasisFrames = StasisFrameRecorder()
+
+    fun copyStasisForReview(bindingEpoch: Long, windowId: Int, nowMs: Long): StasisFrameRecorder.Snapshot? =
+        if (active) stasisFrames.copyForReview(bindingEpoch, windowId, nowMs) else null
     private var active = false
     private var epoch = -1L
     private var windowId = -1
@@ -30,6 +34,7 @@ class ReflexCaptureBridge {
     }
 
     fun reset() {
+        stasisFrames.clear()
         detector.reset()
         epoch = -1L
         windowId = -1
@@ -80,6 +85,7 @@ class ReflexCaptureBridge {
         return when (val d = detector.evaluateFrame(hash, bindingEpoch, boundWindowId, nowMs)) {
             is DeadlockDetector.Decision.TriggerSlowLoop -> {
                 deadlocks++
+                stasisFrames.record(frame, left, top, right, bottom, bindingEpoch, boundWindowId, nowMs)
                 // Deliberately NO automatic VLM upload or gesture here.
                 lastReason = "STASIS_OBSERVED ${d.reason}"
                 lastReason
