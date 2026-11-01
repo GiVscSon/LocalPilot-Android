@@ -19,6 +19,8 @@ class ReflexCaptureBridge {
     private var sampled = 0
     private var deadlocks = 0
     private var independentlyVerified = 0
+    private var totalHashUs = 0L
+    private var maxHashUs = 0L
     private var lastReason = "OFF"
 
     fun setObserving(value: Boolean) {
@@ -68,8 +70,12 @@ class ReflexCaptureBridge {
             left.toFloat() / frame.width, top.toFloat() / frame.height,
             right.toFloat() / frame.width, bottom.toFloat() / frame.height
         )
+        val startedNs = System.nanoTime()
         val hash = try { FastVisualMatcher.computeRoiHash(frame, coordinates) }
         catch (_: RuntimeException) { return "REFLEX_HASH_UNAVAILABLE" }
+        val measuredUs = ((System.nanoTime() - startedNs).coerceAtLeast(0L) / 1000L)
+        totalHashUs += measuredUs
+        if (measuredUs > maxHashUs) maxHashUs = measuredUs
         sampled++
         return when (val d = detector.evaluateFrame(hash, bindingEpoch, boundWindowId, nowMs)) {
             is DeadlockDetector.Decision.TriggerSlowLoop -> {
@@ -106,5 +112,6 @@ class ReflexCaptureBridge {
     fun report(): String =
         "reflex_mode=${if (active) "PASSIVE" else "OFF"}" +
         " frames=$sampled stasis=$deadlocks existing_verified=$independentlyVerified" +
+        " phash_avg_us=${if (sampled == 0) 0 else totalHashUs / sampled} phash_max_us=$maxHashUs" +
         " status=$lastReason candidates_active=0 vlm_upload=OFF dataset_commit=OFF"
 }
