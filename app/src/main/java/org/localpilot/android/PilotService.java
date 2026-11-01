@@ -2173,9 +2173,7 @@ public class PilotService extends AccessibilityService {
     reflexVlmReviewer.review(shot,packageName,address,modelName,key,true,result->{
      if(destroying)return;
      note="Qwen-VL: "+result;update();
-     showServiceDialog(new AlertDialog.Builder(this).setTitle("Qwen-VL · итог")
-      .setMessage(result+"\nКандидат неактивен; рефлекс не исполнялся.")
-      .setPositiveButton("Закрыть",null).create());
+     Toast.makeText(this,"Qwen-VL: "+result,Toast.LENGTH_LONG).show();
     });
    })
    .setNegativeButton("Отмена",null).create();
