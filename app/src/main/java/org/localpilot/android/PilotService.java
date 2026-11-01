@@ -11,6 +11,9 @@ public class PilotService extends AccessibilityService {
  private final org.localpilot.android.reflex.ReflexCaptureBridge reflexCapture=new org.localpilot.android.reflex.ReflexCaptureBridge();
  private boolean reflexObserveEnabled;
  private String reflexStatus="OFF";
+ private org.localpilot.android.reflex.ReflexVlmReviewController reflexVlmReviewer;
+ private org.localpilot.android.reflex.StasisFrameRecorder.Snapshot reflexReviewShot;
+ private String reflexReviewTarget="";
  private final StageMetrics metrics=new StageMetrics();
  private final CaptureTimingTrace captureTiming=new CaptureTimingTrace();
  public String captureTimingReport(){return captureTiming.report();}
@@ -361,9 +364,21 @@ public class PilotService extends AccessibilityService {
   try{wm.addView(overlay,lp);picker=overlay;handler.postDelayed(()->{if(picker==overlay){stop("Время выбора области истекло");compact(false);}},30000);}catch(RuntimeException error){stop("Не удалось открыть выбор области");compact(false);}
  }
  private void moreOptions(){
+  // Copy the stasis ROI while the original window binding is still valid;
+  // opening the menu immediately revokes input authority via STOP.
+  discardReflexReviewShot();
+  if(reflexObserveEnabled&&gate.armed()&&!focusPaused&&!destroying){
+   long now=SystemClock.elapsedRealtime();
+   ActionGate.Ticket ticket=gate.offer(now);
+   if(ticket!=null&&windowRejection(null,false,true)==null){
+    reflexReviewShot=reflexCapture.copyStasisForReview(gate.epoch(),ticket.window,now);
+    if(reflexReviewShot!=null)reflexReviewTarget=target;
+   }
+  }
+  handler.postDelayed(this::discardReflexReviewShot,45000L);
   stop("Дополнительные действия · STOP");
-  final int[] actions={0,3,4,5,7,8,9,10,11,12,13,14,15,16,17,18};
-  overlayMenu("Ещё",new String[]{"Диагностика сеанса","Выбрать установленную игру","Только чтение","Включить автоуправление","Скрыть панель","Отключить службу","Настроить распознавание","Способ управления","Вернуть стандартное распознавание","Размер сетки фишек","Приоритетный цвет фишек","Помощь по панели и играм","Неизвестные клетки","Журнал обучения","Рефлексы · наблюдение вкл/выкл","Рефлексы · диагностический статус"},i->{switch(actions[i]){
+  final int[] actions={0,3,4,5,7,8,9,10,11,12,13,14,15,16,17,18,19};
+  overlayMenu("Ещё",new String[]{"Диагностика сеанса","Выбрать установленную игру","Только чтение","Включить автоуправление","Скрыть панель","Отключить службу","Настроить распознавание","Способ управления","Вернуть стандартное распознавание","Размер сетки фишек","Приоритетный цвет фишек","Помощь по панели и играм","Неизвестные клетки","Журнал обучения","Рефлексы · наблюдение вкл/выкл","Рефлексы · диагностический статус","Qwen-VL · разобрать тупик"},i->{if(actions[i]!=19)discardReflexReviewShot();switch(actions[i]){
    case 0->showServiceDialog(new AlertDialog.Builder(this).setTitle("Последний сеанс").setMessage(lastSessionReport+"\n"+captureStartup.report()).setPositiveButton("Закрыть",null).create());
    case 3->startActivity(new Intent(this,GamePickerActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));case 4->setAutomatic(false);case 5->setAutomatic(true);case 7->hidePanel();case 8->disableSelf();
    case 9->startCustomCalibration();case 10->chooseControlMode();case 11->resetCustomVision();
@@ -376,6 +391,7 @@ public class PilotService extends AccessibilityService {
    case 18->showServiceDialog(new AlertDialog.Builder(this).setTitle("Рефлексы · только наблюдение")
     .setMessage(reflexCapture.report()+"\nСетевые запросы и жесты VLM выключены. Изменение pHash не доказывает успех.")
     .setPositiveButton("Закрыть",null).create());
+   case 19->showReflexReviewDialog();
   }});
  }
 
@@ -389,6 +405,7 @@ public class PilotService extends AccessibilityService {
 
 
  @Override protected void onServiceConnected(){CrashDiagnostics.phase("SERVICE_CONNECTED");instance=this;try{experience=new ExperienceStore(new java.io.File(getFilesDir(),"experience-v1.log"));}catch(java.io.IOException e){experience=null;}try{arcadeLearning=new ArcadeLearningStore(new java.io.File(getFilesDir(),"arcade-learning-v1.log"));}catch(java.io.IOException e){arcadeLearning=null;}try{journal=new RotatingJournal(new java.io.File(getFilesDir(),"audit-segments"),new java.io.File(getFilesDir(),"audit-v1.log"));}catch(java.io.IOException e){journal=null;}wm=(WindowManager)getSystemService(WINDOW_SERVICE);gate.stop();
+  reflexVlmReviewer=new org.localpilot.android.reflex.ReflexVlmReviewController(getApplicationContext());
   reflexObserveEnabled=getSharedPreferences("reflex",MODE_PRIVATE).getBoolean("observe_enabled",false);
   reflexCapture.setObserving(reflexObserveEnabled);
   displayGeometry=readDisplayGeometry();showPanel();}
@@ -2108,6 +2125,67 @@ public class PilotService extends AccessibilityService {
     }
 
  }
+
+ /** This dialog is the ONLY opt-in route for uploading a cropped game ROI.
+  * Opening it has already performed STOP, and no Qwen result may dispatch. */
+ private void discardReflexReviewShot(){
+  if(reflexReviewShot!=null&&!reflexReviewShot.getBitmap().isRecycled())
+   reflexReviewShot.getBitmap().recycle();
+  reflexReviewShot=null;reflexReviewTarget="";
+ }
+ private void showReflexReviewDialog(){
+  org.localpilot.android.reflex.StasisFrameRecorder.Snapshot shot=reflexReviewShot;
+  String packageName=reflexReviewTarget;
+  reflexReviewShot=null;reflexReviewTarget="";
+  if(shot==null||packageName.isEmpty()||reflexVlmReviewer==null){
+   note="Нет свежего кадра тупика: включите наблюдение и дождитесь STASIS";
+   update();return;
+  }
+  android.content.SharedPreferences prefs=getSharedPreferences("reflex",MODE_PRIVATE);
+  LinearLayout fields=new LinearLayout(this);
+  fields.setPadding(dp(12),dp(8),dp(12),dp(8));
+  fields.setOrientation(LinearLayout.VERTICAL);
+  EditText url=new EditText(this);url.setHint("https://host/v1/chat/completions");
+  url.setSingleLine(true);url.setText(prefs.getString("vlm_endpoint",""));
+  fields.addView(url);
+  EditText model=new EditText(this);model.setHint("Имя Qwen-VL модели");
+  model.setSingleLine(true);model.setText(prefs.getString("vlm_model",""));
+  fields.addView(model);
+  EditText token=new EditText(this);token.setHint("API token (только эта сессия)");
+  token.setSingleLine(true);
+  token.setInputType(android.text.InputType.TYPE_CLASS_TEXT|android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD);
+  fields.addView(token);
+  final boolean[] transferred={false};
+  AlertDialog dialog=new AlertDialog.Builder(this)
+   .setTitle("Qwen-VL · только разбор")
+   .setMessage("Отправить на указанный HTTPS-сервер только кадр игровой области? Правило сохранится выключенным. Никаких новых жестов и обучения без проверенного результата.")
+   .setView(fields)
+   .setPositiveButton("Отправить снимок",(d,which)->{
+    String address=url.getText().toString().trim();
+    String modelName=model.getText().toString().trim();
+    String key=token.getText().toString();
+    if(!address.startsWith("https://")||address.length()>300||modelName.isEmpty()||modelName.length()>160){
+     note="VLM: нужен HTTPS-адрес /chat/completions и название модели";update();return;
+    }
+    prefs.edit().putString("vlm_endpoint",address).putString("vlm_model",modelName).apply();
+    transferred[0]=true;
+    note="VLM: анализ игрового кадра; все жесты STOP";update();
+    reflexVlmReviewer.review(shot,packageName,address,modelName,key,true,result->{
+     if(destroying)return;
+     note="Qwen-VL: "+result;update();
+     showServiceDialog(new AlertDialog.Builder(this).setTitle("Qwen-VL · итог")
+      .setMessage(result+"\nКандидат неактивен; рефлекс не исполнялся.")
+      .setPositiveButton("Закрыть",null).create());
+    });
+   })
+   .setNegativeButton("Отмена",null).create();
+  dialog.setOnDismissListener(d->{
+   if(!transferred[0]&&!shot.getBitmap().isRecycled())shot.getBitmap().recycle();
+  });
+  dialog.getWindow().setType(WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY);
+  dialog.show();
+ }
+
  /** Passive matching only. In particular, no extra dispatchGesture or network calls. */
  private void setReflexObservation(boolean enabled){
   reflexObserveEnabled=enabled;
@@ -2160,5 +2238,5 @@ public class PilotService extends AccessibilityService {
   // target window remain the same. The normal per-frame window gate still applies.
   if(!changed){update();return;}
   stop("Поворот/конфигурация — STOP. Выберите окно игры заново");explicitWindow=false;browserProfileConfirmed=false;visualRoi=null;manualVisualRoi=false;visualOwner="";visualWindow=-1;visualWindowBounds.setEmpty();if(layout!=null){layout.x=0;layout.y=dp(48);updatePanelLayout();}}
- @Override public void onDestroy(){destroying=true;reflexCapture.setObserving(false);CrashDiagnostics.phase("SERVICE_DESTROYED");permit.revoke();gate.stop();if(instance==this)instance=null;try{CaptureCleanup.run(this::hidePanel,this::clearDiagnosticFrame,this::clearRetainedGridFrame,gestureFlight::clear,()->gestureHandler.removeCallbacksAndMessages(null),()->handler.removeCallbacksAndMessages(null),()->visionWorker.shutdownNow());}finally{busy=false;super.onDestroy();}}
+ @Override public void onDestroy(){destroying=true;discardReflexReviewShot();if(reflexVlmReviewer!=null)reflexVlmReviewer.close();reflexCapture.setObserving(false);CrashDiagnostics.phase("SERVICE_DESTROYED");permit.revoke();gate.stop();if(instance==this)instance=null;try{CaptureCleanup.run(this::hidePanel,this::clearDiagnosticFrame,this::clearRetainedGridFrame,gestureFlight::clear,()->gestureHandler.removeCallbacksAndMessages(null),()->handler.removeCallbacksAndMessages(null),()->visionWorker.shutdownNow());}finally{busy=false;super.onDestroy();}}
 }
