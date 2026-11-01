@@ -35,6 +35,23 @@ public final class PanelDockingTest {
   check(landscape!=null&&!landscape.intersects(a(507,249,1000,754)),
     "active field's dragged panel can dock outside actual 6x6 ROI");
   check(landscape.width()==316&&landscape.height()==444,"recovery keeps STOP visible");
+  // Reproduced Bubble panel false-positive: a portrait game window is centered
+  // on a larger landscape screen, its chosen ROI consumes the whole window.
+  // Requiring STOP to remain WITHIN that window is impossible, but placing
+  // the overlay in outside letterboxing leaves both actual balls and gun clear.
+  var screenSafe=a(0,24,1536,996);
+  var bubbleWindow=a(418,90,1085,990);
+  var bubbleRoi=a(418,100,1085,970);
+  var bubbleCurrent=a(450,120,610,190);
+  check(PanelDocking.choose(bubbleWindow,bubbleCurrent,bubbleRoi,8)==null,
+    "window-only docking reproduces false claim that Bubble is blocked");
+  var bubbleDock=PanelDocking.choose(screenSafe,bubbleCurrent,bubbleRoi,8);
+  check(bubbleDock!=null&&screenSafe.contains(bubbleDock)&&!bubbleDock.intersects(bubbleRoi),
+    "display letterboxing allows valid STOP without covering Bubble ROI");
+  check(bubbleDock.width()==bubbleCurrent.width()&&bubbleDock.height()==bubbleCurrent.height(),
+    "Bubble STOP remains the same accessible size outside selected game");
+  check(PanelDocking.choose(a(0,0,400,400),a(10,10,70,70),a(0,0,400,400),8)==null,
+    "truly fullscreen Bubble ROI still refuses overlapping STOP");
   // Phone diagnostic: 1220x2712, manual 6x6 ROI [103,1241][1099,2262].
   var phoneRoi=a(103,1241,1099,2262);
   var dock=PanelDocking.choose(a(0,82,1220,2630),a(310,2280,430,2350),phoneRoi,24);
