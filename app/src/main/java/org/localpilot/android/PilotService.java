@@ -1082,9 +1082,9 @@ public class PilotService extends AccessibilityService {
   if(automatic())permit.grantSession(gate.epoch(),SystemClock.elapsedRealtime());
   compact(true);note="Шипучка · проверяю обычные шары и пушку";update();long epoch=gate.epoch(),generation=boardReadGeneration;
   afterPanelLayout(()->{if(epoch!=gate.epoch()||generation!=boardReadGeneration||!playingGrid||focusPaused)return;
-   if(!movePanelAway(boardRoi)){stop("Панель STOP закрывает область: безопасного места нет");return;}
+   if(!moveBubblePanelAway(boardRoi)){stop("Панель STOP перекрывает объекты Шипучки: безопасного места нет");return;}
    afterPanelLayout(()->{if(epoch!=gate.epoch()||generation!=boardReadGeneration||!playingGrid||focusPaused)return;
-    if(!panelOutsideRoi(boardRoi)){stop("PANEL_COVERS_ROI: панель после перемещения перекрывает Шипучку");return;}
+    if(!bubblePanelOutsideActiveArea(boardRoi)){stop("PANEL_OVERLAPS_BUBBLE_ACTIVE: STOP перекрывает шары или пушку");return;}
     scheduleGrid(epoch);});});
  }
  private void bubbleStep(long epoch){
@@ -2008,6 +2008,36 @@ public class PilotService extends AccessibilityService {
   return false;
  }
  /** WindowManager may clamp/resize panel after updateViewLayout: verify the actual layout. */
+ private BubblePanelSafety.Area safetyArea(Rect rect){
+  return new BubblePanelSafety.Area(rect.left,rect.top,rect.right,rect.bottom);
+ }
+ private boolean bubblePanelOutsideActiveArea(Rect roi){
+  Rect p=panelBounds();return roi!=null&&!roi.isEmpty()&&!p.isEmpty()
+    &&!BubblePanelSafety.blocks(safetyArea(roi),safetyArea(p));
+ }
+ private boolean panelOccludesCapture(Rect roi){
+  if(playingGrid&&selectedProfile==9)return !bubblePanelOutsideActiveArea(roi);
+  return Rect.intersects(panelBounds(),roi);
+ }
+ private boolean moveBubblePanelAway(Rect roi){
+  if(roi==null||roi.isEmpty()||panel==null||layout==null||wm==null
+    ||consentPanelDetached||armedBounds.isEmpty())return false;
+  Rect current=panelBounds();if(current.isEmpty())return false;
+  Point size=new Point();wm.getDefaultDisplay().getRealSize(size);
+  int pad=dp(8);
+  Rect safe=new Rect(Math.max(0,armedBounds.left),Math.max(dp(24),armedBounds.top),
+    Math.min(size.x,armedBounds.right),Math.min(size.y-dp(24),armedBounds.bottom));
+  if(safe.isEmpty())return false;
+  BubblePanelSafety.Area candidate=BubblePanelSafety.dock(
+    safetyArea(safe),safetyArea(roi),safetyArea(current),pad);
+  if(candidate==null)return false;
+  int beforeX=layout.x,beforeY=layout.y;
+  layout.x+=candidate.left()-current.left;
+  layout.y+=candidate.top()-current.top;
+  if(updatePanelLayout())return true;
+  if(layout!=null){layout.x=beforeX;layout.y=beforeY;}
+  return false;
+ }
  private boolean panelOutsideRoi(Rect roi){
   Rect measured=panelBounds();
   return roi!=null&&!roi.isEmpty()&&!measured.isEmpty()&&!Rect.intersects(measured,roi);
@@ -2064,16 +2094,16 @@ public class PilotService extends AccessibilityService {
   metrics.attempt(StageMetrics.Stage.CAPTURE);
   ActionGate.Ticket ticket=gate.offer(SystemClock.elapsedRealtime());if(!valid(ticket)||boardRoi==null){if(deferFocus(invalidReason(ticket)))return;failStage(StageMetrics.Stage.CAPTURE,"BINDING_OR_ROI_MISSING","Нет привязки/поля");return;}
   if(captureBusy){failStage(StageMetrics.Stage.CAPTURE,"CAPTURE_INFLIGHT","Предыдущий захват ещё выполняется");return;}final Rect roi=new Rect(boardRoi);
-  if(!discoveringBoard&&Rect.intersects(panelBounds(),roi)){
+  if(!discoveringBoard&&panelOccludesCapture(roi)){
    // A user can drag the STOP panel back over the active board. Recover once
    // per armed session without making a gesture, without reading masked cells,
    // and only after the actual WindowManager layout no longer overlaps ROI.
-   if(panelCoverRecoveryAttempts++==0&&!busy&&movePanelAway(roi)){
+   if(panelCoverRecoveryAttempts++==0&&!busy&&(playingGrid&&selectedProfile==9?moveBubblePanelAway(roi):movePanelAway(roi))){
     final long generation=boardReadGeneration;
-    note="Панель перекрыла поле · перемещаю STOP за пределы сетки без ввода";update();
+    note="STOP перекрывает игровые объекты · переношу панель без ввода";update();
     afterPanelLayout(()->{
      if(epoch!=gate.epoch()||generation!=boardReadGeneration||!captureEnabled()||focusPaused)return;
-     if(!panelOutsideRoi(roi)){failStage(StageMetrics.Stage.CAPTURE,"PANEL_COVERS_ROI","Панель не удалось вынести за ROI");return;}
+     if(panelOccludesCapture(roi)){failStage(StageMetrics.Stage.CAPTURE,"PANEL_OVERLAP","Панель осталась над игровыми объектами");return;}
      postBoardTask(epoch,captureDelay(),()->{
       if(epoch==gate.epoch()&&generation==boardReadGeneration&&!captureBusy&&captureEnabled())
        captureImage(epoch,result);
@@ -2081,7 +2111,7 @@ public class PilotService extends AccessibilityService {
     });
     return;
    }
-   failStage(StageMetrics.Stage.CAPTURE,"PANEL_COVERS_ROI","Панель закрывает поле; безопасное перемещение не удалось");
+   failStage(StageMetrics.Stage.CAPTURE,playingGrid&&selectedProfile==9?"PANEL_OVERLAPS_BUBBLE_ACTIVE":"PANEL_COVERS_ROI","Панель перекрывает активное поле; безопасное перемещение не удалось");
    return;
   }
   final long captureNs=SystemClock.elapsedRealtimeNanos();captureBusy=true;long request=SystemClock.elapsedRealtime();final long requestedUptime=SystemClock.uptimeMillis();final long requestId=++captureCounter;pendingCapture=requestId;captureTiming.request(requestId,request);
