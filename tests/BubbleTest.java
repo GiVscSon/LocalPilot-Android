@@ -257,6 +257,11 @@ public final class BubbleTest {
   var shifted=BubbleVision.read(offset::getRGB,420,760,37,51,357,691,0,0,0,0,r.board());
   check(shifted.usable()&&shifted.board().same(r.board()),"nonzero source ROI offset preserves local bubble coordinates");
   check(!BubbleVision.read(im::getRGB,320,640,0,0,320,640,10,10,40,40,r.board()).usable(),"overlay blocks perception");
+  var sideSky=BubbleVision.read(im::getRGB,320,640,0,0,320,640,
+    10,300,40,345,r.board());
+  check(sideSky.usable()&&sideSky.board().same(r.board()),
+    "side STOP in empty sky must not falsely invalidate full capture ROI");
+
   var g=im.createGraphics();g.setColor(new java.awt.Color(0x3040df));g.fillOval(26-23,80-23,46,46);g.dispose();
   check(!BubbleVision.read(im::getRGB,320,640,0,0,320,640,0,0,0,0,r.board()).usable(),"unsupported blue bubble is not empty sky");
   for(int special:new int[]{0x202020,0xffffff}){
