@@ -24,6 +24,11 @@ public final class JumperPolicy {
             if(verticalMotion > 28f*scale && platform.centerY() <= player.centerY()) continue;
             if (unsafeLanding(platform, player, state)) continue;
             float score = vertical * .55f + horizontal * .45f;
+            // When stationary or rising, do not keep selecting a nearby
+            // lower platform. Prefer a reachable, hazard-free higher landing.
+            // Descending remains allowed to seek a safe lower recovery ledge.
+            if(verticalMotion<=28f*scale&&platform.centerY()>=player.centerY())
+                score+=maxVerticalReach*.55f*scale;
             if (score < best) { best = score; target = platform; }
         }
         boolean dangerLeft = false, dangerRight = false;
