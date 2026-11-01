@@ -107,6 +107,7 @@ public class PilotService extends AccessibilityService {
  private final ArcadeController arcadeController=new ArcadeController();
  private final ArcadeFeedback arcadeFeedback=new ArcadeFeedback();
  private final JumperFeedback jumperFeedback=new JumperFeedback();
+  private final JumperProgressGuard jumperProgressGuard=new JumperProgressGuard();
  private final RoundOutcome roundOutcome=new RoundOutcome();
  private long arcadeSceneGeneration;
  private boolean consentPanelDetached,panelRegistered,destroying;
@@ -351,7 +352,7 @@ public class PilotService extends AccessibilityService {
   if(gridSelected()){startGrid();return;}
   if(playingJumper&&(arcadeFeedback.paused()||jumperResponsePaused)&&selectedProfile<4&&ArcadeProfile.values()[selectedProfile]==captureProfile){
    if(busy){note="Дождитесь завершения касания";update();return;}
-   arcadeController.reset();if(arcadeLearning!=null)arcadeController.restore(arcadeLearning.get(target,modelSlot,captureProfile));arcadeFeedback.reset();jumperFeedback.reset();arcadePending=null;arcadeBefore=null;arcadeAck=false;arcadeLastUsable=null;sceneRecovery.reset();jumperResponsePaused=false;jumperResponseFailures=0;jumperAwaitingVerification=false;
+   arcadeController.reset();if(arcadeLearning!=null)arcadeController.restore(arcadeLearning.get(target,modelSlot,captureProfile));arcadeFeedback.reset();jumperFeedback.reset();jumperProgressGuard.reset();arcadePending=null;arcadeBefore=null;arcadeAck=false;arcadeLastUsable=null;sceneRecovery.reset();jumperResponsePaused=false;jumperResponseFailures=0;jumperAwaitingVerification=false;
    note="Продолжаю текущий захват · проверяю свежую сцену";update();return;
   }
   if(selectedProfile>=4&&manualVisualRoi&&visualRoi!=null)boardRoi=new Rect(visualRoi);
@@ -718,7 +719,7 @@ public class PilotService extends AccessibilityService {
   visionTraining=false;visionTrainingUntil=0;trainingPreviousGrid=gridAdaptiveCandidate=null;trainingStableGrid=gridAdaptiveFrames=gridUnknownStreak=0;trainingPreviousBubble=null;trainingBubbleStable=0;
   captureStartup.stop(SystemClock.elapsedRealtime());clearDiagnosticFrame();arcadeSceneGeneration++;
   playingGrid=false;gridSession.reset();gridPalette=null;gridPendingDecision=null;gridUnknownReasons="none";bubbleSession.reset();bubbleGeometry=null;
-  arcadeLastUsable=null;arcadeController.reset();arcadeFeedback.reset();jumperFeedback.reset();arcadeState=null;arcadeBefore=null;arcadePending=null;arcadeAck=false;
+  arcadeLastUsable=null;arcadeController.reset();arcadeFeedback.reset();jumperFeedback.reset();jumperProgressGuard.reset();arcadeState=null;arcadeBefore=null;arcadePending=null;arcadeAck=false;
   boolean stopJumper=playingJumper||jumperCaptureReady||jumperConsentPending;
   playingJumper=false;jumperCaptureReady=false;jumperConsentPending=false;jumperVisionPending=false;jumperAwaitingVerification=false;jumperCalibrationPending=false;jumperState=null;jumperTracking.reset();
   if(stoppedGame)browserProfileConfirmed=false;
@@ -796,7 +797,7 @@ public class PilotService extends AccessibilityService {
   if(WindowFocus.interruptedArcade(playingJumper,arcadePending!=null,jumperAwaitingVerification)||WindowFocus.interrupted2048(playing2048,before2048!=null)){stop("Фокус потерян во время непроверенного жеста · STOP");return true;}
   if(!focusPaused){
    focusPaused=true;gate.pause();boardReadGeneration++;arcadeSceneGeneration++;
-   arcadeFeedback.reset();jumperFeedback.reset();arcadeController.nextRound();
+   arcadeFeedback.reset();jumperFeedback.reset();jumperProgressGuard.reset();arcadeController.nextRound();
    jumperAwaitingVerification=false;jumperResponsePaused=false;jumperResponseFailures=0;
    arcadePending=null;arcadeBefore=null;arcadeLastUsable=null;arcadeState=null;jumperState=null;jumperTracking.reset();
    captureBusy=false;pendingCapture=++captureCounter;
@@ -908,7 +909,7 @@ public class PilotService extends AccessibilityService {
   }catch(IllegalArgumentException ignored){note="Калибровка повреждена · восстановите стандартное распознавание через Ещё";update();return;}
   modelSlot=VisualGameTarget.modelSlot(learningSlot,controlMode,customVision==null?null:customVision.encode());
   captureProfile=profile;jumperResponseFailures=0;jumperResponsePaused=false;arcadeLastUsable=null;arcadeController.reset();if(arcadeLearning!=null){arcadeController.restore(arcadeLearning.get(target,modelSlot,profile));JumperPolicy.restore(arcadeLearning.get(target,modelSlot,ArcadeProfile.ARI));}arcadeFeedback.reset();clearDiagnosticFrame();sceneRecovery.reset();arcadeRoundSeen=false;arcadeState=null;arcadeBefore=null;arcadePending=null;arcadeAck=false;
-  jumperFeedback.reset();
+  jumperFeedback.reset();jumperProgressGuard.reset();
   arcadeVerified=0;arcadeLastAction=0;
   roundOutcome.reset();
   jumperColorProfile=profile==ArcadeProfile.ARI?loadJumperColors(target):null;
@@ -1528,7 +1529,7 @@ public class PilotService extends AccessibilityService {
   if(roundOutcome.result(timestamp))persistArcadeModel(true);
   arcadeSceneGeneration++;jumperVisionPending=false;
   arcadeController.nextRound();arcadeFeedback.reset();arcadeLastUsable=null;arcadeState=null;arcadePending=null;arcadeBefore=null;arcadeAck=false;
-  jumperState=null;jumperTracking.reset();jumperFeedback.reset();jumperAwaitingVerification=false;jumperResponsePaused=false;jumperResponseFailures=0;sceneRecovery.reset();arcadeRoundSeen=false;
+  jumperState=null;jumperTracking.reset();jumperFeedback.reset();jumperProgressGuard.reset();jumperAwaitingVerification=false;jumperResponsePaused=false;jumperResponseFailures=0;sceneRecovery.reset();arcadeRoundSeen=false;
   note="Экран результата · нажмите Играть снова. Захват и модель сохранены";update();return true;
  }
 
@@ -1738,8 +1739,14 @@ public class PilotService extends AccessibilityService {
   arcadeRoundSeen=true;captureStartup.recognized(captureSession,now);
 
   roundOutcome.game(timestampMs);
-  if(jumperResponsePaused){note="Ари: нет ответа на 3 касания · захват сохранён. Нажмите Старт";update();return;}
+  if(jumperResponsePaused){note=jumperProgressGuard.repeatedSteers()>=4?"Ари: четыре движения без подъёма · остановка повторов. Нажмите Старт":"Ари: нет ответа на 3 касания · захват сохранён. Нажмите Старт";update();return;}
   JumperFeedback.State feedback=advanceJumperFeedback(state,now);
+   if(!jumperProgressGuard.observe(state,feedback==JumperFeedback.State.VERIFIED)){
+    jumperResponsePaused=true;
+    metrics.failure(StageMetrics.Stage.POLICY,"ARI_NO_VERTICAL_PROGRESS");
+    note="Ари: повторяет боковые прыжки без вертикального прогресса · ввод остановлен";
+    update();return;
+   }
   if(feedback==JumperFeedback.State.PAUSED){note="Ари: нет видимого ответа на 3 касания · нажмите Старт";update();return;}
   if(feedback==JumperFeedback.State.WAITING){note="Проверяю направление касания…";update();return;}
   if(targetIsBrowser&&!browserSceneGate.observe(timestampMs,state!=null&&state.usable())){note="Ари: перепроверяю сцену браузера · без ввода";update();return;}
