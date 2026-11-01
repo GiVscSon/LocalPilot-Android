@@ -18,7 +18,8 @@ class ReflexRuleStore(context: Context) {
     private val maxBytes = 256 * 1024
 
     @Synchronized
-    fun loadCandidates(): List<ReflexRule> = try {
+    fun loadCandidates(): List<ReflexRule> {
+        return try {
         val raw = file.openRead().use { input ->
             val bytes = input.readBytes()
             if (bytes.size > maxBytes) return emptyList()
@@ -29,6 +30,7 @@ class ReflexRuleStore(context: Context) {
         else loaded.filter { validStoredRule(it) }.map { it.copy(enabled = false) }
     } catch (_: Exception) {
         emptyList() // fail closed; preserve corrupt file for inspection
+    }
     }
 
     @Synchronized
