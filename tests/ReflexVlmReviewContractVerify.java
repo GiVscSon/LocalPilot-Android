@@ -16,6 +16,7 @@ class ReflexVlmReviewContractVerify {
   String bridge=read("app/src/main/java/org/localpilot/android/reflex/ReflexCaptureBridge.kt");
   String review=read("app/src/main/java/org/localpilot/android/reflex/ReflexVlmReviewController.kt");
   String store=read("app/src/main/java/org/localpilot/android/reflex/ReflexRuleStore.kt");
+  String client=read("app/src/main/java/org/localpilot/android/reflex/VlmApiClient.kt");
   require(service.contains("reflexCapture.copyStasisForReview("),"service must copy bound stasis snapshot");
   int menu=service.indexOf("private void moreOptions()");
   require(menu>=0&&service.indexOf("copyStasisForReview(",menu)<service.indexOf("stop(\"Дополнительные действия · STOP\")",menu),
@@ -33,8 +34,9 @@ class ReflexVlmReviewContractVerify {
   require(recorder.contains("1280.0")&&recorder.contains("30000"),"in-memory snapshots must be bounded and expire");
   require(bridge.contains("stasisFrames.record("),"stasis needs a bounded ROI snapshot");
   require(bridge.contains("stasisFrames.clear()"),"STOP/rebind must clear private frame RAM");
+  require(client.contains("conn.instanceFollowRedirects = false"),"HTTP redirects cannot receive private game screenshot");
   require(!service.contains("reflexVlmReviewer.review(shot,packageName,address,modelName,key,true,result->{}"),
    "review callback must retain diagnostics");
-  System.out.println("REFLEX_VLM_REVIEW_CONTRACT_PASS checks=15");
+  System.out.println("REFLEX_VLM_REVIEW_CONTRACT_PASS checks=16");
  }
 }
