@@ -26,6 +26,18 @@ public final class FieldSafetyTest {
     "center launcher may never be hidden");
   check(BubblePanelSafety.dock(safe,roi,area(0,0,2200,2900),8)==null,
     "large STOP cannot be silently marked safe");
+  // Only Bubble can keep STOP inside an inactive pocket of the capture ROI.
+  var sidePocket=area(36,1420,250,1500);
+  check(roi.overlaps(sidePocket),"side pocket intersects capture ROI");
+  check(BubblePanelSafety.panelClearForRebind(roi,sidePocket,true),
+    "Bubble rebind must accept the safe side pocket");
+  check(!BubblePanelSafety.panelClearForRebind(roi,sidePocket,false),
+    "Grid/2048 rebind must reject the same ROI overlap");
+  check(!BubblePanelSafety.panelClearForRebind(roi,area(900,2700,1100,2800),true),
+    "Bubble rebind must reject launcher overlap");
+  check(!BubblePanelSafety.panelClearForRebind(null,sidePocket,true)
+    &&!BubblePanelSafety.panelClearForRebind(roi,null,true),
+    "Missing geometry must not be marked safe");
   var guard=new JumperProgressGuard();
   check(guard.observe(jumper(800,0,1000),false),"initial observation");
   for(int i=1;i<4;i++)check(guard.observe(jumper(800-2*i,0,1000+i*180),true),
