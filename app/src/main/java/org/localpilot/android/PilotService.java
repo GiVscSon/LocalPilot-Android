@@ -859,7 +859,11 @@ public class PilotService extends AccessibilityService {
   compact(true);
   afterPanelLayout(()->{
    if(generation!=rebindGeneration||gate.epoch()!=stoppedEpoch||gate.armed())return;
-   if(!movePanelAway(roi,verifiedBounds)){note="REBOUND_PANEL_UNSAFE: STOP не помещается";update();return;}
+   // Bubble uses active-object geometry; other profiles retain full-ROI separation.
+   final boolean bubbleRebind=selectedProfile==9;
+   if(!(bubbleRebind?moveBubblePanelAway(roi,verifiedBounds):movePanelAway(roi,verifiedBounds))){
+    note="REBOUND_PANEL_UNSAFE: STOP не помещается";update();return;
+   }
    afterPanelLayout(()->{
     if(generation!=rebindGeneration||gate.epoch()!=stoppedEpoch||gate.armed())return;
     AccessibilityNodeInfo check=null;
@@ -869,7 +873,7 @@ public class PilotService extends AccessibilityService {
        ||!"ru.beru.android".equals(String.valueOf(check.getPackageName()))
        ||check.getWindowId()!=windowId||!verifiedBounds.equals(windowBounds(check))
        ||latest==null||latest.requiresRebind(verifiedDisplay)
-       ||!verifiedBounds.contains(roi)||!panelOutsideRoi(roi)){
+       ||!verifiedBounds.contains(roi)||!rebindPanelClear(roi,bubbleRebind)){
       note="REBOUND_VERIFY_FAILED: проверьте Окно/Область";update();return;
      }
      armedBounds=new Rect(verifiedBounds);visualRoi=new Rect(roi);manualVisualRoi=true;
@@ -2026,14 +2030,16 @@ public class PilotService extends AccessibilityService {
   if(playingGrid&&selectedProfile==9)return !bubblePanelOutsideActiveArea(roi);
   return Rect.intersects(panelBounds(),roi);
  }
- private boolean moveBubblePanelAway(Rect roi){
+ private boolean moveBubblePanelAway(Rect roi){return moveBubblePanelAway(roi,armedBounds);}
+ /** A stopped-epoch rebind uses the newly verified window, not stale armedBounds. */
+ private boolean moveBubblePanelAway(Rect roi,Rect safeBounds){
   if(roi==null||roi.isEmpty()||panel==null||layout==null||wm==null
-    ||consentPanelDetached||armedBounds.isEmpty())return false;
+    ||consentPanelDetached||safeBounds==null||safeBounds.isEmpty())return false;
   Rect current=panelBounds();if(current.isEmpty())return false;
   Point size=new Point();wm.getDefaultDisplay().getRealSize(size);
   int pad=dp(8);
-  Rect safe=new Rect(Math.max(0,armedBounds.left),Math.max(dp(24),armedBounds.top),
-    Math.min(size.x,armedBounds.right),Math.min(size.y-dp(24),armedBounds.bottom));
+  Rect safe=new Rect(Math.max(0,safeBounds.left),Math.max(dp(24),safeBounds.top),
+    Math.min(size.x,safeBounds.right),Math.min(size.y-dp(24),safeBounds.bottom));
   if(safe.isEmpty())return false;
   BubblePanelSafety.Area candidate=BubblePanelSafety.dock(
     safetyArea(safe),safetyArea(roi),safetyArea(current),pad);
@@ -2044,6 +2050,12 @@ public class PilotService extends AccessibilityService {
   if(updatePanelLayout())return true;
   if(layout!=null){layout.x=beforeX;layout.y=beforeY;}
   return false;
+ }
+ /** Read-only check of the actual WindowManager panel after rebind docking. */
+ private boolean rebindPanelClear(Rect roi,boolean bubbleProfile){
+  Rect measured=panelBounds();
+  return roi!=null&&!roi.isEmpty()&&!measured.isEmpty()
+    &&BubblePanelSafety.panelClearForRebind(safetyArea(roi),safetyArea(measured),bubbleProfile);
  }
  private boolean panelOutsideRoi(Rect roi){
   Rect measured=panelBounds();
