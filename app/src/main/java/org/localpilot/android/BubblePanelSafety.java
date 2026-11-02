@@ -26,6 +26,13 @@ public final class BubblePanelSafety {
   // Possible direct or reflected central trajectory, kept conservative.
   return region(roi,.23,.35,.77,.84).overlaps(panel);
  }
+ /** During rebind, reuse the capture safety policy for the selected game.
+  * The result never grants an input permit or revives a stopped ticket.
+  */
+ public static boolean panelClearForRebind(Area roi,Area panel,boolean bubbleProfile){
+  if(roi==null||panel==null)return false;
+  return bubbleProfile?!blocks(roi,panel):!roi.overlaps(panel);
+ }
  /** Choose a side position in the sky gap. Return null if none exists.
   * The caller MUST remeasure the actual WindowManager rectangle after layout.
   */
