@@ -21,6 +21,7 @@ public class MainActivity extends Activity {
   TextView panelHelp=new TextView(this);panelHelp.setText("Панель можно свернуть. STOP всегда остаётся доступным.");box.addView(panelHelp);
   button(box,"Обучение по примерам · внешний API",()->startActivity(new Intent(this,WebLearningActivity.class)));
   button(box,"Нейросеть · учебный симулятор",()->startActivity(new Intent(this,TrainingActivity.class)));
+  button(box,"GameLab · 10 тестовых игр Android",this::openGameLab);
   automatic=new Switch(this);automatic.setText("Автоуправление выбранной игрой");automatic.setChecked(getSharedPreferences(PREF,MODE_PRIVATE).getBoolean("auto_control",true));automatic.setOnCheckedChangeListener((v,on)->{getSharedPreferences(PREF,MODE_PRIVATE).edit().putBoolean("auto_control",on).apply();if(PilotService.instance!=null)PilotService.instance.setAutomatic(on);});box.addView(automatic);
   button(box,"Выбрать игру или браузер",()->startActivity(new Intent(this,GamePickerActivity.class)));
   TextView autoHelp=new TextView(this);autoHelp.setText("Для сетки фишек: Игра → Мэтч Ворлд · обмен соседей или Фишки · удалить группу → выберите 6×6, 7×7 либо другой размер → обведите клетки → Старт. Настройки и типы фишек сохраняются. Поддерживаются различимые цветные фишки без специальных эффектов; цели уровня и усилители пока не распознаются. Для аркад другого оформления: Ещё → Настроить распознавание. Для разных игр одного браузера: Игра → Имя игры. STOP всегда останавливает ввод.");box.addView(autoHelp);
@@ -39,6 +40,21 @@ public class MainActivity extends Activity {
   button(box,"Экспорт журнала",this::beginAuditExport);
   button(box,"STOP и убрать панель",()->{if(PilotService.instance!=null)PilotService.instance.hidePanel();});
   status=new TextView(this);box.addView(status);
+ }
+ private void openGameLab(){
+  final String pkg="org.localpilot.gamelab";
+  Intent game=getPackageManager().getLaunchIntentForPackage(pkg);
+  if(game==null){
+   new AlertDialog.Builder(this).setTitle("Установите GameLab")
+     .setMessage("Для проверки реального Accessibility нужен отдельный пакет Android. "+
+       "Установите LocalPilot GameLab APK из той же сборки GitHub Actions, "+
+       "затем откройте его этой кнопкой. Он не запрашивает системных разрешений.")
+     .setPositiveButton("Понятно",null).show();
+   return;
+  }
+  startActivity(game);
+  PilotService pilot=PilotService.instance;
+  if(pilot!=null)pilot.selectInstalledTarget(pkg,"GameLab · тестовые игры");
  }
  private void openGame(Intent intent,String label){startActivity(intent);if(PilotService.instance!=null)PilotService.instance.selectInstalledTarget(getPackageName(),label);}
  @Override public void onResume(){super.onResume();if(automatic!=null)automatic.setChecked(getSharedPreferences(PREF,MODE_PRIVATE).getBoolean("auto_control",true));if(status!=null)status.setText(CrashDiagnostics.connectionHint(this));}
