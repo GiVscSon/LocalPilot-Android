@@ -13,7 +13,6 @@ import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.Spinner;
 import android.widget.TextView;
-import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 
@@ -39,9 +38,9 @@ public final class RetroLibraryActivity extends Activity {
   title.setTextSize(22);
   content.addView(title);
   TextView note=new TextView(this);
-  note.setText("Системы подключаются через Libretro. Для запуска требуются " +
-    "скомпилированное ядро и фронтенд в самом APK. Этот экран проверяет игры, " +
-    "но без ядра не выдаёт проверку за эмуляцию.");
+  note.setText("NES и Денди: настоящий локальный JSNES-эмулятор, управление Android. " +
+   "DOS пока в разработке: проверка файла не запускает DOSBox. " +
+   "Картриджи и DOS-программы не входят в APK.");
   content.addView(note);
   platforms=new Spinner(this);
   String[] labels=new String[RetroEmulatorCatalog.System.values().length];
@@ -50,11 +49,16 @@ public final class RetroLibraryActivity extends Activity {
   platforms.setAdapter(new ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,labels));
   content.addView(platforms);
   Button pick=new Button(this);
-  pick.setText("Выбрать собственный ROM / DOS-файл");
+  pick.setText("Играть в NES / Денди или проверить DOS-файл");
   pick.setOnClickListener(v->{
-   Intent intent=new Intent(Intent.ACTION_OPEN_DOCUMENT)
+   if(selected().runnableInGameLab()){
+    startActivity(new Intent(this,NesEmulatorActivity.class)
+      .putExtra("dendy",selected()==RetroEmulatorCatalog.System.DENDY));
+   }else{
+    Intent intent=new Intent(Intent.ACTION_OPEN_DOCUMENT)
       .setType("*/*").addCategory(Intent.CATEGORY_OPENABLE);
-   startActivityForResult(intent,IMPORT);
+    startActivityForResult(intent,IMPORT);
+   }
   });
   content.addView(pick);
   Button inspect=new Button(this);
@@ -76,22 +80,25 @@ public final class RetroLibraryActivity extends Activity {
     platforms.getSelectedItemPosition()];
  }
  private String coreStatus(){
-  String required=selected().nativeLibraryName();
-  File file=new File(getApplicationInfo().nativeLibraryDir,required);
-  if(file.isFile())return "Обнаружено ядро "+required+"; требуется ещё запуск через LibretroDroid.";
-  return "Ядро "+required+" не включено в этот APK. Эмуляция недоступна.";
+  if(selected().runnableInGameLab()){
+   try(java.io.InputStream in=getAssets().open("nes/jsnes.min.js")){
+    if(in.read()>=0)return "JSNES 2.1.0 включён: NES исполняется в Android WebView.";
+   }catch(IOException ignored){}
+   return "JSNES отсутствует: запуск NES невозможен.";
+  }
+  return "DOSBox Pure пока не подключён: DOS-файл можно проверить, запуск недоступен.";
  }
  private void report(){
   if(details==null)return;
   RetroEmulatorCatalog.System type=selected();
-  String region=type.coreOptionKey().isEmpty()?"DOS":
-    type.coreOptionKey()+"="+type.fceummRegion;
+  String region=type==RetroEmulatorCatalog.System.DOS?"DOSBox ещё не установлен":
+    type==RetroEmulatorCatalog.System.DENDY?"50 Гц, совместимость без точных таймингов Денди":
+      "NES NTSC ~60 кадров/с";
   details.setText("Платформа: "+type.label+"\nРежим: "+region+"\n"+coreStatus()
     +"\nROM: "+(selectedUri==null?"не выбран":inspected!=null&&inspected.recognized()
       ?"заголовок распознан":"ошибка проверки")
-    +"\n\nИсточник ядра: FCEUmm / DOSBox Pure (GPL). ROM и программы в APK не входят."
-    +"\n\nПолноценное тестирование появится только после сборки native core и " +
-      "проверки кадров/команд на устройстве.");
+    +"\n\nNES: JSNES 2.1.0 (Apache-2.0). DOS: запланирован DOSBox Pure (GPLv2)."
+    +"\nROM и игры не входят в APK. Результаты эмуляторов не заменяют проверку игр Маркета.");
  }
  private String fileName(Uri uri){
   try(Cursor cursor=getContentResolver().query(uri,new String[]{OpenableColumns.DISPLAY_NAME},
