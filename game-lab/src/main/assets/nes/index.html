@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="ru">
+<head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<title>LocalPilot NES cartridge viewer</title>
+<style>
+html,body{background:#101923;color:#d8e5f2;margin:0;font:14px system-ui,sans-serif}
+main{display:grid;place-items:center;height:100vh;gap:8px}
+canvas{width:100vw;max-width:min(100vw,75vh);image-rendering:pixelated;
+  aspect-ratio:256/240;background:#080b13;border-radius:6px}
+#status{font-size:13px;min-height:18px;max-width:96vw}
+</style>
+<script src="jsnes.min.js"></script>
+</head>
+<body><main><canvas id="screen" width="256" height="240"></canvas>
+<div id="status">Выберите файл .nes в приложении</div></main>
+<script>
+"use strict";
+const screen=document.getElementById("screen"),ctx=screen.getContext("2d",{alpha:false});
+const image=ctx.createImageData(256,240);
+const statusNode=document.getElementById("status");
+const buttons={
+ LEFT:"BUTTON_LEFT",RIGHT:"BUTTON_RIGHT",UP:"BUTTON_UP",DOWN:"BUTTON_DOWN",
+ A:"BUTTON_A",B:"BUTTON_B",START:"BUTTON_START",SELECT:"BUTTON_SELECT"
+};
+let machine=null,loop=null,frameNo=0;
+function stop(){if(loop!==null){clearInterval(loop);loop=null;}machine=null;}
+window.retroStop=()=>{stop();statusNode.textContent="Остановлено";};
+window.retroLoadRom=function(encoded,dendy){
+ try {
+  stop();
+  if(typeof jsnes!=="object"||typeof jsnes.NES!=="function")
+   throw Error("В APK отсутствует локальное ядро JSNES");
+  const decoded=atob(encoded),rom=new Uint8Array(decoded.length);
+  for(let i=0;i<decoded.length;i++)rom[i]=decoded.charCodeAt(i);
+  if(rom.length<16||rom[0]!==78||rom[1]!==69||rom[2]!==83||rom[3]!==26)
+   throw Error("Неизвестный заголовок iNES");
+  machine=new jsnes.NES({
+   emulateSound:false,
+   onFrame:function(pixels){
+    const out=image.data;
+    for(let i=0;i<256*240;i++){
+     const rgb=pixels[i],j=i*4;
+     out[j]=(rgb>>16)&255;out[j+1]=(rgb>>8)&255;out[j+2]=rgb&255;out[j+3]=255;
+    }
+    ctx.putImageData(image,0,0);frameNo++;
+   }
+  });
+  machine.loadROM(rom);
+  frameNo=0;
+  // This is only a compatibility speed selector, NOT verified Dendy hardware emulation.
+  if(dendy&&typeof machine.setFramerate==="function")machine.setFramerate(50);
+  loop=setInterval(()=>{
+   try{machine.frame();}catch(error){stop();statusNode.textContent="Ошибка ядра: "+error.message;}
+  },dendy?20:1000/60);
+  statusNode.textContent=dendy?"Dendy-совместимый NES, нет точного режима Dendy":"NES • офлайн";
+  return true;
+ }catch(error){stop();statusNode.textContent=String(error.message||error);return false;}
+};
+window.retroButton=function(name,down){
+ const button=buttons[name],code=button&&jsnes&&jsnes.Controller[jsnes.Controller?button:""];
+ if(!machine||typeof code!=="number")return;
+ if(down)machine.buttonDown(1,code);else machine.buttonUp(1,code);
+};
+document.addEventListener("visibilitychange",()=>{if(document.hidden&&loop){clearInterval(loop);loop=null;statusNode.textContent="Приостановлено";}});
+</script></body></html>
