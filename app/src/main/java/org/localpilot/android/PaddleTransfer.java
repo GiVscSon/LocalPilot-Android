@@ -16,11 +16,12 @@ public final class PaddleTransfer {
   * winner is a *candidate*, never proof of visual Android gameplay. */
  public record Candidate(float offset,int trainingEpisodes,int validationEpisodes,
                          int catchesBaseline,int catchesCandidate,
-                         int bricksBaseline,int bricksCandidate) {
+                         int bricksBaseline,int bricksCandidate,boolean allScenariosImproved) {
   public boolean eligible(){
    return Float.isFinite(offset)&&Math.abs(offset)<=MAX_OFFSET
      &&trainingEpisodes>=100&&validationEpisodes>=400
-     &&catchesCandidate>catchesBaseline&&bricksCandidate>bricksBaseline;
+     &&catchesCandidate>catchesBaseline&&bricksCandidate>bricksBaseline
+     &&allScenariosImproved;
   }
   public String report(){
    return "Кандидат Карканоид: угол="+offset+" · обучение "+trainingEpisodes
@@ -54,7 +55,7 @@ public final class PaddleTransfer {
   }
   PaddleWeightLab.Weights trained=baseline.patchToAngledImpact(angle);
   int catchesBase=0,catchesNew=0,bricksBase=0,bricksNew=0;
-  int validationEpisodes=0;
+  int validationEpisodes=0;boolean allScenariosImproved=true;
   for(PaddleWeightLab.Scenario scenario:PaddleWeightLab.Scenario.values()){
    if(cancelled.getAsBoolean())throw new java.util.concurrent.CancellationException("STOP validation");
    long seed=20261104L+scenario.ordinal()*100001L;
@@ -62,9 +63,10 @@ public final class PaddleTransfer {
    PaddleWeightLab.Summary c=PaddleWeightLab.evaluate("candidate",trained,60,seed,scenario);
    catchesBase+=b.catches;catchesNew+=c.catches;
    bricksBase+=b.bricks;bricksNew+=c.bricks;validationEpisodes+=60;
+   if(c.bricks<=b.bricks||c.catches<=b.catches)allScenariosImproved=false;
   }
   return new Candidate((float)angle,trainingEpisodes,validationEpisodes,
-    catchesBase,catchesNew,bricksBase,bricksNew);
+    catchesBase,catchesNew,bricksBase,bricksNew,allScenariosImproved);
  }
  /** Serialized output-bias of the immutable, fixed 2->4->1 network.
   * We deliberately reject arbitrary hidden weights or checkpoint formats. */
