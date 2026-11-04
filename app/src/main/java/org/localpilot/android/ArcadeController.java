@@ -25,9 +25,10 @@ public final class ArcadeController {
   // Replayed/out-of-order pixels cannot erase the saved physics or renew input.
   if(previous!=null&&s.timestampMs<=previous.timestampMs)return waitFor("Ожидаю следующий кадр");
   learn(s,now);earlier=previous;previous=s;
-  return switch(s.profile){case TRAFFIC->drive(s,now);case FLAPPY->fly(s,now);
-   case PADDLE->paddleTransfer==null?ArcadePolicy.next(s):PaddleTransfer.decide(s,paddleTransfer);
+  ArcadePolicy.Decision motion=switch(s.profile){case TRAFFIC->drive(s,now);case FLAPPY->fly(s,now);
    default->ArcadePolicy.next(s);};
+  // Main engine routes every real arcade decision, with physical backup.
+  return WeightSpaceGameEngine.arcade(s,motion,paddleTransfer);
  }
  /** Call only after dispatch was accepted, not merely when a recommendation was produced. */
  public void actionDispatched(ArcadePolicy.Decision d,long now){
@@ -64,7 +65,7 @@ public final class ArcadeController {
  }
  public void disablePaddleTransfer(){paddleTransfer=null;}
  public boolean paddleTransferActive(){return paddleTransfer!=null;}
- public String report(){return model()+(paddleTransfer==null?" paddleTransfer=off":" paddleTransfer=on");}
+ public String report(){return "engine=WeightSpace "+model()+(paddleTransfer==null?" paddleTransfer=backup":" paddleTransfer=learned");}
  public void restore(String saved){
   if(saved==null||saved.isEmpty())return;
   float road=trafficSpeed,scroll=scrollSpeed,g=gravity,flap=flapVelocity,steering=steeringSpeed;boolean continuous=continuousSteering;
