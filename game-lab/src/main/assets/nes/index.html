@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="ru"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<title>GameLab: playable NES emulator</title>
+<style>
+ html,body{margin:0;background:#0b1020;color:#dce5ee;font:13px sans-serif}
+ main{display:flex;flex-direction:column;justify-content:center;align-items:center;height:100%;min-height:50vh;gap:4px}
+ canvas{width:100%;max-width:640px;aspect-ratio:256/240;image-rendering:pixelated;background:#10141d}
+ #status{font-size:11px;text-align:center;max-width:95%;min-height:19px;color:#5ad0bd}
+</style>
+<script src="jsnes.min.js"></script>
+</head><body><main><canvas id="screen" width="256" height="240"></canvas>
+<div id="status" role="status">Откройте NES-картридж в Android-приложении.</div></main>
+<script>
+"use strict";
+const canvas=document.getElementById("screen"),ctx=canvas.getContext("2d",{alpha:false});
+const image=ctx.createImageData(256,240),stat=document.getElementById("status");
+const keyMap={LEFT:"BUTTON_LEFT",RIGHT:"BUTTON_RIGHT",UP:"BUTTON_UP",DOWN:"BUTTON_DOWN",
+ A:"BUTTON_A",B:"BUTTON_B",START:"BUTTON_START",SELECT:"BUTTON_SELECT"};
+let nes=null,timer=null,frames=0,validFrame=0,paused=false,sampleRate=44100;
+let audioContext=null,audioNode=null;
+const SIZE=32768,ringL=new Float32Array(SIZE),ringR=new Float32Array(SIZE);
+let writeAt=0,readAt=0;
+function status(s){stat.textContent=s;try{
+ if(window.GameLabBridge)window.GameLabBridge.onStatus(s);
+}catch(error){}}
+function audioStop(){
+ if(audioNode){audioNode.disconnect();audioNode.onaudioprocess=null;audioNode=null;}
+ if(audioContext){audioContext.close().catch(()=>{});audioContext=null;}
+ writeAt=readAt=0;
+}
+function audioStart(){
+ audioStop();
+ try{
+  const Audio=window.AudioContext||window.webkitAudioContext;
+  if(!Audio)return;
+  audioContext=new Audio({sampleRate});
+  audioNode=audioContext.createScriptProcessor(2048,0,2);
+  audioNode.onaudioprocess=function(e){
+   const left=e.outputBuffer.getChannelData(0),right=e.outputBuffer.getChannelData(1);
+   for(let i=0;i<left.length;i++){
+    if(readAt!==writeAt){
+     const at=readAt%SIZE;left[i]=ringL[at];right[i]=ringR[at];readAt++;
+    }else left[i]=right[i]=0;
+   }
+  };
+  audioNode.connect(audioContext.destination);
+  audioContext.resume().catch(()=>{});
+ }catch(error){audioStop();}
+}
+function audioWrite(l,r){
+ if(!audioContext)return;
+ if(writeAt-readAt>=SIZE)readAt=writeAt-SIZE+1;
+ const at=writeAt%SIZE;ringL[at]=l;ringR[at]=r;writeAt++;
+}
+function sendFrame(rgb){
+ const data=image.data;
+ for(let i=0;i<256*240;i++){
+  const value=rgb[i],at=i*4;
+  data[at]=(value>>>16)&255;data[at+1]=(value>>>8)&255;
+  data[at+2]=value&255;data[at+3]=255;
+ }
+ ctx.putImageData(image,0,0);frames++;
+ if(frames%15===0){
+  let hash=2166136261>>>0;
+  for(let i=0;i<256*240;i+=241)hash=Math.imul(hash^rgb[i],16777619)>>>0;
+  validFrame=hash;
+  try{if(window.GameLabBridge)window.GameLabBridge.onFrame(frames,hash|0);}catch(error){}
+ }
+}
+function tick(){
+ if(!nes||paused)return;
+ try{nes.frame();}catch(error){stop();status("Ошибка игры: "+String(error.message||error));}
+}
+function stop(){
+ if(timer!==null){clearInterval(timer);timer=null;}
+ nes=null;paused=true;audioStop();
+}
+window.retroStop=function(){stop();status("Игра остановлена");};
+window.retroPause=function(){
+ paused=true;
+ if(timer!==null){clearInterval(timer);timer=null;}
+ if(audioContext)audioContext.suspend();
+};
+window.retroResume=function(){
+ if(!nes||!paused)return false;
+ paused=false;
+ if(audioContext)audioContext.resume().catch(()=>{});
+ timer=setInterval(tick,window.retroDendy?20:1000/60);
+ return true;
+};
+window.retroLoadRom=function(encoded,dendy){
+ try{
+  stop();
+  if(!window.jsnes||typeof jsnes.NES!=="function"||!jsnes.Controller)
+   throw new Error("В APK отсутствует JSNES-ядро");
+  const binary=atob(encoded);
+  if(binary.length<16||binary.length>3*1024*1024||binary.charCodeAt(0)!==78
+    ||binary.charCodeAt(1)!==69||binary.charCodeAt(2)!==83||binary.charCodeAt(3)!==26)
+   throw new Error("Неподдерживаемый NES-картридж");
+  const data=new Uint8Array(binary.length);
+  for(let i=0;i<data.length;i++)data[i]=binary.charCodeAt(i);
+  const machine=new jsnes.NES({emulateSound:true,sampleRate,
+   onFrame:sendFrame,onAudioSample:audioWrite});
+  machine.loadROM(data);nes=machine;window.retroDendy=Boolean(dendy);
+  frames=0;validFrame=0;
+  audioStart();paused=false;
+  timer=setInterval(tick,dendy?20:1000/60);
+  status(dendy?"Денди: NES-совместимый режим 50 Гц (не точные тайминги)":"NES: игра выполняется локально");
+  return true;
+ }catch(error){
+  stop();status("ROM не запущен: "+String(error.message||error));return false;
+ }
+};
+window.retroButton=function(name,down){
+ if(!nes||!Object.prototype.hasOwnProperty.call(keyMap,name))return false;
+ const value=jsnes.Controller[keyMap[name]];
+ if(typeof value!=="number")return false;
+ if(down)nes.buttonDown(1,value);else nes.buttonUp(1,value);
+ return true;
+};
+window.retroMetrics=function(){return JSON.stringify({frames,pixel_hash:validFrame,running:!!nes&&!paused});};
+document.addEventListener("visibilitychange",function(){
+ if(document.hidden)window.retroPause();
+ else if(nes)window.retroResume();
+});
+window.addEventListener("pagehide",function(){window.retroStop();});
+</script></body></html>
