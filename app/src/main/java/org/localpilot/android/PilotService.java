@@ -1791,8 +1791,11 @@ public class PilotService extends AccessibilityService {
   if(busy||now-jumperLastActionMs<180){update();return;}
   captureDecisions++;
   JumperPolicy.Action action=JumperPolicy.nextAction(state);
+  // Shadow comparison sees actual fresh vision but NEVER changes dispatched action.
+  JumperWeightShadow.Review weightShadow=JumperWeightShadow.review(state,jumperProgressGuard.repeatedSteers());
   uiStats="Ари "+Math.round(state.player.centerX())+"×"+Math.round(state.player.centerY())
-    +" · платформы "+state.platforms.size()+" · шипы "+state.hazards.size()+" · "+action;
+    +" · платформы "+state.platforms.size()+" · шипы "+state.hazards.size()+" · "+action
+    +" · "+weightShadow.status();
   if(action==JumperPolicy.Action.WAIT){note="Наблюдаю за прыжком";update();return;}
   JumperFrameGeometry geometry=jumperFrameGeometry;
   if(geometry==null){failStage(StageMetrics.Stage.POLICY,"FRAME_GEOMETRY_MISSING","Нет соответствия координат кадра");return;}
