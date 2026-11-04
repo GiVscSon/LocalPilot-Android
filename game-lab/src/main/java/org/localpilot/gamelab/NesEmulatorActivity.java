@@ -24,7 +24,6 @@ import android.widget.Toast;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.Locale;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.localpilot.shared.HubContract;
 
@@ -64,6 +63,10 @@ public final class NesEmulatorActivity extends Activity {
      .addCategory(Intent.CATEGORY_OPENABLE);
    startActivityForResult(pick,CHOOSE_ROM);
   });
+  Button demo=new Button(this);
+  demo.setText("Запустить тестовую NES-игру");
+  root.addView(demo);
+  demo.setOnClickListener(v->launchRom(HomebrewNes.cartridge()));
   web=new WebView(this);
   web.setBackgroundColor(HubContract.BACKGROUND);
   web.getSettings().setJavaScriptEnabled(true);
@@ -133,6 +136,17 @@ public final class NesEmulatorActivity extends Activity {
   setContentView(root);
   web.loadUrl(START_URL);
  }
+ private void launchRom(byte[] rom){
+  if(!pageLoaded||web==null||rom==null||rom.length>MAX_ROM){
+   state.setText("NES-ядро ещё не загружено или ROM недоступен");return;
+  }
+  String encoded=Base64.encodeToString(rom,Base64.NO_WRAP);
+  frames=hash=0;touches.set(0);
+  web.evaluateJavascript("window.retroLoadRom("+org.json.JSONObject.quote(encoded)+","
+    +(dendy?"true":"false")+")",success->{
+   if(!"true".equals(success))state.setText("NES ROM не запущен. Проверьте mapper и ядро.");
+  });
+ }
  private void gamepad(String key,boolean down){
   if(web==null||!pageLoaded)return;
   web.evaluateJavascript("window.retroButton("+org.json.JSONObject.quote(key)+","
@@ -163,12 +177,7 @@ public final class NesEmulatorActivity extends Activity {
       RetroEmulatorCatalog.System.NES,name,rom).recognized())
     throw new IOException("iNES/NES2 cartridge header not recognized");
    if(!pageLoaded)throw new IOException("emulator page not yet loaded");
-   String encoded=Base64.encodeToString(rom,Base64.NO_WRAP);
-   frames=hash=0;touches.set(0);
-   web.evaluateJavascript("window.retroLoadRom("+org.json.JSONObject.quote(encoded)+","
-      +(dendy?"true":"false")+")",success->{
-     if(!"true".equals(success))state.setText("NES ROM не запущен. Проверьте формат и mapper.");
-   });
+   launchRom(rom);
   }catch(IOException|RuntimeException exception){
    state.setText("ROM не запущен: "+exception.getClass().getSimpleName());
    Toast.makeText(this,"Неподдерживаемый или слишком большой файл игры",Toast.LENGTH_LONG).show();
