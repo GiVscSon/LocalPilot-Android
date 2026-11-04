@@ -106,6 +106,9 @@ public final class HomebrewNes {
   a.op(0xa5,1);a.abs(0x8d,0x2004);
   a.imm(0xa9,0x1e);a.abs(0x8d,0x2001);
   a.jump("frame");
+  a.label("interrupt");
+  int interruptAddress=0x8000+a.code.size();
+  a.op(0x40); // RTI: preserve game state on NMI/IRQ, never reset mid-game.
   byte[] code=a.code();
   if(code.length>=16*1024-6)throw new AssertionError("PRG overflow");
   byte[] cartridge=new byte[ROM_LENGTH];
@@ -113,8 +116,11 @@ public final class HomebrewNes {
   cartridge[4]=1;cartridge[5]=1; // 16KiB PRG, 8KiB CHR
   System.arraycopy(code,0,cartridge,16,code.length);
   int vector=16+16*1024-6;
+  int[] vectors={interruptAddress,0x8000,interruptAddress};
   for(int i=0;i<3;i++){
-   cartridge[vector+2*i]=(byte)0;cartridge[vector+2*i+1]=(byte)0x80;
+   int address=vectors[i];
+   cartridge[vector+2*i]=(byte)(address&255);
+   cartridge[vector+2*i+1]=(byte)(address>>>8);
   }
   // Two-bitplanes of CHR tile 1. 8x8 solid foreground.
   int tile=16+16*1024+16;
