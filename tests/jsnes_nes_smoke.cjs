@@ -1,4 +1,9 @@
 "use strict";
+process.on('uncaughtException',error=>{
+ console.error("NES_COMPACT_ERROR",error&&error.message,
+   String(error&&error.stack||"").split("\n").filter(line=>line.length<380).slice(0,7).join("\n"));
+ process.exit(1);
+});
 const assert=require("node:assert/strict");
 const fs=require("node:fs");
 const path=require("node:path");
