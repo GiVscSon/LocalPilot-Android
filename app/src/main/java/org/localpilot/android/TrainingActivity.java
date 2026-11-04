@@ -16,8 +16,8 @@ public final class TrainingActivity extends Activity {
  private static Runtime runtime;
  private final Handler handler=new Handler(Looper.getMainLooper());
  private TextView status;private Spinner genre,paddleScenario;private View scene;
- private Button train,evaluate,play,export,paddleTrain,paddleDemo,paddleApply,weightSpaceTest;
- private final Runnable refresh=new Runnable(){public void run(){status.setText(runtime.message);scene.invalidate();boolean idle=!runtime.busy;genre.setEnabled(idle);train.setEnabled(idle);evaluate.setEnabled(idle);play.setEnabled(idle);export.setEnabled(idle);
+ private Button train,evaluate,play,export,exportAll,paddleTrain,paddleDemo,paddleApply,weightSpaceTest;
+ private final Runnable refresh=new Runnable(){public void run(){status.setText(runtime.message);scene.invalidate();boolean idle=!runtime.busy;genre.setEnabled(idle);train.setEnabled(idle);evaluate.setEnabled(idle);play.setEnabled(idle);export.setEnabled(idle);exportAll.setEnabled(idle);
   paddleScenario.setEnabled(idle);paddleTrain.setEnabled(idle);paddleDemo.setEnabled(idle);
   paddleApply.setEnabled(idle&&runtime.paddleCandidate!=null&&runtime.paddleCandidate.eligible());
   weightSpaceTest.setEnabled(idle);handler.postDelayed(this,250);}};
@@ -50,6 +50,12 @@ public final class TrainingActivity extends Activity {
   LinearLayout row=new LinearLayout(this);box.addView(row);train=button(row,"Обучать",()->runtime.start(selected(),0));evaluate=button(row,"Оценить ×50",()->runtime.start(selected(),1));
   LinearLayout row2=new LinearLayout(this);box.addView(row2);play=button(row2,"Показать модель",()->runtime.start(selected(),2));button(row2,"Пауза / STOP",()->runtime.pause());
   export=button(box,"Экспорт checkpoint",()->{if(runtime.checkpoint==null||!runtime.checkpoint.isFile()){toast("Сначала обучите и поставьте на паузу");return;}startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT).setType("application/zip").addCategory(Intent.CATEGORY_OPENABLE).putExtra(Intent.EXTRA_TITLE,"localpilot-"+runtime.current+"-checkpoint.zip"),71);});
+  exportAll=button(box,"Сохранить ВСЕ модели для LocalPilot ПК (.zip)",()->{
+   if(runtime.busy){toast("Сначала нажмите STOP и завершите сохранение");return;}
+   startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT)
+     .setType("application/zip").addCategory(Intent.CATEGORY_OPENABLE)
+     .putExtra(Intent.EXTRA_TITLE,"LocalPilot-Android-modelpack.zip"),72);
+  });
   TextView heading=new TextView(this);heading.setText("Карканоид · перенос в игровую модель");heading.setTextSize(18);box.addView(heading);
   paddleScenario=new Spinner(this);
   paddleScenario.setAdapter(new ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,
@@ -74,7 +80,26 @@ public final class TrainingActivity extends Activity {
  @Override protected void onResume(){super.onResume();handler.post(refresh);}
  @Override protected void onStop(){runtime.pause();handler.removeCallbacks(refresh);super.onStop();}
  private void toast(String s){Toast.makeText(this,s,Toast.LENGTH_LONG).show();}
- @Override protected void onActivityResult(int req,int result,Intent data){super.onActivityResult(req,result,data);if(req!=71||result!=RESULT_OK||data==null)return;final File source=runtime.checkpoint;if(runtime.busy||source==null)return;
+ @Override protected void onActivityResult(int req,int result,Intent data){super.onActivityResult(req,result,data);if(result!=RESULT_OK||data==null)return;
+  if(req==72){
+   if(runtime.busy){toast("Модели заняты обучением · нажмите STOP");return;}
+   final PaddleTransfer.Candidate candidate=runtime.paddleCandidate;
+   final File appRoot=getFilesDir();
+   final android.net.Uri outputUri=data.getData();
+   runtime.executor.execute(()->{
+    try(OutputStream out=getContentResolver().openOutputStream(outputUri)){
+     if(out==null)throw new IOException("output");
+     PaddleWeightLab.Weights weights=candidate!=null&&candidate.eligible()
+       ?PaddleWeightLab.Weights.followBall().patchToAngledImpact(candidate.offset()):null;
+     String status=ModelPackExporter.export(appRoot,weights,out);
+     runOnUiThread(()->toast(status));
+    }catch(Exception error){
+     runOnUiThread(()->toast("Экспорт моделей не удался: "+error.getMessage()));
+    }
+   });
+   return;
+  }
+  if(req!=71)return;final File source=runtime.checkpoint;if(runtime.busy||source==null)return;
   runtime.executor.execute(()->{try(InputStream in=new FileInputStream(source);OutputStream out=getContentResolver().openOutputStream(data.getData())){if(out==null)throw new IOException("output");byte[] b=new byte[8192];int n;while((n=in.read(b))!=-1)out.write(b,0,n);runOnUiThread(()->toast("Checkpoint экспортирован"));}catch(IOException e){runOnUiThread(()->toast("Ошибка экспорта: "+e.getMessage()));}});
  }
  private static final class Runtime {
