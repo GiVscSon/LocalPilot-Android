@@ -50,7 +50,9 @@ def get(path):
     if len(data)>MAX_BYTES:raise ValueError("oversized file: "+path)
     return data
 
-def fetch_checked(output,path,sha,fetcher=get):
+def fetch_checked(output,path,sha,fetcher=None):
+    if fetcher is None:
+        fetcher=get
     if not path.startswith(("examples/","LICENSE")) or ".." in Path(path).parts:
         raise ValueError("unsafe asset path")
     out=output/path
