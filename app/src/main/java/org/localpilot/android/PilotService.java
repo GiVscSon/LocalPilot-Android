@@ -1707,6 +1707,19 @@ public class PilotService extends AccessibilityService {
    arcadeController.observeGesture(arcadePending,arcadeBefore,observation);
    persistArcadeModel(false);arcadeVerified++;
   }
+  // The first missed visual response after applying simulator weights revokes
+  // this game's promoted model. This never converts Android ACK into reward.
+  if(captureProfile==ArcadeProfile.PADDLE&&arcadeController.paddleTransferActive()
+    &&(feedback==ArcadeFeedback.State.RETRY||feedback==ArcadeFeedback.State.PAUSED)){
+   arcadeController.disablePaddleTransfer();
+   try{
+    if(arcadeLearning==null)throw new java.io.IOException("model store unavailable");
+    arcadeLearning.disablePaddleTransfer(target,modelSlot);
+    learningStatus="Обученная модель отключена: игровой кадр не подтвердил движение платформы";
+   }catch(java.io.IOException error){
+    stop("Не удалось сохранить откат обученной модели · STOP");return ArcadeFeedback.State.PAUSED;
+   }
+  }
   if(arcadeFeedback.verified()>verifiedBefore||feedback==ArcadeFeedback.State.RETRY||feedback==ArcadeFeedback.State.PAUSED){
    if(arcadePending!=null&&feedback!=ArcadeFeedback.State.READY)metrics.failure(StageMetrics.Stage.POLICY,"VISUAL_RESPONSE_RETRY");
    arcadePending=null;arcadeBefore=null;arcadeAck=false;
