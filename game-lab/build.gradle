@@ -1,5 +1,6 @@
 plugins { id 'com.android.application' }
 android {
+ sourceSets { main { java.srcDirs += ['../shared/src/main/java'] } }
  namespace 'org.localpilot.gamelab'
  compileSdk 35
  defaultConfig {
