@@ -24,16 +24,19 @@ function fingerprint(){
  return a;
 }
 const before=fingerprint();
+console.log('NES_DEBUG_BEFORE',JSON.stringify({pc:emulator.cpu.REG_PC,color:emulator.cpu.mem[0],x:emulator.cpu.mem[1],frames,hash:before}));
 emulator.buttonDown(1,jsnes.Controller.BUTTON_A);
 for(let i=0;i<16;i++)emulator.frame();
 emulator.buttonUp(1,jsnes.Controller.BUTTON_A);
 for(let i=0;i<12;i++)emulator.frame();
 const afterA=fingerprint();
+console.log('NES_DEBUG_AFTER_A',JSON.stringify({pc:emulator.cpu.REG_PC,color:emulator.cpu.mem[0],x:emulator.cpu.mem[1],frames,hash:afterA}));
 assert.notEqual(afterA,before,"A must change homebrew NES pixel output");
 emulator.buttonDown(1,jsnes.Controller.BUTTON_RIGHT);
 for(let i=0;i<18;i++)emulator.frame();
 emulator.buttonUp(1,jsnes.Controller.BUTTON_RIGHT);
 for(let i=0;i<12;i++)emulator.frame();
 const afterRight=fingerprint();
+console.log('NES_DEBUG_AFTER_RIGHT',JSON.stringify({pc:emulator.cpu.REG_PC,color:emulator.cpu.mem[0],x:emulator.cpu.mem[1],frames,hash:afterRight}));
 assert.notEqual(afterRight,afterA,"D-pad must actually move the emulated sprite");
 console.log("NES_REAL_EMULATOR_PASS frames="+frames+" a="+afterA+" right="+afterRight);
