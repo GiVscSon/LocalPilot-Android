@@ -40,7 +40,7 @@ public final class GameLabEngine {
  public void reset(){
   score=actions=simulatedChanges=rejected=ticks=launches=0;
   playerX=.5f;playerY=.55f;ballX=.5f;ballY=.43f;
-  vx=.01f;vy=.017f;paddleX=.5f;lane=1;running=true;
+  vx=.01f;vy=.017f;paddleX=.5f;lane=1;
   Arrays.fill(slots,0);
   n=switch(game){case MATCH->7;case PROTECTED_SWAP->6;
    case BUBBLE->8;case BOARD2048->4;case HEXON->3;default->0;};
