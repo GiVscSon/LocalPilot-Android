@@ -22,20 +22,24 @@ public final class GameLabEngine {
  public enum Result { CHANGED, BLOCKED, NO_CHANGE }
  public final Game game;
  public Fault fault=Fault.NONE;
- public int score,actions,verifiedCandidates,rejected;
+ public int score,actions,simulatedChanges,rejected;
  public float playerX=.5f,playerY=.55f,ballX=.5f,ballY=.43f;
  public float vx=.010f,vy=.017f,paddleX=.5f;
  public int lane=1,ticks,launches;
  public int[] cells,slots=new int[3];
  public int n;
  public boolean running=true;
+ /** Same coordinates as GameSurface.drawSquareBoard, shared in the engine. */
+ public static final float GRID_LEFT=22f/360f,GRID_TOP=140f/640f;
+ public static final float GRID_RIGHT=(22f+315f)/360f;
+ public static final float GRID_BOTTOM=(140f+315f)/640f;
  private final Random random;
  public GameLabEngine(Game game,long seed){
   if(game==null)throw new IllegalArgumentException("game");
   this.game=game;random=new Random(seed);reset();
  }
  public void reset(){
-  score=actions=verifiedCandidates=rejected=ticks=launches=0;
+  score=actions=simulatedChanges=rejected=ticks=launches=0;
   playerX=.5f;playerY=.55f;ballX=.5f;ballY=.43f;
   vx=.01f;vy=.017f;paddleX=.5f;lane=1;running=true;
   Arrays.fill(slots,0);
@@ -109,7 +113,7 @@ public final class GameLabEngine {
     }else rejected++;
    }
   }
-  if(fingerprint()!=old){verifiedCandidates++;return Result.CHANGED;}
+  if(fingerprint()!=old){simulatedChanges++;return Result.CHANGED;}
   return Result.NO_CHANGE;
  }
  public void tick(){
@@ -131,8 +135,9 @@ public final class GameLabEngine {
   }
  }
  public int cellFrom(float x,float y){
-  if(n==0||x<.06f||x>=.94f||y<.19f||y>=.80f)return -1;
-  int col=(int)((x-.06f)/.88f*n),row=(int)((y-.19f)/.61f*n);
+  if(n==0||x<GRID_LEFT||x>=GRID_RIGHT||y<GRID_TOP||y>=GRID_BOTTOM)return -1;
+  int col=(int)((x-GRID_LEFT)/(GRID_RIGHT-GRID_LEFT)*n);
+  int row=(int)((y-GRID_TOP)/(GRID_BOTTOM-GRID_TOP)*n);
   if(col<0||col>=n||row<0||row>=n)return -1;
   return row*n+col;
  }
