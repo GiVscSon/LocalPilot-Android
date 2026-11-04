@@ -16,10 +16,11 @@ public final class TrainingActivity extends Activity {
  private static Runtime runtime;
  private final Handler handler=new Handler(Looper.getMainLooper());
  private TextView status;private Spinner genre,paddleScenario;private View scene;
- private Button train,evaluate,play,export,paddleTrain,paddleDemo,paddleApply;
+ private Button train,evaluate,play,export,paddleTrain,paddleDemo,paddleApply,weightSpaceTest;
  private final Runnable refresh=new Runnable(){public void run(){status.setText(runtime.message);scene.invalidate();boolean idle=!runtime.busy;genre.setEnabled(idle);train.setEnabled(idle);evaluate.setEnabled(idle);play.setEnabled(idle);export.setEnabled(idle);
   paddleScenario.setEnabled(idle);paddleTrain.setEnabled(idle);paddleDemo.setEnabled(idle);
-  paddleApply.setEnabled(idle&&runtime.paddleCandidate!=null&&runtime.paddleCandidate.eligible());handler.postDelayed(this,250);}};
+  paddleApply.setEnabled(idle&&runtime.paddleCandidate!=null&&runtime.paddleCandidate.eligible());
+  weightSpaceTest.setEnabled(idle);handler.postDelayed(this,250);}};
  @Override public void onCreate(Bundle b){super.onCreate(b);if(runtime==null)runtime=new Runtime(getFilesDir());
   LinearLayout box=new LinearLayout(this);box.setOrientation(LinearLayout.VERTICAL);box.setPadding(12,8,12,8);ScrollView page=new ScrollView(this);page.setFillViewport(true);page.addView(box);setContentView(page);
   TextView title=new TextView(this);title.setText("Аркады · обучение на Android");title.setTextSize(20);box.addView(title);
@@ -58,6 +59,7 @@ public final class TrainingActivity extends Activity {
   paddleTrain=button(box,"Обучить на восьми физических условиях",()->runtime.trainPaddle());
   paddleDemo=button(box,"Показать физическую игру и обученную модель",()->runtime.demoPaddle(
     PaddleWeightLab.Scenario.values()[paddleScenario.getSelectedItemPosition()]));
+  weightSpaceTest=button(box,"Эксперимент: исправить зацикленную стратегию Ари",()->runtime.checkIntervention());
   paddleApply=button(box,"Перенести веса в настоящий Карканоид",()->{
    PaddleTransfer.Candidate candidate=runtime.paddleCandidate;
    if(candidate==null||!candidate.eligible()){toast("Сначала обучите и пройдите отдельную проверку");return;}
@@ -101,6 +103,29 @@ public final class TrainingActivity extends Activity {
     if(mode==0){trainer.save(checkpoint);message="Пауза · прогресс сохранён\n"+stats();}else message="Просмотр остановлен\n"+stats();
    }catch(Exception e){message="Остановлено: "+e.getClass().getSimpleName()+" · "+e.getMessage();}
    finally{running=false;busy=false;}});
+  }
+  /** The targeted intervention is a lab-only policy test, not an Ari gesture. */
+  synchronized void checkIntervention(){
+   if(busy)return;
+   busy=true;running=true;paddleScene=null;
+   message="Программирую начальные веса и проверяю точечное исправление...";
+   executor.execute(()->{
+    try{
+     StringBuilder result=new StringBuilder("Эксперимент weight-space programming\n");
+     for(long seed:new long[]{20261104L,177777L,20261201L}){
+      if(!running)throw new java.util.concurrent.CancellationException("STOP");
+      WeightSpaceSkills.Comparison check=WeightSpaceSkills.evaluateRetreat(seed,400);
+      result.append("seed=").append(seed).append(" исправлено=")
+        .append(check.plateauRecovered()).append(" регрессий=")
+        .append(check.regressions()).append(" годен для эксперимента=")
+        .append(check.passes()).append('\n');
+     }
+     result.append("Изменён один вес. Реальным Прыгуном Ари эта лаборатория НЕ управляет.");
+     message=result.toString();
+    }catch(java.util.concurrent.CancellationException cancelled){message="Эксперимент отменён кнопкой STOP";}
+    catch(Exception error){message="Эксперимент не прошёл: "+error.getMessage();}
+    finally{running=false;busy=false;}
+   });
   }
   synchronized void trainPaddle(){
    if(busy)return;
