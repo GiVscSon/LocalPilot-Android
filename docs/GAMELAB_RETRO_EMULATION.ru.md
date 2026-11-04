@@ -1,50 +1,76 @@
-# LocalPilot GameLab: Android test companion + DOS / NES / Dendy
+# LocalPilot-Android + GameLab: единый дизайн и работающие тесты
 
-**Status:** the companion with ten original simulated games is a separate Android application under `game-lab/`. The ROM/core preflight for three historic platforms is implemented. **Full emulation has not yet been linked or physically tested.** Never label a ROM-header check a working emulator.
+## Архитектура
 
-## Why a separate APK
+Два установочных APK под одним интерфейсным стилем, но с раздельной ролью и безопасностью:
 
-The real `PilotService` correctly prevents itself from selecting its own package as a game window. A separate package `org.localpilot.gamelab` can be selected as the target while preserving ActionGate/InputPermit/STOP/TTL/Fail-Closed and genuine Android AccessibilityService + MediaProjection paths.
+- `org.localpilot.android.dev.install1081`: основной **агент**. Vision V2, обучаемый RealGameNeuralCritic, детекторы игр, ActionGate/InputPermit/STOP/TTL/Fail-Closed/UNKNOWN и визуальные свидетели остаются в одном исполняющем контуре.
+- `org.localpilot.gamelab`: отдельная **игровая среда**, которую агент может выбрать как внешнее приложение. GameLab никогда не получает полномочия Android AccessibilityService и не может обойти управление.
+- `shared/src/main/java/org/localpilot/shared/HubContract.java`: общие интерфейсные цвета, понятные классы происхождения доказательств и правило приёмки.
 
-The GameLab module is deliberately distinct from the main LocalPilot Android application; this also isolates emulator-native crashes, ROM access, and copyleft dependencies. Building GameLab does not replace the original 0.8.1 app.
+На главном экране Android: **Управление → Игровые модели → GameLab → Диагностика**. Старые внутренние тестовые мини-игры и внешние экспериментальные учителя больше не конкурируют с главным GameLab на первом экране; редко используемые инструменты доступны из «Дополнительных инструментов». Существующие внутренние классы удаляются только после проверки зависимостей тестов. Не удалять STOP, восстановление состояния или регистрацию Android AccessibilityService.
 
-## Platforms
+## Что действительно выполняется
 
-| Platform | Core | Mode | ROMs or DOS content |
-| --- | --- | --- | --- |
-| Nintendo NES / Famicom | FCEUmm | `fceumm_region=NTSC`, approx. 60 fps | `.nes`, `.unf`, `.unif` |
-| Dendy | **same FCEUmm** | `fceumm_region=Dendy`, 50 fps | same NES cartridge files |
-| MS-DOS | DOSBox Pure | Independent DOS timing/config | `.zip`, `.dosz`, `.exe`, `.com`, `.bat`, `.img`, `.ima`, `.iso`, `.conf` |
+### 1. Десять тестовых игр GameLab
 
-FCEUmm also supports Famicom Disk System, but `.fds` is not enabled in our UI until BIOS and rights handling are implemented.
+Это самостоятельное Android-приложение, которое рисует динамическую игровую физику и получает **реальные Android MotionEvent**. В нём есть Шипучка, Прыгун Ари, Мэтч Ворлд, Карканоид, Маркет Раш, Гошан, 2048, Гексон, Нащупай ход (protected-skull SWAP_MATCH3) и Котобашня. Цель: проверить взаимодействие агент → окно Android → кадр → жест → изменение состояния.
 
-Sources:
-- https://docs.libretro.com/library/fceumm/
-- https://docs.libretro.com/library/dosbox_pure/
-- https://github.com/Swordfish90/LibretroDroid
-- https://github.com/Swordfish90/Lemuroid
+**Это не десять оригинальных Market-игр.** Они специально упрощены и НЕ дают статус приёмки для `issue #69`. Для оригинальных Market-игр результаты собираются отдельно на настоящем телефоне и планшете.
 
-**License review is mandatory before bundling actual native cores.** FCEUmm and DOSBox Pure are GPLv2-licensed, while the LibretroDroid frontend is GPLv3. Build/distribution must preserve notices, compatible source rights and relevant conditions. We must not simply copy copyrighted games or firmware into the APK.
+GameLab предоставляет отключение ввода, заморозку кадра, перекрытие панели и диалог потери фокуса. Результат `simulatedChanges` означает только внутреннюю смену состояния тестовой игры и **не превращается** в метку успеха настоящей Market-игры.
 
-## What is already in this branch
+### 2. Реальный NES-картридж в Android GameLab
 
-- `game-lab/src/main/java/org/localpilot/gamelab/RetroEmulatorCatalog.java` maps the three consoles to core names, native library names, region options and content formats.
-- `RetroLibraryActivity` is reached from the main GameLab screen. It uses Android Storage Access Framework to select a file, checks file type and header, and **explicitly reports missing native cores and runtime**. No fake playback, arbitrary Java execution or unsafe ZIP extraction.
-- `tests/GameLabRetroVerify.java` tests core mapping and 21 safety/integrity assertions (deterministic JVM).
-- `game-lab/build.gradle` and manifest package the independent target Android application.
-- CI builds a separate `LocalPilot-GameLab-<SHA>` test APK when all compile/test gates succeed.
+Используется исполняемый эмулятор **jsnes v2.1.0** с CPU 6502, PPU, APU (звук) и контроллерами. Браузерная библиотека упаковывается **в APK**, а во время игры не требует подключения к сети.
 
-## Work still required for actual DOS/NES/Dendy playback
+- Исходник: https://github.com/bfirsh/jsnes, **Apache-2.0**; `LICENSE` помещается рядом с движком.
+- При сборке `game-lab/build.gradle` скачивает **точно** `jsnes-2.1.0.tgz`, сверяет опубликованный SHA-512 и кладёт `jsnes.min.js` в Android assets. Неофициальный или повреждённый движок вызывает отказ сборки.
+- `NesEmulatorActivity.java` открывает локальную страницу `nes/index.html`. ROM выбирается через Android Storage Access Framework, проверяется заголовок iNES и ограничение объёма; экран создаётся реальным PPU; кнопки UP/DOWN/LEFT/RIGHT, A/B, Start/Select посылаются в настоящий NES controller. ROM не отправляется на сервер.
+- `HomebrewNes.java` генерирует наш свободный тестовый картридж с настоящим кодом 6502: A/B меняют экран, крестовина управляет спрайтом. Его можно запустить без коммерческих ROM.
+- После полной CI-сборки `tests/jsnes_nes_smoke.cjs` обязан проверить реальные PPU-кадры, смену пикселей после A и движение спрайта после RIGHT. `tests/GameLabRetroVerify.java` проверяет точный формат ROM, архитектуру и ограничения.
+- Состояние: **исходники реализованы, работа в Android подтверждается только после CI и аппаратного smoke-теста**.
 
-1. Choose and pin a legally distributable Libretro frontend bridge, with reproducible Android arm64-v8a and x86_64 build; check the GPLv2/v3 combination before shipping.
-2. Build/pin **native FCEUmm and DOSBox Pure cores** for device ABIs, with provenance, exact source revisions, SHA-256 and applicable licenses; package appropriately in `jniLibs`.
-3. Implement Android on-screen D-pad/A/B/Start/Select and DOS virtual keyboard/mouse; render real emulated pixels and obtain genuine core frames/audio.
-4. Select `fceumm_region=Dendy` **before core content launch** when Dendy is requested. Test 50 fps versus NTSC 60 fps.
-5. Set up deterministic open-source/public-domain test cartridges/DOS programs with explicit distribution rights, not commercial ROMs. Verify boot, run, reset, save-state, speed and hardware rotation.
-6. Use separate `capture → read → action → Android ACK → next-frame visual witness` test traces for PilotService. Emulation results are **not** proof that the 10 Market games work on real phone/tablet.
+### 3. Денди
 
-No ROMs, BIOS, game collections or native emulator cores are included yet, so this branch must not be advertised as an installed fully functioning DOS/NES/Dendy emulator.
+Используется тот же NES-эмулятор с программным шагом **50 кадров/с**. Такой режим даёт совместимость с частью игр, но **не полную аппаратную точность Dendy (PAL CPU/PPU timing)**. Недопустимо называть его точной аппаратной эмуляцией или считать все Dendy ROM совместимыми без тестов.
 
-## Important distinction
+### 4. DOS
 
-This environment runs an **emulated older console or DOS guest**, not a virtual Android OS. The Android 0.8.1 app remains a separate agent. GameLab is a real Android app hosting games, but an emulated game's win condition must be assessed separately from OS ACK or raw pixel motion.
+**DOSBox Pure пока не встроен.** Каталог проверяет файл, но не запускает DOS-программу. Это открытый блокер, а не готовая функция.
+
+Для реального DOS требуется автономный libretro-frontend / DOSBox Pure с юридической проверкой лицензий GPLv2, сборками ABI, поддержкой изображения, звука, клавиатуры/мыши и проверкой загрузки собственного свободного DOS-тестового приложения. Простой `ACTION_VIEW` во внешнем эмуляторе также не будет выдаваться за «встроенный DOS».
+
+## Невыдуманная цепочка обучения и управления
+
+```
+реальный кадр с Android compositor / MediaProjection / Accessibility
+   → Vision V2: время, ROI, движение, устойчивость кадра
+   → распознавание игры/объекта (возможно UNKNOWN)
+   → игровая политика + совместимая обученная сеть
+   → ограничения действия: ActionGate, InputPermit, STOP, TTL, окно
+   → Android dispatch → ACK
+   → новый свежий игровой кадр
+   → предметный visual witness: объект действительно изменился
+   → обучение только из проверенных исходов
+```
+
+Отдельно хранить:
+- `REAL_GAME`: оригинальная Market-игра на устройстве с визуальным подтверждением;
+- `SIMULATED_GAME`: упрощённая GameLab;
+- `RETRO_EMULATED`: реально исполняемый NES/Dendy-картридж;
+- `RETRO_PREFLIGHT`: проверка файла DOS без запуска.
+
+**Эмулятор не доказывает качество в Маркете**. В LocalPilot-Android пока обучаемая реальная модель `RealGameNeuralCritic` включена только в PADDLE/TRAFFIC/FLAPPY и после достаточного объёма проверенных действий может лишь отказаться от подозрительного хода. Не заявлять десять обученных полноценных RL-актёров.
+
+## CI и аппаратные критерии
+
+- `java tests/GameLabRetroVerify.java`: каталог, iNES, executable homebrew.
+- `java tests/GameLabContractVerify.java`: реальные координаты касаний, protected skull, Origin != Market.
+- `node tests/jsnes_nes_smoke.cjs ...`: **реальная эмуляция** CPU/PPU/кнопок.
+- `./gradlew :game-lab:assembleDebug`: отдельный APK с настоящим offline NES-движком.
+- Эмуляторы Android API 30, 35, 36 + Android сборка должны пройти на одном исходном SHA.
+- Физически проверить в GameLab: 3 последовательных нажатия A/B и крестовины с изменением сцены; переключение режимов, STOP, повторный запуск и воспроизводимость.
+- Реальная приёмка `issue #69` остаётся **10 оригинальных игр × телефон и планшет × 5 подряд визуально подтверждённых действий**. ACK без доказанного изменения не засчитывается.
+
+Архив предыдущей версии основного Android приложения: `archive/0.8.1-before-ondevice-gamelab-20261104`. Его удалять нельзя до проверки установки новой пары APK.
