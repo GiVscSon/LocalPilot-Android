@@ -38,8 +38,9 @@ public final class TrainingActivity extends Activity {
    c.drawRoundRect(left,top,left+.100f*360,top+.044f*640,3,3,p);
   }
   p.setColor(0xffeee5c5);float paddleX=(float)physics.paddleX()*360;
-  c.drawRoundRect(paddleX-27,(float)PaddleWeightLab.PADDLE_Y*640,
-    paddleX+27,(float)PaddleWeightLab.PADDLE_Y*640+12,5,5,p);
+  float paddleHalfWidth=(float)physics.halfPaddle()*360;
+  c.drawRoundRect(paddleX-paddleHalfWidth,(float)PaddleWeightLab.PADDLE_Y*640,
+    paddleX+paddleHalfWidth,(float)PaddleWeightLab.PADDLE_Y*640+12,5,5,p);
   p.setColor(0xffff5e6c);c.drawCircle((float)physics.ballX()*360,(float)physics.ballY()*640,
     (float)PaddleWeightLab.BALL_RADIUS*360,p);c.restore();return;
  }
