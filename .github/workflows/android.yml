@@ -58,6 +58,7 @@ jobs:
       java tests/PaddleTransferVerify.java
       java tests/WeightSpaceSkillsVerify.java
       java tests/TextRepetitionGuardVerify.java
+      java tests/JumperWeightShadowVerify.java
    - name: Explicit unit tests and Android lint
      shell: bash
      run: |
