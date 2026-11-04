@@ -57,7 +57,15 @@ public class PilotService extends AccessibilityService {
  private final StageMetrics metrics=new StageMetrics();
  private final CaptureTimingTrace captureTiming=new CaptureTimingTrace();
  public String captureTimingReport(){return captureTiming.report();}
- public String exportMetrics(){String bubbleReport=playingGrid&&selectedProfile==9?bubbleSession.report()+" decision="+bubbleDecisionReason:lastBubbleSessionReport;stop("Экспорт замеров: STOP");return metrics.report()+"\n"+captureTiming.report()+"\n"+captureCounters()+"\nLAST_STOP: "+lastStopReason+"\nCAPTURE STARTUP\n"+captureStartup.report()+"\n"+sceneRecovery.report()+"\nLAST_BUBBLE_SESSION\n"+bubbleReport;}
+ public String exportMetrics(){
+  String bubbleReport=playingGrid&&selectedProfile==9?bubbleSession.report()+" decision="+bubbleDecisionReason:lastBubbleSessionReport;
+  String visual=visionV2Snapshot==null?"no_frames":visionV2Snapshot.diagnostics();
+  stop("Экспорт замеров: STOP");
+  return metrics.report()+"\n"+captureTiming.report()+"\n"+captureCounters()
+    +"\nVISION_V2_BEFORE_STOP: "+visual
+    +"\nLAST_STOP: "+lastStopReason+"\nCAPTURE STARTUP\n"+captureStartup.report()
+    +"\n"+sceneRecovery.report()+"\nLAST_BUBBLE_SESSION\n"+bubbleReport;
+ }
  private final Handler handler=new Handler(Looper.getMainLooper());private final Handler gestureHandler=new Handler(Looper.getMainLooper());private final ActionGate gate=new ActionGate();
  private final CaptureRetry captureRetry=new CaptureRetry();
  private final BrowserSceneGate browserSceneGate=new BrowserSceneGate();
@@ -92,6 +100,21 @@ public class PilotService extends AccessibilityService {
  private boolean playingMini;private int miniKind,miniAction;private long miniMoves;private int[] miniBefore;private Rect boardRoi;private View picker;private boolean playing2048=false,colored2048=false,captureBusy=false;private long moves2048;private long captureCounter,pendingCapture,lastShotTimestamp=-1;private long mergeTotal;private Board2048 before2048;private int direction2048;private AlertDialog preview,overlayDialog;
  private final CaptureStartup captureStartup=new CaptureStartup();
  private final SceneRecovery sceneRecovery=new SceneRecovery();
+ /** Shared frame authority for MediaProjection and screenshot game sessions. */
+ private final VisionV2Core visionV2=new VisionV2Core();
+ private volatile VisionV2Core.Frame visionV2Snapshot;
+ private static VisionV2Core.Region visionV2Region(int l,int t,int r,int b,int w,int h){
+  int left=Math.max(0,Math.min(w,l)),top=Math.max(0,Math.min(h,t));
+  int right=Math.max(0,Math.min(w,r)),bottom=Math.max(0,Math.min(h,b));
+  return right>left&&bottom>top?new VisionV2Core.Region(left,top,right,bottom):null;
+ }
+ private VisionV2Core.Frame observeVisionV2(VisionV2Core.Pixels pixels,int w,int h,
+     int l,int t,int r,int b,int el,int et,int er,int eb,long timestamp,long epoch,int stream){
+  VisionV2Core.Region roi=visionV2Region(l,t,r,b,w,h);
+  if(roi==null)throw new IllegalArgumentException("VISION_V2_ROI");
+  VisionV2Core.Region excluded=visionV2Region(el,et,er,eb,w,h);
+  return visionV2.observe(pixels,w,h,roi,excluded,timestamp,epoch,stream);
+ }
  private final PixelBoardLocator.Stability boardSearch=new PixelBoardLocator.Stability();
  private int panelCoverRecoveryAttempts;
  private int boardReadMisses;private long boardReadGeneration;
@@ -264,7 +287,7 @@ public class PilotService extends AccessibilityService {
  }
  private void retainVisualScope(AccessibilityNodeInfo root){
   if(!target.equals(visualOwner)||root.getWindowId()!=visualWindow||!armedBounds.equals(visualWindowBounds)){
-   clearRetainedGridFrame();visualRoi=null;manualVisualRoi=false;visualOwner=target;visualWindow=root.getWindowId();visualWindowBounds=new Rect(armedBounds);
+   clearRetainedGridFrame();visionV2.reset();visionV2Snapshot=null;visualRoi=null;manualVisualRoi=false;visualOwner=target;visualWindow=root.getWindowId();visualWindowBounds=new Rect(armedBounds);
    // Never carry a screenshot or scene geometry from the previous app into a
    // newly bound game.  The next capture must establish a fresh ROI/profile.
    boardRoi=null;clearDiagnosticFrame();sceneRecovery.reset();jumperState=null;jumperTracking.reset();
@@ -709,7 +732,7 @@ public class PilotService extends AccessibilityService {
   }catch(RuntimeException|OutOfMemoryError ignored){lastSessionReport="Сеанс остановлен; метаданные недоступны";}
   if(playingGrid&&selectedProfile==9)
    lastBubbleSessionReport=bubbleSession.report()+" decision="+bubbleDecisionReason;
-  permit.revoke();gate.stop();browserSceneGate.reset();
+  permit.revoke();gate.stop();browserSceneGate.reset();visionV2.reset();visionV2Snapshot=null;
   rebindGeneration++;rebindStability.reset();
   if(playingJumper)CrashDiagnostics.captureStopped();
   // Save measured physics before reset, including measurements made while no
@@ -796,7 +819,7 @@ public class PilotService extends AccessibilityService {
   if(windowFocus.observe(gate.epoch(),reason,SystemClock.elapsedRealtime(),unchangedTargetVisible())!=WindowFocus.State.WAITING)return false;
   if(WindowFocus.interruptedArcade(playingJumper,arcadePending!=null,jumperAwaitingVerification)||WindowFocus.interrupted2048(playing2048,before2048!=null)){stop("Фокус потерян во время непроверенного жеста · STOP");return true;}
   if(!focusPaused){
-   focusPaused=true;gate.pause();boardReadGeneration++;arcadeSceneGeneration++;
+   focusPaused=true;gate.pause();boardReadGeneration++;arcadeSceneGeneration++;visionV2.reset();visionV2Snapshot=null;
    arcadeFeedback.reset();jumperFeedback.reset();jumperProgressGuard.reset();arcadeController.nextRound();
    jumperAwaitingVerification=false;jumperResponsePaused=false;jumperResponseFailures=0;
    arcadePending=null;arcadeBefore=null;arcadeLastUsable=null;arcadeState=null;jumperState=null;jumperTracking.reset();
@@ -912,7 +935,7 @@ public class PilotService extends AccessibilityService {
    customVisionRoiScope=getSharedPreferences("custom-vision",MODE_PRIVATE).getString(scope+".roi-v1",null);
   }catch(IllegalArgumentException ignored){note="Калибровка повреждена · восстановите стандартное распознавание через Ещё";update();return;}
   modelSlot=VisualGameTarget.modelSlot(learningSlot,controlMode,customVision==null?null:customVision.encode());
-  captureProfile=profile;jumperResponseFailures=0;jumperResponsePaused=false;arcadeLastUsable=null;arcadeController.reset();if(arcadeLearning!=null){arcadeController.restore(arcadeLearning.get(target,modelSlot,profile));JumperPolicy.restore(arcadeLearning.get(target,modelSlot,ArcadeProfile.ARI));if(profile==ArcadeProfile.PADDLE)arcadeController.installPaddleTransfer(arcadeLearning.paddleTransfer(target,modelSlot));}arcadeFeedback.reset();clearDiagnosticFrame();sceneRecovery.reset();arcadeRoundSeen=false;arcadeState=null;arcadeBefore=null;arcadePending=null;arcadeAck=false;
+  captureProfile=profile;visionV2.reset();visionV2Snapshot=null;jumperResponseFailures=0;jumperResponsePaused=false;arcadeLastUsable=null;arcadeController.reset();if(arcadeLearning!=null){arcadeController.restore(arcadeLearning.get(target,modelSlot,profile));JumperPolicy.restore(arcadeLearning.get(target,modelSlot,ArcadeProfile.ARI));if(profile==ArcadeProfile.PADDLE)arcadeController.installPaddleTransfer(arcadeLearning.paddleTransfer(target,modelSlot));}arcadeFeedback.reset();clearDiagnosticFrame();sceneRecovery.reset();arcadeRoundSeen=false;arcadeState=null;arcadeBefore=null;arcadePending=null;arcadeAck=false;
   jumperFeedback.reset();jumperProgressGuard.reset();
   arcadeVerified=0;arcadeLastAction=0;
   roundOutcome.reset();
@@ -1527,15 +1550,18 @@ public class PilotService extends AccessibilityService {
    int excludedRight=geometry.toFrameX(excludedScreen.right),excludedBottom=geometry.toFrameY(excludedScreen.bottom);
    JumperState previous=jumperTracking.previous(timestampMs);SceneRecovery.Pass recoveryPass=sceneRecovery.pass();JumperVision.ColorProfile colors=jumperColorProfile;jumperVisionPending=true;long started=SystemClock.elapsedRealtimeNanos();
    try{visionTask=visionWorker.submit(()->{
-    JumperState detected=null;RuntimeException failure=null;
+    JumperState detected=null;VisionV2Core.Frame frameEvidence=null;RuntimeException failure=null;
     try{int width=frame.getWidth();int[] pixels=visionPixels(frame);
+     frameEvidence=observeVisionV2((x,y)->pixels[y*width+x],width,frame.getHeight(),
+      geometry.left,geometry.top,geometry.right,geometry.bottom,
+      excludedLeft,excludedTop,excludedRight,excludedBottom,timestampMs,epoch,1);
      detected=JumperVision.detectRecovering((x,y)->pixels[y*width+x],width,frame.getHeight(),
       geometry.left,geometry.top,geometry.right,geometry.bottom,excludedLeft,excludedTop,excludedRight,excludedBottom,
       timestampMs,previous,colors,recoveryPass);}
     catch(RuntimeException|OutOfMemoryError error){failure=error instanceof RuntimeException?(RuntimeException)error:new IllegalStateException("VISION_OUT_OF_MEMORY");}
     finally{if(!frame.isRecycled())frame.recycle();}
-    JumperState result=detected;RuntimeException error=failure;
-    handler.post(()->{if(scene==arcadeSceneGeneration)finishJumperFrame(epoch,timestampMs,started,result,error);else if(epoch==gate.epoch())jumperVisionPending=false;});
+    JumperState result=detected;VisionV2Core.Frame evidence=frameEvidence;RuntimeException error=failure;
+    handler.post(()->{if(scene==arcadeSceneGeneration)finishJumperFrame(epoch,timestampMs,started,result,evidence,error);else if(epoch==gate.epoch())jumperVisionPending=false;});
    });}catch(RuntimeException error){jumperVisionPending=false;if(!frame.isRecycled())frame.recycle();failStage(StageMetrics.Stage.READ,"VISION_WORKER_UNAVAILABLE","Не удалось запустить распознавание");}
    }catch(RuntimeException|OutOfMemoryError error){if(!frame.isRecycled())frame.recycle();CrashDiagnostics.phase(ProcessExitMetadata.frameFailurePhase(error));stop("Ошибка обработки кадра · захват остановлен. Откройте диагностику для проверки");}
   });
@@ -1601,25 +1627,34 @@ public class PilotService extends AccessibilityService {
   int er=geometry.toFrameX(excluded.right),eb=geometry.toFrameY(excluded.bottom);
   jumperVisionPending=true;long started=SystemClock.elapsedRealtimeNanos();
   try{visionTask=visionWorker.submit(()->{
-   ArcadeObservation detected=null;RuntimeException failure=null;
+   ArcadeObservation detected=null;VisionV2Core.Frame frameEvidence=null;RuntimeException failure=null;
    try{int width=frame.getWidth();int[] pixels=visionPixels(frame);
+    frameEvidence=observeVisionV2((x,y)->pixels[y*width+x],width,frame.getHeight(),
+      geometry.left,geometry.top,geometry.right,geometry.bottom,
+      el,et,er,eb,timestampMs,epoch,1);
     detected=calibration==null?ArcadeVision.detectRecovering(profile,(x,y)->pixels[y*width+x],width,frame.getHeight(),
      geometry.left,geometry.top,geometry.right,geometry.bottom,el,et,er,eb,timestampMs,previous,recoveryPass)
      :CustomArcadeVision.detect(profile,(x,y)->pixels[y*width+x],geometry.left,geometry.top,geometry.right,geometry.bottom,el,et,er,eb,timestampMs,previous,calibration);}
    catch(RuntimeException|OutOfMemoryError error){failure=error instanceof RuntimeException?(RuntimeException)error:new IllegalStateException("VISION_OUT_OF_MEMORY");}
    finally{if(!frame.isRecycled())frame.recycle();}
-   ArcadeObservation result=detected;RuntimeException error=failure;
-   handler.post(()->{if(scene==arcadeSceneGeneration)finishArcadeFrame(epoch,timestampMs,started,geometry,result,error);else if(epoch==gate.epoch())jumperVisionPending=false;});
+   ArcadeObservation result=detected;VisionV2Core.Frame evidence=frameEvidence;RuntimeException error=failure;
+   handler.post(()->{if(scene==arcadeSceneGeneration)finishArcadeFrame(epoch,timestampMs,started,geometry,result,evidence,error);else if(epoch==gate.epoch())jumperVisionPending=false;});
   });}catch(RuntimeException error){jumperVisionPending=false;frame.recycle();failStage(StageMetrics.Stage.READ,"ARCADE_WORKER_UNAVAILABLE","Распознавание не запущено");}
  }
 
  private void finishArcadeFrame(long epoch,long timestampMs,long started,JumperFrameGeometry geometry,
-   ArcadeObservation observation,RuntimeException error){
+   ArcadeObservation observation,VisionV2Core.Frame evidence,RuntimeException error){
   if(epoch!=gate.epoch()||!playingJumper)return;
   jumperVisionPending=false;captureReads++;metrics.attempt(StageMetrics.Stage.READ);
   if(error!=null){failStage(StageMetrics.Stage.READ,"ARCADE_FRAME_REJECTED","Кадр не соответствует профилю");return;}
   metrics.record(StageMetrics.Stage.READ,SystemClock.elapsedRealtimeNanos()-started);
   long now=SystemClock.elapsedRealtime();jumperLastFrameMs=timestampMs;
+  visionV2Snapshot=evidence;
+  if(evidence==null||!evidence.ready()){
+   advanceArcadeFeedback(null,now);
+   note="Vision V2 · "+(evidence==null?"нет пикселей":evidence.diagnostics())
+     +" · ожидаю последовательное наблюдение без ввода";update();return;
+  }
   if(timestampMs>now||now-timestampMs>300){advanceArcadeFeedback(null,now);note="Пропускаю устаревший кадр";update();return;}
   ActionGate.Ticket ticket=gate.offer(now);
   if(!valid(ticket)){
@@ -1748,12 +1783,18 @@ public class PilotService extends AccessibilityService {
   return feedback;
  }
 
- private void finishJumperFrame(long epoch,long timestampMs,long started,JumperState state,RuntimeException error){
+ private void finishJumperFrame(long epoch,long timestampMs,long started,JumperState state,VisionV2Core.Frame evidence,RuntimeException error){
   if(epoch!=gate.epoch()||!playingJumper)return;
   jumperVisionPending=false;captureReads++;metrics.attempt(StageMetrics.Stage.READ);
   if(error!=null){metrics.failure(StageMetrics.Stage.READ,"JUMPER_FRAME_REJECTED");failStage(StageMetrics.Stage.READ,"JUMPER_FRAME_REJECTED","Кадр не соответствует игровому полю");return;}
   metrics.record(StageMetrics.Stage.READ,SystemClock.elapsedRealtimeNanos()-started);
   long now=SystemClock.elapsedRealtime();jumperLastFrameMs=timestampMs;
+  visionV2Snapshot=evidence;
+  if(evidence==null||!evidence.ready()){
+   advanceJumperFeedback(null,now);
+   note="Vision V2 · "+(evidence==null?"нет пикселей":evidence.diagnostics())
+     +" · ожидаю последовательное наблюдение без ввода";update();return;
+  }
   if(timestampMs>now||now-timestampMs>300){advanceJumperFeedback(null,now);note="Пропускаю устаревший кадр";update();return;}
   ActionGate.Ticket ticket=gate.offer(now);
   if(!valid(ticket)){
@@ -2182,6 +2223,20 @@ public class PilotService extends AccessibilityService {
      String rejection=invalidReason(ticket);
      if(rejection!=null){if(deferFocus(rejection)||retryCapture(epoch,result,rejection))return;failStage(StageMetrics.Stage.CAPTURE,rejection,"Контекст/срок снимка изменился");return;}
      if(!CaptureFreshness.valid(shot.getTimestamp(),requestedUptime,SystemClock.uptimeMillis(),previousTimestamp)){if(!retryCapture(epoch,result,"FRAME_TTL_EXPIRED"))failStage(StageMetrics.Stage.CAPTURE,"FRAME_TTL_EXPIRED","Обработка кадра превысила TTL после повторов");return;}
+     // Vision V2 receives all board screenshots (2048, grid, Bubble).
+     // Geometric/photometric evidence is NOT a substitute for game-specific
+     // post-ACK board verification or UNKNOWN cell classification.
+     Rect panelForVision=panelBounds();
+     VisionV2Core.Frame evidence=observeVisionV2(pixels::getPixel,pixels.getWidth(),pixels.getHeight(),
+       roi.left,roi.top,roi.right,roi.bottom,
+       panelForVision.left,panelForVision.top,panelForVision.right,panelForVision.bottom,
+       shot.getTimestamp(),epoch,2);
+     visionV2Snapshot=evidence;
+     if(evidence.status()==VisionV2Core.Status.INSUFFICIENT_PIXELS){
+      if(retryCapture(epoch,result,"VISION_V2_MASKED"))return;
+      failStage(StageMetrics.Stage.CAPTURE,"VISION_V2_MASKED","Недостаточно видимой области кадра");
+      return;
+     }
      metrics.record(StageMetrics.Stage.CAPTURE,SystemClock.elapsedRealtimeNanos()-captureNs);captured=true;captureRetry.fresh(epoch);result.ready(pixels,ticket,SystemClock.elapsedRealtime()-request);
      // Board games use Accessibility screenshots rather than MediaProjection.
      // Refresh their preview too, so it cannot keep showing the last arcade.
