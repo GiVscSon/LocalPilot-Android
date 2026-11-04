@@ -1,0 +1,311 @@
+package org.localpilot.gamelab;
+
+import android.app.Activity;
+import android.app.AlertDialog;
+import android.content.Intent;
+import android.graphics.Bitmap;
+import android.graphics.Canvas;
+import android.graphics.Color;
+import android.graphics.Paint;
+import android.graphics.Path;
+import android.graphics.RectF;
+import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
+import android.os.SystemClock;
+import android.view.MotionEvent;
+import android.view.View;
+import android.widget.ArrayAdapter;
+import android.widget.Button;
+import android.widget.LinearLayout;
+import android.widget.Spinner;
+import android.widget.TextView;
+import java.io.IOException;
+import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.Locale;
+
+/**
+ * A real, separately installed Android activity used as the Pilot's target.
+ * Delivers real MotionEvents and screen pixels from the Android compositor.
+ * It is NOT a nested OS, and its simulated success is not Market-game evidence.
+ */
+public final class TestDeviceActivity extends Activity {
+ public static final String BUILD_ID="GameLab-1.0";
+ private static final int EXPORT=61;
+ private final Handler handler=new Handler(Looper.getMainLooper());
+ private final ArrayList<String> records=new ArrayList<>();
+ private GameLabEngine engine;
+ private GameSurface surface;
+ private TextView status;
+ private Spinner games,faults;
+ private boolean playing=true;
+ private long seed=20261104L;
+ private final Runnable clock=new Runnable(){public void run(){
+  if(engine!=null&&surface!=null&&playing){
+   if(engine.fault!=GameLabEngine.Fault.FROZEN_VIEW)engine.tick();
+   surface.invalidate();
+  }
+  update();handler.postDelayed(this,55);
+ }};
+ @Override public void onCreate(Bundle state){
+  super.onCreate(state);
+  game(0);
+  LinearLayout root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);
+  root.setPadding(8,8,8,8);root.setBackgroundColor(0xff0b1020);
+  TextView title=label("GameLab · виртуальное игровое устройство",18);
+  root.addView(title);
+  TextView warning=label("ОТДЕЛЬНЫЙ APK • ТЕСТОВЫЕ ИГРЫ • НЕ МАРКЕТ",11);
+  warning.setTextColor(0xffffba74);root.addView(warning);
+  games=new Spinner(this);
+  String[] labels=new String[GameLabEngine.Game.values().length];
+  for(int i=0;i<labels.length;i++)labels[i]=GameLabEngine.Game.values()[i].label;
+  games.setAdapter(new ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,labels));
+  games.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener(){
+   @Override public void onItemSelected(android.widget.AdapterView<?> v,View selected,int position,long id){
+    game(position);surface.invalidate();
+   }
+   @Override public void onNothingSelected(android.widget.AdapterView<?> v){}
+  });
+  root.addView(games);
+  faults=new Spinner(this);
+  faults.setAdapter(new ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,
+   new String[]{"Нормальная игра","Игнорировать вход","Заморозить экран","Панель закрывает поле"}));
+  faults.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener(){
+   @Override public void onItemSelected(android.widget.AdapterView<?> v,View selected,int position,long id){
+    if(engine==null||surface==null)return;
+    engine.fault=GameLabEngine.Fault.values()[position];
+    surface.freeze(engine.fault==GameLabEngine.Fault.FROZEN_VIEW);
+   }
+   @Override public void onNothingSelected(android.widget.AdapterView<?> v){}
+  });
+  root.addView(faults);
+  surface=new GameSurface();root.addView(surface,new LinearLayout.LayoutParams(-1,0,1));
+  LinearLayout row=new LinearLayout(this);root.addView(row);
+  addButton(row,"Сброс",()->{engine.reset();surface.clearFreeze();faults.setSelection(0);addLog("RESET");});
+  addButton(row,"Пауза",()->{playing=!playing;addLog(playing?"RESUME":"PAUSE");});
+  addButton(row,"Фокус",()->new AlertDialog.Builder(this).setTitle("Проверка потери фокуса")
+    .setMessage("Это реальное Android-диалоговое окно. Проверяй, что LocalPilot остановит ввод и не примет старые кадры.")
+    .setPositiveButton("Закрыть",null).show());
+  addButton(row,"CSV",()->startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT)
+      .setType("text/csv").addCategory(Intent.CATEGORY_OPENABLE)
+      .putExtra(Intent.EXTRA_TITLE,"localpilot-gamelab-actions.csv"),EXPORT));
+  status=label("",12);root.addView(status);
+  setContentView(root);
+  addLog("START game="+engine.game.name());
+ }
+ private void addButton(LinearLayout parent,String title,Runnable run){
+  Button b=new Button(this);b.setText(title);b.setTextSize(11);
+  b.setOnClickListener(v->run.run());parent.addView(b,new LinearLayout.LayoutParams(0,-2,1));
+ }
+ private TextView label(String content,int size){
+  TextView t=new TextView(this);t.setText(content);t.setTextSize(size);
+  t.setTextColor(Color.WHITE);return t;
+ }
+ private void game(int index){
+  if(index<0||index>=GameLabEngine.Game.values().length)return;
+  engine=new GameLabEngine(GameLabEngine.Game.values()[index],seed+index*101);
+  if(surface!=null)surface.clearFreeze();
+  addLog("GAME "+engine.game+" pilotProfile="+engine.game.localPilotProfile);
+  update();
+ }
+ private void update(){
+  if(status!=null&&engine!=null)status.setText("Только тестовое поле • профиль "+engine.game.localPilotProfile
+   +" • касаний "+engine.actions+" • изменений симулятора "+engine.verifiedCandidates
+   +" • отказов "+engine.rejected+" • режим "+engine.fault);
+ }
+ private void addLog(String entry){
+  if(records.size()>=512)records.remove(0);
+  records.add(SystemClock.elapsedRealtime()+","+entry.replace(',',';'));
+ }
+ @Override protected void onResume(){super.onResume();handler.post(clock);}
+ @Override protected void onPause(){handler.removeCallbacks(clock);super.onPause();}
+ @Override protected void onDestroy(){if(surface!=null)surface.release();super.onDestroy();}
+ @Override protected void onActivityResult(int req,int result,Intent data){
+  super.onActivityResult(req,result,data);
+  if(req!=EXPORT||result!=RESULT_OK||data==null||data.getData()==null)return;
+  StringBuilder body=new StringBuilder("uptime_ms,event\n");
+  for(String record:records)body.append(record).append('\n');
+  try(OutputStream stream=getContentResolver().openOutputStream(data.getData())){
+   if(stream==null)throw new IOException("no writer");
+   stream.write(body.toString().getBytes(StandardCharsets.UTF_8));
+  }catch(IOException failure){
+   new AlertDialog.Builder(this).setMessage("Не удалось сохранить журнал").setPositiveButton("OK",null).show();
+  }
+ }
+ private final class GameSurface extends View {
+  private final Paint brush=new Paint(3);
+  private final RectF rect=new RectF();
+  private Bitmap frozen;
+  private float downX,downY;private long downAt;
+  GameSurface(){super(TestDeviceActivity.this);
+   setContentDescription("GameLab synthetic game display; never real Market acceptance");
+  }
+  void freeze(boolean enabled){
+   if(!enabled){clearFreeze();return;}
+   if(frozen!=null)return;
+   Bitmap b=Bitmap.createBitmap(360,640,Bitmap.Config.ARGB_8888);
+   Canvas backing=new Canvas(b);
+   render(backing);
+   frozen=b;invalidate();
+  }
+  void clearFreeze(){if(frozen!=null){frozen.recycle();frozen=null;}invalidate();}
+  void release(){clearFreeze();}
+  @Override protected void onDraw(Canvas c){
+   super.onDraw(c);
+   if(engine==null)return;
+   c.save();c.scale(getWidth()/360f,getHeight()/640f);
+   if(frozen!=null)c.drawBitmap(frozen,0,0,brush);
+   else render(c);
+   c.restore();
+  }
+  private void color(int argb){brush.setColor(argb);brush.setStyle(Paint.Style.FILL);}
+  private void block(Canvas c,float l,float t,float r,float b,int argb,float radius){
+   color(argb);c.drawRoundRect(l,t,r,b,radius,radius,brush);
+  }
+  private void circle(Canvas c,float x,float y,float rad,int argb){
+   color(argb);c.drawCircle(x,y,rad,brush);
+  }
+  private void words(Canvas c,String text,float x,float y,int size,int color){
+   color(color);brush.setTextSize(size);c.drawText(text,x,y,brush);
+  }
+  private void hex(Canvas c,float x,float y,float radius,int color){
+   Path path=new Path();
+   for(int i=0;i<6;i++){
+    double radians=Math.PI/3*i-Math.PI/6;
+    float vx=x+(float)Math.cos(radians)*radius;
+    float vy=y+(float)Math.sin(radians)*radius;
+    if(i==0)path.moveTo(vx,vy);else path.lineTo(vx,vy);
+   }
+   path.close();color(color);c.drawPath(path,brush);
+  }
+  private int tint(int index){
+   int[] palette={0xff234569,0xff45b5df,0xffed954c,0xff86d184,0xffeb6f91,
+     0xffbd86e8,0xffffcf67,0xffb3cad7,0xff303444,0xff22293d};
+   return palette[Math.abs(index)%palette.length];
+  }
+  private void render(Canvas c){
+   c.drawColor(0xff111e31);
+   block(c,0,0,360,75,0xff172e45,0);
+   words(c,engine.game.label,13,32,21,Color.WHITE);
+   words(c,"СИМУЛЯЦИЯ · "+engine.game.name(),13,56,12,0xffffbd77);
+   // Gameplay always fits the ROI 0..1 x 0.13..0.90.
+   block(c,8,86,352,580,0xff1c3349,13);
+   switch(engine.game){
+    case BUBBLE -> {
+     for(int row=0;row<engine.n;row++)for(int col=0;col<engine.n;col++){
+      int value=engine.cells[row*engine.n+col];if(value==0)continue;
+      circle(c,32+col*42+(row%2)*10,115+row*39,17,tint(value));
+      circle(c,26+col*42+(row%2)*10,108+row*39,5,0x88ffffff);
+     }
+     block(c,155,490,205,545,0xffd4a181,8);circle(c,180,495,18,tint(engine.launches%4+1));
+     words(c,"Aim & tap",122,575,15,Color.WHITE);
+    }
+    case ARI -> {
+     for(int i=0;i<8;i++){
+      float x=23+(i*79)%250,y=150+i*48-(engine.ticks%35);
+      block(c,x,y,x+80,y+11,0xffde9149,5);
+     }
+     block(c,engine.playerX*360-14,engine.playerY*640-17,
+       engine.playerX*360+14,engine.playerY*640+23,0xffffcc51,12);
+     circle(c,engine.playerX*360-5,engine.playerY*640-5,2,0xff222222);
+     words(c,"wrap-around • tap / swipe",65,560,13,0xffc6d6e5);
+    }
+    case PADDLE -> {
+     for(int i=0;i<24;i++){
+      if((i+engine.score)%11==0)continue;
+      float x=14+(i%8)*42,y=130+(i/8)*28;
+      block(c,x,y,x+39,y+20,tint(i%5+1),3);
+     }
+     circle(c,engine.ballX*360,engine.ballY*640,11,0xfffa334a);
+     block(c,engine.paddleX*360-47,530,engine.paddleX*360+47,546,0xffc8955c,8);
+    }
+    case TRAFFIC -> {
+     block(c,70,90,290,577,0xff747986,3);
+     for(int lane=1;lane<=2;lane++)for(int k=0;k<10;k++)
+      block(c,70+lane*220f/3-2,92+k*52+engine.ticks%26,
+        70+lane*220f/3+2,115+k*52+engine.ticks%26,0xffdbe5e9,1);
+     block(c,98,190+engine.ticks%200,145,257+engine.ticks%200,0xff2f3641,8);
+     float carX=70+(engine.lane+.5f)*220/3;
+     block(c,carX-24,461,carX+24,530,0xffe74e4f,8);
+     block(c,carX-17,467,carX+17,484,0xff263d49,3);
+     block(c,carX-19,506,carX+19,516,0xffefce61,4);
+    }
+    case FLAPPY -> {
+     float by=engine.playerY*640;
+     block(c,290,115,326,200,0xff55ba66,5);
+     block(c,290,360,326,545,0xff55ba66,5);
+     for(int i=0;i<5;i++)block(c,290+i*4,140,294+i*4,160,0xff428f56,1);
+     block(c,13,560,347,580,0xffb17b4c,0);
+     circle(c,93,by,21,0xff2e3541);block(c,78,by-21,103,by-12,0xffe94f55,4);
+     words(c,"Tap = flap",25,110,14,Color.WHITE);
+    }
+    case BOARD2048,MATCH,PROTECTED_SWAP -> drawSquareBoard(c);
+    case HEXON -> {
+     for(int i=0;i<9;i++){
+      float x=66+(i%3)*112+(i/3%2)*14,y=150+(i/3)*102;
+      hex(c,x,y,34,tint(engine.cells[i]));
+     }
+     for(int i=0;i<3;i++){
+      block(c,19+i*112,474,110+i*112,570,0xff364960,8);
+      words(c,""+engine.slots[i]+"/10",40+i*112,523,22,0xffdfe9f7);
+     }
+    }
+    case CAT_TOWER -> {
+     for(int i=0;i<7;i++){
+      int x=20+(i*55)%230,y=140+i*62;
+      block(c,x,y,x+105,y+14,0xffabb0bf,6);
+     }
+     circle(c,engine.playerX*360,engine.playerY*640,23,0xffefac59);
+     hex(c,engine.playerX*360-13,engine.playerY*640-15,9,0xffefac59);
+     hex(c,engine.playerX*360+13,engine.playerY*640-15,9,0xffefac59);
+     circle(c,engine.playerX*360-8,engine.playerY*640-3,3,0xff162536);
+     circle(c,engine.playerX*360+8,engine.playerY*640-3,3,0xff162536);
+    }
+   }
+   if(engine.fault==GameLabEngine.Fault.PANEL_OVERLAP){
+    block(c,0,405,300,572,0xd922293b,13);
+    words(c,"PANEL COVERS ROI",18,464,17,0xffffaaaa);
+   }
+   block(c,0,588,360,640,0xff142b41,0);
+   words(c,"touch "+engine.actions+"  world changes "+engine.verifiedCandidates,10,613,13,0xffa5e8f5);
+   words(c,"NO VIRTUAL ACK = GAME SUCCESS",10,634,10,0xffffbc75);
+  }
+  private void drawSquareBoard(Canvas c){
+   int n=engine.n;float left=22,top=140,cell=315f/n;
+   block(c,left-6,top-6,left+cell*n+6,top+cell*n+6,0xff506278,10);
+   for(int r=0;r<n;r++)for(int col=0;col<n;col++){
+    int v=engine.cells[r*n+col];
+    float x=left+col*cell,y=top+r*cell;
+    int fill=engine.game==GameLabEngine.Game.BOARD2048
+      ?v==0?0xff6d7887:tint((int)(Math.log(v)/Math.log(2)))
+      :v>=8?0xff2a2e37:tint(v);
+    block(c,x+2,y+2,x+cell-2,y+cell-2,fill,6);
+    if(v!=0){
+     String label=engine.game==GameLabEngine.Game.BOARD2048?String.valueOf(v):
+       v==8?"☠":v==9?"!":"●";
+     words(c,label,x+cell*.27f,y+cell*.63f,Math.max(14,(int)(cell*.32f)),Color.WHITE);
+    }
+   }
+  }
+  @Override public boolean onTouchEvent(MotionEvent event){
+   if(engine==null)return false;
+   float x=event.getX()/Math.max(1,getWidth()),y=event.getY()/Math.max(1,getHeight());
+   if(event.getActionMasked()==MotionEvent.ACTION_DOWN){
+    downX=x;downY=y;downAt=SystemClock.elapsedRealtime();return true;
+   }
+   if(event.getActionMasked()!=MotionEvent.ACTION_UP)return true;
+   long elapsed=SystemClock.elapsedRealtime()-downAt;
+   if(engine.fault==GameLabEngine.Fault.PANEL_OVERLAP&&y>.63f&&x<.84f){
+    addLog("PANEL_BLOCKED,game="+engine.game);return true;
+   }
+   int old=engine.fingerprint();
+   GameLabEngine.Result response=engine.gesture(downX,downY,x,y,elapsed);
+   addLog("TOUCH_RECEIVED,game="+engine.game+",result="+response+
+    ",changed_state="+(old!=engine.fingerprint())+",fault="+engine.fault);
+   invalidate();update();
+   return true;
+  }
+ }
+}
