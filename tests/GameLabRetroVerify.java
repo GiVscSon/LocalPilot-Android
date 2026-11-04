@@ -11,6 +11,7 @@ class GameLabRetroVerify {
       "--release","17","-d",out.toString(),
       "game-lab/src/main/java/org/localpilot/gamelab/GameLabEngine.java",
       "game-lab/src/main/java/org/localpilot/gamelab/RetroEmulatorCatalog.java",
+      "game-lab/src/main/java/org/localpilot/gamelab/HomebrewNes.java",
       "tests/RetroEmulatorCatalogTest.java")!=0)
    throw new AssertionError("GameLab retro catalog compile");
   try(URLClassLoader loader=new URLClassLoader(new URL[]{out.toUri().toURL()})){
