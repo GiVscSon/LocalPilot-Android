@@ -18,8 +18,8 @@ public final class TextRepetitionGuard {
     String chunk=s.substring(start,start+width);
     // A repeated punctuation or one-letter sequence is not a useful cue.
     if(chunk.chars().filter(Character::isLetterOrDigit).count()<8)continue;
-    if(s.regionMatches(start,start+width,width)
-        &&s.regionMatches(start,start+2*width,width))return Result.REPEATED_BLOCK;
+    if(s.regionMatches(start,s,start+width,width)
+        &&s.regionMatches(start,s,start+2*width,width))return Result.REPEATED_BLOCK;
    }
   }
   // One token repeated many times can be a model failure too.
