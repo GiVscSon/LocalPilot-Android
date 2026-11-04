@@ -4,7 +4,7 @@ import java.nio.file.*;
 class ResultVerify {
  public static void main(String[]args)throws Exception{
   Path out=Files.createTempDirectory("localpilot-result-test-");var sources=new java.util.ArrayList<String>();sources.add("-d");sources.add(out.toString());
-  for(String name:new String[]{"GameOverScreen","RoundOutcome","ArcadeLearningStore","VisualGameTarget","JumperPolicy","JumperState","ArcadeController","PaddleTransfer","ArcadeProfile","ArcadePolicy","ArcadeObservation"})sources.add("app/src/main/java/org/localpilot/android/"+name+".java");
+  for(String name:new String[]{"GameOverScreen","RoundOutcome","ArcadeLearningStore","VisualGameTarget","JumperPolicy","JumperState","ArcadeController","RealGameNeuralCritic","PaddleTransfer","ArcadeProfile","ArcadePolicy","ArcadeObservation"})sources.add("app/src/main/java/org/localpilot/android/"+name+".java");
   sources.add("app/src/main/java/org/localpilot/android/rl/PaddleWeightLab.java");
   sources.add("tests/ResultLifecycleTest.java");
   if(ToolProvider.getSystemJavaCompiler().run(null,System.out,System.err,sources.toArray(String[]::new))!=0)throw new AssertionError("compile failed");

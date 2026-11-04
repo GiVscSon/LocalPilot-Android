@@ -14,6 +14,14 @@ public final class ArcadeLearningStore {
  /** Candidate is scoped to exact app package, model slot and PADDLE profile.
   * A simulation checkpoint for another genre cannot impersonate this key.
   */
+ public synchronized String realGameNeural(String pkg,String slot,ArcadeProfile profile){
+  return models.get(VisualGameTarget.key(pkg,slot,profile)+".real-neural-v1");
+ }
+ public synchronized void saveRealGameNeural(String pkg,String slot,ArcadeProfile profile,String encoded)throws IOException{
+  try{RealGameNeuralCritic.decode(encoded,profile);}
+  catch(IllegalArgumentException invalid){throw new IOException("invalid visual-game neural checkpoint",invalid);}
+  saveKey(VisualGameTarget.key(pkg,slot,profile)+".real-neural-v1",encoded);
+ }
  public synchronized String paddleTransfer(String pkg,String slot){
   return models.get(VisualGameTarget.key(pkg,slot,ArcadeProfile.PADDLE)+".paddle-transfer-v1");
  }

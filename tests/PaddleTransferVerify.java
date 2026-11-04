@@ -11,7 +11,7 @@ class PaddleTransferVerify {
   Path out=Files.createTempDirectory("real-paddle-transfer-");
   var sources=new ArrayList<String>(List.of("--release","17","-d",out.toString()));
   for(String name:List.of("ArcadeProfile","ArcadeObservation","ArcadePolicy",
-    "ArcadeController","VisualGameTarget","ArcadeLearningStore","PaddleTransfer"))
+    "ArcadeController","RealGameNeuralCritic","VisualGameTarget","ArcadeLearningStore","PaddleTransfer"))
    sources.add("app/src/main/java/org/localpilot/android/"+name+".java");
   sources.add("app/src/main/java/org/localpilot/android/rl/PaddleWeightLab.java");
   sources.add("tests/PaddleTransferTest.java");

@@ -234,6 +234,7 @@ public class PilotService extends AccessibilityService {
     .append("\nframe_age_ms=").append(diagnosticFrameAt<0?-1:Math.max(0,now-diagnosticFrameAt)).append('\n').append(diagnosticFrameGeometry)
     .append('\n').append(gestureFlight.report(now)).append('\n').append(sceneRecovery.report())
     .append('\n').append(arcadeFeedback.report()).append('\n').append(jumperFeedback.report()).append("\nMOTION MODEL: ").append(arcadeController.model())
+     .append("\nREAL GAME NEURAL: ").append(arcadeController.neuralStatus())
     .append('\n').append(roundOutcome.report()).append("\nLEARNING: ").append(learningStatus)
     .append(" scope=").append(target).append('/').append(learningSlot)
     .append(" model_context=").append(modelSlot)
@@ -375,7 +376,7 @@ public class PilotService extends AccessibilityService {
   if(gridSelected()){startGrid();return;}
   if(playingJumper&&(arcadeFeedback.paused()||jumperResponsePaused)&&selectedProfile<4&&ArcadeProfile.values()[selectedProfile]==captureProfile){
    if(busy){note="Дождитесь завершения касания";update();return;}
-   arcadeController.reset();if(arcadeLearning!=null)arcadeController.restore(arcadeLearning.get(target,modelSlot,captureProfile));arcadeFeedback.reset();jumperFeedback.reset();jumperProgressGuard.reset();arcadePending=null;arcadeBefore=null;arcadeAck=false;arcadeLastUsable=null;sceneRecovery.reset();jumperResponsePaused=false;jumperResponseFailures=0;jumperAwaitingVerification=false;
+   arcadeController.reset();if(arcadeLearning!=null)arcadeController.restore(arcadeLearning.get(target,modelSlot,captureProfile));installRealGameNeural(captureProfile);arcadeFeedback.reset();jumperFeedback.reset();jumperProgressGuard.reset();arcadePending=null;arcadeBefore=null;arcadeAck=false;arcadeLastUsable=null;sceneRecovery.reset();jumperResponsePaused=false;jumperResponseFailures=0;jumperAwaitingVerification=false;
    note="Продолжаю текущий захват · проверяю свежую сцену";update();return;
   }
   if(selectedProfile>=4&&manualVisualRoi&&visualRoi!=null)boardRoi=new Rect(visualRoi);
@@ -935,7 +936,7 @@ public class PilotService extends AccessibilityService {
    customVisionRoiScope=getSharedPreferences("custom-vision",MODE_PRIVATE).getString(scope+".roi-v1",null);
   }catch(IllegalArgumentException ignored){note="Калибровка повреждена · восстановите стандартное распознавание через Ещё";update();return;}
   modelSlot=VisualGameTarget.modelSlot(learningSlot,controlMode,customVision==null?null:customVision.encode());
-  captureProfile=profile;visionV2.reset();visionV2Snapshot=null;jumperResponseFailures=0;jumperResponsePaused=false;arcadeLastUsable=null;arcadeController.reset();if(arcadeLearning!=null){arcadeController.restore(arcadeLearning.get(target,modelSlot,profile));JumperPolicy.restore(arcadeLearning.get(target,modelSlot,ArcadeProfile.ARI));if(profile==ArcadeProfile.PADDLE)arcadeController.installPaddleTransfer(arcadeLearning.paddleTransfer(target,modelSlot));}arcadeFeedback.reset();clearDiagnosticFrame();sceneRecovery.reset();arcadeRoundSeen=false;arcadeState=null;arcadeBefore=null;arcadePending=null;arcadeAck=false;
+  captureProfile=profile;visionV2.reset();visionV2Snapshot=null;jumperResponseFailures=0;jumperResponsePaused=false;arcadeLastUsable=null;arcadeController.reset();if(arcadeLearning!=null){arcadeController.restore(arcadeLearning.get(target,modelSlot,profile));JumperPolicy.restore(arcadeLearning.get(target,modelSlot,ArcadeProfile.ARI));if(profile==ArcadeProfile.PADDLE)arcadeController.installPaddleTransfer(arcadeLearning.paddleTransfer(target,modelSlot));}installRealGameNeural(profile);arcadeFeedback.reset();clearDiagnosticFrame();sceneRecovery.reset();arcadeRoundSeen=false;arcadeState=null;arcadeBefore=null;arcadePending=null;arcadeAck=false;
   jumperFeedback.reset();jumperProgressGuard.reset();
   arcadeVerified=0;arcadeLastAction=0;
   roundOutcome.reset();
@@ -978,6 +979,27 @@ public class PilotService extends AccessibilityService {
    return "Перенесено в игровую модель Карканоида. Запустите игру заново; жесты проверяются по кадрам.";
   }catch(java.io.IOException|IllegalArgumentException error){
    return "Перенос не удался: "+error.getClass().getSimpleName();
+  }
+ }
+ private void installRealGameNeural(ArcadeProfile profile){
+  if(arcadeLearning==null||profile==ArcadeProfile.ARI)return;
+  String saved=arcadeLearning.realGameNeural(target,modelSlot,profile);
+  try{
+   arcadeController.installRealGameNeural(saved==null
+      ?new RealGameNeuralCritic(profile)
+      :RealGameNeuralCritic.decode(saved,profile));
+  }catch(IllegalArgumentException invalid){
+   arcadeController.installRealGameNeural(null);
+   learningStatus="Нейросеть не загружена: несовместимый checkpoint. Резервная политика сохранена.";
+  }
+ }
+ private void persistNeuralModel(){
+  if(arcadeLearning==null||captureProfile==ArcadeProfile.ARI)return;
+  String packed=arcadeController.neuralCheckpoint();
+  if(packed==null)return;
+  try{arcadeLearning.saveRealGameNeural(target,modelSlot,captureProfile,packed);}
+  catch(java.io.IOException failure){
+   learningStatus="Не удалось сохранить веса нейросети: "+failure.getClass().getSimpleName();
   }
  }
  private void persistArcadeModel(boolean result){
@@ -1740,7 +1762,7 @@ public class PilotService extends AccessibilityService {
     return ArcadeFeedback.State.PAUSED;
    }
    arcadeController.observeGesture(arcadePending,arcadeBefore,observation);
-   persistArcadeModel(false);arcadeVerified++;
+   persistNeuralModel();persistArcadeModel(false);arcadeVerified++;
   }
   // The first missed visual response after applying simulator weights revokes
   // this game's promoted model. This never converts Android ACK into reward.
@@ -1754,6 +1776,13 @@ public class PilotService extends AccessibilityService {
    }catch(java.io.IOException error){
     stop("Не удалось сохранить откат обученной модели · STOP");return ArcadeFeedback.State.PAUSED;
    }
+  }
+  if((feedback==ArcadeFeedback.State.RETRY||feedback==ArcadeFeedback.State.PAUSED)
+     &&arcadePending!=null&&arcadeAck&&observation!=null
+     &&visionV2Snapshot!=null&&visionV2Snapshot.ready()
+     &&observation.timestampMs>arcadePendingAt
+     &&arcadeController.learnObservedNonresponse(arcadeBefore,arcadePending,observation,true)){
+   persistNeuralModel(); // observed nonresponse, never ACK alone
   }
   if(arcadeFeedback.verified()>verifiedBefore||feedback==ArcadeFeedback.State.RETRY||feedback==ArcadeFeedback.State.PAUSED){
    if(arcadePending!=null&&feedback!=ArcadeFeedback.State.READY)metrics.failure(StageMetrics.Stage.POLICY,"VISUAL_RESPONSE_RETRY");

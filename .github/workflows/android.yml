@@ -60,6 +60,7 @@ jobs:
       java tests/TextRepetitionGuardVerify.java
       java tests/JumperWeightShadowVerify.java
       java tests/VisionV2Verify.java
+      java tests/RealGameNeuralVerify.java
    - name: Explicit unit tests and Android lint
      shell: bash
      run: |
