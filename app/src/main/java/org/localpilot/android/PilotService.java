@@ -234,6 +234,7 @@ public class PilotService extends AccessibilityService {
     .append("\nframe_age_ms=").append(diagnosticFrameAt<0?-1:Math.max(0,now-diagnosticFrameAt)).append('\n').append(diagnosticFrameGeometry)
     .append('\n').append(gestureFlight.report(now)).append('\n').append(sceneRecovery.report())
     .append('\n').append(arcadeFeedback.report()).append('\n').append(jumperFeedback.report()).append("\nMOTION MODEL: ").append(arcadeController.model())
+     .append("\nREAL GAME NEURAL: ").append(arcadeController.neuralStatus())
     .append('\n').append(roundOutcome.report()).append("\nLEARNING: ").append(learningStatus)
     .append(" scope=").append(target).append('/').append(learningSlot)
     .append(" model_context=").append(modelSlot)
