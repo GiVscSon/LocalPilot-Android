@@ -55,6 +55,7 @@ jobs:
       java tests/SystemVerify.java
       java tests/RlVerify.java
       java tests/PaddleWeightLabVerify.java
+      java tests/PaddleTransferVerify.java
    - name: Explicit unit tests and Android lint
      shell: bash
      run: |

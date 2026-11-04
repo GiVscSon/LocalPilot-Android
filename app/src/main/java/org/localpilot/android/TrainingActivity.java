@@ -15,18 +15,56 @@ import java.util.concurrent.Executors;
 public final class TrainingActivity extends Activity {
  private static Runtime runtime;
  private final Handler handler=new Handler(Looper.getMainLooper());
- private TextView status;private Spinner genre;private View scene;private Button train,evaluate,play,export;
- private final Runnable refresh=new Runnable(){public void run(){status.setText(runtime.message);scene.invalidate();boolean idle=!runtime.busy;genre.setEnabled(idle);train.setEnabled(idle);evaluate.setEnabled(idle);play.setEnabled(idle);export.setEnabled(idle);handler.postDelayed(this,250);}};
+ private TextView status;private Spinner genre,paddleScenario;private View scene;
+ private Button train,evaluate,play,export,paddleTrain,paddleDemo,paddleApply;
+ private final Runnable refresh=new Runnable(){public void run(){status.setText(runtime.message);scene.invalidate();boolean idle=!runtime.busy;genre.setEnabled(idle);train.setEnabled(idle);evaluate.setEnabled(idle);play.setEnabled(idle);export.setEnabled(idle);
+  paddleScenario.setEnabled(idle);paddleTrain.setEnabled(idle);paddleDemo.setEnabled(idle);
+  paddleApply.setEnabled(idle&&runtime.paddleCandidate!=null&&runtime.paddleCandidate.eligible());handler.postDelayed(this,250);}};
  @Override public void onCreate(Bundle b){super.onCreate(b);if(runtime==null)runtime=new Runtime(getFilesDir());
   LinearLayout box=new LinearLayout(this);box.setOrientation(LinearLayout.VERTICAL);box.setPadding(12,8,12,8);ScrollView page=new ScrollView(this);page.setFillViewport(true);page.addView(box);setContentView(page);
   TextView title=new TextView(this);title.setText("Аркады · обучение на Android");title.setTextSize(20);box.addView(title);
   genre=new Spinner(this);genre.setAdapter(new ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,new String[]{"Вертикальный джампер","Вертикальный платформер","Раннер по полосам","Jetpack"}));genre.setSelection(Math.max(0,Math.min(3,getSharedPreferences(MainActivity.PREF,MODE_PRIVATE).getInt("training_genre",0))));box.addView(genre);
-  TextView help=new TextView(this);help.setText("Собственные симуляторы · Double DQN · координаты объектов. Эти модели не управляют установленными играми; для «Прыгуна Ари» в Яндекс Маркете предусмотрен отдельный экспериментальный зрительный профиль. При уходе в фон — пауза и checkpoint.");box.addView(help);
-  scene=new View(this){private final Paint p=new Paint(3);@Override public void onDraw(Canvas c){super.onDraw(c);c.drawColor(0xff101d2d);float[] s=runtime.scene;if(s==null)return;c.save();float scale=Math.min(getWidth()/360f,getHeight()/640f);c.translate((getWidth()-360*scale)/2,(getHeight()-640*scale)/2);c.scale(scale,scale);p.setColor(0xff5bc2ff);c.drawRect(s[0]-10,s[1]-14,s[0]+10,s[1]+14,p);for(int i=2;i+4<s.length;i+=5){p.setColor(s[i+4]==1?0xff62d394:s[i+4]==2?0xffee6677:0xffffd166);c.drawRect(s[i]-s[i+2]/2,s[i+1]-s[i+3]/2,s[i]+s[i+2]/2,s[i+1]+s[i+3]/2,p);}c.restore();}};
+  TextView help=new TextView(this);help.setText("Четыре исходные DQN-модели остаются учебными и не переносятся напрямую: их схемы действий отличаются от настоящих игр. Ниже отдельный Карканоид: его маленькая сеть обучается на восьми физических сценариях и может быть вручную перенесена в реальную зрительную модель после проверки.");box.addView(help);
+  scene=new View(this){private final Paint p=new Paint(3);@Override public void onDraw(Canvas c){super.onDraw(c);c.drawColor(0xff101d2d);
+ PaddleWeightLab.Scene physics=runtime.paddleScene;
+ if(physics!=null){
+  c.save();float scale=Math.min(getWidth()/360f,getHeight()/640f);
+  c.translate((getWidth()-360*scale)/2,(getHeight()-640*scale)/2);c.scale(scale,scale);
+  boolean[] alive=physics.alive();
+  for(int row=0;row<3;row++)for(int col=0;col<8;col++){
+   if(!alive[row*8+col])continue;
+   p.setColor(new int[]{0xff41b6e6,0xffee8b56,0xffa9d070}[row]);
+   float left=(.025f+col*.119f)*360,top=(.09f+row*.067f)*640;
+   c.drawRoundRect(left,top,left+.100f*360,top+.044f*640,3,3,p);
+  }
+  p.setColor(0xffeee5c5);float paddleX=(float)physics.paddleX()*360;
+  float paddleHalfWidth=(float)physics.halfPaddle()*360;
+  c.drawRoundRect(paddleX-paddleHalfWidth,(float)PaddleWeightLab.PADDLE_Y*640,
+    paddleX+paddleHalfWidth,(float)PaddleWeightLab.PADDLE_Y*640+12,5,5,p);
+  p.setColor(0xffff5e6c);c.drawCircle((float)physics.ballX()*360,(float)physics.ballY()*640,
+    (float)PaddleWeightLab.BALL_RADIUS*360,p);c.restore();return;
+ }
+ float[] s=runtime.scene;if(s==null)return;c.save();float scale=Math.min(getWidth()/360f,getHeight()/640f);c.translate((getWidth()-360*scale)/2,(getHeight()-640*scale)/2);c.scale(scale,scale);p.setColor(0xff5bc2ff);c.drawRect(s[0]-10,s[1]-14,s[0]+10,s[1]+14,p);for(int i=2;i+4<s.length;i+=5){p.setColor(s[i+4]==1?0xff62d394:s[i+4]==2?0xffee6677:0xffffd166);c.drawRect(s[i]-s[i+2]/2,s[i+1]-s[i+3]/2,s[i]+s[i+2]/2,s[i+1]+s[i+3]/2,p);}c.restore();}};
   box.addView(scene,new LinearLayout.LayoutParams(-1,dp(Math.max(220,Math.min(480,getResources().getConfiguration().screenHeightDp-360)))));status=new TextView(this);status.setTextSize(12);ScrollView stats=new ScrollView(this);stats.addView(status);box.addView(stats,new LinearLayout.LayoutParams(-1,dp(120)));
   LinearLayout row=new LinearLayout(this);box.addView(row);train=button(row,"Обучать",()->runtime.start(selected(),0));evaluate=button(row,"Оценить ×50",()->runtime.start(selected(),1));
   LinearLayout row2=new LinearLayout(this);box.addView(row2);play=button(row2,"Показать модель",()->runtime.start(selected(),2));button(row2,"Пауза / STOP",()->runtime.pause());
   export=button(box,"Экспорт checkpoint",()->{if(runtime.checkpoint==null||!runtime.checkpoint.isFile()){toast("Сначала обучите и поставьте на паузу");return;}startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT).setType("application/zip").addCategory(Intent.CATEGORY_OPENABLE).putExtra(Intent.EXTRA_TITLE,"localpilot-"+runtime.current+"-checkpoint.zip"),71);});
+  TextView heading=new TextView(this);heading.setText("Карканоид · перенос в игровую модель");heading.setTextSize(18);box.addView(heading);
+  paddleScenario=new Spinner(this);
+  paddleScenario.setAdapter(new ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,
+    new String[]{"Классический","Узкая платформа","Быстрый шар","Рикошеты от стен",
+      "Пустоты между блоками","Плотные блоки","Задержка управления","Сильный отскок"}));
+  box.addView(paddleScenario);
+  paddleTrain=button(box,"Обучить на восьми физических условиях",()->runtime.trainPaddle());
+  paddleDemo=button(box,"Показать физическую игру и обученную модель",()->runtime.demoPaddle(
+    PaddleWeightLab.Scenario.values()[paddleScenario.getSelectedItemPosition()]));
+  paddleApply=button(box,"Перенести веса в настоящий Карканоид",()->{
+   PaddleTransfer.Candidate candidate=runtime.paddleCandidate;
+   if(candidate==null||!candidate.eligible()){toast("Сначала обучите и пройдите отдельную проверку");return;}
+   PilotService pilot=PilotService.instance;
+   toast(pilot==null?"Включите службу LocalPilot и выберите настоящий Карканоид":
+     pilot.installPaddleTransfer(candidate));
+  });
  }
  private int dp(int n){return (int)(n*getResources().getDisplayMetrics().density);}
  private ArcadeEnv.Genre selected(){int index=genre.getSelectedItemPosition();getSharedPreferences(MainActivity.PREF,MODE_PRIVATE).edit().putInt("training_genre",index).apply();return ArcadeEnv.Genre.values()[index];}
@@ -39,9 +77,12 @@ public final class TrainingActivity extends Activity {
  }
  private static final class Runtime {
   final java.util.concurrent.ExecutorService executor=Executors.newSingleThreadExecutor();final File directory;
-  volatile boolean busy,running;volatile String message="Выберите жанр и нажмите «Обучать»";volatile float[] scene;volatile File checkpoint;volatile ArcadeEnv.Genre current;DqnTrainer trainer;
+  volatile boolean busy,running;volatile String message="Выберите жанр и нажмите «Обучать»";
+  volatile float[] scene;volatile PaddleWeightLab.Scene paddleScene;
+  volatile PaddleTransfer.Candidate paddleCandidate;
+  volatile File checkpoint;volatile ArcadeEnv.Genre current;DqnTrainer trainer;
   Runtime(File root){directory=new File(root,"arcade-rl");}
-  synchronized void start(ArcadeEnv.Genre genre,int mode){if(busy)return;busy=true;running=true;message="Загрузка модели…";
+  synchronized void start(ArcadeEnv.Genre genre,int mode){if(busy)return;busy=true;running=true;paddleScene=null;message="Загрузка модели…";
    executor.execute(()->{try{
     if(trainer==null||current!=genre){File f=new File(directory,genre+".zip");DqnTrainer loaded;
      loaded=DqnTrainer.loadRecovering(f,genre,20261021);trainer=loaded;checkpoint=f;current=genre;
@@ -60,6 +101,45 @@ public final class TrainingActivity extends Activity {
     if(mode==0){trainer.save(checkpoint);message="Пауза · прогресс сохранён\n"+stats();}else message="Просмотр остановлен\n"+stats();
    }catch(Exception e){message="Остановлено: "+e.getClass().getSimpleName()+" · "+e.getMessage();}
    finally{running=false;busy=false;}});
+  }
+  synchronized void trainPaddle(){
+   if(busy)return;
+   busy=true;running=true;paddleCandidate=null;
+   message="Карканоид: обучение на 8 сценариях, затем отдельная проверка...";
+   executor.execute(()->{
+    try{
+     PaddleTransfer.Candidate candidate=PaddleTransfer.trainCandidate(()->!running);
+     if(!running)throw new java.util.concurrent.CancellationException();
+     paddleCandidate=candidate;
+     message=candidate.report()+"\nРезультаты симулятора не подтверждают поведение настоящей игры.";
+    }catch(java.util.concurrent.CancellationException interrupted){
+     message="Обучение Карканоида отменено · веса не перенесены";
+    }catch(Exception error){message="Карканоид: "+error.getClass().getSimpleName()+": "+error.getMessage();}
+    finally{running=false;busy=false;}
+   });
+  }
+  synchronized void demoPaddle(PaddleWeightLab.Scenario scenario){
+   if(busy)return;
+   busy=true;running=true;scene=null;
+   message="Сцена Карканоида: "+scenario;
+   executor.execute(()->{
+    try{
+     PaddleWeightLab.Control weights=paddleCandidate!=null&&paddleCandidate.eligible()
+       ?PaddleWeightLab.Weights.followBall().patchToAngledImpact(paddleCandidate.offset())
+       :PaddleWeightLab.Weights.followBall();
+     PaddleWeightLab.Episode result=PaddleWeightLab.play(weights,20261104L,scenario,frame->{
+      if(!running)throw new java.util.concurrent.CancellationException();
+      paddleScene=frame;
+      try{Thread.sleep(42);}catch(InterruptedException e){
+       Thread.currentThread().interrupt();throw new java.util.concurrent.CancellationException();
+      }
+     });
+     message="Карканоид · "+scenario+" · блоков "+result.bricks()+
+       " · отбиваний "+result.catches()+" · пропущено "+result.missed()+" · только симуляция";
+    }catch(java.util.concurrent.CancellationException ignored){message="Показ Карканоида остановлен";}
+    catch(Exception error){message="Симулятор Карканоида: "+error.getMessage();}
+    finally{running=false;busy=false;}
+   });
   }
   void pause(){running=false;}
   String stats(){return String.format(Locale.ROOT,"%s · шаги %d · эпизоды %d\nОбновления %d · replay %d · epsilon %.3f\nНаграда %.3f · лучший прогресс %.1f · loss %.4f",current,trainer.steps,trainer.episodes,trainer.updates,trainer.replaySize(),trainer.epsilon(),trainer.lastReturn,trainer.bestProgress,trainer.loss);}

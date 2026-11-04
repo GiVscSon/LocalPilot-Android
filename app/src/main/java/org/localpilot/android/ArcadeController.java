@@ -11,7 +11,9 @@ public final class ArcadeController {
  private int intendedLane=-1,lastHold=150;
  private float steeringSpeed=1.1f,laneStartX;
  private boolean continuousSteering;
- public void reset(){previous=earlier=null;trafficSpeed=.55f;scrollSpeed=.28f;gravity=1.5f;flapVelocity=-.44f;lastFlap=lastLane=verifiedFlap=-10000;intendedLane=-1;steeringSpeed=1.1f;lastHold=150;continuousSteering=false;}
+ /** Explicitly promoted, scoped model used for real PADDLE decisions. */
+ private String paddleTransfer;
+ public void reset(){paddleTransfer=null;previous=earlier=null;trafficSpeed=.55f;scrollSpeed=.28f;gravity=1.5f;flapVelocity=-.44f;lastFlap=lastLane=verifiedFlap=-10000;intendedLane=-1;steeringSpeed=1.1f;lastHold=150;continuousSteering=false;}
  /** New episode in the same window: keep learned physics, discard old objects/actions. */
  public void nextRound(){previous=earlier=null;lastFlap=lastLane=verifiedFlap=-10000;intendedLane=-1;}
  /** A loss is an outcome, not a measurement of gravity or flap impulse. */
@@ -23,7 +25,9 @@ public final class ArcadeController {
   // Replayed/out-of-order pixels cannot erase the saved physics or renew input.
   if(previous!=null&&s.timestampMs<=previous.timestampMs)return waitFor("Ожидаю следующий кадр");
   learn(s,now);earlier=previous;previous=s;
-  return switch(s.profile){case TRAFFIC->drive(s,now);case FLAPPY->fly(s,now);default->ArcadePolicy.next(s);};
+  return switch(s.profile){case TRAFFIC->drive(s,now);case FLAPPY->fly(s,now);
+   case PADDLE->paddleTransfer==null?ArcadePolicy.next(s):PaddleTransfer.decide(s,paddleTransfer);
+   default->ArcadePolicy.next(s);};
  }
  /** Call only after dispatch was accepted, not merely when a recommendation was produced. */
  public void actionDispatched(ArcadePolicy.Decision d,long now){
@@ -51,7 +55,16 @@ public final class ArcadeController {
   }
 
  }
- public String report(){return model();}
+ /** Never grant input here. The service still owns the real ActionGate and visual feedback. */
+ public void installPaddleTransfer(String encoded){
+  paddleTransfer=null;
+  if(encoded==null)return;
+  try{PaddleTransfer.decode(encoded);paddleTransfer=encoded;}
+  catch(IllegalArgumentException ignored){/* Invalid imports cannot alter the policy. */}
+ }
+ public void disablePaddleTransfer(){paddleTransfer=null;}
+ public boolean paddleTransferActive(){return paddleTransfer!=null;}
+ public String report(){return model()+(paddleTransfer==null?" paddleTransfer=off":" paddleTransfer=on");}
  public void restore(String saved){
   if(saved==null||saved.isEmpty())return;
   float road=trafficSpeed,scroll=scrollSpeed,g=gravity,flap=flapVelocity,steering=steeringSpeed;boolean continuous=continuousSteering;
