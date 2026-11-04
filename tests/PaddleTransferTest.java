@@ -28,7 +28,9 @@ public final class PaddleTransferTest {
   }
   PaddleTransfer.Candidate trained=PaddleTransfer.trainCandidate();
   System.out.println("REAL_MODEL_TRANSFER "+trained.report());
-  check(trained.eligible(),"held-out eight-scenario gate");
+  check(trained.eligible()&&trained.allScenariosImproved(),"held-out eight-scenario gate");
+  check(!new PaddleTransfer.Candidate(trained.offset(),320,480,1,100,1,100,false).eligible(),
+    "aggregate gain can never conceal a failing game scenario");
   check(trained.trainingEpisodes()==320&&trained.validationEpisodes()==480,
     "train/test episode counts");
   String encoded=PaddleTransfer.encode(trained);
