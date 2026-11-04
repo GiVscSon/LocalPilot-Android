@@ -353,6 +353,7 @@ public final class WebLearningActivity extends Activity {
   String ep=endpoint,key=apiKey;say("Отправляю снимок игровой области выбранному API…");
   io.execute(()->{try{
    JSONObject response=new JSONObject(new String(WebHttp.teacher(ep,key,request),StandardCharsets.UTF_8));String content=response.getJSONArray("choices").getJSONObject(0).getJSONObject("message").getString("content").trim();
+   if(!TextRepetitionGuard.accepted(content))throw new JSONException("repetition in model output");
    if(content.startsWith("```")){int line=content.indexOf('\n');int end=content.lastIndexOf("```");if(line<0||end<=line)throw new JSONException("format");content=content.substring(line+1,end).trim();}
    JSONObject a=new JSONObject(content);WebLesson.Action action=new WebLesson.Action(WebLesson.Kind.valueOf(a.getString("kind")),(float)a.optDouble("x",0),(float)a.optDouble("y",0),(float)a.optDouble("toX",a.optDouble("x",0)),(float)a.optDouble("toY",a.optDouble("y",0)),a.optInt("duration",100));
    ui(()->{if(generation==token){suggestion=action;suggestedFrom=features;suggestionTime=time;say("Подсказка: "+action.label()+". Применение — отдельной кнопкой; движущаяся сцена может устареть");}});
