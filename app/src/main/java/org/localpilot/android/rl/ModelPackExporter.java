@@ -115,7 +115,7 @@ public final class ModelPackExporter {
    throw new IOException("model export location");
   File rlDirectory=new File(appFiles,"arcade-rl");
   Archive a=new Archive(destination);
-  int found=0,missing=0,invalid=0;
+  int found=0,trained=0,missing=0,invalid=0;
   StringBuilder models=new StringBuilder("[");
   for(ArcadeEnv.Genre genre:ArcadeEnv.Genre.values()){
    if(models.length()>1)models.append(',');
@@ -132,7 +132,7 @@ public final class ModelPackExporter {
      throw new IOException("invalid size");
     // DqnTrainer.load validates stored SHA256 and the entire observation/action schema.
     DqnTrainer trainer=DqnTrainer.load(source,genre);
-    if(trainer.steps==0)throw new IOException("no training steps");
+    // A saved but never optimized network is preserved, explicitly marked untrained.
     a.addFile("dqn/"+id+"/checkpoint.zip",source,MAX_CHECKPOINT_BYTES);
     a.add("dqn/"+id+"/policy.f32le",policy(trainer));
     a.add("dqn/"+id+"/policy.json",
@@ -142,8 +142,11 @@ public final class ModelPackExporter {
        +",\"dtype\":\"float32-le\",\"checkpoint_manifest\":"
        +trainer.manifest()+"}").getBytes(StandardCharsets.UTF_8));
     found++;
+    if(trainer.updates>0)trained++;
     models.append("{\"genre\":").append(quote(genre.name()))
-      .append(",\"status\":\"trained_checkpoint_exported\",\"steps\":")
+      .append(",\"status\":").append(quote(trainer.updates>0
+        ?"trained_checkpoint_exported":"untrained_checkpoint_exported"))
+      .append(",\"steps\":")
       .append(trainer.steps).append(",\"updates\":").append(trainer.updates)
       .append(",\"checkpoint\":").append(quote("dqn/"+id+"/checkpoint.zip"))
       .append(",\"policy\":").append(quote("dqn/"+id+"/policy.f32le")).append('}');
@@ -190,13 +193,13 @@ public final class ModelPackExporter {
   a.add("manifest.json",("{\"format\":\""+FORMAT+"\","
     +"\"origin\":\"user_initiated_local_android_export\","
     +"\"dqn\":"+models+","
-    +"\"dqn_trained\":"+found+",\"dqn_missing\":"+missing+",\"dqn_invalid\":"+invalid+","
+    +"\"dqn_exported\":"+found+",\"dqn_trained\":"+trained+",\"dqn_missing\":"+missing+",\"dqn_invalid\":"+invalid+","
     +"\"paddle_current_exported\":"+hasPaddle+",\"live_policy_store_exported\":"+hasLive+","
     +"\"weightspace_origin\":\"explicitly_programmed_not_trained\","
     +"\"compatibility\":\"python_reader_requires_matching_observation_schema\"}"
    ).getBytes(StandardCharsets.UTF_8));
   a.finish();
-  return "Модели сохранены: DQN "+found+"/4; нет "+missing
+  return "Модели сохранены: DQN "+found+"/4 (обучены "+trained+"); нет "+missing
     +"; повреждены "+invalid+"; Карканоид "+(hasPaddle?"обучен":"базовые веса")
     +"; игровые настройки "+(hasLive?"включены":"отсутствуют");
  }
