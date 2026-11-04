@@ -99,21 +99,36 @@ public final class PaddleWeightLab {
  /** Real 2D timestep simulation: ball motion, side/top bounces, paddle collision,
   * angle-dependent rebound, and destructible bricks. Per-episode seeded layout.
   */
- public static Episode play(Control policy,long seed){
+ /** Domain-randomized Karkanoid-like environments, sharing the production feature schema. */
+ public enum Scenario { CLASSIC, NARROW_PADDLE, FAST_BALL, BANK_SHOT, BRICK_GAPS,
+                        DENSE_BRICKS, INPUT_LATENCY, HEAVY_REBOUND }
+ public static Episode play(Control policy,long seed){return play(policy,seed,Scenario.CLASSIC);}
+ public static Episode play(Control policy,long seed,Scenario scenario){
+  if(policy==null||scenario==null)throw new IllegalArgumentException("scenario");
   Random rng=new Random(seed);
   double x=.18+.64*rng.nextDouble(),y=.34+.05*rng.nextDouble();
   double vx=(rng.nextDouble()-.5)*1.35;
-  double speed=.80+.12*rng.nextDouble(),vy=Math.sqrt(speed*speed-vx*vx);
+  double speed=.80+.12*rng.nextDouble();
+  if(scenario==Scenario.FAST_BALL)speed*=1.28;
+  if(scenario==Scenario.BANK_SHOT)vx=Math.copySign(speed*.70,vx);
+  double vy=Math.sqrt(speed*speed-vx*vx);
+  final double halfPaddle=scenario==Scenario.NARROW_PADDLE?.053:HALF_PADDLE;
+  final double paddleSpeed=scenario==Scenario.INPUT_LATENCY?.68:MAX_PADDLE_SPEED;
+  final double bounceScale=scenario==Scenario.HEAVY_REBOUND?.78:.62;
   double paddle=.15+.70*rng.nextDouble();
   boolean[] alive=new boolean[24];Arrays.fill(alive,true);
-  for(int i=0;i<alive.length;i++)if(rng.nextDouble()<.17)alive[i]=false;
+  double holeRate=scenario==Scenario.BRICK_GAPS?.38:scenario==Scenario.DENSE_BRICKS?.04:.17;
+  for(int i=0;i<alive.length;i++)if(rng.nextDouble()<holeRate)alive[i]=false;
   int catches=0,bricks=0;
   Random policyRng=new Random(seed^0x59b57f48ca13L);
+  double move=0;
   for(int step=0;step<2400;step++){
-   Frame frame=new Frame(x,y,vx,vy,paddle,true,true,true);
-   double move=policy.steer(frame,policyRng);
+   if(scenario!=Scenario.INPUT_LATENCY||step%12==0){
+    Frame frame=new Frame(x,y,vx,vy,paddle,true,true,true);
+    move=policy.steer(frame,policyRng);
+   }
    if(!Double.isFinite(move)||Math.abs(move)>1.0000001)throw new IllegalStateException("invalid steering command");
-   paddle=clip(paddle+move*MAX_PADDLE_SPEED*DT,HALF_PADDLE,1-HALF_PADDLE);
+   paddle=clip(paddle+move*paddleSpeed*DT,HALF_PADDLE,1-HALF_PADDLE);
    double oldY=y;
    x+=vx*DT;y+=vy*DT;
    if(x<BALL_RADIUS){x=2*BALL_RADIUS-x;vx=Math.abs(vx);}
@@ -134,10 +149,10 @@ public final class PaddleWeightLab {
     }
    }
    if(vy>0&&oldY+BALL_RADIUS<PADDLE_Y&&y+BALL_RADIUS>=PADDLE_Y){
-    if(Math.abs(x-paddle)<=HALF_PADDLE+BALL_RADIUS){
+    if(Math.abs(x-paddle)<=halfPaddle+BALL_RADIUS){
      catches++;
-     double offset=clip((x-paddle)/(HALF_PADDLE+BALL_RADIUS),-1,1);
-     vx=offset*.62;vy=-Math.sqrt(Math.max(.08,speed*speed-vx*vx));
+     double offset=clip((x-paddle)/(halfPaddle+BALL_RADIUS),-1,1);
+     vx=offset*bounceScale;vy=-Math.sqrt(Math.max(.08,speed*speed-vx*vx));
      y=PADDLE_Y-BALL_RADIUS;
     }else return new Episode(catches,bricks,step+1,true);
    }
@@ -165,6 +180,16 @@ public final class PaddleWeightLab {
    catches+=e.catches();bricks+=e.bricks();if(e.missed())misses++;scores+=e.score();
   }
   return new Summary(name,episodes,misses,bricks,catches,scores);
+ }
+ public static Summary evaluate(String name,Control model,int episodes,long seed,Scenario scenario){
+  if(name==null||!name.matches("[a-z_-]{1,32}")||episodes<1||episodes>10000||model==null||scenario==null)
+   throw new IllegalArgumentException("evaluation");
+  int catches=0,bricks=0,misses=0;double score=0;
+  for(int i=0;i<episodes;i++){
+   Episode e=play(model,seed+i*7919L,scenario);
+   catches+=e.catches();bricks+=e.bricks;if(e.missed())misses++;score+=e.score();
+  }
+  return new Summary(name,episodes,misses,bricks,catches,score);
  }
  public static final long CALIBRATION_SEED=2718L;
  public static final int CALIBRATION_EPISODES=240;
