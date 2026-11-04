@@ -11,6 +11,19 @@ public final class ArcadeLearningStore {
  private final Map<String,String> models=new HashMap<>();
  public ArcadeLearningStore(File file)throws IOException{this.file=file;File p=file.getParentFile();if(p!=null&&!p.isDirectory()&&!p.mkdirs())throw new IOException("directory");load();}
  private void load()throws IOException{if(!file.exists())return;try(BufferedReader r=new BufferedReader(new FileReader(file))){String line;while((line=r.readLine())!=null){int i=line.indexOf('|');if(i>0&&i<line.length()-1)models.put(line.substring(0,i),line.substring(i+1));}}}
+ /** Candidate is scoped to exact app package, model slot and PADDLE profile.
+  * A simulation checkpoint for another genre cannot impersonate this key.
+  */
+ public synchronized String paddleTransfer(String pkg,String slot){
+  return models.get(VisualGameTarget.key(pkg,slot,ArcadeProfile.PADDLE)+".paddle-transfer-v1");
+ }
+ public synchronized void savePaddleTransfer(String pkg,String slot,String encoded)throws IOException{
+  try{PaddleTransfer.decode(encoded);}catch(IllegalArgumentException invalid){throw new IOException("invalid paddle transfer",invalid);}
+  saveKey(VisualGameTarget.key(pkg,slot,ArcadeProfile.PADDLE)+".paddle-transfer-v1",encoded);
+ }
+ public synchronized void disablePaddleTransfer(String pkg,String slot)throws IOException{
+  saveKey(VisualGameTarget.key(pkg,slot,ArcadeProfile.PADDLE)+".paddle-transfer-v1","disabled");
+ }
  public synchronized String get(ArcadeProfile profile){return models.get(profile.name());}
  public synchronized String get(String pkg,String slot,ArcadeProfile profile){String value=models.get(VisualGameTarget.key(pkg,slot,profile));return value==null&&VisualGameTarget.legacyMarket(pkg)&&"default".equals(slot)?get(profile):value;}
  public synchronized long losses(String pkg,String slot,ArcadeProfile profile){String value=models.get(VisualGameTarget.key(pkg,slot,profile)+".losses");try{return value==null&&VisualGameTarget.legacyMarket(pkg)&&"default".equals(slot)?losses(profile):value==null?0:Math.max(0,Long.parseLong(value));}catch(NumberFormatException ignored){return 0;}}
