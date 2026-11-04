@@ -912,7 +912,7 @@ public class PilotService extends AccessibilityService {
    customVisionRoiScope=getSharedPreferences("custom-vision",MODE_PRIVATE).getString(scope+".roi-v1",null);
   }catch(IllegalArgumentException ignored){note="Калибровка повреждена · восстановите стандартное распознавание через Ещё";update();return;}
   modelSlot=VisualGameTarget.modelSlot(learningSlot,controlMode,customVision==null?null:customVision.encode());
-  captureProfile=profile;jumperResponseFailures=0;jumperResponsePaused=false;arcadeLastUsable=null;arcadeController.reset();if(arcadeLearning!=null){arcadeController.restore(arcadeLearning.get(target,modelSlot,profile));JumperPolicy.restore(arcadeLearning.get(target,modelSlot,ArcadeProfile.ARI));}arcadeFeedback.reset();clearDiagnosticFrame();sceneRecovery.reset();arcadeRoundSeen=false;arcadeState=null;arcadeBefore=null;arcadePending=null;arcadeAck=false;
+  captureProfile=profile;jumperResponseFailures=0;jumperResponsePaused=false;arcadeLastUsable=null;arcadeController.reset();if(arcadeLearning!=null){arcadeController.restore(arcadeLearning.get(target,modelSlot,profile));JumperPolicy.restore(arcadeLearning.get(target,modelSlot,ArcadeProfile.ARI));if(profile==ArcadeProfile.PADDLE)arcadeController.installPaddleTransfer(arcadeLearning.paddleTransfer(target,modelSlot));}arcadeFeedback.reset();clearDiagnosticFrame();sceneRecovery.reset();arcadeRoundSeen=false;arcadeState=null;arcadeBefore=null;arcadePending=null;arcadeAck=false;
   jumperFeedback.reset();jumperProgressGuard.reset();
   arcadeVerified=0;arcadeLastAction=0;
   roundOutcome.reset();
@@ -936,6 +936,27 @@ public class PilotService extends AccessibilityService {
  private void detachPanelForConsent(){if(panel!=null&&!consentPanelDetached){View old=panel;consentPanelDetached=true;if(CaptureCleanup.run(()->wm.removeViewImmediate(old)))panelRegistered=false;else{clearPanel();stop("Не удалось убрать панель перед разрешением захвата");}}}
  private void restoreConsentPanel(){if(panel!=null&&consentPanelDetached&&!destroying){consentPanelDetached=false;updatePanelLayout();update();}}
  public void captureConsentUiClosed(long id){if(id==captureSession)restoreConsentPanel();}
+ /** Only an explicit transfer from native training can change the next
+  * real PADDLE policy. No live gesture/permit may survive this operation. */
+ public String installPaddleTransfer(PaddleTransfer.Candidate candidate){
+  if(android.os.Looper.myLooper()!=android.os.Looper.getMainLooper())
+   return "Перенос модели: требуется основной поток";
+  if(candidate==null||!candidate.eligible()||arcadeLearning==null)
+   return "Перенос модели: проверка обучения не пройдена";
+  if(gate.armed()||busy||playingJumper||playingGrid||playing2048||playingMini||visionTraining)
+   return "Сначала нажмите STOP и остановите реальную игру";
+  if(selectedProfile!=1||captureProfile!=ArcadeProfile.PADDLE
+    ||target==null||!VisualGameTarget.allowed(target,getPackageName())
+    ||modelSlot==null||modelSlot.isEmpty())
+   return "Сначала выберите и остановите настоящий профиль Карканоид";
+  try{
+   arcadeLearning.savePaddleTransfer(target,modelSlot,PaddleTransfer.encode(candidate));
+   learningStatus="Кандидат из учебной физики сохранён для "+target+" / "+modelSlot;
+   return "Перенесено в игровую модель Карканоида. Запустите игру заново; жесты проверяются по кадрам.";
+  }catch(java.io.IOException|IllegalArgumentException error){
+   return "Перенос не удался: "+error.getClass().getSimpleName();
+  }
+ }
  private void persistArcadeModel(boolean result){
   if(arcadeLearning==null){learningStatus="Хранилище обучения недоступно";return;}
   String model=captureProfile==ArcadeProfile.ARI?JumperPolicy.model():arcadeController.model();
