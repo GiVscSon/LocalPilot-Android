@@ -1790,12 +1790,13 @@ public class PilotService extends AccessibilityService {
   if(targetIsBrowser&&!browserSceneGate.observe(timestampMs,state!=null&&state.usable())){note="Ари: перепроверяю сцену браузера · без ввода";update();return;}
   if(busy||now-jumperLastActionMs<180){update();return;}
   captureDecisions++;
-  JumperPolicy.Action action=JumperPolicy.nextAction(state);
-  // Shadow comparison sees actual fresh vision but NEVER changes dispatched action.
+  JumperPolicy.Action backup=JumperPolicy.nextAction(state);
+  JumperPolicy.Action action=WeightSpaceJumperEngine.decide(state,jumperProgressGuard.repeatedSteers(),backup);
+  // WeightSpace output remains subject to all normal gesture and visual-response gates.
   JumperWeightShadow.Review weightShadow=JumperWeightShadow.review(state,jumperProgressGuard.repeatedSteers());
   uiStats="Ари "+Math.round(state.player.centerX())+"×"+Math.round(state.player.centerY())
-    +" · платформы "+state.platforms.size()+" · шипы "+state.hazards.size()+" · "+action
-    +" · "+weightShadow.status();
+    +" · платформы "+state.platforms.size()+" · шипы "+state.hazards.size()+" · WeightSpace="+action
+    +" (резерв="+backup+") · "+weightShadow.status();
   if(action==JumperPolicy.Action.WAIT){note="Наблюдаю за прыжком";update();return;}
   JumperFrameGeometry geometry=jumperFrameGeometry;
   if(geometry==null){failStage(StageMetrics.Stage.POLICY,"FRAME_GEOMETRY_MISSING","Нет соответствия координат кадра");return;}
