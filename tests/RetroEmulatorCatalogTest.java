@@ -11,15 +11,16 @@ public final class RetroEmulatorCatalogTest {
   var dendy=RetroEmulatorCatalog.System.DENDY;
   var dos=RetroEmulatorCatalog.System.DOS;
   ok(nes.core.equals(dendy.core),"one hardware core for NES and Dendy");
-  ok(nes.coreOptionKey().equals("fceumm_region"),"region option key matches FCEUmm");
+  ok(nes.core.equals("jsnes")&&nes.coreOptionKey().equals("jsnes_compatibility_mode"),"NES executes with bundled JSNES");
   ok(nes.fceummRegion.equals("NTSC")&&dendy.fceummRegion.equals("Dendy"),
     "Dendy timing is a distinct core mode");
   ok(nes.expectedFps==60&&dendy.expectedFps==50,"region clock distinction");
   ok(!dos.core.equals(nes.core)&&dos.coreOptionKey().isEmpty(),"DOSBox has separate core");
   ok(dos.nativeLibraryName().equals("libdosbox_pure_libretro_android.so"),
     "right DOS native core");
-  ok(nes.nativeLibraryName().equals("libfceumm_libretro_android.so"),
-    "right NES native core");
+  ok(nes.nativeLibraryName().isEmpty()&&nes.runnableInGameLab()&&dendy.runnableInGameLab(),
+    "working NES runtime is not a missing native libretro core");
+  ok(!dos.runnableInGameLab(),"DOS remains explicitly blocked before native core integration");
   byte[] cartridge=new byte[16];
   cartridge[0]='N';cartridge[1]='E';cartridge[2]='S';cartridge[3]=26;
   ok(RetroEmulatorCatalog.inspect(nes,"game.nes",cartridge).recognized(),
@@ -31,8 +32,8 @@ public final class RetroEmulatorCatalogTest {
   ok(!RetroEmulatorCatalog.inspect(nes,"game.nes",new byte[16]).recognized(),
     "fake NES image rejected");
   byte[] unif={'U','N','I','F',0,0,0,0};
-  ok(RetroEmulatorCatalog.inspect(dendy,"cart.unif",unif).recognized(),
-    "UNIF cartridge supported");
+  ok(!RetroEmulatorCatalog.inspect(dendy,"cart.unif",unif).recognized(),
+    "UNIF is not claimed supported by JSNES");
   byte[] zip={'P','K',3,4,0,0,0,0};
   ok(RetroEmulatorCatalog.inspect(dos,"doom.zip",zip).recognized(),
     "DOS software archive recognized");
@@ -50,6 +51,16 @@ public final class RetroEmulatorCatalogTest {
   try{RetroEmulatorCatalog.accepts(nes,"../cart.nes");throw new AssertionError("path traversal");}
   catch(IllegalArgumentException expected){checks++;}
   ok(RetroEmulatorCatalog.System.values().length==3,"exactly requested machines");
+  byte[] homebrew=HomebrewNes.cartridge();
+  ok(homebrew.length==HomebrewNes.ROM_LENGTH,"full executable NROM cartridge");
+  ok(RetroEmulatorCatalog.inspect(nes,"homebrew.nes",homebrew).recognized(),
+    "homebrew ROM contains a valid iNES header");
+  ok(homebrew[4]==1&&homebrew[5]==1,"one PRG and one CHR bank");
+  int vector=16+16384-6;
+  ok((homebrew[vector]&255)==0&&(homebrew[vector+1]&255)==128,
+    "homebrew reset and interrupts enter $8000");
+  int spriteTile=16+16384+16;
+  ok((homebrew[spriteTile]&255)==255,"actual CHR 8x8 moving sprite exists");
   System.out.println("RETRO_CATALOG_PASS checks="+checks);
  }
 }
