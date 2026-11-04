@@ -91,6 +91,8 @@ public final class TestDeviceActivity extends Activity {
   addButton(row,"CSV",()->startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT)
       .setType("text/csv").addCategory(Intent.CATEGORY_OPENABLE)
       .putExtra(Intent.EXTRA_TITLE,"localpilot-gamelab-actions.csv"),EXPORT));
+  LinearLayout retroRow=new LinearLayout(this);root.addView(retroRow);
+  addButton(retroRow,"NES / Денди / DOS",()->startActivity(new Intent(this,RetroLibraryActivity.class)));
   status=label("",12);root.addView(status);
   setContentView(root);
   addLog("START game="+engine.game.name());
