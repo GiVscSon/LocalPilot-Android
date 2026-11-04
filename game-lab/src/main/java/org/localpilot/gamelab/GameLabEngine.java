@@ -13,8 +13,8 @@ public final class GameLabEngine {
   BUBBLE("Шипучка",9), ARI("Прыгун Ари",0),
   MATCH("Мэтч Ворлд",6), PADDLE("Карканоид",1),
   TRAFFIC("Маркет Раш",2), FLAPPY("Гошан",3),
-  BOARD2048("2048",4), HEXON("Гексон",8),
-  PROTECTED_SWAP("Нащупай ход · обмен",11), CAT_TOWER("Котобашня",0);
+  BOARD2048("2048",4), HEXON("Гексон",-1),
+  PROTECTED_SWAP("Нащупай ход · обмен",11), CAT_TOWER("Котобашня",-1);
   public final String label; public final int localPilotProfile;
   Game(String label,int profile){this.label=label;localPilotProfile=profile;}
  }
@@ -28,7 +28,6 @@ public final class GameLabEngine {
  public int lane=1,ticks,launches;
  public int[] cells,slots=new int[3];
  public int n;
- public boolean running=true;
  /** Same coordinates as GameSurface.drawSquareBoard, shared in the engine. */
  public static final float GRID_LEFT=22f/360f,GRID_TOP=140f/640f;
  public static final float GRID_RIGHT=(22f+315f)/360f;
@@ -70,7 +69,6 @@ public final class GameLabEngine {
   hash=31*hash+lane;hash=31*hash+score;
   return hash;
  }
- public int columns(){return n;}
  public Result gesture(float x,float y,float toX,float toY,long durationMs){
   if(!finite(x,y,toX,toY)||x<0||x>1||toX<0||toX>1
       ||y<0||y>1||toY<0||toY>1||durationMs<0||durationMs>20000){
