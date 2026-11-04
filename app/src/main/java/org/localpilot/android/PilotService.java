@@ -1542,15 +1542,18 @@ public class PilotService extends AccessibilityService {
    int excludedRight=geometry.toFrameX(excludedScreen.right),excludedBottom=geometry.toFrameY(excludedScreen.bottom);
    JumperState previous=jumperTracking.previous(timestampMs);SceneRecovery.Pass recoveryPass=sceneRecovery.pass();JumperVision.ColorProfile colors=jumperColorProfile;jumperVisionPending=true;long started=SystemClock.elapsedRealtimeNanos();
    try{visionTask=visionWorker.submit(()->{
-    JumperState detected=null;RuntimeException failure=null;
+    JumperState detected=null;VisionV2Core.Frame frameEvidence=null;RuntimeException failure=null;
     try{int width=frame.getWidth();int[] pixels=visionPixels(frame);
+     frameEvidence=observeVisionV2((x,y)->pixels[y*width+x],width,frame.getHeight(),
+      geometry.left,geometry.top,geometry.right,geometry.bottom,
+      excludedLeft,excludedTop,excludedRight,excludedBottom,timestampMs,epoch,1);
      detected=JumperVision.detectRecovering((x,y)->pixels[y*width+x],width,frame.getHeight(),
       geometry.left,geometry.top,geometry.right,geometry.bottom,excludedLeft,excludedTop,excludedRight,excludedBottom,
       timestampMs,previous,colors,recoveryPass);}
     catch(RuntimeException|OutOfMemoryError error){failure=error instanceof RuntimeException?(RuntimeException)error:new IllegalStateException("VISION_OUT_OF_MEMORY");}
     finally{if(!frame.isRecycled())frame.recycle();}
-    JumperState result=detected;RuntimeException error=failure;
-    handler.post(()->{if(scene==arcadeSceneGeneration)finishJumperFrame(epoch,timestampMs,started,result,error);else if(epoch==gate.epoch())jumperVisionPending=false;});
+    JumperState result=detected;VisionV2Core.Frame evidence=frameEvidence;RuntimeException error=failure;
+    handler.post(()->{if(scene==arcadeSceneGeneration)finishJumperFrame(epoch,timestampMs,started,result,evidence,error);else if(epoch==gate.epoch())jumperVisionPending=false;});
    });}catch(RuntimeException error){jumperVisionPending=false;if(!frame.isRecycled())frame.recycle();failStage(StageMetrics.Stage.READ,"VISION_WORKER_UNAVAILABLE","Не удалось запустить распознавание");}
    }catch(RuntimeException|OutOfMemoryError error){if(!frame.isRecycled())frame.recycle();CrashDiagnostics.phase(ProcessExitMetadata.frameFailurePhase(error));stop("Ошибка обработки кадра · захват остановлен. Откройте диагностику для проверки");}
   });
@@ -1616,25 +1619,34 @@ public class PilotService extends AccessibilityService {
   int er=geometry.toFrameX(excluded.right),eb=geometry.toFrameY(excluded.bottom);
   jumperVisionPending=true;long started=SystemClock.elapsedRealtimeNanos();
   try{visionTask=visionWorker.submit(()->{
-   ArcadeObservation detected=null;RuntimeException failure=null;
+   ArcadeObservation detected=null;VisionV2Core.Frame frameEvidence=null;RuntimeException failure=null;
    try{int width=frame.getWidth();int[] pixels=visionPixels(frame);
+    frameEvidence=observeVisionV2((x,y)->pixels[y*width+x],width,frame.getHeight(),
+      geometry.left,geometry.top,geometry.right,geometry.bottom,
+      el,et,er,eb,timestampMs,epoch,1);
     detected=calibration==null?ArcadeVision.detectRecovering(profile,(x,y)->pixels[y*width+x],width,frame.getHeight(),
      geometry.left,geometry.top,geometry.right,geometry.bottom,el,et,er,eb,timestampMs,previous,recoveryPass)
      :CustomArcadeVision.detect(profile,(x,y)->pixels[y*width+x],geometry.left,geometry.top,geometry.right,geometry.bottom,el,et,er,eb,timestampMs,previous,calibration);}
    catch(RuntimeException|OutOfMemoryError error){failure=error instanceof RuntimeException?(RuntimeException)error:new IllegalStateException("VISION_OUT_OF_MEMORY");}
    finally{if(!frame.isRecycled())frame.recycle();}
-   ArcadeObservation result=detected;RuntimeException error=failure;
-   handler.post(()->{if(scene==arcadeSceneGeneration)finishArcadeFrame(epoch,timestampMs,started,geometry,result,error);else if(epoch==gate.epoch())jumperVisionPending=false;});
+   ArcadeObservation result=detected;VisionV2Core.Frame evidence=frameEvidence;RuntimeException error=failure;
+   handler.post(()->{if(scene==arcadeSceneGeneration)finishArcadeFrame(epoch,timestampMs,started,geometry,result,evidence,error);else if(epoch==gate.epoch())jumperVisionPending=false;});
   });}catch(RuntimeException error){jumperVisionPending=false;frame.recycle();failStage(StageMetrics.Stage.READ,"ARCADE_WORKER_UNAVAILABLE","Распознавание не запущено");}
  }
 
  private void finishArcadeFrame(long epoch,long timestampMs,long started,JumperFrameGeometry geometry,
-   ArcadeObservation observation,RuntimeException error){
+   ArcadeObservation observation,VisionV2Core.Frame evidence,RuntimeException error){
   if(epoch!=gate.epoch()||!playingJumper)return;
   jumperVisionPending=false;captureReads++;metrics.attempt(StageMetrics.Stage.READ);
   if(error!=null){failStage(StageMetrics.Stage.READ,"ARCADE_FRAME_REJECTED","Кадр не соответствует профилю");return;}
   metrics.record(StageMetrics.Stage.READ,SystemClock.elapsedRealtimeNanos()-started);
   long now=SystemClock.elapsedRealtime();jumperLastFrameMs=timestampMs;
+  visionV2Snapshot=evidence;
+  if(evidence==null||!evidence.ready()){
+   advanceArcadeFeedback(null,now);
+   note="Vision V2 · "+(evidence==null?"нет пикселей":evidence.diagnostics())
+     +" · ожидаю последовательное наблюдение без ввода";update();return;
+  }
   if(timestampMs>now||now-timestampMs>300){advanceArcadeFeedback(null,now);note="Пропускаю устаревший кадр";update();return;}
   ActionGate.Ticket ticket=gate.offer(now);
   if(!valid(ticket)){
@@ -1763,12 +1775,18 @@ public class PilotService extends AccessibilityService {
   return feedback;
  }
 
- private void finishJumperFrame(long epoch,long timestampMs,long started,JumperState state,RuntimeException error){
+ private void finishJumperFrame(long epoch,long timestampMs,long started,JumperState state,VisionV2Core.Frame evidence,RuntimeException error){
   if(epoch!=gate.epoch()||!playingJumper)return;
   jumperVisionPending=false;captureReads++;metrics.attempt(StageMetrics.Stage.READ);
   if(error!=null){metrics.failure(StageMetrics.Stage.READ,"JUMPER_FRAME_REJECTED");failStage(StageMetrics.Stage.READ,"JUMPER_FRAME_REJECTED","Кадр не соответствует игровому полю");return;}
   metrics.record(StageMetrics.Stage.READ,SystemClock.elapsedRealtimeNanos()-started);
   long now=SystemClock.elapsedRealtime();jumperLastFrameMs=timestampMs;
+  visionV2Snapshot=evidence;
+  if(evidence==null||!evidence.ready()){
+   advanceJumperFeedback(null,now);
+   note="Vision V2 · "+(evidence==null?"нет пикселей":evidence.diagnostics())
+     +" · ожидаю последовательное наблюдение без ввода";update();return;
+  }
   if(timestampMs>now||now-timestampMs>300){advanceJumperFeedback(null,now);note="Пропускаю устаревший кадр";update();return;}
   ActionGate.Ticket ticket=gate.offer(now);
   if(!valid(ticket)){
