@@ -51,7 +51,8 @@ public final class RealGameNeuralCritic {
   * Never infer unknown objects or trust predicted gameplay state.
   */
  public static float[] features(ArcadeProfile p,ArcadeObservation s,ArcadePolicy.Decision a){
-  if(p==null||s==null||a==null||p!=s.profile||!s.usable()
+  if((p!=ArcadeProfile.PADDLE&&p!=ArcadeProfile.TRAFFIC&&p!=ArcadeProfile.FLAPPY)
+    ||s==null||a==null||p!=s.profile||!s.usable()
     ||s.confidence<.85f||!s.tracked||s.player==null||s.control==null)
    return null;
   float[] f=new float[IN];
@@ -212,6 +213,9 @@ public final class RealGameNeuralCritic {
     m.w[i]=z;
    }
    if(in.available()!=0)throw new IllegalArgumentException("extra data");
+   // Screenshot clocks use Android elapsedRealtime; their epoch restarts after
+   // reboot. Never let a persisted old uptime block learning forever.
+   m.lastSampleMs=-1;
    return m;
   }catch(IOException|NoSuchAlgorithmException|IllegalArgumentException ex){
    throw new IllegalArgumentException("invalid critic checkpoint",ex);
