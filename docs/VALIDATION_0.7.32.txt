@@ -1,0 +1,88 @@
+LocalPilot Android 0.7.32-dev / code48 — 2026-10-27
+
+Package org.localpilot.android.dev, original Dev signer SHA256:
+55626377256dda3a6b5824b7278eb12db75b8a7d1c80baa9d2af4402ccac2684.
+APK607978bytes, SHA2567fbcc26df97e4749325864350b9d8a2ef402df5c03bd1f9430842a1dcc66a1ec.
+Main code131eca7a9a20c999fde2501c0f5204461257ca89; final test/config code
+b14b10936ed40ece1f8b97d80b18a04376ec88eb. Main sources identical between them.
+Backup /workspace/localpilot-backups/android-before-feedback-0732.bundle.
+Control0.7.31 was packaged separately from1ec77ea with clean manifest and ZIP CRC.
+
+CHANGES
+MainActivity explicitly uses edge-to-edge with systemBars/displayCutout padding
+on ScrollView. Native coordinate fallback uses safe content, original control
+center, clipped visible bounds and fresh geometry; it never accepts Home-region
+fragments. Activity lifecycle/click trace is bounded80/40 events, synthetic test
+APK only. TYPE_VIEW_CLICKED is diagnostic; actual destination, board result and
+STOP assertions remain mandatory.
+
+BubbleSession fixed-size reason counters/age/mismatch metadata, last120-character
+single-line BubbleVision reason. No pixel/frame/account data added. Metrics
+export snapshots report before STOP resets state. All300ms freshness,
+100ms stability,350ms settle and7000ms timeout conditions/order remain unchanged.
+ACK alone still cannot verify. Local differential50000 seeded operations against
+1ec77ea preserved statuses, exceptions, pending/verified state (temporary local
+comparison harness, not an additional CI test).
+
+JVM / BUILD
+BubbleVerify:176 synthetic assertions; with optional private48-candy screenshot
+at .75/1/1.5 scales total788 PASS. BubbleBounceTest1341 PASS including exact
+API30 source1080x1920, ROI(21,630)-(1059,1773),1038x1143 and nominal/stale/deadline
+sequences. Private images are not packaged or published.
+Release tooling10 PASS; Python runner py_compile PASS.
+Local build_debug.py assembleDebug/lintDebug/compileDebugAndroidTestJavaWithJavac
+PASS1m24s. After enabling lint.checkTestSources, compile/lint PASS1m43s,
+0 errors/49 warnings (including test sources).
+Build CI40454505529 PASS2m11s and final40455149093 PASS2m7s.
+The workflow runs Verify, GridVerify, BubbleVerify, LearningVerify,
+ProcessExitVerify, AuditVerify, CaptureCleanupVerify, RuntimeVerify,
+Upgrade726/727Verify, ResultVerify, UniversalVerify, ControllerVerify,
+SystemVerify, RlVerify and release tooling before building/packaging.
+
+NATIVE ANDROID ACCEPTANCE
+Final CI40455149136 SUCCESS7m00s atb14b109. All3 actual emulator jobs completed:
+- API30/default: PASS18 scenarios. Artifact SHA256
+  d074e451176aaef0b89852227b15c669aa7064065e4ede357987627d60b74f99.
+- API35/default: PASS18 scenarios. Artifact SHA256
+  2d915cd3823b0734f82273680c77658a6f5a10b7dd841ede0bb2480a9fe58d2f.
+- API36/google_apis: PASS18 scenarios. Artifact SHA256
+  abb91ac7ccc30ef3858bb9b104f02e3aa784773aeec4a4b9c6a7e8680731b51a.
+https://github.com/GiVscSon/LocalPilot-Android/actions/runs/40455149136
+Public summary shows3 PASS18 notices and StatusSuccess; no raw log/API bypass.
+
+Scope: launcher/picker/panel, bounded10-touch demo and STOP, manual2048 region,
+real screenshots with legal2048 progress, explicit bubble profile/region,
+independent direct and reflected collision/match fixture, real negative tap/
+wrong direction, expected post-state and STOP; actual emulator rotation disarm and
+2 real MediaProjection consent/start/frames/stop cycles with injected transient focus loss followed by real capture recovery.
+Native fixture is test APK only, never a replacement game in the user APK.
+
+PRIOR FAILURES / ATTRIBUTION
+Initial native CI40454505568: API35/36 PASS18, API30 failed setup because new
+instrumentation used Rect.inset(IIII), introducedAPI31. Replaced with explicit
+bounds arithmetic; test-source lint is enabled and282 method references were
+audited againstSDK35 api-versions. No other new minSdk30 blocker found;
+UiAutomation.clearCache is correctly guardedAPI34+.
+Main→2048 passed in two newAPI35 runs after insets/safe-geometry changes.
+The previous Home-tap explanation is a concrete risk addressed by the code,
+but exact attribution of old failures remains unproven (no old coordinate trace).
+Prior API30 deadline failure from0.7.31 was NOT reproduced by the final run.
+The exact JVM scene and synthetic stale/deadline path pass; no timeout or
+freshness limit was widened without evidence. Diagnostics remain to identify
+any future occurrence. Do not claim every historical timeout fixed.
+
+LIMITS / DELIVERY
+No physical phone attached. Emulator checks establish Android dispatch/capture/
+verification on synthetic targets, not real Market scores, quest rewards,
+per-session improvement or all10 games. Ordinary bubble profile remains
+experimental:4 colors, direct/1wall, no special balls/reserve/multiple bounce,
+initial acquisition>=3 anchors across2rows, no automatic single remaining bubble.
+Hexa Sort/Kototower require separate controllers. Learning/ROI formats unchanged.
+
+Local delivery release/delivery/LocalPilot_Android_0.7.32_dev/: APK/source/bundle,
+MANIFEST.json/SHA256SUMS. Final documentation/source commit is in manifest.
+Install over Dev without uninstall/data wipe. CI signing identities never replace
+original local Dev signer. Source ZIP excludes private captures/logs/keys.
+GitHub source branch sync/localpilot-android-0711 is pushed. Release asset upload
+hosts remain blocked by active network revision16; saved network draft is not
+applied. Local artifact links are valid; do not invent GitHub Release asset URLs.

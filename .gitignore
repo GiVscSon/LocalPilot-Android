@@ -1,0 +1,25 @@
+.gradle/
+.build/
+**/build/
+local.properties
+*.apk
+*.aab
+*.jks
+*.keystore
+.env
+.env.*
+!.env.example
+release/
+evidence/
+__pycache__/
+*.pyc
+.idea/
+*.iml
+*.egg-info/
+.venv/
+.venv-rl/
+
+# Private offline replay input: never publish screenshot/ROI datasets
+**/localpilot-frames.csv
+local-jpg/
+local-frames/

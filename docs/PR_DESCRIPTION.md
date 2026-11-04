@@ -1,0 +1,3 @@
+Traffic steering and bird flaps previously used single-frame thresholds with slow feedback, missed active scenes and fixed50ms input. Add a temporal motion controller with bounded visual-response feedback, actual frame-age checks and held steering; preserve learned physics across rounds. Fix own-car windshield detections, single-segment obstacles and false-floor selection in user video frames.
+
+Validation: see VALIDATION.txt and docs/GAMEPLAY_EVIDENCE_0.7.11.txt for real-video perception, synthetic closed-loop comparisons and Android build/lint. Physical Android gameplay remains unverified. Existing user recordings and signing keys are excluded from release source.

@@ -1,0 +1,44 @@
+LocalPilot Android 0.7.21-dev, versionCode 37
+Date: 2026-10-23
+Package: org.localpilot.android.dev
+Activity: org.localpilot.android.MainActivity
+
+Gradle 8.9 / JDK 21 / Android SDK 35, offline
+:app:assembleDebug :app:lintDebug :app:compileDebugAndroidTestJavaWithJavac
+Final BUILD SUCCESSFUL in 1m 49s; 59 actionable tasks
+Lint: 0 errors, 0 fatal issues, 42 warnings.
+Android instrumentation compiled, not executed.
+
+JVM checks executed with JDK21:
+tests/LearningVerify.java: 34 assertions PASS
+tests/Verify.java: all suites PASS (including board4531, hardening2634)
+tests/ResultVerify.java: 1046 assertions PASS; real frames=0
+tests/ControllerVerify.java: 16 assertions PASS
+  Closed-loop bird: 72 synthetic scenarios; integrated gates527,
+  baseline+feedback gates313. These are existing-policy baseline comparisons,
+  not a comparison against the previous released APK or real-game scores.
+  Road: 48 synthetic scenarios; continuous steering: 36 scenarios.
+tests/SystemVerify.java: 9 assertions PASS, 12 synthetic pixel-loop scenarios
+tests/GridVerify.java: 3860 assertions PASS
+tests/UniversalVerify.java: 172 assertions PASS; 27 synthetic scenes
+
+The original feedback tests exposed an overly broad positional response during
+development; stationary frames are rejected in final code. The original profile
+fixture used identical before/after timestamps and was updated to use a later
+response timestamp. Final full Verify and new lifecycle tests passed.
+
+APK ZIP CRC: PASS
+APK signature: PASS, v2
+Certificate SHA256:
+55626377256dda3a6b5824b7278eb12db75b8a7d1c80baa9d2af4402ccac2684
+APK bytes: 492718
+APK SHA256:
+86259485e42137465a0b3f41fe21731821c294053b989c12031f6b9030df165d
+APK path: release/LocalPilot_Android_0.7.21_dev.apk
+
+No physical Android, gameplay, or STOP UI acceptance test executed.
+Persistence tests exercise real temporary files, simulated failed atomic moves,
+new store/controller instances, and separation of game/profile identities.
+STOP save ordering was reviewed in PilotService and included in the compiled APK;
+the Android service lifecycle itself was not run in JVM tests.
+No new game profiles or universal learned policy claimed.

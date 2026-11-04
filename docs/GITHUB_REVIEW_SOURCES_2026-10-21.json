@@ -1,0 +1,21 @@
+{
+  "Fate-Grand-Automata/FGA": {
+    "commit": "cfb0593c64aaaceeab3ba56040fa34ab8e32f7ba",
+    "paths": [
+      "LICENSE",
+      "libautomata/src/main/java/io/github/lib_automata/ImageMatcher.kt",
+      "libautomata/src/main/java/io/github/lib_automata/ResizedScreenshotProvider.kt",
+      "app/src/main/java/io/github/fate_grand_automata/imaging/DroidCvPattern.kt",
+      "app/src/main/java/io/github/fate_grand_automata/imaging/MediaProjectionScreenshotService.kt"
+    ]
+  },
+  "Nain57/Smart-AutoClicker": {
+    "commit": "cf4cdcee9bfaf8ab14f4538ed7a9c0476ff23260",
+    "paths": [
+      "LICENSE",
+      "core/smart/detection/src/main/cpp/detector/matching/template/template_matcher.cpp",
+      "core/smart/detection/src/main/java/com/buzbuz/smartautoclicker/core/detection/ImageDetector.kt",
+      "core/smart/detection/src/main/cpp/detector/images/detection_image.cpp"
+    ]
+  }
+}

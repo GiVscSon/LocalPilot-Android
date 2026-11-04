@@ -1,0 +1,224 @@
+group,stage,event,session,result
+callback,STOP,grant,current,PASS
+callback,STOP,grant,old,PASS
+callback,STOP,grant,zero,PASS
+callback,STOP,ready,current,PASS
+callback,STOP,ready,old,PASS
+callback,STOP,ready,zero,PASS
+callback,STOP,frame,current,PASS
+callback,STOP,frame,old,PASS
+callback,STOP,frame,zero,PASS
+callback,STOP,recognize,current,PASS
+callback,STOP,recognize,old,PASS
+callback,STOP,recognize,zero,PASS
+callback,STOP,error,current,PASS
+callback,STOP,error,old,PASS
+callback,STOP,error,zero,PASS
+callback,1/5 экран,grant,current,PASS
+callback,1/5 экран,grant,old,PASS
+callback,1/5 экран,grant,zero,PASS
+callback,1/5 экран,ready,current,PASS
+callback,1/5 экран,ready,old,PASS
+callback,1/5 экран,ready,zero,PASS
+callback,1/5 экран,frame,current,PASS
+callback,1/5 экран,frame,old,PASS
+callback,1/5 экран,frame,zero,PASS
+callback,1/5 экран,recognize,current,PASS
+callback,1/5 экран,recognize,old,PASS
+callback,1/5 экран,recognize,zero,PASS
+callback,1/5 экран,error,current,PASS
+callback,1/5 экран,error,old,PASS
+callback,1/5 экран,error,zero,PASS
+callback,2/5 служба,grant,current,PASS
+callback,2/5 служба,grant,old,PASS
+callback,2/5 служба,grant,zero,PASS
+callback,2/5 служба,ready,current,PASS
+callback,2/5 служба,ready,old,PASS
+callback,2/5 служба,ready,zero,PASS
+callback,2/5 служба,frame,current,PASS
+callback,2/5 служба,frame,old,PASS
+callback,2/5 служба,frame,zero,PASS
+callback,2/5 служба,recognize,current,PASS
+callback,2/5 служба,recognize,old,PASS
+callback,2/5 служба,recognize,zero,PASS
+callback,2/5 служба,error,current,PASS
+callback,2/5 служба,error,old,PASS
+callback,2/5 служба,error,zero,PASS
+callback,3/5 кадр,grant,current,PASS
+callback,3/5 кадр,grant,old,PASS
+callback,3/5 кадр,grant,zero,PASS
+callback,3/5 кадр,ready,current,PASS
+callback,3/5 кадр,ready,old,PASS
+callback,3/5 кадр,ready,zero,PASS
+callback,3/5 кадр,frame,current,PASS
+callback,3/5 кадр,frame,old,PASS
+callback,3/5 кадр,frame,zero,PASS
+callback,3/5 кадр,recognize,current,PASS
+callback,3/5 кадр,recognize,old,PASS
+callback,3/5 кадр,recognize,zero,PASS
+callback,3/5 кадр,error,current,PASS
+callback,3/5 кадр,error,old,PASS
+callback,3/5 кадр,error,zero,PASS
+callback,4/5 кадры,grant,current,PASS
+callback,4/5 кадры,grant,old,PASS
+callback,4/5 кадры,grant,zero,PASS
+callback,4/5 кадры,ready,current,PASS
+callback,4/5 кадры,ready,old,PASS
+callback,4/5 кадры,ready,zero,PASS
+callback,4/5 кадры,frame,current,PASS
+callback,4/5 кадры,frame,old,PASS
+callback,4/5 кадры,frame,zero,PASS
+callback,4/5 кадры,recognize,current,PASS
+callback,4/5 кадры,recognize,old,PASS
+callback,4/5 кадры,recognize,zero,PASS
+callback,4/5 кадры,error,current,PASS
+callback,4/5 кадры,error,old,PASS
+callback,4/5 кадры,error,zero,PASS
+callback,5/5 игра,grant,current,PASS
+callback,5/5 игра,grant,old,PASS
+callback,5/5 игра,grant,zero,PASS
+callback,5/5 игра,ready,current,PASS
+callback,5/5 игра,ready,old,PASS
+callback,5/5 игра,ready,zero,PASS
+callback,5/5 игра,frame,current,PASS
+callback,5/5 игра,frame,old,PASS
+callback,5/5 игра,frame,zero,PASS
+callback,5/5 игра,recognize,current,PASS
+callback,5/5 игра,recognize,old,PASS
+callback,5/5 игра,recognize,zero,PASS
+callback,5/5 игра,error,current,PASS
+callback,5/5 игра,error,old,PASS
+callback,5/5 игра,error,zero,PASS
+lifecycle,STOP,stop,current,PASS
+lifecycle,STOP,retry_then_late_callback,old,PASS
+lifecycle,1/5 экран,stop,current,PASS
+lifecycle,1/5 экран,retry_then_late_callback,old,PASS
+lifecycle,2/5 служба,stop,current,PASS
+lifecycle,2/5 служба,retry_then_late_callback,old,PASS
+lifecycle,3/5 кадр,stop,current,PASS
+lifecycle,3/5 кадр,retry_then_late_callback,old,PASS
+lifecycle,4/5 кадры,stop,current,PASS
+lifecycle,4/5 кадры,retry_then_late_callback,old,PASS
+lifecycle,5/5 игра,stop,current,PASS
+lifecycle,5/5 игра,retry_then_late_callback,old,PASS
+timeout,STOP,elapsed_-1,current,PASS
+timeout,STOP,elapsed_0,current,PASS
+timeout,STOP,elapsed_119999,current,PASS
+timeout,STOP,elapsed_120000,current,PASS
+timeout,STOP,elapsed_120001,current,PASS
+timeout,STOP,elapsed_1000000,current,PASS
+timeout,STOP,elapsed_-1,old,PASS
+timeout,STOP,elapsed_0,old,PASS
+timeout,STOP,elapsed_119999,old,PASS
+timeout,STOP,elapsed_120000,old,PASS
+timeout,STOP,elapsed_120001,old,PASS
+timeout,STOP,elapsed_1000000,old,PASS
+timeout,STOP,elapsed_-1,zero,PASS
+timeout,STOP,elapsed_0,zero,PASS
+timeout,STOP,elapsed_119999,zero,PASS
+timeout,STOP,elapsed_120000,zero,PASS
+timeout,STOP,elapsed_120001,zero,PASS
+timeout,STOP,elapsed_1000000,zero,PASS
+timeout,1/5 экран,elapsed_-1,current,PASS
+timeout,1/5 экран,elapsed_0,current,PASS
+timeout,1/5 экран,elapsed_119999,current,PASS
+timeout,1/5 экран,elapsed_120000,current,PASS
+timeout,1/5 экран,elapsed_120001,current,PASS
+timeout,1/5 экран,elapsed_1000000,current,PASS
+timeout,1/5 экран,elapsed_-1,old,PASS
+timeout,1/5 экран,elapsed_0,old,PASS
+timeout,1/5 экран,elapsed_119999,old,PASS
+timeout,1/5 экран,elapsed_120000,old,PASS
+timeout,1/5 экран,elapsed_120001,old,PASS
+timeout,1/5 экран,elapsed_1000000,old,PASS
+timeout,1/5 экран,elapsed_-1,zero,PASS
+timeout,1/5 экран,elapsed_0,zero,PASS
+timeout,1/5 экран,elapsed_119999,zero,PASS
+timeout,1/5 экран,elapsed_120000,zero,PASS
+timeout,1/5 экран,elapsed_120001,zero,PASS
+timeout,1/5 экран,elapsed_1000000,zero,PASS
+timeout,2/5 служба,elapsed_-1,current,PASS
+timeout,2/5 служба,elapsed_0,current,PASS
+timeout,2/5 служба,elapsed_9999,current,PASS
+timeout,2/5 служба,elapsed_10000,current,PASS
+timeout,2/5 служба,elapsed_10001,current,PASS
+timeout,2/5 служба,elapsed_1000000,current,PASS
+timeout,2/5 служба,elapsed_-1,old,PASS
+timeout,2/5 служба,elapsed_0,old,PASS
+timeout,2/5 служба,elapsed_9999,old,PASS
+timeout,2/5 служба,elapsed_10000,old,PASS
+timeout,2/5 служба,elapsed_10001,old,PASS
+timeout,2/5 служба,elapsed_1000000,old,PASS
+timeout,2/5 служба,elapsed_-1,zero,PASS
+timeout,2/5 служба,elapsed_0,zero,PASS
+timeout,2/5 служба,elapsed_9999,zero,PASS
+timeout,2/5 служба,elapsed_10000,zero,PASS
+timeout,2/5 служба,elapsed_10001,zero,PASS
+timeout,2/5 служба,elapsed_1000000,zero,PASS
+timeout,3/5 кадр,elapsed_-1,current,PASS
+timeout,3/5 кадр,elapsed_0,current,PASS
+timeout,3/5 кадр,elapsed_2999,current,PASS
+timeout,3/5 кадр,elapsed_3000,current,PASS
+timeout,3/5 кадр,elapsed_3001,current,PASS
+timeout,3/5 кадр,elapsed_1000000,current,PASS
+timeout,3/5 кадр,elapsed_-1,old,PASS
+timeout,3/5 кадр,elapsed_0,old,PASS
+timeout,3/5 кадр,elapsed_2999,old,PASS
+timeout,3/5 кадр,elapsed_3000,old,PASS
+timeout,3/5 кадр,elapsed_3001,old,PASS
+timeout,3/5 кадр,elapsed_1000000,old,PASS
+timeout,3/5 кадр,elapsed_-1,zero,PASS
+timeout,3/5 кадр,elapsed_0,zero,PASS
+timeout,3/5 кадр,elapsed_2999,zero,PASS
+timeout,3/5 кадр,elapsed_3000,zero,PASS
+timeout,3/5 кадр,elapsed_3001,zero,PASS
+timeout,3/5 кадр,elapsed_1000000,zero,PASS
+timeout,4/5 кадры,elapsed_-1,current,PASS
+timeout,4/5 кадры,elapsed_0,current,PASS
+timeout,4/5 кадры,elapsed_119999,current,PASS
+timeout,4/5 кадры,elapsed_120000,current,PASS
+timeout,4/5 кадры,elapsed_120001,current,PASS
+timeout,4/5 кадры,elapsed_1000000,current,PASS
+timeout,4/5 кадры,elapsed_-1,old,PASS
+timeout,4/5 кадры,elapsed_0,old,PASS
+timeout,4/5 кадры,elapsed_119999,old,PASS
+timeout,4/5 кадры,elapsed_120000,old,PASS
+timeout,4/5 кадры,elapsed_120001,old,PASS
+timeout,4/5 кадры,elapsed_1000000,old,PASS
+timeout,4/5 кадры,elapsed_-1,zero,PASS
+timeout,4/5 кадры,elapsed_0,zero,PASS
+timeout,4/5 кадры,elapsed_119999,zero,PASS
+timeout,4/5 кадры,elapsed_120000,zero,PASS
+timeout,4/5 кадры,elapsed_120001,zero,PASS
+timeout,4/5 кадры,elapsed_1000000,zero,PASS
+timeout,5/5 игра,elapsed_-1,current,PASS
+timeout,5/5 игра,elapsed_0,current,PASS
+timeout,5/5 игра,elapsed_119999,current,PASS
+timeout,5/5 игра,elapsed_120000,current,PASS
+timeout,5/5 игра,elapsed_120001,current,PASS
+timeout,5/5 игра,elapsed_1000000,current,PASS
+timeout,5/5 игра,elapsed_-1,old,PASS
+timeout,5/5 игра,elapsed_0,old,PASS
+timeout,5/5 игра,elapsed_119999,old,PASS
+timeout,5/5 игра,elapsed_120000,old,PASS
+timeout,5/5 игра,elapsed_120001,old,PASS
+timeout,5/5 игра,elapsed_1000000,old,PASS
+timeout,5/5 игра,elapsed_-1,zero,PASS
+timeout,5/5 игра,elapsed_0,zero,PASS
+timeout,5/5 игра,elapsed_119999,zero,PASS
+timeout,5/5 игра,elapsed_120000,zero,PASS
+timeout,5/5 игра,elapsed_120001,zero,PASS
+timeout,5/5 игра,elapsed_1000000,zero,PASS
+concurrency,1/5 экран,32_duplicate_callbacks,current,PASS
+concurrency,2/5 служба,32_duplicate_callbacks,current,PASS
+concurrency,3/5 кадр,32_duplicate_callbacks,current,PASS
+concurrency,4/5 кадры,32_duplicate_callbacks,current,PASS
+diagnostic,any,null,n/a,PASS
+diagnostic,any,empty,n/a,PASS
+diagnostic,any,SecurityException,n/a,PASS
+diagnostic,any,ForegroundServiceStartNotAllowedException,n/a,PASS
+diagnostic,any,IllegalStateException,n/a,PASS
+diagnostic,any,RESULT_MISSING,n/a,PASS
+diagnostic,any,FIRST_FRAME_TIMEOUT,n/a,PASS
+diagnostic,any,bad value/with punctuation,n/a,PASS
+diagnostic,any,XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX,n/a,PASS

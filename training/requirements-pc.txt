@@ -1,0 +1,8 @@
+# Versions actually used for the Python3.12 Gymnasium/JVM contract checks.
+gymnasium==1.4.0
+JPype1==1.7.1
+numpy==2.5.4
+cloudpickle==3.1.2
+farama-notifications==0.0.6
+packaging==26.3
+typing_extensions==4.16.0

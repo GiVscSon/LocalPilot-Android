@@ -1,0 +1,71 @@
+LocalPilot Android 0.7.24-dev / versionCode40
+Date: 2026-10-24
+Package: org.localpilot.android.dev
+Application source commit: 40669741b019c63110a5f11deaeb4904985aebc5
+
+Build through build_debug.py, Gradle8.9/JDK21/SDK35/offline:
+assembleDebug, lintDebug, compileDebugAndroidTestJavaWithJavac: PASS.
+BUILD SUCCESSFUL in 2m 29s; 59 actionable tasks.
+Lint: 0 errors/fatal; 46 warnings.
+APK ZIP CRC, aapt package/version/SDK levels, apksigner: PASS.
+Verified same Dev certificate SHA256:
+55626377256dda3a6b5824b7278eb12db75b8a7d1c80baa9d2af4402ccac2684
+APK SHA256:
+86b49b84d5ce37de0c8ee2c0f33eef5d0dd802046be56df68cfeaa57e0f34c45
+APK bytes: 535954
+
+All following runners passed on JDK21:
+Verify tests/legacy_parity.txt: full suite PASS; Gate194, Board6131,
+Hardening2634, ArcadeFeedback32, GestureFlight19, SceneRecovery157.
+RuntimeVerify: 155 assertions, feedback and region geometry (--release17).
+CaptureCleanupVerify: 41 fault-injected cleanup assertions.
+LearningVerify: 41 lifecycle/persistence assertions (--release17).
+ControllerVerify: 16 assertions; 72 bird scenarios: integrated541 vs baseline205
+passed gates, 48 road scenarios1004 vs180 rows, 36 continuous911 vs118 rows.
+GridVerify: policy1644, vision1296, lifecycle128, config177, loop540, goal75.
+ProcessExitVerify: 73; AuditVerify: 89, actual temporary files and file locks.
+ResultVerify: 1046; UniversalVerify: 185, allocation budget584 bytes/frame
+on the cloud JVM (result objects still allocate; not zero-allocation).
+SystemVerify: 9 closed-loop synthetic pixel assertions, road34 vs7 passed
+rows (4 scenarios per steering mode), bird19 vs6 gates (4 scenarios).
+RlVerify: 680187 environment/checkpoint/session/journal assertions.
+Python release-tool regressions: 10 tests PASS.
+Synthetic/controller CPU results do not establish physical-phone performance.
+
+Normal GitHub build, exact final test/app source: PASS
+https://github.com/GiVscSon/LocalPilot-Android/actions/runs/40072828751
+Acceptance test source: 7828e8025591fca9fdd4036a64274a7c86f907d5
+Instrumentation Java sources additionally compiled with javac --release17.
+
+Actual Android device acceptance: PASS (isolated KVM emulators).
+https://github.com/GiVscSon/LocalPilot-Android/actions/runs/40072828710
+device (30, default): 10/10 actual Android acceptance scenarios PASS; job 120809768727
+device (35, default): 10/10 actual Android acceptance scenarios PASS; job 120809768869
+device (36, google_apis): 10/10 actual Android acceptance scenarios PASS; job 120809768912
+Each matrix job checks launcher/picker/panel recovery, collapse/expand and
+first collapse after hide/show, ten real Demo target touches with ten verified
+responses and revoked authority/permit, STOP during an in-flight session,
+rotation disarm, visible region editor/cancel, two real corner taps plus Done,
+2048 screenshot progression (at least three verified swipes) and stopped board
+stability after at most one already-dispatched legal move, with revoked input
+and unchanged proposal count; fresh browser-context mechanic confirmation, and two separate
+MediaProjection consent/start/frame-delivery/teardown sessions.
+API30 test waits for Android accessibility publication of the region window;
+it retains the visibility/bounds requirement instead of assuming local View
+layout is already published. Native Android ACK alone is never score evidence.
+
+Scope: Actual Android UI/capture evidence is separate from JVM simulation.
+No physical-phone/browser-gameplay performance claim. Test fixture verifies
+MediaProjection restart/rotation and frame decoding, not recognition of an
+arbitrary commercial game's art. It is included only in the test APK.
+Bubble shooting, drilling and jump-on-target controllers remain unsupported.
+Color2048Reader remains strict for its known2/4/8/16 palette; unknown tiles
+are not inferred. Bounded local physics learning is not a guarantee that every
+round or every new session sets a higher record.
+The original user process exit reason13=OTHER without Java stack is still
+unidentified; lifecycle guards and emulator passes do not prove that exit fixed.
+
+Source commit/clean working tree, APK and source hashes are additionally
+recorded in release/MANIFEST.json by package_release.py. Source excludes private
+keys, user reports, captures and recordings. Release keeps the existing Dev
+signer so an in-place installation preserves the application data directory.

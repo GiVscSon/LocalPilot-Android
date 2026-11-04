@@ -1,0 +1,35 @@
+LocalPilot Android 0.7.26-dev / versionCode 42
+Дата: 2026-10-24
+Код APK: 0e2cc0cc6ef7072faab001f0d6fa7440f6bacd36
+Пакет: org.localpilot.android.dev
+APK: 557718 bytes
+SHA256: 656c210fa3d7dcdb017ac0ab01905bfa08d1e5f44e207ddf1499310995657f80
+Сертификат SHA256: 55626377256dda3a6b5824b7278eb12db75b8a7d1c80baa9d2af4402ccac2684
+Прежний Dev-сертификат сохранён. Данные не удаляются.
+
+Локальная сборка PASS: assembleDebug, lintDebug, compileDebugAndroidTestJavaWithJavac.
+JVM PASS: Verify, RuntimeVerify, SystemVerify, UniversalVerify,
+ControllerVerify, LearningVerify, GridVerify, CaptureCleanupVerify, ProcessExitVerify.
+Дополнительно PASS: Upgrade726Verify (147), ResultVerify (1046).
+Gate: 220; CaptureStartup: 46; Runtime:155; System:9; Universal:193;
+Learning:41; CaptureCleanup:41; ProcessExit:73.
+Синтетические игровые результаты не доказывают качество игры на телефоне.
+
+GitHub build CI PASS:
+https://github.com/GiVscSon/LocalPilot-Android/actions/runs/40092940061
+Android acceptance PARTIAL / общий итог FAILURE:
+https://github.com/GiVscSon/LocalPilot-Android/actions/runs/40092939993
+API 35 default: PASS.
+API 30 default: FAIL — Isolated projection fixture did not launch,
+checkProjectionLifecycle (PilotUiInstrumentation.java:334).
+API 36 google_apis: FAIL — Visible clickable UI control not found:
+@contains:org.localpilot.android.dev, bindWindow / check2048ScreenshotProgress.
+В обоих диагностических снимках service connected/registered/panel=true,
+но целевой тестовый экран отсутствовал. Причина ещё не установлена;
+это не считается успешной приёмкой и не списывается на инфраструктуру.
+
+Статус поставки: экспериментальная Dev-сборка, не стабильный релиз.
+На физическом телефоне новый APK не проверен. Исправление reason=13,
+нагрев, рост рекорда и универсальная поддержка игр не подтверждены.
+Исходники включают отрицательные тесты и отчёт VIDEO_REVIEW_0.7.26.ru.md.
+Хэши архива исходников и итоговый git commit находятся в MANIFEST.json поставки.

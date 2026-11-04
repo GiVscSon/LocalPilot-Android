@@ -1,0 +1,167 @@
+package org.localpilot.android;
+
+import java.util.Arrays;
+import java.util.BitSet;
+
+/**
+ * Synthetic safety regression for imperfect 6x6 visual boards.
+ * This does not claim that gestures were delivered to a real Android game.
+ */
+public final class GridPartialVerifyTest {
+ private static int checks;
+ private static void check(boolean ok,String what){checks++;if(!ok)throw new AssertionError(what);}
+ private static int[] scene(){
+  int[] a=new int[36];for(int i=0;i<a.length;i++)a[i]=100+i;
+  a[0]=1;a[1]=2;a[2]=1;a[7]=1;
+  for(int i=12;i<=18;i++)a[i]=-1;
+  return a;
+ }
+ private static int token(int x,int y,int[] tiles){
+  int col=x/80,row=y/80,index=row*6+col,value=tiles[index];
+  if(value<0)return 0x505050;
+  float nx=x%80/80f,ny=y%80/80f;
+  if(nx<.12f||nx>.88f||ny<.12f||ny>.88f)return 0xdddddd;
+  int[] colors={0xe72832,0xfbc72b,0x4aa91f,0x266ac6};
+  int rgb=colors[value%colors.length];
+  if(nx>.57f&&ny>.57f){
+   int r=Math.max(0,(rgb>>16&255)-12),g=Math.max(0,(rgb>>8&255)-12),b=Math.max(0,(rgb&255)-12);
+   return r<<16|g<<8|b;
+  }
+  return rgb;
+ }
+ public static void main(String[] args){
+  int[] cells=scene();GridPuzzle partial=new GridPuzzle(6,6,cells);
+  check(!partial.known(),"board is genuinely incomplete");
+  check(GridPuzzlePolicy.choose(partial,GridPuzzlePolicy.Mode.SWAP_MATCH3)==null,
+    "legacy strict solver must not change its contract");
+  BitSet special=new BitSet(36);special.set(31);
+  var swap=GridPuzzlePolicy.choosePartial(partial,GridPuzzlePolicy.Mode.SWAP_MATCH3,2,0,0,special);
+  check(swap!=null&&swap.expectedCleared==3,"safe swap is found among recognized cells");
+  for(int idx:swap.clearedCells())check(cells[idx]>0&&!special.get(idx),
+    "all predicted clears are known ordinary cells");
+  int from=swap.fromRow*6+swap.fromCol,to=swap.toRow*6+swap.toCol;
+  check(cells[from]>0&&cells[to]>0&&!special.get(from)&&!special.get(to),
+    "both endpoints are confidently classified");
+
+  int[] trace=scene();trace[0]=trace[1]=trace[2]=5;
+  var line=GridPuzzlePolicy.choosePartial(new GridPuzzle(6,6,trace),
+    GridPuzzlePolicy.Mode.TRACE_LINE,3,0,0,new BitSet());
+  check(line!=null&&line.expectedCleared>=3,"straight trace remains available");
+  BitSet protectedLine=new BitSet();protectedLine.set(1);
+  var split=GridPuzzlePolicy.choosePartial(new GridPuzzle(6,6,trace),
+    GridPuzzlePolicy.Mode.TRACE_LINE,3,0,0,protectedLine);
+  check(split==null||!Arrays.stream(split.clearedCells()).anyMatch(i->i==1),
+    "protected item is not used as a bridge");
+
+  int[] allUnknown=new int[36];Arrays.fill(allUnknown,-1);
+  check(GridPuzzlePolicy.choosePartial(new GridPuzzle(6,6,allUnknown),
+    GridPuzzlePolicy.Mode.SWAP_MATCH3,2,0,0,new BitSet())==null,
+    "low coverage must not authorize input");
+
+  int[] fourColors=new int[36];for(int i=0;i<36;i++)fourColors[i]=i%4;
+  for(int i=12;i<=18;i++)fourColors[i]=-1;
+  GridPuzzleVision.Observation vision=GridPuzzleVision.detect((x,y)->token(x,y,fourColors),
+    0,0,480,480,6,6,0,0,0,0,1000,null);
+  check(!vision.usable()&&vision.partialUsable(),"29/36 recognized tokens permit partial observation");
+  check(vision.unknownIndices().length==7,"all seven unknowns remain unknown");
+  var obstructed=GridPuzzleVision.detect((x,y)->token(x,y,fourColors),
+    0,0,480,480,6,6,80,0,160,80,1100,vision.palette());
+  check(!obstructed.partialUsable(),"panel overlap cannot authorize partial input");
+
+  GridPuzzleSession session=new GridPuzzleSession();
+  check(session.observePartial(6,6,cells,new BitSet(),1000,1000)==GridPuzzleSession.Status.WAIT_STABLE,
+    "one partial frame not enough");
+  check(session.observePartial(6,6,cells,new BitSet(),1100,1100)==GridPuzzleSession.Status.READY,
+    "two stable partial frames authorize candidate consideration");
+  session.sent(cells,1200,swap);session.acknowledge(1250);
+  check(session.verifiedChanges()==0,"ACK is not a learned success");
+  int[] onlyOne=cells.clone();onlyOne[0]=9;
+  session.observePartial(6,6,onlyOne,new BitSet(),1500,1500);
+  check(session.observePartial(6,6,onlyOne,new BitSet(),1600,1600)==GridPuzzleSession.Status.WAIT_RESPONSE,
+    "one known cell change is insufficient for partial verification");
+  int[] newKnown=cells.clone();newKnown[12]=8;
+  session.observePartial(6,6,newKnown,new BitSet(),1700,1700);
+  check(session.observePartial(6,6,newKnown,new BitSet(),1800,1800)==GridPuzzleSession.Status.WAIT_RESPONSE,
+    "UNKNOWN becoming known is not game response");
+  int[] unrelated=cells.clone();unrelated[30]=91;unrelated[31]=92;
+  session.observePartial(6,6,unrelated,new BitSet(),1900,1900);
+  check(session.observePartial(6,6,unrelated,new BitSet(),2000,2000)==GridPuzzleSession.Status.WAIT_RESPONSE,
+    "unrelated two-cell animation must not verify the attempted move");
+  int[] after=cells.clone();after[0]=9;after[1]=8;
+  session.observePartial(6,6,after,new BitSet(),2100,2100);
+  check(session.observePartial(6,6,after,new BitSet(),2200,2200)==GridPuzzleSession.Status.CHANGED,
+    "two fresh stable changed frames including move footprint verify response");
+  check(session.verifiedChanges()==1&&!session.pending(),"one change counted and no pending retry");
+  check(session.observePartial(6,6,after,new BitSet(),2300,2300)==GridPuzzleSession.Status.READY
+    &&session.verifiedChanges()==1,"static partial field never earns a second result");
+
+  int[] complete=scene();for(int i=12;i<=18;i++)complete[i]=100+i;
+  GridPuzzleSession full=new GridPuzzleSession();
+  var fullMove=GridPuzzlePolicy.choose(new GridPuzzle(6,6,complete),GridPuzzlePolicy.Mode.SWAP_MATCH3,2,0,0,new BitSet());
+  check(fullMove!=null,"complete board has a move");
+  full.observe(6,6,complete,1000,1000);full.observe(6,6,complete,1100,1100);
+  full.sent(complete,1200,fullMove);full.acknowledge(1250);
+  int[] unrelatedFull=complete.clone();unrelatedFull[30]=91;unrelatedFull[31]=92;
+  full.observe(6,6,unrelatedFull,1500,1500);
+  check(full.observe(6,6,unrelatedFull,1600,1600)==GridPuzzleSession.Status.WAIT_RESPONSE,"complete board unrelated changes do not verify action");
+  int[] justSwap=complete.clone();int start=fullMove.fromRow*6+fullMove.fromCol,end=fullMove.toRow*6+fullMove.toCol;
+  justSwap[start]=complete[end];justSwap[end]=complete[start];
+  full.observe(6,6,justSwap,1650,1650);
+  check(full.observe(6,6,justSwap,1730,1730)==GridPuzzleSession.Status.WAIT_RESPONSE,"swapped endpoints alone cannot confirm a match");
+  int[] relevantFull=complete.clone();int[] footprint=fullMove.clearedCells();relevantFull[footprint[0]]=90;relevantFull[footprint[1]]=91;
+  full.observe(6,6,relevantFull,1800,1800);
+  check(full.observe(6,6,relevantFull,1900,1900)==GridPuzzleSession.Status.CHANGED,"stable local changes verify response");
+
+  // A top-row match cannot depend on a cell above the board.  The third
+  // predicted cell must be observed changing on two post-ACK frames.
+  int[] top=new int[49];for(int i=0;i<top.length;i++)top[i]=100+i;
+  top[0]=1;top[1]=2;top[2]=1;top[8]=1;
+  var topMove=GridPuzzlePolicy.choose(new GridPuzzle(7,7,top),GridPuzzlePolicy.Mode.SWAP_MATCH3,2,0,0,new BitSet());
+  check(topMove!=null&&Arrays.equals(topMove.clearedCells(),new int[]{0,1,2}),"predicted horizontal top-row triple");
+  int topFrom=topMove.fromRow*7+topMove.fromCol,topTo=topMove.toRow*7+topMove.toCol;
+  int outside=-1;for(int index:topMove.clearedCells())if(index!=topFrom&&index!=topTo){outside=index;break;}
+  check(outside>=0,"top match includes a non-endpoint cell");
+  GridPuzzleSession topSession=new GridPuzzleSession();
+  topSession.observe(7,7,top,1000,1000);topSession.observe(7,7,top,1100,1100);topSession.sent(top,1200,topMove);topSession.acknowledge(1250);
+  int[] topAfter=top.clone();topAfter[topFrom]=90;topAfter[outside]=91;
+  topSession.observe(7,7,topAfter,1500,1500);
+  check(topSession.observe(7,7,topAfter,1600,1600)==GridPuzzleSession.Status.CHANGED,"stable change to a non-endpoint in row zero confirms a response");
+
+  // Refill can reproduce the old color, even in the top row: failure to
+  // observe that change is uncertainty, not proof that the game ignored it.
+  GridPuzzleSession sameRefill=new GridPuzzleSession();
+  sameRefill.observe(7,7,top,1000,1000);sameRefill.observe(7,7,top,1100,1100);sameRefill.sent(top,1200,topMove);sameRefill.acknowledge(1250);
+  int[] ambiguous=top.clone();ambiguous[topFrom]=top[topTo];ambiguous[topTo]=top[topFrom];
+  sameRefill.observe(7,7,ambiguous,1500,1500);
+  check(sameRefill.observe(7,7,ambiguous,1600,1600)==GridPuzzleSession.Status.WAIT_RESPONSE,"same-color refill with endpoint-only differences remains unverified");
+  check(sameRefill.observe(7,7,ambiguous,3700,3700)==GridPuzzleSession.Status.PAUSED,"ambiguous response pauses rather than issuing another gesture");
+
+  // Seven unknowns out of 36 permit read-only proposal selection after the
+  // two-frame partial-session gate; this does not enable live gesture input.
+  GridPuzzleSession traceSession=new GridPuzzleSession();
+  traceSession.observePartial(6,6,trace,new BitSet(),1000,1000);
+  check(traceSession.observePartial(6,6,trace,new BitSet(),1100,1100)==GridPuzzleSession.Status.READY,"29 known cells become stable for observation");
+  check(GridPuzzlePolicy.choosePartial(new GridPuzzle(6,6,trace),GridPuzzlePolicy.Mode.TRACE_LINE,3,0,0,new BitSet())!=null,"seven unknown cells do not block a known straight trace proposal");
+
+  GridPuzzleSession late=new GridPuzzleSession(1000,4000);
+  late.observe(6,6,complete,1000,1000);late.observe(6,6,complete,1100,1100);
+  late.sent(complete,1200,fullMove);late.acknowledge(1250);
+  check(late.observe(6,6,complete,2200,2200)==GridPuzzleSession.Status.PAUSED&&late.awaitingLateVerification(),"primary deadline pauses input");
+  late.observe(6,6,relevantFull,2300,2300);
+  check(late.observe(6,6,relevantFull,2400,2400)==GridPuzzleSession.Status.CHANGED&&!late.pending(),"two stable late frames confirm local response");
+  GridPuzzleSession expired=new GridPuzzleSession(1000,4000);
+  expired.observe(6,6,complete,1000,1000);expired.observe(6,6,complete,1100,1100);expired.sent(complete,1200,fullMove);expired.acknowledge(1250);
+  expired.observe(6,6,complete,2200,2200);expired.observe(6,6,relevantFull,5100,5100);
+  check(expired.observe(6,6,relevantFull,5200,5200)==GridPuzzleSession.Status.PAUSED&&expired.finalPaused(),"final deadline cannot be extended");
+  GridPuzzleSession focus=new GridPuzzleSession(1000,4000);
+  focus.observe(6,6,complete,1000,1000);focus.observe(6,6,complete,1100,1100);focus.sent(complete,1200,fullMove);focus.acknowledge(1250);focus.invalidateCandidate();
+  check(focus.observe(6,6,relevantFull,2200,2200)==GridPuzzleSession.Status.PAUSED&&focus.finalPaused(),"focus interruption revokes late recovery");
+  GridPuzzleSession noResponse=new GridPuzzleSession();
+  noResponse.observePartial(6,6,cells,new BitSet(),1000,1000);
+  noResponse.observePartial(6,6,cells,new BitSet(),1100,1100);
+  noResponse.sent(cells,1200);noResponse.acknowledge(1250);
+  check(noResponse.observePartial(6,6,cells,new BitSet(),3700,3700)==GridPuzzleSession.Status.PAUSED,
+    "no confirmed response must still fail closed at timeout");
+  System.out.println("Grid partial vision/solver/session: "+checks+" assertions PASS (synthetic only)");
+ }
+}

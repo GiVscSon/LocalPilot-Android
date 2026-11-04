@@ -1,0 +1,77 @@
+name: Android device acceptance
+on:
+ workflow_dispatch:
+ push:
+  branches: ['**']
+  paths: ['app/**', '.github/workflows/android-device.yml', 'tools/run_device_acceptance.py']
+ pull_request:
+  paths: ['app/**', '.github/workflows/android-device.yml', 'tools/run_device_acceptance.py']
+permissions:
+ contents: read
+jobs:
+ device:
+  runs-on: ubuntu-24.04
+  timeout-minutes: 20
+  strategy:
+   fail-fast: false
+   matrix:
+    include:
+     - api: 30
+       target: default
+     - api: 35
+       target: default
+     - api: 36
+       target: google_apis
+  steps:
+   - uses: actions/checkout@v4
+   - uses: actions/setup-java@v4
+     with:
+      distribution: temurin
+      java-version: '21'
+   - uses: gradle/actions/setup-gradle@v4
+     with:
+      gradle-version: '8.9'
+   - name: Build app and instrumentation with the same isolated CI signing key
+     run: |
+      set -euo pipefail
+      "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-35' 'build-tools;35.0.0'
+      mkdir -p device-evidence
+      if gradle --no-daemon :app:assembleDebug :app:assembleDebugAndroidTest 2>&1 | tee device-evidence/gradle-build.log; then
+        exit 0
+      fi
+      # Retry only the exact lint dependency resolution failure observed on API 30.
+      # Never conceal a compiler, lint finding, or instrumentation failure.
+      if grep -q "Could not resolve all files for configuration ':app:detachedConfiguration1'" device-evidence/gradle-build.log && \
+         grep -Eq 'Could not find (org\.codehaus\.groovy:groovy:3\.0\.21|org\.apache\.httpcomponents:httpclient:4\.5\.6)' device-evidence/gradle-build.log; then
+        echo "::warning title=Gradle dependency resolution::Retrying lint dependency retrieval after Maven resolution failure"
+        sleep 8
+        gradle --no-daemon --refresh-dependencies :app:assembleDebug :app:assembleDebugAndroidTest 2>&1 | tee -a device-evidence/gradle-build.log
+      else
+        exit 1
+      fi
+   - name: Enable hosted KVM
+     run: |
+      test -c /dev/kvm
+      sudo chmod 666 /dev/kvm
+   - name: Run actual UI, screenshot and gesture acceptance
+     uses: reactivecircus/android-emulator-runner@v2
+     with:
+      api-level: ${{ matrix.api }}
+      arch: x86_64
+      target: ${{ matrix.target }}
+      profile: pixel_2
+      disable-animations: true
+      emulator-boot-timeout: 300
+      emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
+      script: python3 tools/run_device_acceptance.py
+   - name: Collect isolated synthetic-device crash evidence
+     if: always()
+     run: |
+      mkdir -p device-evidence
+      timeout 15s adb logcat -d -b crash > device-evidence/crash-logcat.txt 2>&1 || true
+   - uses: actions/upload-artifact@v4
+     if: always()
+     with:
+      name: Android-API${{ matrix.api }}-acceptance-${{ github.sha }}-attempt${{ github.run_attempt }}
+      if-no-files-found: error
+      path: device-evidence/

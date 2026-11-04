@@ -1,0 +1,36 @@
+LocalPilot Android 0.7.20-dev, versionCode 36
+Date: 2026-10-23
+Package: org.localpilot.android.dev
+Activity: org.localpilot.android.MainActivity
+
+Final build: Gradle 8.9 / JDK 21 / Android SDK 35, offline
+:app:assembleDebug :app:lintDebug :app:compileDebugAndroidTestJavaWithJavac
+BUILD SUCCESSFUL in 3m 44s; 59 actionable tasks
+Lint XML: 0 errors; 42 warnings. Instrumentation compiled, not executed.
+
+JVM commands executed with JDK21 (GridVerify compiles with --release17):
+tests/GridVerify.java: 3860 assertions PASS
+  policy1644 (180 independent rectangular scenes), vision1296,
+  lifecycle128, config177, pixel/action/response loop540 (36 scenes), goal75
+tests/Verify.java: all suites PASS
+tests/ResultVerify.java: 1046 assertions PASS; real frames=0
+tests/UniversalVerify.java: 172 assertions PASS; 27 synthetic scenes
+
+Private screenshot check: provided7x7 board49/49 cells correctly classified,
+4 colour types; repeated read preserves IDs. Static image only, no game played.
+Provided6x6 food/skull/special-item grid intentionally unusable/unknown cells.
+No user image, video or extracted training sample added to source repository.
+
+APK ZIP CRC: PASS, all entries
+APK signing verification: PASS, v2 signature
+Signer certificate SHA256:
+55626377256dda3a6b5824b7278eb12db75b8a7d1c80baa9d2af4402ccac2684
+APK bytes: 491686
+APK SHA256:
+f91a3de5264f7743b8e858123ba0c8b32ee76029f95b5d3032ea2a6bcc60a027
+APK path: release/LocalPilot_Android_0.7.20_dev.apk
+
+Initial GridVerify run with environment-default Java failed because that JDK
+does not support --release17. Re-run under specified JDK21 passed all suites.
+No physical Android gameplay or grid UI acceptance test performed.
+No claim of full-level completion, support for boosters, or learning every round.

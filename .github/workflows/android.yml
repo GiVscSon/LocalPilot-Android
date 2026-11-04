@@ -1,0 +1,95 @@
+name: Build Android debug APK
+on: [workflow_dispatch, push, pull_request]
+permissions:
+ contents: read
+jobs:
+ build:
+  runs-on: ubuntu-latest
+  timeout-minutes: 25
+  steps:
+   - uses: actions/checkout@v4
+   - uses: actions/setup-java@v4
+     with:
+      distribution: temurin
+      java-version: '21'
+   - uses: gradle/actions/setup-gradle@v4
+     with:
+      gradle-version: '8.9'
+   - name: Install SDK packages using hosted runner tools
+     shell: bash
+     run: |
+      set -euo pipefail
+      test -x "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+      "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-35' 'build-tools;35.0.0'
+   - name: Release tooling regression checks
+     run: python3 -m unittest discover -s tests -p 'test_release_tools.py' -v
+   - name: Verify optional HTTPS telemetry receiver
+     run: python3 -m unittest discover -s tests -p 'test_telemetry_receiver.py' -v
+   - name: JVM regressions
+     shell: bash
+     run: |
+      set -euo pipefail
+      java tests/Verify.java tests/legacy_parity.txt
+      java tests/GridVerify.java
+      java tests/CalibrationVerify.java
+      java tests/BrowserSceneVerify.java
+      java tests/TabletCaptureVerify.java
+      java tests/Field2048GlassVerify.java
+      java -Djava.awt.headless=true tests/LocalJpgContractVerify.java
+      java tests/CaptureTimingVerify.java
+      java tests/CaptureRetryVerify.java
+      java tests/CaptureMatrixVerify.java
+      java tests/PanelDockingVerify.java
+      java tests/BubbleVerify.java
+      java tests/FieldSafetyVerify.java
+      java tests/LearningVerify.java
+      java tests/ProcessExitVerify.java
+      java tests/AuditVerify.java
+      java tests/CaptureCleanupVerify.java
+      java tests/RuntimeVerify.java
+      java tests/Upgrade726Verify.java
+      java tests/Upgrade727Verify.java
+      java tests/ResultVerify.java
+      java tests/UniversalVerify.java
+      java tests/ControllerVerify.java
+      java tests/SystemVerify.java
+      java tests/RlVerify.java
+      java tests/PaddleWeightLabVerify.java
+      java tests/PaddleTransferVerify.java
+      java tests/WeightSpaceSkillsVerify.java
+      java tests/TextRepetitionGuardVerify.java
+      java tests/JumperWeightShadowVerify.java
+   - name: Explicit unit tests and Android lint
+     shell: bash
+     run: |
+      set -euo pipefail
+      chmod +x ./gradlew
+      ./gradlew --no-daemon testDebugUnitTest lintDebug
+   - name: Build and verify current Dev APK
+     run: python3 build_debug.py --gradle gradle
+   - name: Package verified APK and source
+     run: python3 tools/package_release.py
+   - uses: actions/upload-artifact@v4
+     with:
+      name: LocalPilot-Android-${{ github.sha }}
+      if-no-files-found: error
+      path: |
+       release/LocalPilot_Android_*/**
+   - uses: actions/upload-artifact@v4
+     if: always()
+     with:
+      name: Weight-space-skills-${{ github.sha }}
+      if-no-files-found: ignore
+      path: build/reports/weight-space-skills.json
+   - uses: actions/upload-artifact@v4
+     if: always()
+     with:
+      name: Paddle-weight-lab-${{ github.sha }}
+      if-no-files-found: ignore
+      path: build/reports/paddle-weight-lab.json
+   - uses: actions/upload-artifact@v4
+     if: always()
+     with:
+      name: Android-lint-${{ github.sha }}
+      if-no-files-found: ignore
+      path: app/build/reports/lint-results-debug.*
