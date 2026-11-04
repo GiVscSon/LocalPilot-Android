@@ -103,7 +103,7 @@ public final class PaddleWeightLab {
  public enum Scenario { CLASSIC, NARROW_PADDLE, FAST_BALL, BANK_SHOT, BRICK_GAPS,
                         DENSE_BRICKS, INPUT_LATENCY, HEAVY_REBOUND }
  /** Immutable visual evidence for the *synthetic* game only, never a device screenshot. */
- public record Scene(double ballX,double ballY,double paddleX,int catches,int bricks,int step,boolean[] alive){
+ public record Scene(double ballX,double ballY,double paddleX,double halfPaddle,int catches,int bricks,int step,boolean[] alive){
   public Scene{alive=alive.clone();}
   @Override public boolean[] alive(){return alive.clone();}
  }
@@ -129,7 +129,7 @@ public final class PaddleWeightLab {
   Random policyRng=new Random(seed^0x59b57f48ca13L);
   double move=0;
   for(int step=0;step<2400;step++){
-   if(observer!=null&&step%6==0)observer.accept(new Scene(x,y,paddle,catches,bricks,step,alive));
+   if(observer!=null&&step%6==0)observer.accept(new Scene(x,y,paddle,halfPaddle,catches,bricks,step,alive));
    if(scenario!=Scenario.INPUT_LATENCY||step%12==0){
     Frame frame=new Frame(x,y,vx,vy,paddle,true,true,true);
     move=policy.steer(frame,policyRng);
