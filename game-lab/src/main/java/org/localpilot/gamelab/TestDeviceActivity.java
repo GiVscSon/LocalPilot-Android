@@ -95,7 +95,7 @@ public final class TestDeviceActivity extends Activity {
       .putExtra(Intent.EXTRA_TITLE,"localpilot-gamelab-actions.csv"),EXPORT));
   LinearLayout retroRow=new LinearLayout(this);root.addView(retroRow);
   addButton(retroRow,"Ретро · NES / Денди / DOS",()->startActivity(new Intent(this,RetroLibraryActivity.class)));
-  TextView retroStatus=label("Эмуляторные ядра пока не включены. Доступна проверка файлов.",11);
+  TextView retroStatus=label("NES и Денди: запуск реального ROM. DOS: пока подготовка ядра.",11);
   retroStatus.setTextColor(HubContract.SECONDARY);root.addView(retroStatus);
   String pilotPackage=getIntent().getStringExtra("pilot_package");
   if(HubContract.supportedPilotPackage(pilotPackage))
