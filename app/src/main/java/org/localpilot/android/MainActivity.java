@@ -1,4 +1,5 @@
 package org.localpilot.android;
+import org.localpilot.shared.HubContract;
 import android.app.*;import android.os.*;import android.content.*;import android.provider.Settings;import android.widget.*;
 public class MainActivity extends Activity {
  public static final String PREF="pilot";
@@ -9,40 +10,48 @@ public class MainActivity extends Activity {
   DiagnosticRequest(String session,android.graphics.Bitmap frame){this.session=session;this.frame=frame;}
   void close(){if(frame!=null&&!frame.isRecycled())frame.recycle();}
  }
- @Override public void onCreate(Bundle b){super.onCreate(b);getWindow().setDecorFitsSystemWindows(false);Object retained=getLastNonConfigurationInstance();if(retained instanceof DiagnosticRequest)diagnosticRequest=(DiagnosticRequest)retained;LinearLayout box=new LinearLayout(this);box.setOrientation(LinearLayout.VERTICAL);box.setPadding(24,24,24,24);ScrollView scroll=new ScrollView(this);scroll.addView(box);
+ @Override public void onCreate(Bundle b){super.onCreate(b);getWindow().setDecorFitsSystemWindows(false);Object retained=getLastNonConfigurationInstance();if(retained instanceof DiagnosticRequest)diagnosticRequest=(DiagnosticRequest)retained;LinearLayout box=new LinearLayout(this);box.setOrientation(LinearLayout.VERTICAL);box.setPadding(24,24,24,24);ScrollView scroll=new ScrollView(this);scroll.addView(box);scroll.setBackgroundColor(HubContract.BACKGROUND);
   // Apply the same explicit inset policy on API30+ and Android35's enforced
   // edge-to-edge windows. Padding belongs to the viewport, so scrolled controls
   // cannot first become touchable underneath Home or a display cutout.
   scroll.setOnApplyWindowInsetsListener((view,insets)->{android.graphics.Insets safe=insets.getInsets(android.view.WindowInsets.Type.systemBars()|android.view.WindowInsets.Type.displayCutout());if(view.getPaddingLeft()!=safe.left||view.getPaddingTop()!=safe.top||view.getPaddingRight()!=safe.right||view.getPaddingBottom()!=safe.bottom)view.setPadding(safe.left,safe.top,safe.right,safe.bottom);return insets;});setContentView(scroll);scroll.requestApplyInsets();
-  TextView title=new TextView(this);title.setText("LocalPilot Android"+(getPackageName().contains(".install10")?" Standalone":getPackageName().endsWith(".dev")?" Dev":"")+" · "+CrashDiagnostics.buildLabel(this)+"\nАркады и головоломки на телефоне");title.setTextSize(24);box.addView(title);
+  TextView title=new TextView(this);title.setText("LocalPilot Android"+(getPackageName().contains(".install10")?" Standalone":getPackageName().endsWith(".dev")?" Dev":"")+" · "+CrashDiagnostics.buildLabel(this)+"\nАркады и головоломки на телефоне");title.setTextSize(24);title.setTextColor(HubContract.TEXT);box.addView(title);
   TextView help=new TextView(this);help.setText("1. Откройте игру и выберите её профиль: «Игра».\n2. Нажмите «Окно» и выберите приложение с игрой.\n3. Нажмите «Старт» и разрешите показ экрана.\n\nSTOP останавливает игру агента. В первый раз включите управление кнопкой ниже.");box.addView(help);
+  section(box,"01 · Управление настоящими играми");
   button(box,"Включить управление",()->startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)));
   button(box,"Показать панель",()->{PilotService pilot=PilotService.instance;if(pilot==null){toast(CrashDiagnostics.connectionHint(this));return;}pilot.recoverPanel();status.setText(CrashDiagnostics.connectionHint(this));});
   TextView panelHelp=new TextView(this);panelHelp.setText("Панель можно свернуть. STOP всегда остаётся доступным.");box.addView(panelHelp);
-  button(box,"Обучение по примерам · внешний API",()->startActivity(new Intent(this,WebLearningActivity.class)));
-  button(box,"Нейросеть · учебный симулятор",()->startActivity(new Intent(this,TrainingActivity.class)));
-  button(box,"GameLab · 10 тестовых игр Android",this::openGameLab);
+  section(box,"02 · Модели и обучение");
+  button(box,"Игровые модели · обучение и экспорт",()->startActivity(new Intent(this,TrainingActivity.class)));
+  button(box,"Внешние учителя · дополнительный API",()->startActivity(new Intent(this,WebLearningActivity.class)));
   automatic=new Switch(this);automatic.setText("Автоуправление выбранной игрой");automatic.setChecked(getSharedPreferences(PREF,MODE_PRIVATE).getBoolean("auto_control",true));automatic.setOnCheckedChangeListener((v,on)->{getSharedPreferences(PREF,MODE_PRIVATE).edit().putBoolean("auto_control",on).apply();if(PilotService.instance!=null)PilotService.instance.setAutomatic(on);});box.addView(automatic);
   button(box,"Выбрать игру или браузер",()->startActivity(new Intent(this,GamePickerActivity.class)));
   TextView autoHelp=new TextView(this);autoHelp.setText("Для сетки фишек: Игра → Мэтч Ворлд · обмен соседей или Фишки · удалить группу → выберите 6×6, 7×7 либо другой размер → обведите клетки → Старт. Настройки и типы фишек сохраняются. Поддерживаются различимые цветные фишки без специальных эффектов; цели уровня и усилители пока не распознаются. Для аркад другого оформления: Ещё → Настроить распознавание. Для разных игр одного браузера: Игра → Имя игры. STOP всегда останавливает ввод.");box.addView(autoHelp);
-  button(box,"Открыть 2048",()->openGame(new Intent(this,Game2048Activity.class),"2048"));
-  button(box,"Крестики-нолики",()->openGame(new Intent(this,MiniGamesActivity.class).putExtra("kind",0),"Крестики-нолики"));
-  button(box,"Погаси свет",()->openGame(new Intent(this,MiniGamesActivity.class).putExtra("kind",1),"Погаси свет"));
-  button(box,"Проверить касания",()->startActivity(new Intent(this,DemoActivity.class)));
-  button(box,"Включить сбор примеров",()->{if(PilotService.instance==null){toast("Сначала включите службу");return;}new AlertDialog.Builder(this).setTitle("Сохранять игровые примеры?").setMessage("В памяти приложения останутся только распознанные поля до/после и проверенное действие, без снимков. До 256 примеров / 256 КиБ. Это не обучение. При заполнении сбор выключается, игра продолжается. При ошибке записи управление остановится.").setPositiveButton("Включить",(d,w)->{if(PilotService.instance!=null)PilotService.instance.enableExamples();else toast("Служба отключена");}).setNegativeButton("Отмена",null).show();});
-  button(box,"Выключить сбор примеров",()->{if(PilotService.instance!=null)PilotService.instance.disableExamples();});
-  button(box,"Экспорт примеров",()->{if(PilotService.instance==null){toast("Сначала включите службу");return;}try{PilotService.instance.exportExamples();startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT).setType("text/plain").addCategory(Intent.CATEGORY_OPENABLE).putExtra(Intent.EXTRA_TITLE,"localpilot-experience-v1.log"),11);}catch(java.io.IOException e){toast("Хранилище недоступно; исходник сохранён");}});
-  button(box,"Восстановить в пустое хранилище",()->{if(PilotService.instance==null){toast("Сначала включите службу");return;}PilotService.instance.disableExamples();new AlertDialog.Builder(this).setTitle("Восстановление примеров").setMessage("Файл будет проверен полностью. Восстановление разрешено только в пустое исправное хранилище. Имеющиеся примеры не заменяются. Импорт не включает обучение или управление.").setPositiveButton("Выбрать файл",(d,w)->startActivityForResult(new Intent(Intent.ACTION_OPEN_DOCUMENT).setType("text/*").addCategory(Intent.CATEGORY_OPENABLE),12)).setNegativeButton("Отмена",null).show();});
+  section(box,"03 · Игровая лаборатория");
+  TextView labCaption=new TextView(this);
+  labCaption.setText("10 тестовых игр в отдельном Android-приложении. NES / Денди / DOS: пока проверка файлов и подготовка ядер. Тесты GameLab не считаются успешными ходами в Маркете.");
+  labCaption.setTextColor(HubContract.SECONDARY);box.addView(labCaption);
+  button(box,"Открыть GameLab · 10 игр / ретро",this::openGameLab);
+  section(box,"04 · Диагностика и контроль");
   button(box,"Отчёт с кадром игры",this::beginDiagnosticReport);
-  button(box,"Онлайн-диагностика и модели",()->startActivity(new Intent(this,OnlineDiagnosticsActivity.class)));
   button(box,"Экспорт задержек",()->{if(PilotService.instance==null){toast("Сначала включите службу");return;}PilotService.instance.exportMetrics();startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT).setType("text/plain").addCategory(Intent.CATEGORY_OPENABLE).putExtra(Intent.EXTRA_TITLE,"localpilot-latency.txt"),10);});
-  button(box,"Экспорт диагностики сбоя",()->startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT).setType("text/plain").addCategory(Intent.CATEGORY_OPENABLE).putExtra(Intent.EXTRA_TITLE,"localpilot-crash.txt"),13));
-  button(box,"Экспорт журнала",this::beginAuditExport);
+  LinearLayout advanced=new LinearLayout(this);advanced.setOrientation(LinearLayout.VERTICAL);
+  advanced.setVisibility(android.view.View.GONE);
+  button(box,"Дополнительные инструменты ▾",()->advanced.setVisibility(
+    advanced.getVisibility()==android.view.View.VISIBLE?android.view.View.GONE:android.view.View.VISIBLE));
+  box.addView(advanced);
+  button(advanced,"Включить сбор примеров",()->{if(PilotService.instance==null){toast("Сначала включите службу");return;}new AlertDialog.Builder(this).setTitle("Сохранять игровые примеры?").setMessage("В памяти приложения останутся только распознанные поля до/после и проверенное действие, без снимков. До 256 примеров / 256 КиБ. Это не обучение. При заполнении сбор выключается, игра продолжается. При ошибке записи управление остановится.").setPositiveButton("Включить",(d,w)->{if(PilotService.instance!=null)PilotService.instance.enableExamples();else toast("Служба отключена");}).setNegativeButton("Отмена",null).show();});
+  button(advanced,"Выключить сбор примеров",()->{if(PilotService.instance!=null)PilotService.instance.disableExamples();});
+  button(advanced,"Экспорт примеров",()->{if(PilotService.instance==null){toast("Сначала включите службу");return;}try{PilotService.instance.exportExamples();startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT).setType("text/plain").addCategory(Intent.CATEGORY_OPENABLE).putExtra(Intent.EXTRA_TITLE,"localpilot-experience-v1.log"),11);}catch(java.io.IOException e){toast("Хранилище недоступно; исходник сохранён");}});
+  button(advanced,"Восстановить в пустое хранилище",()->{if(PilotService.instance==null){toast("Сначала включите службу");return;}PilotService.instance.disableExamples();new AlertDialog.Builder(this).setTitle("Восстановление примеров").setMessage("Файл будет проверен полностью. Восстановление разрешено только в пустое исправное хранилище. Имеющиеся примеры не заменяются. Импорт не включает обучение или управление.").setPositiveButton("Выбрать файл",(d,w)->startActivityForResult(new Intent(Intent.ACTION_OPEN_DOCUMENT).setType("text/*").addCategory(Intent.CATEGORY_OPENABLE),12)).setNegativeButton("Отмена",null).show();});
+  button(advanced,"Онлайн-диагностика и модели",()->startActivity(new Intent(this,OnlineDiagnosticsActivity.class)));
+  button(advanced,"Экспорт диагностики сбоя",()->startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT).setType("text/plain").addCategory(Intent.CATEGORY_OPENABLE).putExtra(Intent.EXTRA_TITLE,"localpilot-crash.txt"),13));
+  button(advanced,"Экспорт журнала",this::beginAuditExport);
   button(box,"STOP и убрать панель",()->{if(PilotService.instance!=null)PilotService.instance.hidePanel();});
   status=new TextView(this);box.addView(status);
  }
  private void openGameLab(){
-  final String pkg="org.localpilot.gamelab";
+  final String pkg=HubContract.LAB_PACKAGE;
   Intent game=getPackageManager().getLaunchIntentForPackage(pkg);
   if(game==null){
    new AlertDialog.Builder(this).setTitle("Установите GameLab")
@@ -52,11 +61,11 @@ public class MainActivity extends Activity {
      .setPositiveButton("Понятно",null).show();
    return;
   }
+  game.putExtra("pilot_package",getPackageName());
   startActivity(game);
   PilotService pilot=PilotService.instance;
   if(pilot!=null)pilot.selectInstalledTarget(pkg,"GameLab · тестовые игры");
  }
- private void openGame(Intent intent,String label){startActivity(intent);if(PilotService.instance!=null)PilotService.instance.selectInstalledTarget(getPackageName(),label);}
  @Override public void onResume(){super.onResume();if(automatic!=null)automatic.setChecked(getSharedPreferences(PREF,MODE_PRIVATE).getBoolean("auto_control",true));if(status!=null)status.setText(CrashDiagnostics.connectionHint(this));}
  private void beginDiagnosticReport(){
   if(diagnosticRequest!=null)diagnosticRequest.close();
@@ -153,6 +162,12 @@ public class MainActivity extends Activity {
     runOnUiThread(()->toast("Экспорт не завершён; файл назначения может быть неполным. Исходные журналы сохранены"));
    }
   },"LocalPilot-Audit-Export").start();
+ }
+ private void section(LinearLayout parent,String heading){
+  TextView label=new TextView(this);
+  label.setText(heading);label.setTextColor(HubContract.ACCENT);label.setTextSize(17);
+  label.setPadding(0,20,0,8);
+  parent.addView(label);
  }
  private void button(LinearLayout b,String t,Runnable r){Button x=new Button(this);x.setText(t);x.setOnClickListener(v->r.run());b.addView(x);}
  private void toast(String s){Toast.makeText(this,s,Toast.LENGTH_LONG).show();}
