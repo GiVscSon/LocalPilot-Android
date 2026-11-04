@@ -4,7 +4,7 @@ import javax.tools.ToolProvider;
 class ControllerVerify {
  public static void main(String[] args)throws Exception{
   Path out=Files.createTempDirectory("pilot-controller-");
-  String[] names={"ArcadeProfile","ArcadeObservation","ArcadePolicy","ArcadeController","PaddleTransfer","ArcadeFeedback"};
+  String[] names={"ArcadeProfile","ArcadeObservation","ArcadePolicy","ArcadeController","RealGameNeuralCritic","PaddleTransfer","ArcadeFeedback"};
   var cmd=new java.util.ArrayList<String>();cmd.add("-d");cmd.add(out.toString());
   for(String name:names)cmd.add("app/src/main/java/org/localpilot/android/"+name+".java");
   cmd.add("app/src/main/java/org/localpilot/android/rl/PaddleWeightLab.java");
