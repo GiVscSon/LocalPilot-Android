@@ -29,19 +29,41 @@ public final class PaddleTransfer {
      +" · "+(eligible()?"готов к ручному переносу":"НЕ ДОПУЩЕН");
   }
  }
- public static Candidate trainCandidate(){
-  double angle=PaddleWeightLab.calibrateAngle();
+ public static Candidate trainCandidate(){return trainCandidate(()->false);}
+ /** Optimizes against ALL eight environments, then evaluates on separate seeds.
+  * A screen transition cancels before the next bounded episode batch.
+  */
+ public static Candidate trainCandidate(java.util.function.BooleanSupplier cancelled){
+  if(cancelled==null)throw new IllegalArgumentException("cancelled");
   PaddleWeightLab.Weights baseline=PaddleWeightLab.Weights.followBall();
+  double[] angles={-.08,-.07,-.06,-.04,-.02,-.01,0,.01,.02,.04,.06,.07,.08};
+  double angle=0,best=-Double.MAX_VALUE;
+  int trainingEpisodes=0;
+  for(double candidate:angles){
+   if(cancelled.getAsBoolean())throw new java.util.concurrent.CancellationException("STOP training");
+   double score=0;
+   for(PaddleWeightLab.Scenario scenario:PaddleWeightLab.Scenario.values()){
+    if(cancelled.getAsBoolean())throw new java.util.concurrent.CancellationException("STOP training");
+    PaddleWeightLab.Summary trial=PaddleWeightLab.evaluate("train",
+      baseline.patchToAngledImpact(candidate),40,
+      2718L+scenario.ordinal()*100001L,scenario);
+    score+=trial.meanScore;
+   }
+   if(score>best){best=score;angle=candidate;}
+   trainingEpisodes=40*PaddleWeightLab.Scenario.values().length;
+  }
   PaddleWeightLab.Weights trained=baseline.patchToAngledImpact(angle);
   int catchesBase=0,catchesNew=0,bricksBase=0,bricksNew=0;
-  // Two independently seeded hold-out cohorts; the calibration seed is 2718.
-  for(long seed:new long[]{20261104L,177777L}){
-   PaddleWeightLab.Summary b=PaddleWeightLab.evaluate("baseline",baseline,240,seed);
-   PaddleWeightLab.Summary c=PaddleWeightLab.evaluate("candidate",trained,240,seed);
+  int validationEpisodes=0;
+  for(PaddleWeightLab.Scenario scenario:PaddleWeightLab.Scenario.values()){
+   if(cancelled.getAsBoolean())throw new java.util.concurrent.CancellationException("STOP validation");
+   long seed=20261104L+scenario.ordinal()*100001L;
+   PaddleWeightLab.Summary b=PaddleWeightLab.evaluate("baseline",baseline,60,seed,scenario);
+   PaddleWeightLab.Summary c=PaddleWeightLab.evaluate("candidate",trained,60,seed,scenario);
    catchesBase+=b.catches;catchesNew+=c.catches;
-   bricksBase+=b.bricks;bricksNew+=c.bricks;
+   bricksBase+=b.bricks;bricksNew+=c.bricks;validationEpisodes+=60;
   }
-  return new Candidate((float)angle,PaddleWeightLab.CALIBRATION_EPISODES,480,
+  return new Candidate((float)angle,trainingEpisodes,validationEpisodes,
     catchesBase,catchesNew,bricksBase,bricksNew);
  }
  /** Serialized output-bias of the immutable, fixed 2->4->1 network.
