@@ -12,16 +12,17 @@ import java.util.Locale;
 public final class RetroEmulatorCatalog {
  private RetroEmulatorCatalog(){}
  public enum System {
-  NES("NES / Famicom","fceumm",60,"NTSC"),
-  DENDY("Денди (Dendy)","fceumm",50,"Dendy"),
+  NES("NES / Famicom","jsnes",60,"NTSC"),
+  DENDY("Денди (NES-совместимый 50 Гц)","jsnes",50,"Dendy"),
   DOS("MS-DOS","dosbox_pure",0,"");
   public final String label,core,fceummRegion;
   public final int expectedFps;
   System(String label,String core,int fps,String region){
    this.label=label;this.core=core;expectedFps=fps;fceummRegion=region;
   }
-  public String nativeLibraryName(){return "lib"+core+"_libretro_android.so";}
-  public String coreOptionKey(){return this==DOS?"":"fceumm_region";}
+  public String nativeLibraryName(){return this==DOS?"libdosbox_pure_libretro_android.so":"";}
+  public boolean runnableInGameLab(){return this!=DOS;}
+  public String coreOptionKey(){return this==DOS?"":"jsnes_compatibility_mode";}
  }
  public record Inspection(System system,String extension,boolean recognized,String note) {}
  private static String extension(String name){
@@ -34,7 +35,7 @@ public final class RetroEmulatorCatalog {
   if(system==null)return false;
   String ext=extension(filename);
   if(system==System.NES||system==System.DENDY)
-   return ".nes".equals(ext)||".unf".equals(ext)||".unif".equals(ext);
+   return ".nes".equals(ext);
   return ".zip".equals(ext)||".dosz".equals(ext)||".com".equals(ext)
     ||".exe".equals(ext)||".bat".equals(ext)||".img".equals(ext)
     ||".ima".equals(ext)||".iso".equals(ext)||".conf".equals(ext);
@@ -51,11 +52,6 @@ public final class RetroEmulatorCatalog {
     recognized=first.length>=16&&first[0]==0x4e&&first[1]==0x45
       &&first[2]==0x53&&first[3]==0x1a;
     note="iNES/NES2 header";
-   }
-   case ".unf",".unif" -> {
-    recognized=first.length>=4&&first[0]==0x55&&first[1]==0x4e
-       &&first[2]==0x49&&first[3]==0x46;
-    note="UNIF header";
    }
    case ".zip",".dosz" -> {
     recognized=first.length>=4&&first[0]==0x50&&first[1]==0x4b&&
