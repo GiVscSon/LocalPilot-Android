@@ -38,7 +38,7 @@ public final class JumperWeightShadow {
   if(width<=0)return unknown(repetitions);
   float px=s.player.centerX(),py=s.player.centerY();
   float reachY=430*scale,reachX=390*scale;
-  double left=0,right=0,stay=.55;
+  double left=0,right=0,stay=.80;
   for(JumperState.ObjectBox platform:s.platforms){
    if(platform==null||platform.confidence<.80f)continue;
    float dy=py-platform.centerY();
