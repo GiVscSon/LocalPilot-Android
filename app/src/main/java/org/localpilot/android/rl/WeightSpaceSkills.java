@@ -77,7 +77,8 @@ public final class WeightSpaceSkills {
   public Action predict(Genre genre,Frame frame){
    if(genre==null||frame==null||!frame.valid())return Action.STAY;
    double[] x={frame.leftSafety(),frame.staySafety(),
-     frame.rightSafety(),frame.stasis()};
+     frame.rightSafety(),genre==Genre.PLATFORM_RECOVERY
+       ?frame.stasis()*frame.leftSafety():frame.stasis()};
    int winner=0;double best=Double.NEGATIVE_INFINITY;
    int n=genre==Genre.GAP_FLIGHT?2:3;
    for(int j=0;j<n;j++){
