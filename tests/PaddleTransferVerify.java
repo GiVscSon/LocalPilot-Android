@@ -11,9 +11,10 @@ class PaddleTransferVerify {
   Path out=Files.createTempDirectory("real-paddle-transfer-");
   var sources=new ArrayList<String>(List.of("--release","17","-d",out.toString()));
   for(String name:List.of("ArcadeProfile","ArcadeObservation","ArcadePolicy",
-    "ArcadeController","VisualGameTarget","ArcadeLearningStore","PaddleTransfer"))
+    "ArcadeController","WeightSpaceGameEngine","VisualGameTarget","ArcadeLearningStore","PaddleTransfer"))
    sources.add("app/src/main/java/org/localpilot/android/"+name+".java");
   sources.add("app/src/main/java/org/localpilot/android/rl/PaddleWeightLab.java");
+  sources.add("app/src/main/java/org/localpilot/android/rl/WeightSpaceSkills.java");
   sources.add("tests/PaddleTransferTest.java");
   if(ToolProvider.getSystemJavaCompiler()==null
     ||ToolProvider.getSystemJavaCompiler().run(null,System.out,System.err,
