@@ -64,7 +64,7 @@ public final class TestDeviceActivity extends Activity {
   games.setAdapter(new ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,labels));
   games.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener(){
    @Override public void onItemSelected(android.widget.AdapterView<?> v,View selected,int position,long id){
-    game(position);surface.invalidate();
+    game(position);if(surface!=null)surface.invalidate();
    }
    @Override public void onNothingSelected(android.widget.AdapterView<?> v){}
   });
