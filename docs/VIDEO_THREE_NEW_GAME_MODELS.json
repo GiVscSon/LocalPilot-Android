@@ -1,0 +1,57 @@
+{
+  "schema": "localpilot-video-game-model-sources-v1",
+  "updated": "2026-11-04",
+  "videos": [
+    {
+      "id": "HR3Qr9WLpmQ",
+      "title": "Заставил Нейросеть играть в Half-Life 2",
+      "topic": "NVIDIA NitroGen",
+      "original_checkpoint_confirmed": true,
+      "model": {
+        "id": "nvidia/NitroGen/ng.pt",
+        "publisher": "NVIDIA",
+        "url": "https://huggingface.co/nvidia/NitroGen/blob/73a12a270889bda502d8a626cc7ed798c772710a/ng.pt",
+        "sha256": "a266f5fb9c7dbdcdf97216558d2d82075a9a994b824cda69afa9fd3280260a81",
+        "license": "NVIDIA non-commercial research",
+        "estimated_size_gb": 1.97,
+        "method": "behavior_cloning",
+        "input": "RGB 256x256",
+        "output": "21x16 gamepad action sequence",
+        "windows_source": "https://github.com/MineDojo/NitroGen"
+      },
+      "downloaded": false,
+      "compatible_with_android_touch": false
+    },
+    {
+      "id": "KerqrfSUtFk",
+      "title": "Обучение непобедимого ИИ в Trackmania",
+      "topic": "Yosh reinforcement learning",
+      "original": "https://youtu.be/Dw3BZ6O_8LY",
+      "original_checkpoint_confirmed": false,
+      "unverified_reason": "No author-published checkpoint established",
+      "related_but_not_original": [
+        "https://github.com/Linesight-RL/linesight"
+      ],
+      "downloaded": false
+    },
+    {
+      "id": "SAzDZhSSa_c",
+      "title": "Учу Нейросеть Играть В Cuphead!",
+      "topic": "Creator Cuphead neural agent",
+      "original_checkpoint_confirmed": false,
+      "unverified_reason": "Video description does not disclose model architecture or published author checkpoint",
+      "related_but_not_original": [
+        "https://simonxcao.github.io/bots/final.html",
+        "https://github.com/Deinigu/cuphead-rl"
+      ],
+      "downloaded": false
+    }
+  ],
+  "policy": {
+    "checkpoint_count_added": 1,
+    "previous_original_checkpoints": 28,
+    "confirmed_total_original_checkpoint_sets": 29,
+    "all_files_downloaded": false,
+    "active_android_models_changed": false
+  }
+}
