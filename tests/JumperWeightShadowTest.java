@@ -11,7 +11,7 @@ public final class JumperWeightShadowTest {
   var player=new JumperState.ObjectBox(JumperState.Kind.PLAYER,420,596,450,644,.95f);
   var platforms=new java.util.ArrayList<JumperState.ObjectBox>();
   for(int i=0;i<5;i++)platforms.add(new JumperState.ObjectBox(
-    JumperState.Kind.PLATFORM,20,220+i*44,120,232+i*44,.95f));
+    JumperState.Kind.PLATFORM,30,220+i*55,130,232+i*55,.95f));
   List<JumperState.ObjectBox> hazards=dangerous?
     List.of(new JumperState.ObjectBox(JumperState.Kind.HAZARD,40,205,110,435,.96f)):List.of();
   return new JumperState(854,1280,0,0,854,1280,1000,player,platforms,hazards,
