@@ -64,7 +64,7 @@ MAX_FILE = 18 * 1024 * 1024
 
 
 def git_blob(data: bytes) -> str:
-    return hashlib.sha1(b"blob " + str(len(data)).encode("ascii") + b"\\0" + data).hexdigest()
+    return hashlib.sha1(b"blob " + str(len(data)).encode("ascii") + bytes([0]) + data).hexdigest()
 
 
 def request_bytes(url: str, max_bytes: int) -> bytes:
@@ -165,7 +165,7 @@ def main(argv=None):
               "selected_groups":list(args.groups),
               "note":"Original checkpoints only. MinAtar/Go Astra networks were hand-programmed, not PPO-trained. No automatic Android/PC control."}
     manifest_path=target/"MODEL_INDEX.json"
-    manifest_path.write_text(json.dumps(manifest,indent=2,ensure_ascii=False)+"\\n",encoding="utf-8")
+    manifest_path.write_text(json.dumps(manifest,indent=2,ensure_ascii=False)+chr(10),encoding="utf-8")
     print("Verified",len(chosen),"model files; index:",manifest_path)
 
 
