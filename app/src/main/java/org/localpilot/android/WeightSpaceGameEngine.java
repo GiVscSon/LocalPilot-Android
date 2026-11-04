@@ -78,20 +78,4 @@ public final class WeightSpaceGameEngine {
   return physics;
  }
 
- /** Only plateau recovery on a fresh, confident Ari scene may adjust the
-  * existing intent. Does not bypass STOP or the four-steer progress limit.
-  */
- public static JumperPolicy.Action jumper(JumperState frame,int repeatedVerifiedSteers,
-      JumperPolicy.Action physics){
-  if(physics==null)return JumperPolicy.Action.WAIT;
-  if(frame==null||frame.player==null||repeatedVerifiedSteers<2
-    ||repeatedVerifiedSteers>=4||frame.confidence<.90f)
-   return physics;
-  JumperWeightShadow.Review review=JumperWeightShadow.review(frame,repeatedVerifiedSteers);
-  if(!review.usable()||!review.intervention()
-    ||review.patched()!=WeightSpaceSkills.Action.LEFT)return physics;
-  // The vision adapter has already rejected unsafe landing geometry.
-  // The visual progress guard still stops if the detour makes no ascent.
-  return JumperPolicy.Action.TAP_LEFT;
- }
 }
