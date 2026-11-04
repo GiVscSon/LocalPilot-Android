@@ -13,7 +13,9 @@ public final class ArcadeController {
  private boolean continuousSteering;
  /** Explicitly promoted, scoped model used for real PADDLE decisions. */
  private String paddleTransfer;
- public void reset(){paddleTransfer=null;previous=earlier=null;trafficSpeed=.55f;scrollSpeed=.28f;gravity=1.5f;flapVelocity=-.44f;lastFlap=lastLane=verifiedFlap=-10000;intendedLane=-1;steeringSpeed=1.1f;lastHold=150;continuousSteering=false;}
+ /** Trained from confirmed real game effects; never grants input by itself. */
+ private RealGameNeuralCritic neural;
+ public void reset(){paddleTransfer=null;neural=null;previous=earlier=null;trafficSpeed=.55f;scrollSpeed=.28f;gravity=1.5f;flapVelocity=-.44f;lastFlap=lastLane=verifiedFlap=-10000;intendedLane=-1;steeringSpeed=1.1f;lastHold=150;continuousSteering=false;}
  /** New episode in the same window: keep learned physics, discard old objects/actions. */
  public void nextRound(){previous=earlier=null;lastFlap=lastLane=verifiedFlap=-10000;intendedLane=-1;}
  /** A loss is an outcome, not a measurement of gravity or flap impulse. */
@@ -25,9 +27,11 @@ public final class ArcadeController {
   // Replayed/out-of-order pixels cannot erase the saved physics or renew input.
   if(previous!=null&&s.timestampMs<=previous.timestampMs)return waitFor("Ожидаю следующий кадр");
   learn(s,now);earlier=previous;previous=s;
-  return switch(s.profile){case TRAFFIC->drive(s,now);case FLAPPY->fly(s,now);
+  ArcadePolicy.Decision physics=switch(s.profile){case TRAFFIC->drive(s,now);case FLAPPY->fly(s,now);
    case PADDLE->paddleTransfer==null?ArcadePolicy.next(s):PaddleTransfer.decide(s,paddleTransfer);
    default->ArcadePolicy.next(s);};
+  // Learned network is in real decision path, but may only abstain.
+  return neural==null?physics:neural.filter(s,physics);
  }
  /** Call only after dispatch was accepted, not merely when a recommendation was produced. */
  public void actionDispatched(ArcadePolicy.Decision d,long now){
@@ -43,6 +47,8 @@ public final class ArcadeController {
  /** Measured response improves the motion model; an Android ACK alone is not evidence. */
  public void observeGesture(ArcadePolicy.Decision action,ArcadeObservation before,ArcadeObservation after){
   if(action==null||before==null||after==null||before.profile!=after.profile||!before.usable()||!after.usable())return;
+  // Only this VERIFIED game response may label a success.
+  if(neural!=null)neural.learnVerified(before,action,after);
   // A dispatched tap may have been ignored while an earlier jump still rises.
   // Only an extra visual impulse from this dispatch enables flap calibration.
   if(action.action==ArcadePolicy.Action.FLAP&&before.profile==ArcadeProfile.FLAPPY
@@ -62,9 +68,18 @@ public final class ArcadeController {
   try{PaddleTransfer.decode(encoded);paddleTransfer=encoded;}
   catch(IllegalArgumentException ignored){/* Invalid imports cannot alter the policy. */}
  }
+ public void installRealGameNeural(RealGameNeuralCritic candidate){
+  neural=candidate;
+ }
+ public boolean learnObservedNonresponse(ArcadeObservation before,ArcadePolicy.Decision action,
+     ArcadeObservation after,boolean acknowledged){
+  return neural!=null&&neural.learnNonresponse(before,action,after,acknowledged);
+ }
+ public String neuralCheckpoint(){return neural==null?null:neural.encode();}
+ public String neuralStatus(){return neural==null?"neural=not-installed":neural.report();}
  public void disablePaddleTransfer(){paddleTransfer=null;}
  public boolean paddleTransferActive(){return paddleTransfer!=null;}
- public String report(){return model()+(paddleTransfer==null?" paddleTransfer=off":" paddleTransfer=on");}
+ public String report(){return model()+(paddleTransfer==null?" paddleTransfer=off":" paddleTransfer=on")+" "+neuralStatus();}
  public void restore(String saved){
   if(saved==null||saved.isEmpty())return;
   float road=trafficSpeed,scroll=scrollSpeed,g=gravity,flap=flapVelocity,steering=steeringSpeed;boolean continuous=continuousSteering;
