@@ -39,35 +39,47 @@ public final class PaddleWeightLab {
  }
  public interface Control {double steer(Frame f,Random random);}
  /** Analytic controller is an explicit reference: weight patch does not beat physics by itself. */
- public static Control directPhysics(){return (f,unused)->{
+ public static Control directPhysics(){return directPhysicsAngle(0);}
+ public static Control directPhysicsAngle(double offset){
+  if(!Double.isFinite(offset)||Math.abs(offset)>.08)throw new IllegalArgumentException("angle offset");
+  return (f,unused)->{
   if(f==null||!f.usable())return 0;
   double projected=impact(f);
   double target=Double.isFinite(projected)?projected:f.x();
-  return clip((target-f.paddleX())*6,-1,1);
+  return clip((target-f.paddleX()-offset)*6,-1,1);
  };}
  /** Two inputs, four rectified hidden units, one linear output.
   * x0 = current ball-paddle error, x1 = physically predicted impact error.
-  * A hand-written readout patch changes exactly four of twelve weights.
+  * A hand-written readout patch changes four of thirteen parameters.
+  * An optional calibrated output bias changes one additional parameter.
   */
  public static final class Weights implements Control {
   private final double[] hidden,readout;
-  private Weights(double[] hidden,double[] readout){
+  private final double bias;
+  private Weights(double[] hidden,double[] readout,double bias){
    if(hidden.length!=8||readout.length!=4)throw new IllegalArgumentException("network shape");
    for(double w:hidden)if(!Double.isFinite(w)||Math.abs(w)>16)throw new IllegalArgumentException("hidden weight");
    for(double w:readout)if(!Double.isFinite(w)||Math.abs(w)>16)throw new IllegalArgumentException("readout weight");
-   this.hidden=hidden.clone();this.readout=readout.clone();
+   if(!Double.isFinite(bias)||Math.abs(bias)>16)throw new IllegalArgumentException("bias");
+   this.hidden=hidden.clone();this.readout=readout.clone();this.bias=bias;
   }
-  public static Weights followBall(){return new Weights(new double[]{1,0,-1,0,0,1,0,-1},new double[]{1,-1,0,0});}
+  public static Weights followBall(){return new Weights(new double[]{1,0,-1,0,0,1,0,-1},new double[]{1,-1,0,0},0);}
   public Weights patchToImpact(){
    // No training, no new observations, no random initialization: only readout edit.
-   return new Weights(hidden,new double[]{0,0,1,-1});
+   return new Weights(hidden,new double[]{0,0,1,-1},0);
+  }
+  /** Output-bias correction calibrated only on training episodes. */
+  public Weights patchToAngledImpact(double offset){
+   if(!Double.isFinite(offset)||Math.abs(offset)>.08)throw new IllegalArgumentException("angle offset");
+   return new Weights(hidden,new double[]{0,0,1,-1},-offset);
   }
   public int changedParameters(Weights other){
    int changed=0;for(int i=0;i<8;i++)if(hidden[i]!=other.hidden[i])changed++;
    for(int i=0;i<4;i++)if(readout[i]!=other.readout[i])changed++;
+   if(bias!=other.bias)changed++;
    return changed;
   }
-  public double[] snapshot(){double[] out=Arrays.copyOf(hidden,12);System.arraycopy(readout,0,out,8,4);return out;}
+  public double[] snapshot(){double[] out=Arrays.copyOf(hidden,13);System.arraycopy(readout,0,out,8,4);out[12]=bias;return out;}
   @Override public double steer(Frame f,Random random){
    if(f==null||!f.usable())return 0; // unknown frame grants no action
    double predicted=impact(f);
@@ -77,7 +89,7 @@ public final class PaddleWeightLab {
     double activation=Math.max(0,hidden[j*2]*inputs[0]+hidden[j*2+1]*inputs[1]);
     output+=readout[j]*activation;
    }
-   return clip(output*6,-1,1);
+   return clip((output+bias)*6,-1,1);
   }
  }
  public record Episode(int catches,int bricks,int steps,boolean missed) {
@@ -154,17 +166,36 @@ public final class PaddleWeightLab {
   }
   return new Summary(name,episodes,misses,bricks,catches,scores);
  }
+ public static final long CALIBRATION_SEED=2718L;
+ public static final int CALIBRATION_EPISODES=240;
+ /** Search only on training seeds. Held-out test seeds must differ. */
+ public static double calibrateAngle(){
+  Weights original=Weights.followBall();
+  double[] candidates={-.08,-.07,-.06,-.04,-.02,-.01,0,.01,.02,.04,.06,.07,.08};
+  double best=-Double.MAX_VALUE,selected=0;
+  for(double offset:candidates){
+   Summary trained=evaluate("train",original.patchToAngledImpact(offset),CALIBRATION_EPISODES,CALIBRATION_SEED);
+   if(trained.meanScore>best){best=trained.meanScore;selected=offset;}
+  }
+  return selected;
+ }
  public static String comparisonJson(int episodes,long seed){
+  if(seed==CALIBRATION_SEED)throw new IllegalArgumentException("held-out seed overlaps training");
   Weights baseline=Weights.followBall(),patched=baseline.patchToImpact();
   Control random=(f,r)->r.nextDouble()*2-1;
   Summary a=evaluate("random",random,episodes,seed);
   Summary b=evaluate("follow_ball",baseline,episodes,seed);
   Summary c=evaluate("patched_impact",patched,episodes,seed);
   Summary d=evaluate("direct_physics",directPhysics(),episodes,seed);
+  double angle=calibrateAngle();
+  Summary e=evaluate("tuned_impact",baseline.patchToAngledImpact(angle),episodes,seed);
+  Summary f=evaluate("direct_angled_physics",directPhysicsAngle(angle),episodes,seed);
   return "{\"experiment\":\"paddle-weight-lab-v1\",\"environment\":\"synthetic-paddle-v1\","
    +"\"seed\":"+seed+",\"episodes\":"+episodes+",\"patched_weights\":"+baseline.changedParameters(patched)+","
    +"\"score_definition\":\"bricks+0.1*catches\","
+   +"\"training_seed\":"+CALIBRATION_SEED+",\"training_episodes\":"+CALIBRATION_EPISODES+","
+   +"\"tuned_angle_offset\":"+String.format(Locale.ROOT,"%.6f",angle)+","
    +"\"realtime_android\":false,\"visual_verified\":false,\"eligible_for_android\":false,"
-   +"\"policies\":["+a.json()+","+b.json()+","+c.json()+","+d.json()+"]}";
+   +"\"policies\":["+a.json()+","+b.json()+","+c.json()+","+d.json()+","+e.json()+","+f.json()+"]}";
  }
 }
