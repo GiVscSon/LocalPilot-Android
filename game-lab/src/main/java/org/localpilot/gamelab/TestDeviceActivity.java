@@ -1,4 +1,5 @@
 package org.localpilot.gamelab;
+import org.localpilot.shared.HubContract;
 
 import android.app.Activity;
 import android.app.AlertDialog;
@@ -24,7 +25,6 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
-import java.util.Locale;
 
 /**
  * A real, separately installed Android activity used as the Pilot's target.
@@ -53,11 +53,13 @@ public final class TestDeviceActivity extends Activity {
   super.onCreate(state);
   game(0);
   LinearLayout root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);
-  root.setPadding(8,8,8,8);root.setBackgroundColor(0xff0b1020);
-  TextView title=label("GameLab · виртуальное игровое устройство",18);
+  root.setPadding(12,12,12,12);root.setBackgroundColor(HubContract.BACKGROUND);
+  TextView title=label("LocalPilot · GameLab",21);
+  title.setTextColor(HubContract.ACCENT);
   root.addView(title);
-  TextView warning=label("ОТДЕЛЬНЫЙ APK • ТЕСТОВЫЕ ИГРЫ • НЕ МАРКЕТ",11);
-  warning.setTextColor(0xffffba74);root.addView(warning);
+  TextView warning=label(HubContract.Evidence.SIMULATED_GAME.label
+    +" • отдельное приложение • не испытание игр Маркета",12);
+  warning.setTextColor(HubContract.WARNING);root.addView(warning);
   games=new Spinner(this);
   String[] labels=new String[GameLabEngine.Game.values().length];
   for(int i=0;i<labels.length;i++)labels[i]=GameLabEngine.Game.values()[i].label;
@@ -92,7 +94,15 @@ public final class TestDeviceActivity extends Activity {
       .setType("text/csv").addCategory(Intent.CATEGORY_OPENABLE)
       .putExtra(Intent.EXTRA_TITLE,"localpilot-gamelab-actions.csv"),EXPORT));
   LinearLayout retroRow=new LinearLayout(this);root.addView(retroRow);
-  addButton(retroRow,"NES / Денди / DOS",()->startActivity(new Intent(this,RetroLibraryActivity.class)));
+  addButton(retroRow,"Ретро · NES / Денди / DOS",()->startActivity(new Intent(this,RetroLibraryActivity.class)));
+  TextView retroStatus=label("Эмуляторные ядра пока не включены. Доступна проверка файлов.",11);
+  retroStatus.setTextColor(HubContract.SECONDARY);root.addView(retroStatus);
+  String pilotPackage=getIntent().getStringExtra("pilot_package");
+  if(HubContract.supportedPilotPackage(pilotPackage))
+   addButton(retroRow,"К LocalPilot",()->{
+    Intent back=getPackageManager().getLaunchIntentForPackage(pilotPackage);
+    if(back!=null)startActivity(back);
+   });
   status=label("",12);root.addView(status);
   setContentView(root);
   addLog("START game="+engine.game.name());
@@ -103,7 +113,7 @@ public final class TestDeviceActivity extends Activity {
  }
  private TextView label(String content,int size){
   TextView t=new TextView(this);t.setText(content);t.setTextSize(size);
-  t.setTextColor(Color.WHITE);return t;
+  t.setTextColor(HubContract.TEXT);return t;
  }
  private void game(int index){
   if(index<0||index>=GameLabEngine.Game.values().length)return;
@@ -114,7 +124,7 @@ public final class TestDeviceActivity extends Activity {
  }
  private void update(){
   if(status!=null&&engine!=null)status.setText("Только тестовое поле • профиль "+engine.game.localPilotProfile
-   +" • касаний "+engine.actions+" • изменений симулятора "+engine.verifiedCandidates
+   +" • касаний "+engine.actions+" • изменений симулятора "+engine.simulatedChanges
    +" • отказов "+engine.rejected+" • режим "+engine.fault);
  }
  private void addLog(String entry){
@@ -271,11 +281,12 @@ public final class TestDeviceActivity extends Activity {
     words(c,"PANEL COVERS ROI",18,464,17,0xffffaaaa);
    }
    block(c,0,588,360,640,0xff142b41,0);
-   words(c,"touch "+engine.actions+"  world changes "+engine.verifiedCandidates,10,613,13,0xffa5e8f5);
-   words(c,"NO VIRTUAL ACK = GAME SUCCESS",10,634,10,0xffffbc75);
+   words(c,"касания "+engine.actions+"  изменения стенда "+engine.simulatedChanges,10,613,12,0xffa5e8f5);
+   words(c,"НЕ СЧИТАЕТСЯ РЕАЛЬНОЙ ПРИЁМКОЙ",10,634,10,HubContract.WARNING);
   }
   private void drawSquareBoard(Canvas c){
-   int n=engine.n;float left=22,top=140,cell=315f/n;
+   int n=engine.n;float left=GameLabEngine.GRID_LEFT*360f,top=GameLabEngine.GRID_TOP*640f;
+    float cell=(GameLabEngine.GRID_RIGHT-GameLabEngine.GRID_LEFT)*360f/n;
    block(c,left-6,top-6,left+cell*n+6,top+cell*n+6,0xff506278,10);
    for(int r=0;r<n;r++)for(int col=0;col<n;col++){
     int v=engine.cells[r*n+col];
