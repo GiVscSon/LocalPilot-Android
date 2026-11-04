@@ -57,7 +57,15 @@ public class PilotService extends AccessibilityService {
  private final StageMetrics metrics=new StageMetrics();
  private final CaptureTimingTrace captureTiming=new CaptureTimingTrace();
  public String captureTimingReport(){return captureTiming.report();}
- public String exportMetrics(){String bubbleReport=playingGrid&&selectedProfile==9?bubbleSession.report()+" decision="+bubbleDecisionReason:lastBubbleSessionReport;stop("Экспорт замеров: STOP");return metrics.report()+"\n"+captureTiming.report()+"\n"+captureCounters()+"\nLAST_STOP: "+lastStopReason+"\nCAPTURE STARTUP\n"+captureStartup.report()+"\n"+sceneRecovery.report()+"\nLAST_BUBBLE_SESSION\n"+bubbleReport;}
+ public String exportMetrics(){
+  String bubbleReport=playingGrid&&selectedProfile==9?bubbleSession.report()+" decision="+bubbleDecisionReason:lastBubbleSessionReport;
+  String visual=visionV2Snapshot==null?"no_frames":visionV2Snapshot.diagnostics();
+  stop("Экспорт замеров: STOP");
+  return metrics.report()+"\n"+captureTiming.report()+"\n"+captureCounters()
+    +"\nVISION_V2_BEFORE_STOP: "+visual
+    +"\nLAST_STOP: "+lastStopReason+"\nCAPTURE STARTUP\n"+captureStartup.report()
+    +"\n"+sceneRecovery.report()+"\nLAST_BUBBLE_SESSION\n"+bubbleReport;
+ }
  private final Handler handler=new Handler(Looper.getMainLooper());private final Handler gestureHandler=new Handler(Looper.getMainLooper());private final ActionGate gate=new ActionGate();
  private final CaptureRetry captureRetry=new CaptureRetry();
  private final BrowserSceneGate browserSceneGate=new BrowserSceneGate();
