@@ -30,11 +30,36 @@ def adb(*args,timeout=35,binary=False):
     return proc.stdout
 
 def screen_dump():
-    adb("shell","uiautomator","dump","/sdcard/window-gamelab.xml",timeout=32)
-    raw=adb("exec-out","cat","/sdcard/window-gamelab.xml",timeout=15)
-    start=raw.find("<?xml")
-    if start<0:raise RuntimeError("GameLab accessibility XML unavailable")
-    return ET.fromstring(raw[start:])
+    """Bounded synchronization with a *real* UI hierarchy on slow API30 devices.
+
+    Older Android may return 'null root node' directly after the previous
+    instrumentation's UiAutomation disconnects. Never reuse stale XML and never
+    claim success from activity metadata alone.
+    """
+    failures=[]
+    for attempt in range(6):
+        destination="/sdcard/window-gamelab.xml"
+        try:
+            adb("shell","rm","-f",destination,timeout=8)
+            arguments=["shell","uiautomator","dump"]
+            if attempt%2:
+                arguments.append("--compressed")
+            arguments.append(destination)
+            output=adb(*arguments,timeout=25)
+            raw=adb("exec-out","cat",destination,timeout=12)
+            begin=raw.find("<?xml")
+            if begin>=0:
+                xml=ET.fromstring(raw[begin:])
+                if any(node.get("package")==PACKAGE for node in xml.iter()):
+                    return xml
+                failures.append("no GameLab nodes in returned UI hierarchy")
+            else:
+                failures.append("no XML: "+output.strip()[-140:])
+        except (RuntimeError, ET.ParseError, subprocess.TimeoutExpired) as error:
+            failures.append(type(error).__name__+": "+str(error)[-180:])
+        time.sleep(.65+attempt*.2)
+    raise RuntimeError("GameLab accessibility XML unavailable after 6 real dumps: "+
+        " | ".join(failures[-4:]))
 
 def bounds(node):
     encoded=node.get("bounds","")
@@ -139,6 +164,8 @@ def run():
     adb("install","-r",str(APK),timeout=85)
     adb("shell","am","start","-W","-n",
         PACKAGE+"/.TestDeviceActivity",timeout=40)
+    # Accessibility view trees may lag behind ActivityManager resume on API30.
+    time.sleep(1.0)
     tree,rect=wait_scene()
     original=state(tree)
     if number(original,"касаний")!=0 or number(original,"изменений стенда")!=0:
