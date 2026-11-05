@@ -1,6 +1,10 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
  <application android:label="LocalPilot GameLab" android:theme="@android:style/Theme.Material.NoActionBar"
   android:allowBackup="false" android:usesCleartextTraffic="false" android:supportsRtl="true">
+  <!-- No permissions, no mutation: shell-only bounded synthetic-state diagnostic. -->
+  <provider android:name=".GameLabEvidenceProvider"
+   android:authorities="org.localpilot.gamelab.evidence"
+   android:exported="true" android:grantUriPermissions="false"/>
   <activity android:name=".RetroLibraryActivity" android:exported="false"/>
   <activity android:name=".NesEmulatorActivity" android:exported="false"/>
   <activity android:name=".TestDeviceActivity" android:exported="true">
