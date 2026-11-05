@@ -740,10 +740,15 @@ public final class PilotUiInstrumentation extends Instrumentation {
         Bitmap frame=automation.takeScreenshot();
         require(frame!=null,"Android compositor did not provide an independent GameLab frame");
         try{
-            int l=Math.max(0,canvas.left+Math.round(canvas.width()*.64f));
-            int r=Math.min(frame.getWidth(),canvas.left+Math.round(canvas.width()*.88f));
-            int t=Math.max(0,canvas.top+Math.round(canvas.height()*.28f));
-            int b=Math.min(frame.getHeight(),canvas.top+Math.round(canvas.height()*.42f));
+            // GameLab letterboxes its 360x640 world. Sample the actual
+            // logical bubble rows, not the surrounding wallpaper or overlay.
+            float scale=Math.min(canvas.width()/360f,canvas.height()/640f);
+            float x0=canvas.left+(canvas.width()-360*scale)*.5f;
+            float y0=canvas.top+(canvas.height()-640*scale)*.5f;
+            int l=Math.max(0,Math.round(x0+360*scale*.64f));
+            int r=Math.min(frame.getWidth(),Math.round(x0+360*scale*.90f));
+            int t=Math.max(0,Math.round(y0+640*scale*.27f));
+            int b=Math.min(frame.getHeight(),Math.round(y0+640*scale*.42f));
             require(r-l>35&&b-t>20,"GameLab pixel witness ROI unavailable");
             long digest=0xcbf29ce484222325L;
             for(int y=t;y<b;y+=3)for(int x=l;x<r;x+=3)
