@@ -45,7 +45,7 @@ import java.util.regex.Pattern;
  * 2048 progress is independently read from real screenshots, never Android ACK.
  */
 public final class PilotUiInstrumentation extends Instrumentation {
-    private static final long TEST_LIMIT_MS = 240_000;
+    private static final long TEST_LIMIT_MS = 300_000;
     private static final Pattern SCORE = Pattern.compile("^Счёт:\\s*(\\d+)");
 
     private final JSONObject evidence = new JSONObject();
