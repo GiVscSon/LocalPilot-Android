@@ -37,7 +37,7 @@ def probe():
     if "Row: 0 " not in result:
         raise RuntimeError("Read-only GameLab evidence provider has no active scene: "+result[-250:])
     row=result.split("Row: 0 ",1)[1].splitlines()[0]
-    values=dict(re.findall(r"([a-z_]+)=([^,\\n]+)",row))
+    values=dict(re.findall(r"([a-z_]+)=([^,]+)",row))
     if values.get("source")!="gamelab-only":
         raise RuntimeError("GameLab probe identity mismatch")
     for field in ("scene","game"):
@@ -134,6 +134,7 @@ def wait_scene():
 
 
 def state(tree):
+    if tree is None:return ""
     texts=[n.get("text","") for n in tree.iter() if n.get("package")==PACKAGE]
     return " ".join(texts)
 
@@ -171,41 +172,58 @@ def screenshot(path):
     path.write_bytes(raw)
     return hashlib.sha256(raw).hexdigest()
 
-def tap_label(text):
-    """Tap actual visible Android control across theme case transformations.
+def button_bounds(text):
+    """Return visible Android button bounds, using only live view geometry.
 
-    Android's material-style button renderer can uppercase Russian and Latin
-    labels in the accessibility tree. Match text semantically, but still require
-    the real GameLab package, a clickable node and nonempty screen bounds.
+    API30 does not always expose UIAutomator XML after instrumentation; the
+    separate app's read-only provider may supply bounds, but never clicks.
     """
-    requested=" ".join(text.split()).casefold()
-    last_labels=[]
-    for _ in range(6):
-        tree=screen_dump()
-        clickable=[n for n in tree.iter() if n.get("package")==PACKAGE
-          and n.get("clickable")=="true"]
-        last_labels=[n.get("text","") for n in clickable]
-        buttons=[n for n in clickable if
-          " ".join(n.get("text","").split()).casefold()==requested]
-        if len(buttons)==1:
-            x1,y1,x2,y2=bounds(buttons[0])
-            if x2-x1<10 or y2-y1<10:
-                raise RuntimeError("GameLab button has no actual touch area: "+text)
-            adb("shell","input","tap",str((x1+x2)//2),str((y1+y2)//2),timeout=15)
-            return
-        if len(buttons)>1:
-            raise RuntimeError("Ambiguous GameLab control: "+text)
-        time.sleep(.6)
-    raise RuntimeError("NES GameLab button unavailable: "+text+
-      " visible clickable labels="+repr(last_labels[-12:]))
+    global _probe_only
+    wanted=" ".join(text.split()).casefold()
+    last=[]
+    if not _probe_only:
+        try:
+            tree=screen_dump()
+            clickable=[node for node in tree.iter() if
+                node.get("package")==PACKAGE and node.get("clickable")=="true"]
+            last=[node.get("text","") for node in clickable]
+            matching=[node for node in clickable
+                if " ".join(node.get("text","").split()).casefold()==wanted]
+            if len(matching)==1:return bounds(matching[0])
+            if len(matching)>1:raise RuntimeError("Ambiguous NES control: "+text)
+        except (RuntimeError, ET.ParseError):
+            _probe_only=True
+    mapping={
+      "ретро · nes / денди / dos":("gamelab","primary"),
+      "играть в nes / денди или проверить dos-файл":("retro","primary"),
+      "запустить тестовую nes-игру":("nes","primary"),
+      "a":("nes","secondary")
+    }
+    expected=mapping.get(wanted)
+    if expected is None:raise RuntimeError("Unrecognized device smoke control: "+text)
+    for _ in range(8):
+        data=probe()
+        if data["scene"]==expected[0]:
+            return probe_bounds(data,expected[1])
+        time.sleep(.35)
+    raise RuntimeError("NES button unavailable: "+text+
+       " expected scene="+expected[0]+" actual="+data["scene"]+
+       " tree_labels="+repr(last[-8:]))
+
+
+def tap_label(text):
+    x1,y1,x2,y2=button_bounds(text)
+    adb("shell","input","tap",str((x1+x2)//2),str((y1+y2)//2),timeout=15)
 
 
 def nes_metrics(tree):
-    from re import search
-    current=state(tree)
-    matches=search(r"Кадров\s*(\d+)\s*·\s*экран CRC=([0-9a-fA-F]+)",current)
-    if not matches:return None
-    return int(matches.group(1)),matches.group(2).lower()
+    if tree is not None:
+        match=re.search(r"Кадров\s*(\d+)\s*·\s*экран CRC=([0-9a-fA-F]+)",state(tree))
+        if match:return int(match.group(1)),match.group(2).lower()
+    data=probe()
+    if data["scene"]!="nes":return None
+    if data["frames"]<=0:return None
+    return data["frames"],format(data["pixel_hash"] & 0xffffffff,"x")
 
 
 def verify_nes_android():
@@ -217,7 +235,7 @@ def verify_nes_android():
         time.sleep(1.2)
         tap_label("Запустить тестовую NES-игру")
         for _ in range(8):
-            current=nes_metrics(screen_dump())
+            current=nes_metrics(scene_tree())
             if current and current[0]>=60:break
             time.sleep(.35)
         if current and current[0]>=60:break
@@ -225,17 +243,13 @@ def verify_nes_android():
         raise RuntimeError("NES did not execute 60 actual emulated video frames in Android WebView")
     first_frames,first_hash=current
     before=screenshot(OUT/"gamelab-nes-before.png")
-    # Hold the real Android A button across several 6502 frame polls.
-    tree=screen_dump()
-    buttons=[n for n in tree.iter() if n.get("package")==PACKAGE
-      and n.get("text")=="A" and n.get("clickable")=="true"]
-    if not buttons:raise RuntimeError("NES A touchscreen button not found")
-    x1,y1,x2,y2=bounds(buttons[0])
+    # Hold a REAL OS touchscreen button; the probe never generates input.
+    x1,y1,x2,y2=button_bounds("A")
     x,y=(x1+x2)//2,(y1+y2)//2
     adb("shell","input","touchscreen","swipe",str(x),str(y),str(x),str(y),"280",timeout=15)
     final=None
     for _ in range(10):
-        final=nes_metrics(screen_dump())
+        final=nes_metrics(scene_tree())
         if final and final[0]>first_frames and final[1]!=first_hash:break
         time.sleep(.5)
     if not final or final[0]<=first_frames or final[1]==first_hash:
@@ -278,7 +292,7 @@ def run():
         str(startX),str(startY),str(endX),str(endY),"160",timeout=15)
     updated=None
     for _ in range(8):
-        tree=screen_dump();updated=game_state(tree)
+        tree=scene_tree();updated=game_state(tree)
         if updated["touches"]>=1:break
         time.sleep(.25)
     if updated is None or updated["game"]!="BUBBLE" or updated["touches"]!=1 or updated["changes"]<1:
