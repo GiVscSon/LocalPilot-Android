@@ -27,7 +27,13 @@ public final class HomebrewNes {
   void label(String name){
    if(labels.putIfAbsent(name,code.size())!=null)throw new AssertionError("duplicate "+name);
   }
-  void abs(int opcode,int address){op(opcode,address&255,(address>>>8)&255);}
+  void abs(int opcode,int address){
+   // Encoding a zero-page opcode with three bytes inserts a stray $00 (BRK)
+   // into 6502 instructions and silently corrupts execution.
+   if(opcode==0x85||opcode==0xa5||opcode==0xc6||opcode==0xe6)
+    throw new IllegalArgumentException("2-byte zero-page opcode sent to abs()");
+   op(opcode,address&255,(address>>>8)&255);
+  }
   void imm(int opcode,int value){op(opcode,value);}
   void branch(int opcode,String name){
    op(opcode,0);patches.add(new Patch(name,code.size()-1,true));
