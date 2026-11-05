@@ -98,11 +98,11 @@ window.retroLoadRom=function(encoded,dendy){
   if(binary.length<16||binary.length>3*1024*1024||binary.charCodeAt(0)!==78
     ||binary.charCodeAt(1)!==69||binary.charCodeAt(2)!==83||binary.charCodeAt(3)!==26)
    throw new Error("Неподдерживаемый NES-картридж");
-  const data=new Uint8Array(binary.length);
-  for(let i=0;i<data.length;i++)data[i]=binary.charCodeAt(i);
+  // JSNES expects an 8-bit binary string. Uint8Array causes invalid ROM
+  // reads/6502 opcodes even when the iNES header has been recognized.
   const machine=new jsnes.NES({emulateSound:true,sampleRate,
    onFrame:sendFrame,onAudioSample:audioWrite});
-  machine.loadROM(data);nes=machine;window.retroDendy=Boolean(dendy);
+  machine.loadROM(binary);nes=machine;window.retroDendy=Boolean(dendy);
   frames=0;validFrame=0;
   audioStart();paused=false;
   timer=setInterval(tick,dendy?20:1000/60);
