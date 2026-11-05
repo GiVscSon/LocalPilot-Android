@@ -746,9 +746,13 @@ public final class PilotUiInstrumentation extends Instrumentation {
         click("Область");
         await(()->present("Готово")&&present("STOP · отмена"),5_000,
                 "Autoplay: 2048 visual ROI editor did not become available");
-        tapAt(board.left,board.top);tapAt(board.right,board.bottom);
-        // Prefer the native accessibility click where Android exposes it.
-        // Fallback is still a real OS touch; commitment is asserted below.
+        // Android 15/16 may not deliver two separate corner taps to the
+        // full-screen accessibility overlay after the panel compacts. Use
+        // one continuous, actual OS drag; the picker must visibly enable
+        // its confirmation button before we can commit the rectangle.
+        drag(board.left+2,board.top+2,board.right-2,board.bottom-2);
+        await(()->onMain(()->ownControlBounds("Готово")!=null),3_000,
+            "Autoplay: real ROI drag did not enable the visible Done control");
         click("Готово");
         await(()->onMain(()->booleanField("manualVisualRoi")
             &&field("visualRoi") instanceof Rect rect
