@@ -136,7 +136,7 @@ public final class TestDeviceActivity extends Activity {
  private void update(){
   if(status==null||engine==null)return;
   status.setText("Только тестовое поле • профиль "+engine.game.localPilotProfile
-   +" • касаний "+engine.actions+" • изменений стенда "+engine.simulatedChanges
+   +" • счёт "+engine.score+" • касаний "+engine.actions+" • изменений стенда "+engine.simulatedChanges
    +" • отказов "+engine.rejected+" • режим "+engine.fault);
   // Stable, machine-readable ACCESSIBILITY evidence. This is an actual
   // Android-rendered TextView value updated only after real UI event handling.
@@ -186,7 +186,13 @@ public final class TestDeviceActivity extends Activity {
   @Override protected void onDraw(Canvas c){
    super.onDraw(c);
    if(engine==null)return;
-   c.save();c.scale(getWidth()/360f,getHeight()/640f);
+   // A single scale preserves square 2048 cells and the CV/object geometry
+   // on both phones and tablets. Never stretch X and Y independently.
+   GameLabViewport transform=new GameLabViewport(getWidth(),getHeight());
+   c.drawColor(HubContract.BACKGROUND);
+   c.save();
+   c.translate(transform.offsetX,transform.offsetY);
+   c.scale(transform.scale,transform.scale);
    if(frozen!=null)c.drawBitmap(frozen,0,0,brush);
    else render(c);
    c.restore();
@@ -311,7 +317,7 @@ public final class TestDeviceActivity extends Activity {
     int v=engine.cells[r*n+col];
     float x=left+col*cell,y=top+r*cell;
     int fill=engine.game==GameLabEngine.Game.BOARD2048
-      ?v==0?0xff6d7887:tint((int)(Math.log(v)/Math.log(2)))
+      ?0xff000000|GameLab2048Palette.rgb(v)
       :v>=8?0xff2a2e37:tint(v);
     block(c,x+2,y+2,x+cell-2,y+cell-2,fill,6);
     if(v!=0){
@@ -323,8 +329,10 @@ public final class TestDeviceActivity extends Activity {
   }
   @Override public boolean onTouchEvent(MotionEvent event){
    if(engine==null)return false;
-   float x=event.getX()/Math.max(1,getWidth()),y=event.getY()/Math.max(1,getHeight());
+   GameLabViewport geometry=new GameLabViewport(getWidth(),getHeight());
+   float x=geometry.xFromScreen(event.getX()),y=geometry.yFromScreen(event.getY());
    if(event.getActionMasked()==MotionEvent.ACTION_DOWN){
+    if(!geometry.contains(event.getX(),event.getY()))return false;
     downX=x;downY=y;downAt=SystemClock.elapsedRealtime();return true;
    }
    if(event.getActionMasked()!=MotionEvent.ACTION_UP)return true;
