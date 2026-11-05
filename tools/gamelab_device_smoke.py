@@ -244,6 +244,7 @@ def verify_nes_android():
     if not current or current[0]<60:
         raise RuntimeError("NES did not execute 60 actual emulated video frames in Android WebView")
     first_frames,first_hash=current
+    initial_touches=probe()["touches"]
     before=screenshot(OUT/"gamelab-nes-before.png")
     # The ROM latches the last A/B palette, so an already-red scene can
     # legitimately ignore a repeated A. Exercise two distinct real OS touches.
@@ -260,8 +261,13 @@ def verify_nes_android():
                 changed_by=key
                 break
             time.sleep(.5)
+        current_touches=probe()["touches"]
         observations.append({"key":key,"frames":final[0] if final else None,
-                             "hash":final[1] if final else None})
+                             "hash":final[1] if final else None,
+                             "touches":current_touches})
+        if current_touches<initial_touches+len(observations):
+            raise RuntimeError("NES Android onTouchListener did not receive real "+
+              key+" touchscreen ACTION_DOWN: "+repr(observations))
         if changed_by:break
     if not changed_by:
         raise RuntimeError("NES PPU did not respond to real held B/A touches: "
@@ -273,6 +279,7 @@ def verify_nes_android():
       "cpu_ppu_frames_before":first_frames,"cpu_ppu_frames_after":final[0],
       "ppu_hash_before":first_hash,"ppu_hash_after":final[1],
        "controller_button":changed_by,"controller_observations":observations,
+       "android_touch_delivered":True,
       "android_pixel_change":True,"result":"PASS"}
     (OUT/"gamelab-nes-evidence.json").write_text(json.dumps(proof,indent=2),encoding="utf-8")
     print("GAMELAB_NES_ACTUAL_ANDROID_PASS "+json.dumps(proof),flush=True)
