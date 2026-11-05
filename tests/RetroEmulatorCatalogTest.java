@@ -57,7 +57,7 @@ public final class RetroEmulatorCatalogTest {
     "homebrew ROM contains a valid iNES header");
   ok(homebrew[4]==1&&homebrew[5]==1,"one PRG and one CHR bank");
   int vector=16+16384-6;
-  ok((homebrew[vector]&255)==0&&(homebrew[vector+1]&255)==128,
+  ok((homebrew[vector+2]&255)==0&&(homebrew[vector+3]&255)==128,
     "homebrew reset and interrupts enter $8000");
   int spriteTile=16+16384+16;
   ok((homebrew[spriteTile]&255)==255,"actual CHR 8x8 moving sprite exists");
