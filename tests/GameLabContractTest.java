@@ -55,6 +55,15 @@ public final class GameLabContractTest {
   ok(HubContract.countsForMarketAcceptance(
        HubContract.Evidence.REAL_GAME,true,true,true),
     "only real game with subsequent witness can pass");
+  ok(!HubContract.countsForMarketAcceptance(
+       HubContract.Evidence.REAL_GAME,"org.localpilot.gamelab",true,true,true),
+    "never accept a test app by mislabeling it REAL_GAME");
+  ok(!HubContract.countsForMarketAcceptance(
+       HubContract.Evidence.REAL_GAME,"org.other.console",true,true,true),
+    "other games cannot be counted as Market");
+  ok(HubContract.countsForMarketAcceptance(
+       HubContract.Evidence.REAL_GAME,"ru.beru.android",true,true,true),
+    "genuine Market identity and witness required for acceptance");
   ok(HubContract.supportedLabPackage("org.localpilot.gamelab"),"supported lab package");
   ok(!HubContract.supportedLabPackage("org.localpilot.android"),
     "Pilot cannot target itself as lab");
