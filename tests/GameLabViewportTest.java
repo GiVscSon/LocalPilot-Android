@@ -41,6 +41,19 @@ public final class GameLabViewportTest {
    yes(Board2048.colorTile(argb)==tile,
       "strict production reader recognizes the test tile "+tile);
   }
+  // The Android 11 external-window focus probe is confined to the header,
+  // never to a playable region, for every supported viewport aspect ratio.
+  for(GameLabViewport view:new GameLabViewport[]{wide,tall,square}){
+   float probeX=view.offsetX+340f*view.scale;
+   float probeY=view.offsetY+20f*view.scale;
+   yes(view.inGame(probeX,probeY),"focus probe lies within companion canvas");
+   GameLabEngine header=new GameLabEngine(GameLabEngine.Game.BUBBLE,101);
+   yes(header.gesture(view.x(probeX),view.y(probeY),
+     view.x(probeX),view.y(probeY),60)==GameLabEngine.Result.BLOCKED,
+     "external focus probe is not a permitted gameplay gesture");
+   yes(header.actions==0&&header.simulatedChanges==0,
+     "external focus probe cannot generate synthetic gameplay evidence");
+  }
   GameLabEngine exercise=new GameLabEngine(GameLabEngine.Game.BOARD2048,212);
   Board2048 initial=new Board2048(exercise.cells);
   yes(exercise.gesture(.40f,.45f,.70f,.45f,160)==GameLabEngine.Result.CHANGED,
