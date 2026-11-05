@@ -84,7 +84,7 @@ def tap_label(text):
 def nes_metrics(tree):
     from re import search
     current=state(tree)
-    matches=search(r"Кадров\\s*(\\d+)\\s*·\\s*экран CRC=([0-9a-fA-F]+)",current)
+    matches=search(r"Кадров\s*(\d+)\s*·\s*экран CRC=([0-9a-fA-F]+)",current)
     if not matches:return None
     return int(matches.group(1)),matches.group(2).lower()
 
