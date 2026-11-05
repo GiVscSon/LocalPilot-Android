@@ -1,0 +1,59 @@
+name: GameLab NES CPU/PPU runtime
+on:
+  push:
+    paths:
+      - 'game-lab/**'
+      - 'tests/jsnes_nes_smoke.cjs'
+      - 'tests/nes_controller_framehold.cjs'
+      - 'tests/ExportHomebrewNes.java'
+      - '.github/workflows/nes-runtime.yml'
+  pull_request:
+    paths:
+      - 'game-lab/**'
+      - 'tests/jsnes_nes_smoke.cjs'
+      - 'tests/nes_controller_framehold.cjs'
+      - 'tests/ExportHomebrewNes.java'
+      - '.github/workflows/nes-runtime.yml'
+permissions:
+  contents: read
+jobs:
+  nes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Download and verify pinned original CPU emulation runtime
+        run: |
+          set -euo pipefail
+          npm pack jsnes@2.1.0 --ignore-scripts --silent
+          python3 - <<'PY'
+          import hashlib,base64,pathlib
+          raw=pathlib.Path('jsnes-2.1.0.tgz').read_bytes()
+          want="LUa++E5Dfs1A6ZYB5HiSOR4JrUzrZEXGLZ5Imczhu9lkg7f+94SqnLZ/MXwGa7oc02+j/xYyHR0azGQ6LCU68g=="
+          actual=base64.b64encode(hashlib.sha512(raw).digest()).decode()
+          if actual!=want: raise SystemExit("JSNES core SHA-512 MISMATCH")
+          print("PINNED_NES_CORE_PASS", len(raw))
+          PY
+          mkdir -p build/test-core
+          tar -xzf jsnes-2.1.0.tgz -C build/test-core package/dist/jsnes.min.js
+
+      - name: Verify controller press is observed by real emulated frames
+        run: node tests/nes_controller_framehold.cjs
+      - name: Execute real iNES homebrew under JavaScript CPU/PPU
+        run: |
+          set -euo pipefail
+          mkdir -p build/nes-runtime
+          javac --release 17 -d build/nes-runtime \
+            game-lab/src/main/java/org/localpilot/gamelab/HomebrewNes.java \
+            tests/ExportHomebrewNes.java
+          java -cp build/nes-runtime ExportHomebrewNes build/nes-runtime/demo.nes
+          node tests/jsnes_nes_smoke.cjs \
+            build/test-core/package/dist/jsnes.min.js \
+            build/nes-runtime/demo.nes

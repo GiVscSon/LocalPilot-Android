@@ -3,9 +3,9 @@ on:
  workflow_dispatch:
  push:
   branches: ['**']
-  paths: ['app/**', '.github/workflows/android-device.yml', 'tools/run_device_acceptance.py']
+  paths: ['app/**', 'game-lab/**', 'shared/**', '.github/workflows/android-device.yml', 'tools/run_device_acceptance.py', 'tools/gamelab_device_smoke.py']
  pull_request:
-  paths: ['app/**', '.github/workflows/android-device.yml', 'tools/run_device_acceptance.py']
+  paths: ['app/**', 'game-lab/**', 'shared/**', '.github/workflows/android-device.yml', 'tools/run_device_acceptance.py', 'tools/gamelab_device_smoke.py']
 permissions:
  contents: read
 jobs:
@@ -36,7 +36,7 @@ jobs:
       set -euo pipefail
       "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-35' 'build-tools;35.0.0'
       mkdir -p device-evidence
-      if gradle --no-daemon :app:assembleDebug :app:assembleDebugAndroidTest 2>&1 | tee device-evidence/gradle-build.log; then
+      if gradle --no-daemon :app:assembleDebug :app:assembleDebugAndroidTest :game-lab:assembleDebug 2>&1 | tee device-evidence/gradle-build.log; then
         exit 0
       fi
       # Retry only the exact lint dependency resolution failure observed on API 30.

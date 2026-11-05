@@ -1,5 +1,6 @@
 plugins { id 'com.android.application' }
 android {
+ sourceSets { main { java.srcDirs += ['../shared/src/main/java'] } }
  namespace 'org.localpilot.android'
  compileSdk 35
  defaultConfig { applicationId 'org.localpilot.android'; minSdk 30; targetSdk 35; versionCode 53; versionName '0.8.1'; testInstrumentationRunner 'org.localpilot.android.PilotUiInstrumentation' }

@@ -98,7 +98,21 @@ def main():
                                + '\n' + str(report.get('own_state',''))
                                + '\nUI: ' + str(report.get('visible_ui',''))[:2000]
                                + '\n' + str(report.get('stack', ''))[:1000])
-        annotation('notice', 'PASS: ' + str(len(report.get('checks', []))) + ' actual Android acceptance scenarios')
+        # The PilotService instrumentation is FINISHED and its full original
+        # result has been recorded. Revoke that isolated emulator's Accessibility
+        # service before launching a separate-package GameLab experiment.
+        # Android API30 sometimes returns a null UI root when the retired
+        # instrumentation UiAutomation and PilotService compete for the tree.
+        # This never applies to real devices and never weakens the live Pilot.
+        command(['adb','shell','settings','put','secure','accessibility_enabled','0'])
+        command(['adb','shell','settings','delete','secure','enabled_accessibility_services'])
+        command(['adb','shell','am','force-stop',PACKAGE])
+        # Run companion testing AFTER and SEPARATE from PilotService acceptance.
+        # Thus an ADB-injected test touch can never be misreported as a
+        # PilotService-dispatched gesture.
+        from gamelab_device_smoke import run as verify_gamelab_touch
+        verify_gamelab_touch()
+        annotation('notice', 'PASS: ' + str(len(report.get('checks', []))) + ' Pilot scenarios + genuine GameLab touch/pixel change')
         return 0
     except (OSError, RuntimeError, ValueError, subprocess.TimeoutExpired) as error:
         text = str(error)
