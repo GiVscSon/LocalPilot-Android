@@ -54,7 +54,7 @@ public final class TestDeviceActivity extends Activity {
   super.onCreate(state);
   game(0);
   LinearLayout root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);
-  root.setPadding(12,12,12,12);root.setBackgroundColor(HubContract.BACKGROUND);
+  GameLabInsets.install(this,root,12);root.setBackgroundColor(HubContract.BACKGROUND);
   TextView title=label("LocalPilot · GameLab",21);
   title.setTextColor(HubContract.ACCENT);
   root.addView(title);
@@ -114,6 +114,7 @@ public final class TestDeviceActivity extends Activity {
    });
   status=label("",12);root.addView(status);
   setContentView(root);
+  root.requestApplyInsets();
   addLog("START game="+engine.game.name());
  }
  private Button addButton(LinearLayout parent,String title,Runnable run){
