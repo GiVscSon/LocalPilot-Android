@@ -11,6 +11,8 @@ class GameLabRetroVerify {
       "--release","17","-d",out.toString(),
       "game-lab/src/main/java/org/localpilot/gamelab/GameLabEngine.java",
       "game-lab/src/main/java/org/localpilot/gamelab/GameLabViewport.java",
+      "game-lab/src/main/java/org/localpilot/gamelab/GameLab2048Palette.java",
+      "app/src/main/java/org/localpilot/android/Board2048.java",
       "game-lab/src/main/java/org/localpilot/gamelab/RetroEmulatorCatalog.java",
       "game-lab/src/main/java/org/localpilot/gamelab/HomebrewNes.java",
       "tests/RetroEmulatorCatalogTest.java",
