@@ -158,6 +158,7 @@ public final class PilotUiInstrumentation extends Instrumentation {
             checkRotationStopsInput();
             checkProjectionLifecycle();
             checkExternalGameLabPilotGesture();
+            checkExternalGameLabAutoplay2048();
             evidence.put("capture_timing",service.captureTimingReport());
             evidence.put("metrics", onMain(() -> service.exportMetrics()));
             passed = true;
@@ -703,7 +704,127 @@ public final class PilotUiInstrumentation extends Instrumentation {
                 .put("stop_rearmed",false));
     }
 
-    private int[] gameLabBubbleCounts() {
+    /**
+     * This time the policy is NOT a test-side gesture: start the actual
+     * production 2048 solver on a DIFFERENT Android application. The GameLab
+     * scene uses the exact public palette and rules, but no hidden board state
+     * can be read by PilotService.
+     */
+    private void checkExternalGameLabAutoplay2048() throws Exception {
+        final String external="org.localpilot.gamelab";
+        final String display="GameLab synthetic game display; never real Market acceptance";
+        onMain(()->{service.hidePanel();service.showPanel();return null;});
+        getTargetContext().startActivity(new Intent()
+                .setClassName(external,external+".TestDeviceActivity")
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_CLEAR_TASK));
+        await(()->markerBounds(display)!=null,10_000,
+                "Autoplay: separate GameLab did not render a game window");
+        // Select the independent 2048 game using a real Android accessibility
+        // control. Never inject a fake GameLab state or update its hidden cells.
+        await(this::openExternalGameLabSpinner,5_000,
+                "Autoplay: external game selection control inaccessible");
+        click("2048");
+        await(()->{
+            int[] state=gameLabCounts("BOARD2048",4);
+            return state!=null&&state[0]==0&&state[1]==0;
+        },5_000,"Autoplay: standalone 2048 did not start from the visible board");
+        Rect canvas=markerBounds(display);
+        require(canvas!=null&&!canvas.isEmpty(),"Autoplay: actual Canvas vanished");
+        float scale=Math.min(canvas.width()/360f,canvas.height()/640f);
+        float x0=canvas.left+(canvas.width()-360f*scale)*.5f;
+        float y0=canvas.top+(canvas.height()-640f*scale)*.5f;
+        Rect board=new Rect(Math.round(x0+22*scale),Math.round(y0+140*scale),
+                Math.round(x0+337*scale),Math.round(y0+455*scale));
+        require(Math.abs(board.width()-board.height())<=2&&board.width()>=160,
+                "Autoplay: GameLab board is not a physically square screenshot ROI");
+
+        click("Игра");click("2048");
+        await(()->onMain(()->intField("selectedProfile")==4
+                &&field("overlayDialog")==null),4_000,
+                "Autoplay: production Pilot mechanic did not select 2048");
+        bindWindow(external);
+        click("Область");
+        await(()->present("Готово")&&present("STOP · отмена"),5_000,
+                "Autoplay: 2048 visual ROI editor did not become available");
+        tapAt(board.left,board.top);tapAt(board.right,board.bottom);
+        require(touchOwnControl("Готово"),
+                "Autoplay: game ROI cannot be confirmed by real Android touch");
+        await(()->onMain(()->booleanField("manualVisualRoi")
+            &&field("visualRoi") instanceof Rect rect
+            &&Math.abs(rect.left-board.left)<=3&&Math.abs(rect.top-board.top)<=3
+            &&Math.abs(rect.right-board.right)<=3&&Math.abs(rect.bottom-board.bottom)<=3),
+            4_000,"Autoplay: actual selected game field differs from rendered 4x4 board");
+        onMain(()->{service.hidePanel();return null;});
+        Board2048 before=readExternalGameLab2048(board);
+        onMain(()->{service.showPanel();return null;});
+        bindWindow(external);
+        click("Старт");
+        await(()->onMain(()->booleanField("playing2048")),12_000,
+                "Autoplay: production 2048 screenshot-policy loop did not start");
+        await(()->onMain(()->intField("moves2048")>=3),28_000,
+                "Autoplay: production 2048 policy made fewer than three visually confirmed moves");
+        click("STOP");
+        await(()->!armed()&&!onMain(()->booleanField("busy")),5_000,
+                "Autoplay: STOP did not disarm actual external gameplay");
+        int verified=onMain(()->intField("moves2048"));
+        onMain(()->{service.hidePanel();return null;});
+        Board2048 after=readExternalGameLab2048(board);
+        require(total(after)>total(before),
+                "Autoplay: external GameLab did not spawn tiles after production policy swipes");
+        int[] game=gameLabCounts("BOARD2048",4);
+        require(game!=null&&game[0]>=verified&&game[1]>=verified,
+                "Autoplay: independent game did not register production visually verified swipes");
+        SystemClock.sleep(600);
+        int[] still=gameLabCounts("BOARD2048",4);
+        require(still!=null&&still[0]==game[0]&&still[1]==game[1],
+                "Autoplay: production Pilot kept playing after STOP");
+        addCheck("pilotservice_external_2048_autonomous_vision_policy",new JSONObject()
+            .put("source","GameLab synthetic 2048")
+            .put("market_acceptance",false)
+            .put("pilot_dispatched",true)
+            .put("policy","production Board2048 screenshot reader and solver")
+            .put("verified_moves",verified)
+            .put("game_touch_count",game[0])
+            .put("game_transitions",game[1])
+            .put("spawned_tiles_visible",true));
+    }
+
+    private boolean openExternalGameLabSpinner() {
+        refreshAutomationCache();
+        AccessibilityNodeInfo root=automation.getRootInActiveWindow();
+        if(root==null)return false;
+        try{return clickExternalGameLabSpinner(root,0,new int[]{1800});}
+        finally{root.recycle();}
+    }
+    private boolean clickExternalGameLabSpinner(AccessibilityNodeInfo node,
+                                                int depth,int[] remaining) {
+        if(depth>35||--remaining[0]<0)return false;
+        if("org.localpilot.gamelab".contentEquals(
+                 node.getPackageName()==null?"":node.getPackageName())
+             &&"android.widget.Spinner".contentEquals(
+                 node.getClassName()==null?"":node.getClassName())
+             &&node.isVisibleToUser()&&node.isEnabled()&&node.isClickable())
+            return node.performAction(AccessibilityNodeInfo.ACTION_CLICK);
+        for(int i=0;i<node.getChildCount();i++){
+            AccessibilityNodeInfo child=node.getChild(i);
+            if(child==null)continue;
+            try{if(clickExternalGameLabSpinner(child,depth+1,remaining))return true;}
+            finally{child.recycle();}
+        }
+        return false;
+    }
+    private Board2048 readExternalGameLab2048(Rect region) throws Exception{
+        Bitmap image=automation.takeScreenshot();
+        require(image!=null,"Autoplay: no real Android screenshot after rendered 2048");
+        try{
+            return PixelBoardReader.read(image::getPixel,image.getWidth(),image.getHeight(),
+                region.left,region.top,region.right,region.bottom);
+        }finally{image.recycle();}
+    }
+
+    private int[] gameLabBubbleCounts() {return gameLabCounts("BUBBLE",9);}
+
+    private int[] gameLabCounts(String game,int profile) {
         refreshAutomationCache();
         AccessibilityNodeInfo root=automation.getRootInActiveWindow();
         if(root==null)return null;
@@ -712,11 +833,12 @@ public final class PilotUiInstrumentation extends Instrumentation {
             findExternalLabState(root,0,new int[]{2500},state);
             if(state[0]==null)return null;
             java.util.regex.Matcher matched=java.util.regex.Pattern.compile(
-                "^gamelab-state-v1 synthetic=true game=BUBBLE touches=(\\d+)"
-                +" changes=(\\d+) rejected=(\\d+) profile=9$").matcher(state[0]);
-            if(!matched.matches())return null;
-            return new int[]{Integer.parseInt(matched.group(1)),
-                Integer.parseInt(matched.group(2))};
+                "^gamelab-state-v1 synthetic=true game=([A-Z0-9_]+) touches=(\\d+)"
+                +" changes=(\\d+) rejected=(\\d+) profile=(-?\\d+)$").matcher(state[0]);
+            if(!matched.matches()||!game.equals(matched.group(1))
+                ||profile!=Integer.parseInt(matched.group(5)))return null;
+            return new int[]{Integer.parseInt(matched.group(2)),
+                Integer.parseInt(matched.group(3))};
         }finally{root.recycle();}
     }
     private void findExternalLabState(AccessibilityNodeInfo node,int depth,
