@@ -110,16 +110,32 @@ def screenshot(path):
     return hashlib.sha256(raw).hexdigest()
 
 def tap_label(text):
-    for _ in range(5):
+    """Tap actual visible Android control across theme case transformations.
+
+    Android's material-style button renderer can uppercase Russian and Latin
+    labels in the accessibility tree. Match text semantically, but still require
+    the real GameLab package, a clickable node and nonempty screen bounds.
+    """
+    requested=" ".join(text.split()).casefold()
+    last_labels=[]
+    for _ in range(6):
         tree=screen_dump()
-        buttons=[n for n in tree.iter() if n.get("package")==PACKAGE
-          and n.get("text")==text and n.get("clickable")=="true"]
-        if buttons:
+        clickable=[n for n in tree.iter() if n.get("package")==PACKAGE
+          and n.get("clickable")=="true"]
+        last_labels=[n.get("text","") for n in clickable]
+        buttons=[n for n in clickable if
+          " ".join(n.get("text","").split()).casefold()==requested]
+        if len(buttons)==1:
             x1,y1,x2,y2=bounds(buttons[0])
+            if x2-x1<10 or y2-y1<10:
+                raise RuntimeError("GameLab button has no actual touch area: "+text)
             adb("shell","input","tap",str((x1+x2)//2),str((y1+y2)//2),timeout=15)
             return
-        time.sleep(.5)
-    raise RuntimeError("NES GameLab button unavailable: "+text)
+        if len(buttons)>1:
+            raise RuntimeError("Ambiguous GameLab control: "+text)
+        time.sleep(.6)
+    raise RuntimeError("NES GameLab button unavailable: "+text+
+      " visible clickable labels="+repr(last_labels[-12:]))
 
 
 def nes_metrics(tree):
