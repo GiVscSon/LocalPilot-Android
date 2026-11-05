@@ -56,6 +56,14 @@ public final class RetroEmulatorCatalogTest {
   ok(RetroEmulatorCatalog.inspect(nes,"homebrew.nes",homebrew).recognized(),
     "homebrew ROM contains a valid iNES header");
   ok(homebrew[4]==1&&homebrew[5]==1,"one PRG and one CHR bank");
+  // Guard the first real 6502 opcodes: STA $00 uses 85 00 (TWO bytes).
+  // A third 00 would trigger BRK and crash on actual CPU/PPU execution.
+  int[] bootstrap={0x78,0xd8,0xa2,0xff,0x9a,0xa9,0x00,
+    0x8d,0x00,0x20,0x8d,0x01,0x20,0xa9,0x0f,
+    0x85,0x00,0xa9,0x80,0x85,0x01,0xa9,0x70,0x85,0x02,
+    0x2c,0x02,0x20};
+  for(int i=0;i<bootstrap.length;i++)ok((homebrew[16+i]&255)==bootstrap[i],
+    "decoded 6502 bootstrap byte "+i);
   int vector=16+16384-6;
   ok((homebrew[vector+2]&255)==0&&(homebrew[vector+3]&255)==128,
     "homebrew reset and interrupts enter $8000");
