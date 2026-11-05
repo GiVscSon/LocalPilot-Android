@@ -747,8 +747,9 @@ public final class PilotUiInstrumentation extends Instrumentation {
         await(()->present("Готово")&&present("STOP · отмена"),5_000,
                 "Autoplay: 2048 visual ROI editor did not become available");
         tapAt(board.left,board.top);tapAt(board.right,board.bottom);
-        require(touchOwnControl("Готово"),
-                "Autoplay: game ROI cannot be confirmed by real Android touch");
+        // Prefer the native accessibility click where Android exposes it.
+        // Fallback is still a real OS touch; commitment is asserted below.
+        click("Готово");
         await(()->onMain(()->booleanField("manualVisualRoi")
             &&field("visualRoi") instanceof Rect rect
             &&Math.abs(rect.left-board.left)<=3&&Math.abs(rect.top-board.top)<=3
@@ -814,12 +815,31 @@ public final class PilotUiInstrumentation extends Instrumentation {
         return false;
     }
     private Board2048 readExternalGameLab2048(Rect region) throws Exception{
-        Bitmap image=automation.takeScreenshot();
-        require(image!=null,"Autoplay: no real Android screenshot after rendered 2048");
-        try{
-            return PixelBoardReader.read(image::getPixel,image.getWidth(),image.getHeight(),
-                region.left,region.top,region.right,region.bottom);
-        }finally{image.recycle();}
+        // An overlay can disappear from the view hierarchy before Android's
+        // compositor has published a fresh unobscured frame. We never guess
+        // UNKNOWN tiles: wait for TWO independent and identical strict reads.
+        long end=Math.min(limit,SystemClock.uptimeMillis()+3_000);
+        Board2048 previous=null;
+        String lastReason="no stable frame";
+        do{
+            Bitmap image=automation.takeScreenshot();
+            require(image!=null,"Autoplay: no real Android screenshot after rendered 2048");
+            try{
+                try{
+                    Board2048 current=PixelBoardReader.read(
+                        image::getPixel,image.getWidth(),image.getHeight(),
+                        region.left,region.top,region.right,region.bottom);
+                    if(previous!=null&&previous.same(current))return current;
+                    previous=current;
+                    lastReason="consecutive frames differ";
+                }catch(IllegalArgumentException unknown){
+                    previous=null;lastReason=unknown.getMessage();
+                }
+            }finally{image.recycle();}
+            SystemClock.sleep(110);
+        }while(SystemClock.uptimeMillis()<end);
+        throw new AssertionError("Autoplay: no stable strict 2048 board at "
+            +region.toShortString()+" ("+lastReason+")");
     }
 
     private int[] gameLabBubbleCounts() {return gameLabCounts("BUBBLE",9);}
@@ -1060,7 +1080,36 @@ public final class PilotUiInstrumentation extends Instrumentation {
         },3_000,"The current window dialog has no visible target row");
         // click() performs a fresh lookup and refreshes the actionable node.
         click(query);
-        await(()->onMain(()->gate().armed()&&pkg.equals(field("target"))&&field("overlayDialog")==null),3_000,"Window selection did not commit before the next control");
+        // The Android 11 accessibility-window cache can report a focused
+        // foreign window while the service still waits for its own fresh
+        // focus event. The companion has a strictly non-gameplay header:
+        // a single real OS tap there may trigger focus without a game move.
+        // This never arms the gate on behalf of PilotService.
+        if("org.localpilot.gamelab".equals(pkg)){
+            SystemClock.sleep(400);
+            boolean pending=onMain(()->!gate().armed()&&field("overlayDialog")==null
+                &&String.valueOf(field("note")).contains("ожидаю фокус"));
+            if(pending){
+                Rect gameSurface=markerBounds(
+                    "GameLab synthetic game display; never real Market acceptance");
+                if(gameSurface!=null&&!gameSurface.isEmpty()){
+                    float scale=Math.min(gameSurface.width()/360f,gameSurface.height()/640f);
+                    float x=gameSurface.left+(gameSurface.width()-360f*scale)*.5f+340f*scale;
+                    float y=gameSurface.top+(gameSurface.height()-640f*scale)*.5f+20f*scale;
+                    int[] before=gameLabCounts("BUBBLE",9);
+                    if(before==null)before=gameLabCounts("BOARD2048",4);
+                    require(tapAt(x,y),"Companion focus probe was rejected by Android");
+                    int[] after=gameLabCounts("BUBBLE",9);
+                    if(after==null)after=gameLabCounts("BOARD2048",4);
+                    require(before!=null&&after!=null
+                        &&java.util.Arrays.equals(before,after),
+                        "Companion focus probe changed the synthetic game");
+                }
+            }
+        }
+        await(()->onMain(()->gate().armed()&&pkg.equals(field("target"))
+            &&field("overlayDialog")==null),8_000,
+            "Window selection did not commit before the next control");
     }
     private void awaitBrowserMechanic()throws Exception{await(()->onMain(()->booleanField("browserProfileConfirmed")&&field("overlayDialog")==null),3_000,"Browser mechanic selection did not finish before the next action");}
 
