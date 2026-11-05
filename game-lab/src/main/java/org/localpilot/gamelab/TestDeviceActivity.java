@@ -40,6 +40,7 @@ public final class TestDeviceActivity extends Activity {
  private GameSurface surface;
  private TextView status;
  private Spinner games,faults;
+ private Button retroLauncher;
  private boolean playing=true;
  private long seed=20261104L;
  private final Runnable clock=new Runnable(){public void run(){
@@ -94,7 +95,7 @@ public final class TestDeviceActivity extends Activity {
       .setType("text/csv").addCategory(Intent.CATEGORY_OPENABLE)
       .putExtra(Intent.EXTRA_TITLE,"localpilot-gamelab-actions.csv"),EXPORT));
   LinearLayout retroRow=new LinearLayout(this);root.addView(retroRow);
-  addButton(retroRow,"Ретро · NES / Денди / DOS",()->startActivity(new Intent(this,RetroLibraryActivity.class)));
+  retroLauncher=addButton(retroRow,"Ретро · NES / Денди / DOS",()->startActivity(new Intent(this,RetroLibraryActivity.class)));
   TextView retroStatus=label("NES и Денди: запуск реального ROM. DOS: пока подготовка ядра.",11);
   retroStatus.setTextColor(HubContract.SECONDARY);root.addView(retroStatus);
   String pilotPackage=getIntent().getStringExtra("pilot_package");
@@ -115,9 +116,10 @@ public final class TestDeviceActivity extends Activity {
   setContentView(root);
   addLog("START game="+engine.game.name());
  }
- private void addButton(LinearLayout parent,String title,Runnable run){
+ private Button addButton(LinearLayout parent,String title,Runnable run){
   Button b=new Button(this);b.setText(title);b.setTextSize(11);
   b.setOnClickListener(v->run.run());parent.addView(b,new LinearLayout.LayoutParams(0,-2,1));
+  return b;
  }
  private TextView label(String content,int size){
   TextView t=new TextView(this);t.setText(content);t.setTextSize(size);
@@ -141,13 +143,14 @@ public final class TestDeviceActivity extends Activity {
   status.setContentDescription("gamelab-state-v1 synthetic=true game="+engine.game.name()
     +" touches="+engine.actions+" changes="+engine.simulatedChanges
     +" rejected="+engine.rejected+" profile="+engine.game.localPilotProfile);
+  GameLabEvidenceProvider.game(engine,surface,retroLauncher);
  }
  private void addLog(String entry){
   if(records.size()>=512)records.remove(0);
   records.add(SystemClock.elapsedRealtime()+","+entry.replace(',',';'));
  }
  @Override protected void onResume(){super.onResume();handler.post(clock);}
- @Override protected void onPause(){handler.removeCallbacks(clock);super.onPause();}
+ @Override protected void onPause(){handler.removeCallbacks(clock);GameLabEvidenceProvider.clear("gamelab");super.onPause();}
  @Override protected void onDestroy(){if(surface!=null)surface.release();super.onDestroy();}
  @Override protected void onActivityResult(int req,int result,Intent data){
   super.onActivityResult(req,result,data);
