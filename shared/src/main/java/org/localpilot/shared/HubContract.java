@@ -34,6 +34,17 @@ public final class HubContract {
   return origin==Evidence.REAL_GAME && physicalDevice
      && androidAck&&gameSpecificVisualWitness;
  }
+ /** Package identity is mandatory: even a visually changed GameLab frame is
+  * training in a simulator, not acceptance of an actual Market mini-game. */
+ public static boolean officialMarketPackage(String pkg){
+  return "ru.beru.android".equals(pkg)||"ru.yandex.market".equals(pkg)
+    ||"com.yandex.market".equals(pkg);
+ }
+ public static boolean countsForMarketAcceptance(Evidence origin,String pkg,
+    boolean physicalDevice,boolean androidAck,boolean gameSpecificVisualWitness){
+  return officialMarketPackage(pkg)
+    &&countsForMarketAcceptance(origin,physicalDevice,androidAck,gameSpecificVisualWitness);
+ }
  public static boolean ownPackage(String observed,String pilotPackage){
   return observed!=null&&observed.equals(pilotPackage);
  }
