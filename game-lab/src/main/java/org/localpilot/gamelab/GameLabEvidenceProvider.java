@@ -26,7 +26,8 @@ public final class GameLabEvidenceProvider extends ContentProvider {
   "source","scene","game","touches","changes","rejected","profile",
   "frames","pixel_hash","canvas_left","canvas_top","canvas_right","canvas_bottom",
   "primary_left","primary_top","primary_right","primary_bottom",
-  "secondary_left","secondary_top","secondary_right","secondary_bottom","updated_elapsed_ms"
+  "secondary_left","secondary_top","secondary_right","secondary_bottom",
+  "tertiary_left","tertiary_top","tertiary_right","tertiary_bottom","updated_elapsed_ms"
  };
  private record Bounds(int left,int top,int right,int bottom){
   static Bounds of(View view){
@@ -39,7 +40,7 @@ public final class GameLabEvidenceProvider extends ContentProvider {
  }
  private record Evidence(String scene,String game,int touches,int changes,
        int rejected,int profile,int frames,int pixelHash,
-       Bounds canvas,Bounds primary,Bounds secondary,long timestampMs){}
+       Bounds canvas,Bounds primary,Bounds secondary,Bounds tertiary,long timestampMs){}
  private static volatile Evidence current;
  private static final Bounds EMPTY=new Bounds(0,0,0,0);
  private static void publish(Evidence next){current=next;}
@@ -48,17 +49,17 @@ public final class GameLabEvidenceProvider extends ContentProvider {
   if(engine==null)return;
   publish(new Evidence("gamelab",engine.game.name(),engine.actions,
     engine.simulatedChanges,engine.rejected,engine.game.localPilotProfile,
-    0,0,Bounds.of(canvas),Bounds.of(retroButton),EMPTY,
+    0,0,Bounds.of(canvas),Bounds.of(retroButton),EMPTY,EMPTY,
     SystemClock.elapsedRealtime()));
  }
  static void retro(RetroEmulatorCatalog.System system,View launchButton){
   if(system==null)return;
   publish(new Evidence("retro",system.name(),0,0,0,-1,
-   0,0,EMPTY,Bounds.of(launchButton),EMPTY,SystemClock.elapsedRealtime()));
+   0,0,EMPTY,Bounds.of(launchButton),EMPTY,EMPTY,SystemClock.elapsedRealtime()));
  }
- static void nes(boolean dendy,int frames,int pixelHash,View demo,View a){
+ static void nes(boolean dendy,int frames,int pixelHash,View demo,View a,View b){
   publish(new Evidence("nes",dendy?"DENDY":"NES",0,0,0,-1,
-    Math.max(0,frames),pixelHash,EMPTY,Bounds.of(demo),Bounds.of(a),
+    Math.max(0,frames),pixelHash,EMPTY,Bounds.of(demo),Bounds.of(a),Bounds.of(b),
     SystemClock.elapsedRealtime()));
  }
  static void clear(String scene){
@@ -83,7 +84,8 @@ public final class GameLabEvidenceProvider extends ContentProvider {
    "gamelab-only",e.scene,e.game,e.touches,e.changes,e.rejected,e.profile,
    e.frames,e.pixelHash,e.canvas.left,e.canvas.top,e.canvas.right,e.canvas.bottom,
    e.primary.left,e.primary.top,e.primary.right,e.primary.bottom,
-   e.secondary.left,e.secondary.top,e.secondary.right,e.secondary.bottom,e.timestampMs
+   e.secondary.left,e.secondary.top,e.secondary.right,e.secondary.bottom,
+   e.tertiary.left,e.tertiary.top,e.tertiary.right,e.tertiary.bottom,e.timestampMs
   });
   return result;
  }
