@@ -5,9 +5,12 @@ import java.io.InputStream;
 import java.util.Locale;
 
 /**
- * Real Libretro core selection and ROM-format checks for the GameLab companion.
- * Not itself a CPU/PPU emulator. Does not execute ROMs or claim a test PASS.
- * Native cores must be built/packaged under the correct GPL obligations.
+ * Actual GameLab core capability and content preflight.
+ *
+ * NES / Dendy: packaged JSNES 2.1.0 JavaScript CPU+PPU (Apache-2.0),
+ * with Dendy speed-compatibility at 50 fps (NOT exact Dendy video timing).
+ * DOS: DOSBox Pure is NOT bundled or executable yet; preflight only.
+ * Nothing here counts as real Market-game response or learning evidence.
  */
 public final class RetroEmulatorCatalog {
  private RetroEmulatorCatalog(){}
