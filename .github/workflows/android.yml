@@ -75,6 +75,9 @@ jobs:
      run: |
       set -euo pipefail
       ./gradlew --no-daemon :game-lab:assembleDebug
+
+   - name: Verify NES on-device input frame latch
+     run: node tests/nes_controller_framehold.cjs
    - name: NES CPU + PPU + button integration
      shell: bash
      run: |
