@@ -179,7 +179,12 @@ public final class GameLabEngine {
    }
   }
   if(!Arrays.equals(before,cells)){
-   for(int i=0;i<16;i++)if(cells[i]==0){cells[i]=2;break;}
+   // A legal swipe spawns exactly one new tile in a seeded random empty slot.
+   // 90% of spawns are 2, 10% are 4. This remains fully deterministic by seed
+   // for reproducible GameLab regression runs, without leaking spawn to Pilot.
+   int[] empty=new int[16];int count=0;
+   for(int i=0;i<16;i++)if(cells[i]==0)empty[count++]=i;
+   if(count>0)cells[empty[random.nextInt(count)]]=random.nextInt(10)==0?4:2;
   }
  }
  private static boolean finite(float... v){for(float x:v)if(!Float.isFinite(x))return false;return true;}
