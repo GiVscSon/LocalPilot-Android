@@ -315,7 +315,7 @@ public final class TestDeviceActivity extends Activity {
     int v=engine.cells[r*n+col];
     float x=left+col*cell,y=top+r*cell;
     int fill=engine.game==GameLabEngine.Game.BOARD2048
-      ?v==0?0xff6d7887:tint((int)(Math.log(v)/Math.log(2)))
+      ?GameLab2048Palette.paint(v)
       :v>=8?0xff2a2e37:tint(v);
     block(c,x+2,y+2,x+cell-2,y+cell-2,fill,6);
     if(v!=0){
