@@ -794,6 +794,35 @@ public final class PilotUiInstrumentation extends Instrumentation {
             .put("spawned_tiles_visible",true));
     }
 
+    /** Read only a visible title in the focused separate app, never our panel. */
+    private Rect externalGameLabTitleBounds(String pkg){
+        refreshAutomationCache();
+        AccessibilityNodeInfo root=automation.getRootInActiveWindow();
+        if(root==null)return null;
+        try{return externalGameLabTitleBounds(root,pkg,0,new int[]{1200});}
+        finally{root.recycle();}
+    }
+    private Rect externalGameLabTitleBounds(AccessibilityNodeInfo node,String pkg,
+                                            int depth,int[] remaining){
+        if(depth>35||--remaining[0]<0)return null;
+        if(node.isVisibleToUser()&&pkg.contentEquals(
+            node.getPackageName()==null?"":node.getPackageName())
+            &&"LocalPilot · GameLab".contentEquals(
+                node.getText()==null?"":node.getText())){
+            Rect b=new Rect();node.getBoundsInScreen(b);
+            return b.isEmpty()?null:b;
+        }
+        for(int i=0;i<node.getChildCount();i++){
+            AccessibilityNodeInfo child=node.getChild(i);
+            if(child==null)continue;
+            try{
+                Rect r=externalGameLabTitleBounds(child,pkg,depth+1,remaining);
+                if(r!=null)return r;
+            }finally{child.recycle();}
+        }
+        return null;
+    }
+
     private boolean openExternalGameLabSpinner() {
         refreshAutomationCache();
         AccessibilityNodeInfo root=automation.getRootInActiveWindow();
@@ -1092,20 +1121,22 @@ public final class PilotUiInstrumentation extends Instrumentation {
             boolean pending=onMain(()->!gate().armed()&&field("overlayDialog")==null
                 &&String.valueOf(field("note")).contains("ожидаю фокус"));
             if(pending){
-                Rect gameSurface=markerBounds(
-                    "GameLab synthetic game display; never real Market acceptance");
-                if(gameSurface!=null&&!gameSurface.isEmpty()){
-                    float scale=Math.min(gameSurface.width()/360f,gameSurface.height()/640f);
-                    float x=gameSurface.left+(gameSurface.width()-360f*scale)*.5f+340f*scale;
-                    float y=gameSurface.top+(gameSurface.height()-640f*scale)*.5f+20f*scale;
+                // Tap only a VERIFIED TextView outside the GameSurface.
+                // Even a nominally decorative Canvas coordinate can be
+                // transformed differently on Android 11 and count as a move.
+                Rect title=externalGameLabTitleBounds(pkg);
+                if(title!=null&&!title.isEmpty()){
                     int[] before=gameLabCounts("BUBBLE",9);
                     if(before==null)before=gameLabCounts("BOARD2048",4);
-                    require(tapAt(x,y),"Companion focus probe was rejected by Android");
+                    require(tapAt(title.centerX(),title.centerY()),
+                        "Companion title focus probe was rejected by Android");
                     int[] after=gameLabCounts("BUBBLE",9);
                     if(after==null)after=gameLabCounts("BOARD2048",4);
                     require(before!=null&&after!=null
                         &&java.util.Arrays.equals(before,after),
-                        "Companion focus probe changed the synthetic game");
+                        "Companion title focus probe mutated gameplay before="
+                        +java.util.Arrays.toString(before)+" after="
+                        +java.util.Arrays.toString(after));
                 }
             }
         }
