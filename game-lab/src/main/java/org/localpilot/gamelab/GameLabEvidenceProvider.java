@@ -57,8 +57,8 @@ public final class GameLabEvidenceProvider extends ContentProvider {
   publish(new Evidence("retro",system.name(),0,0,0,-1,
    0,0,EMPTY,Bounds.of(launchButton),EMPTY,EMPTY,SystemClock.elapsedRealtime()));
  }
- static void nes(boolean dendy,int frames,int pixelHash,View demo,View a,View b){
-  publish(new Evidence("nes",dendy?"DENDY":"NES",0,0,0,-1,
+ static void nes(boolean dendy,int frames,int pixelHash,int realTouches,View demo,View a,View b){
+  publish(new Evidence("nes",dendy?"DENDY":"NES",Math.max(0,realTouches),0,0,-1,
     Math.max(0,frames),pixelHash,EMPTY,Bounds.of(demo),Bounds.of(a),Bounds.of(b),
     SystemClock.elapsedRealtime()));
  }
