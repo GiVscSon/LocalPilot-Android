@@ -26,6 +26,7 @@ public final class RetroLibraryActivity extends Activity {
  private static final int IMPORT=83;
  private Spinner platforms;
  private TextView details;
+ private Button launchButton;
  private RetroEmulatorCatalog.Inspection inspected;
  private Uri selectedUri;
  @Override public void onCreate(Bundle state){
@@ -48,7 +49,7 @@ public final class RetroLibraryActivity extends Activity {
    labels[i]=RetroEmulatorCatalog.System.values()[i].label;
   platforms.setAdapter(new ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,labels));
   content.addView(platforms);
-  Button pick=new Button(this);
+  launchButton=new Button(this);Button pick=launchButton;
   pick.setText("Играть в NES / Денди или проверить DOS-файл");
   pick.setOnClickListener(v->{
    if(selected().runnableInGameLab()){
@@ -74,6 +75,7 @@ public final class RetroLibraryActivity extends Activity {
    @Override public void onNothingSelected(android.widget.AdapterView<?> view){}
   });
   setContentView(content);report();
+  content.post(this::publishEvidence);
  }
  private RetroEmulatorCatalog.System selected(){
   return RetroEmulatorCatalog.System.values()[platforms.getSelectedItemPosition()<0?0:
@@ -99,6 +101,17 @@ public final class RetroLibraryActivity extends Activity {
       ?"заголовок распознан":"ошибка проверки")
     +"\n\nNES: JSNES 2.1.0 (Apache-2.0). DOS: запланирован DOSBox Pure (GPLv2)."
     +"\nROM и игры не входят в APK. Результаты эмуляторов не заменяют проверку игр Маркета.");
+ }
+ private void publishEvidence(){
+  if(launchButton!=null)GameLabEvidenceProvider.retro(selected(),launchButton);
+ }
+ @Override protected void onResume(){
+  super.onResume();
+  if(launchButton!=null)launchButton.post(this::publishEvidence);
+ }
+ @Override protected void onPause(){
+  GameLabEvidenceProvider.clear("retro");
+  super.onPause();
  }
  private String fileName(Uri uri){
   try(Cursor cursor=getContentResolver().query(uri,new String[]{OpenableColumns.DISPLAY_NAME},
