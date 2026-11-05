@@ -125,6 +125,7 @@ public final class NesEmulatorActivity extends Activity {
      if(type==MotionEvent.ACTION_DOWN){
       gamepad(name,true);
       touches.incrementAndGet();lastInputAt=SystemClock.elapsedRealtime();
+      publishEvidence();
       return true;
      }
      if(type==MotionEvent.ACTION_UP||type==MotionEvent.ACTION_CANCEL){
@@ -145,7 +146,7 @@ public final class NesEmulatorActivity extends Activity {
  }
  private void publishEvidence(){
   if(resumed&&demoButton!=null)
-   GameLabEvidenceProvider.nes(dendy,frames,hash,demoButton,aButton,bButton);
+   GameLabEvidenceProvider.nes(dendy,frames,hash,touches.get(),demoButton,aButton,bButton);
  }
  private void launchRom(byte[] rom){
   if(!pageLoaded||web==null||rom==null||rom.length>MAX_ROM){
