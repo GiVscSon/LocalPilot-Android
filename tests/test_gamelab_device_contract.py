@@ -60,11 +60,13 @@ class GameLabDeviceStateContractTest(unittest.TestCase):
           "canvas_left=0","canvas_top=0","canvas_right=0","canvas_bottom=0",
           "primary_left=12","primary_top=110","primary_right=300","primary_bottom=170",
           "secondary_left=600","secondary_top=1600","secondary_right=720","secondary_bottom=1710",
+          "tertiary_left=470","tertiary_top=1600","tertiary_right=590","tertiary_bottom=1710",
           "updated_elapsed_ms=191200"]
         with patch.object(smoke,"adb",return_value="Row: 0 "+", ".join(columns)):
             data=smoke.probe()
         self.assertEqual((data["scene"],data["frames"],data["game"]),("nes",75,"NES"))
         self.assertEqual(smoke.probe_bounds(data,"secondary"),[600,1600,720,1710])
+        self.assertEqual(smoke.probe_bounds(data,"tertiary"),[470,1600,590,1710])
         self.assertEqual(data["pixel_hash"] & 0xffffffff,0xaaaaaaaa)
 
     def test_incomplete_probe_is_rejected(self):
