@@ -29,7 +29,7 @@ public class MainActivity extends Activity {
   TextView autoHelp=new TextView(this);autoHelp.setText("Для сетки фишек: Игра → Мэтч Ворлд · обмен соседей или Фишки · удалить группу → выберите 6×6, 7×7 либо другой размер → обведите клетки → Старт. Настройки и типы фишек сохраняются. Поддерживаются различимые цветные фишки без специальных эффектов; цели уровня и усилители пока не распознаются. Для аркад другого оформления: Ещё → Настроить распознавание. Для разных игр одного браузера: Игра → Имя игры. STOP всегда останавливает ввод.");box.addView(autoHelp);
   section(box,"03 · Игровая лаборатория");
   TextView labCaption=new TextView(this);
-  labCaption.setText("10 тестовых игр в отдельном Android-приложении. NES / Денди / DOS: пока проверка файлов и подготовка ядер. Тесты GameLab не считаются успешными ходами в Маркете.");
+  labCaption.setText("10 тестовых игр в отдельном Android-приложении. NES / Денди: встроенное JSNES-ядро проходит проверку; DOS: пока проверка файлов, без исполнения. Тесты GameLab не считаются успешными ходами в Маркете.");
   labCaption.setTextColor(HubContract.SECONDARY);box.addView(labCaption);
   button(box,"Открыть GameLab · 10 игр / ретро",this::openGameLab);
   section(box,"04 · Диагностика и контроль");
