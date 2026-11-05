@@ -154,23 +154,49 @@ public final class GameLabEngine {
   }
   score+=count*10;return count>0;
  }
+ /**
+  * Standard 2048 slide/merge and exactly one bounded random spawn.
+  * This simulation never returns an invented verification from Android ACK.
+  * A 2048 tile ends this training episode instead of creating unrecognized
+  * 4096 tiles that the real Pilot reader cannot classify.
+  */
+ public boolean won2048(){
+  if(game!=Game.BOARD2048)return false;
+  for(int value:cells)if(value>=2048)return true;
+  return false;
+ }
+ public boolean lost2048(){
+  if(game!=Game.BOARD2048||won2048())return false;
+  for(int value:cells)if(value==0)return false;
+  for(int row=0;row<4;row++)for(int col=0;col<4;col++){
+   int value=cells[row*4+col];
+   if(col<3&&cells[row*4+col+1]==value)return false;
+   if(row<3&&cells[(row+1)*4+col]==value)return false;
+  }
+  return true;
+ }
  private void swipe2048(float dx,float dy){
-  if(Math.max(Math.abs(dx),Math.abs(dy))<.045f)return;
+  if(Math.max(Math.abs(dx),Math.abs(dy))<.045f
+      ||won2048()||lost2048())return;
   int[] before=cells.clone();
+  int gained=0;
   for(int line=0;line<4;line++){
-   int[] values=new int[4],packed=new int[4];int size=0;
+   int[] packed=new int[4];int size=0;
    boolean horizontal=Math.abs(dx)>=Math.abs(dy);
    boolean forward=horizontal?dx>0:dy>0;
    for(int i=0;i<4;i++){
     int row=horizontal?line:(forward?3-i:i);
     int col=horizontal?(forward?3-i:i):line;
-    values[i]=cells[row*4+col];
-    if(values[i]!=0)packed[size++]=values[i];
+    int value=cells[row*4+col];
+    if(value!=0)packed[size++]=value;
    }
    int[] merged=new int[4];int count=0;
    for(int i=0;i<size;i++){
-    if(i+1<size&&packed[i]==packed[i+1]){merged[count++]=packed[i]*2;score+=packed[i]*2;i++;}
-    else merged[count++]=packed[i];
+    if(i+1<size&&packed[i]==packed[i+1]){
+     merged[count]=packed[i]*2;
+     gained+=merged[count];
+     count++;i++;
+    }else merged[count++]=packed[i];
    }
    for(int i=0;i<4;i++){
     int row=horizontal?line:(forward?3-i:i);
@@ -178,8 +204,19 @@ public final class GameLabEngine {
     cells[row*4+col]=merged[i];
    }
   }
-  if(!Arrays.equals(before,cells)){
-   for(int i=0;i<16;i++)if(cells[i]==0){cells[i]=2;break;}
+  if(Arrays.equals(before,cells))return; // no legal movement, no phantom spawn
+  score+=gained;
+  int available=0;
+  for(int value:cells)if(value==0)available++;
+  if(available>0){
+   int pick=random.nextInt(available);
+   for(int i=0;i<cells.length;i++){
+    if(cells[i]!=0)continue;
+    if(pick--==0){
+     cells[i]=random.nextInt(10)==0?4:2;
+     break;
+    }
+   }
   }
  }
  private static boolean finite(float... v){for(float x:v)if(!Float.isFinite(x))return false;return true;}
