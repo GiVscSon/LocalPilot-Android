@@ -197,7 +197,8 @@ def button_bounds(text):
       "ретро · nes / денди / dos":("gamelab","primary"),
       "играть в nes / денди или проверить dos-файл":("retro","primary"),
       "запустить тестовую nes-игру":("nes","primary"),
-      "a":("nes","secondary")
+      "a":("nes","secondary"),
+      "b":("nes","tertiary")
     }
     expected=mapping.get(wanted)
     if expected is None:raise RuntimeError("Unrecognized device smoke control: "+text)
@@ -243,23 +244,34 @@ def verify_nes_android():
         raise RuntimeError("NES did not execute 60 actual emulated video frames in Android WebView")
     first_frames,first_hash=current
     before=screenshot(OUT/"gamelab-nes-before.png")
-    # Hold a REAL OS touchscreen button; the probe never generates input.
-    x1,y1,x2,y2=button_bounds("A")
-    x,y=(x1+x2)//2,(y1+y2)//2
-    adb("shell","input","touchscreen","swipe",str(x),str(y),str(x),str(y),"280",timeout=15)
+    # The ROM latches the last A/B palette, so an already-red scene can
+    # legitimately ignore a repeated A. Exercise two distinct real OS touches.
     final=None
-    for _ in range(10):
-        final=nes_metrics(scene_tree())
-        if final and final[0]>first_frames and final[1]!=first_hash:break
-        time.sleep(.5)
-    if not final or final[0]<=first_frames or final[1]==first_hash:
-        raise RuntimeError("NES PPU pixels did not respond to a real held A press: "+str(final))
+    changed_by=None
+    observations=[]
+    for key in ("B","A"):
+        x1,y1,x2,y2=button_bounds(key)
+        x,y=(x1+x2)//2,(y1+y2)//2
+        adb("shell","input","touchscreen","swipe",str(x),str(y),str(x),str(y),"450",timeout=15)
+        for _ in range(10):
+            final=nes_metrics(scene_tree())
+            if final and final[0]>first_frames and final[1]!=first_hash:
+                changed_by=key
+                break
+            time.sleep(.5)
+        observations.append({"key":key,"frames":final[0] if final else None,
+                             "hash":final[1] if final else None})
+        if changed_by:break
+    if not changed_by:
+        raise RuntimeError("NES PPU did not respond to real held B/A touches: "
+                           +repr(observations))
     after=screenshot(OUT/"gamelab-nes-after.png")
     if before==after:raise RuntimeError("Android compositor did not show changed NES screen")
     proof={"kind":"separate-nes-android-emulation-v1","origin":"RETRO_EMULATED",
       "market_acceptance":False,"pilot_dispatched":False,"rom":"original_6502_nrom_homebrew",
       "cpu_ppu_frames_before":first_frames,"cpu_ppu_frames_after":final[0],
       "ppu_hash_before":first_hash,"ppu_hash_after":final[1],
+       "controller_button":changed_by,"controller_observations":observations,
       "android_pixel_change":True,"result":"PASS"}
     (OUT/"gamelab-nes-evidence.json").write_text(json.dumps(proof,indent=2),encoding="utf-8")
     print("GAMELAB_NES_ACTUAL_ANDROID_PASS "+json.dumps(proof),flush=True)
