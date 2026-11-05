@@ -157,6 +157,7 @@ public final class PilotUiInstrumentation extends Instrumentation {
             // service configuration can arrive before Activity recreation ends.
             checkRotationStopsInput();
             checkProjectionLifecycle();
+            checkExternalGameLabPilotGesture();
             evidence.put("capture_timing",service.captureTimingReport());
             evidence.put("metrics", onMain(() -> service.exportMetrics()));
             passed = true;
@@ -618,6 +619,137 @@ public final class PilotUiInstrumentation extends Instrumentation {
             }
             bubblePixelSample=sample.toString();return matches;
         }finally{screenshot.recycle();}
+    }
+
+    /**
+     * Missing release gate: PilotService itself must be able to dispatch a
+     * real ACTION_DOWN/UP into a DIFFERENT installed Android package.
+     *
+     * This uses a bounded, explicitly authorized manual probe, NOT an ADB
+     * injected gesture or a claim that an RL policy completed Market gameplay.
+     * The independent GameLab board pixels and accessibility counters must
+     * change after the service's gesture completion.
+     */
+    private void checkExternalGameLabPilotGesture() throws Exception {
+        final String external="org.localpilot.gamelab";
+        final String display="GameLab synthetic game display; never real Market acceptance";
+        onMain(()->{service.hidePanel();service.showPanel();return null;});
+        getTargetContext().startActivity(new Intent()
+                .setClassName(external,external+".TestDeviceActivity")
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_CLEAR_TASK));
+        await(()->markerBounds(display)!=null,10_000,
+                "Separate GameLab Android package did not show its actual game surface");
+        await(()->{
+            int[] state=gameLabBubbleCounts();
+            return state!=null&&state[0]==0&&state[1]==0;
+        },4_000,"GameLab did not start from a fresh synthetic Bubble state");
+        boolean automatic=onMain(()->getTargetContext()
+                .getSharedPreferences(MainActivity.PREF,Context.MODE_PRIVATE)
+                .getBoolean("auto_control",false));
+        if(!automatic){
+            click("Ещё");click("Включить автоуправление");
+            await(()->onMain(()->getTargetContext()
+                .getSharedPreferences(MainActivity.PREF,Context.MODE_PRIVATE)
+                .getBoolean("auto_control",false)),3_000,
+                "Explicit automatic input setting was not committed");
+        }
+        bindWindow(external);
+        await(()->onMain(()->permit().allows(gate().epoch(),SystemClock.elapsedRealtime())),
+                4_000,"Real external GameLab target did not get explicit input session");
+        Rect board=markerBounds(display);
+        require(board!=null&&board.width()>250&&board.height()>350,
+                "External GameLab touch surface disappeared or is too small");
+        int[] previous=gameLabBubbleCounts();
+        require(previous!=null&&previous[0]==0&&previous[1]==0,
+                "GameLab changed before the service dispatched its gesture");
+        long beforePixels=gameLabBubblePixels(board);
+        int alreadySent=onMain(()->intField("dispatchedInputs"));
+        // Use the production manual/gesture pipeline, with its real Ticket,
+        // InputPermit, STOP, TTL, window focus, panel intersection and audit.
+        // The instrumentation NEVER calls dispatchGesture directly.
+        onMain(()->{
+            java.lang.reflect.Method action=PilotService.class
+                .getDeclaredMethod("manual",int.class,int.class);
+            action.setAccessible(true);
+            action.invoke(service,1,0);return null;
+        });
+        await(()->onMain(()->intField("dispatchedInputs")==alreadySent+1
+                &&!booleanField("busy")),8_000,
+                "PilotService did not complete precisely one authorized cross-app gesture");
+        await(()->{
+            int[] state=gameLabBubbleCounts();
+            return state!=null&&state[0]==1&&state[1]==1;
+        },6_000,"GameLab did not receive the PilotService gesture and update its actual game state");
+        long afterPixels=gameLabBubblePixels(board);
+        require(afterPixels!=beforePixels,
+                "Independent Android compositor pixels did not show the external game change");
+        require(onMain(()->external.equals(field("target"))&&gate().armed()),
+                "PilotService lost the authorized GameLab target before the visible witness");
+        click("STOP");
+        await(()->!armed()&&!onMain(()->booleanField("busy")),4_000,
+                "STOP did not revoke the cross-app input session");
+        SystemClock.sleep(650);
+        int[] stopped=gameLabBubbleCounts();
+        require(stopped!=null&&stopped[0]==1&&stopped[1]==1,
+                "GameLab continued receiving gestures after STOP");
+        addCheck("pilotservice_real_cross_app_gesture_with_external_pixel_witness",
+            new JSONObject().put("source","GameLab synthetic only")
+                .put("market_acceptance",false)
+                .put("pilot_dispatched",true)
+                .put("input","PilotService.manual -> ActionGate -> dispatchGesture")
+                .put("external_package",external)
+                .put("verified_game_changes",stopped[1])
+                .put("independent_pixel_difference",true)
+                .put("stop_rearmed",false));
+    }
+
+    private int[] gameLabBubbleCounts() {
+        refreshAutomationCache();
+        AccessibilityNodeInfo root=automation.getRootInActiveWindow();
+        if(root==null)return null;
+        try{
+            String[] state=new String[1];
+            findExternalLabState(root,0,new int[]{2500},state);
+            if(state[0]==null)return null;
+            java.util.regex.Matcher matched=java.util.regex.Pattern.compile(
+                "^gamelab-state-v1 synthetic=true game=BUBBLE touches=(\\d+)"
+                +" changes=(\\d+) rejected=(\\d+) profile=9$").matcher(state[0]);
+            if(!matched.matches())return null;
+            return new int[]{Integer.parseInt(matched.group(1)),
+                Integer.parseInt(matched.group(2))};
+        }finally{root.recycle();}
+    }
+    private void findExternalLabState(AccessibilityNodeInfo node,int depth,
+                                      int[] remaining,String[] result){
+        if(depth>40||--remaining[0]<0||result[0]!=null)return;
+        CharSequence marker=node.getContentDescription();
+        if("org.localpilot.gamelab".contentEquals(node.getPackageName()==null?"":node.getPackageName())
+           &&node.isVisibleToUser()&&marker!=null
+           &&marker.toString().startsWith("gamelab-state-v1 ")){
+            result[0]=marker.toString();return;
+        }
+        for(int i=0;i<node.getChildCount();i++){
+            AccessibilityNodeInfo child=node.getChild(i);
+            if(child==null)continue;
+            try{findExternalLabState(child,depth+1,remaining,result);}
+            finally{child.recycle();}
+        }
+    }
+    /** Only the game-only board stripe: excludes the overlay, score and HUD. */
+    private long gameLabBubblePixels(Rect canvas)throws Exception{
+        Bitmap frame=automation.takeScreenshot();
+        require(frame!=null,"Android compositor did not provide an independent GameLab frame");
+        try{
+            int l=Math.max(0,canvas.left+Math.round(canvas.width()*.64f));
+            int r=Math.min(frame.getWidth(),canvas.left+Math.round(canvas.width()*.88f));
+            int t=Math.max(0,canvas.top+Math.round(canvas.height()*.28f));
+            int b=Math.min(frame.getHeight(),canvas.top+Math.round(canvas.height()*.42f));
+            require(r-l>35&&b-t>20,"GameLab pixel witness ROI unavailable");
+            long digest=0xcbf29ce484222325L;
+            for(int y=t;y<b;y+=3)for(int x=l;x<r;x+=3)
+                digest=(digest^(frame.getPixel(x,y)&0xffffff))*0x100000001b3L;
+            return digest;
+        }finally{frame.recycle();}
     }
 
     private void checkProjectionLifecycle() throws Exception {
