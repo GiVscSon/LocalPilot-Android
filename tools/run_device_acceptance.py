@@ -36,6 +36,9 @@ def main():
         isolated_emulator=True
         command(['adb', 'install', '-r', 'app/build/outputs/apk/debug/app-debug.apk'])
         command(['adb', 'install', '-r', 'app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk'])
+        # Install the real separate-package target before Pilot's instrumentation.
+        # A manual PilotService dispatch must genuinely cross Android app UIDs.
+        command(['adb','install','-r','game-lab/build/outputs/apk/debug/game-lab-debug.apk'])
         command(['adb','shell','settings','put','system','screen_off_timeout','600000'])
         command(['adb','shell','svc','power','stayon','true'])
         command(['adb','shell','input','keyevent','KEYCODE_WAKEUP'])
