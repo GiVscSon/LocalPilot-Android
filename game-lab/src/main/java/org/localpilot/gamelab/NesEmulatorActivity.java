@@ -39,6 +39,8 @@ public final class NesEmulatorActivity extends Activity {
  private static final String[] GAMEPAD={"UP","LEFT","DOWN","RIGHT","SELECT","START","B","A"};
  private WebView web;
  private TextView state;
+ private Button demoButton,aButton;
+ private boolean resumed;
  private boolean pageLoaded;
  private int frames,hash;
  private long lastInputAt;
@@ -63,7 +65,7 @@ public final class NesEmulatorActivity extends Activity {
      .addCategory(Intent.CATEGORY_OPENABLE);
    startActivityForResult(pick,CHOOSE_ROM);
   });
-  Button demo=new Button(this);
+  demoButton=new Button(this);Button demo=demoButton;
   demo.setText("Запустить тестовую NES-игру");
   root.addView(demo);
   demo.setOnClickListener(v->launchRom(HomebrewNes.cartridge()));
@@ -97,7 +99,9 @@ public final class NesEmulatorActivity extends Activity {
   web.addJavascriptInterface(new Object(){
    @JavascriptInterface public void onFrame(int count,int pixelsHash){
     runOnUiThread(()->{
+     if(!resumed)return;
      frames=count;hash=pixelsHash;
+     publishEvidence();
      if(count%60==0)
       state.setText("Кадров "+frames+" · экран CRC="+Integer.toHexString(hash)
        +" · касаний "+touches.get()+" · только эмуляция (не результат Маркета)");
@@ -113,6 +117,7 @@ public final class NesEmulatorActivity extends Activity {
    for(int i=row*4;i<row*4+4;i++){
     String name=GAMEPAD[i];
     Button btn=new Button(this);btn.setText(name);btn.setTextSize(11);
+    if("A".equals(name))aButton=btn;
     btn.setContentDescription("NES "+name+" button");
     btn.setOnTouchListener((view,event)->{
      int type=event.getActionMasked();
@@ -134,7 +139,12 @@ public final class NesEmulatorActivity extends Activity {
   note.setText(dendy?"50 Гц: программная совместимость, не точное железо Денди.":
    "JSNES 2.1.0 · Apache-2.0 · настоящее выполнение кода NES");
   setContentView(root);
+  root.post(this::publishEvidence);
   web.loadUrl(START_URL);
+ }
+ private void publishEvidence(){
+  if(resumed&&demoButton!=null)
+   GameLabEvidenceProvider.nes(dendy,frames,hash,demoButton,aButton);
  }
  private void launchRom(byte[] rom){
   if(!pageLoaded||web==null||rom==null||rom.length>MAX_ROM){
@@ -184,12 +194,15 @@ public final class NesEmulatorActivity extends Activity {
   }
  }
  @Override protected void onPause(){
+  resumed=false;GameLabEvidenceProvider.clear("nes");
   if(web!=null&&pageLoaded)web.evaluateJavascript("window.retroPause()",null);
   if(web!=null)web.onPause();
   super.onPause();
  }
  @Override protected void onResume(){
-  super.onResume();if(web!=null){web.onResume();
+  super.onResume();resumed=true;
+  if(demoButton!=null)demoButton.post(this::publishEvidence);
+  if(web!=null){web.onResume();
    if(pageLoaded)web.evaluateJavascript("window.retroResume()",null);
   }
  }
