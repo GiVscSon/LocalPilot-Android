@@ -131,9 +131,16 @@ public final class TestDeviceActivity extends Activity {
   update();
  }
  private void update(){
-  if(status!=null&&engine!=null)status.setText("Только тестовое поле • профиль "+engine.game.localPilotProfile
+  if(status==null||engine==null)return;
+  status.setText("Только тестовое поле • профиль "+engine.game.localPilotProfile
    +" • касаний "+engine.actions+" • изменений стенда "+engine.simulatedChanges
    +" • отказов "+engine.rejected+" • режим "+engine.fault);
+  // Stable, machine-readable ACCESSIBILITY evidence. This is an actual
+  // Android-rendered TextView value updated only after real UI event handling.
+  // It is deliberately marked "synthetic", not a Market-game reward.
+  status.setContentDescription("gamelab-state-v1 synthetic=true game="+engine.game.name()
+    +" touches="+engine.actions+" changes="+engine.simulatedChanges
+    +" rejected="+engine.rejected+" profile="+engine.game.localPilotProfile);
  }
  private void addLog(String entry){
   if(records.size()>=512)records.remove(0);
