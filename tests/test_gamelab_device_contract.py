@@ -6,6 +6,7 @@ They make sure the test cannot silently count synthetic changes as Market wins.
 import importlib.util
 from pathlib import Path
 import unittest
+from unittest.mock import patch
 from xml.etree import ElementTree as ET
 
 ROOT=Path(__file__).resolve().parents[1]
@@ -51,6 +52,39 @@ class GameLabDeviceStateContractTest(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             smoke.game_state(self.build(
                 "gamelab-state-v1 synthetic=true game=BUBBLE touches=1 rejected=0 profile=9"))
+
+    def test_live_probe_row_parser(self):
+        columns=["source=gamelab-only","scene=nes","game=NES",
+          "touches=0","changes=0","rejected=0","profile=-1",
+          "frames=75","pixel_hash=-1431655766",
+          "canvas_left=0","canvas_top=0","canvas_right=0","canvas_bottom=0",
+          "primary_left=12","primary_top=110","primary_right=300","primary_bottom=170",
+          "secondary_left=600","secondary_top=1600","secondary_right=720","secondary_bottom=1710",
+          "updated_elapsed_ms=191200"]
+        with patch.object(smoke,"adb",return_value="Row: 0 "+", ".join(columns)):
+            data=smoke.probe()
+        self.assertEqual((data["scene"],data["frames"],data["game"]),("nes",75,"NES"))
+        self.assertEqual(smoke.probe_bounds(data,"secondary"),[600,1600,720,1710])
+        self.assertEqual(data["pixel_hash"] & 0xffffffff,0xaaaaaaaa)
+
+    def test_incomplete_probe_is_rejected(self):
+        with patch.object(smoke,"adb",return_value="Row: 0 source=gamelab-only, scene=nes"):
+            with self.assertRaises(RuntimeError):
+                smoke.probe()
+
+    def test_probe_button_bounds_cannot_send_input(self):
+        data={"scene":"nes","primary_left":5,"primary_top":60,
+          "primary_right":150,"primary_bottom":115,
+          "secondary_left":550,"secondary_top":1350,
+          "secondary_right":650,"secondary_bottom":1470}
+        previous=smoke._probe_only
+        try:
+            smoke._probe_only=True
+            with patch.object(smoke,"probe",return_value=data),patch.object(smoke,"adb",
+                side_effect=AssertionError("reading bounds must never dispatch input")):
+                self.assertEqual(smoke.button_bounds("A"),[550,1350,650,1470])
+        finally:
+            smoke._probe_only=previous
 
     def test_ambiguous_state_rejected(self):
         root=self.build("gamelab-state-v1 synthetic=true game=BUBBLE "
