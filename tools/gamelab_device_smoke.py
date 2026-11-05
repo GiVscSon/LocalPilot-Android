@@ -46,6 +46,7 @@ def probe():
       "canvas_left","canvas_top","canvas_right","canvas_bottom",
       "primary_left","primary_top","primary_right","primary_bottom",
       "secondary_left","secondary_top","secondary_right","secondary_bottom",
+      "tertiary_left","tertiary_top","tertiary_right","tertiary_bottom",
       "updated_elapsed_ms"):
         if field not in values:raise RuntimeError("GameLab probe missing "+field)
         values[field]=int(values[field])
