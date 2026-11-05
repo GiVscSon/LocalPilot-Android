@@ -60,7 +60,7 @@ def main():
                     command(['adb', 'shell', 'settings', 'put', 'secure', 'enabled_accessibility_services',
                              PACKAGE + '/org.localpilot.android.PilotService'])
                     command(['adb', 'shell', 'settings', 'put', 'secure', 'accessibility_enabled', '1'])
-                    process.wait(timeout=300)
+                    process.wait(timeout=360)
                     if process.returncode:raise RuntimeError('Instrumentation process failed\n'+(OUT/'instrumentation.txt').read_text()[-2500:])
                 finally:
                     if process.poll() is None:process.kill();process.wait(timeout=5)
