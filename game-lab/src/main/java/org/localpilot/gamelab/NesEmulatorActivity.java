@@ -39,7 +39,7 @@ public final class NesEmulatorActivity extends Activity {
  private static final String[] GAMEPAD={"UP","LEFT","DOWN","RIGHT","SELECT","START","B","A"};
  private WebView web;
  private TextView state;
- private Button demoButton,aButton;
+ private Button demoButton,aButton,bButton;
  private boolean resumed;
  private boolean pageLoaded;
  private int frames,hash;
@@ -118,6 +118,7 @@ public final class NesEmulatorActivity extends Activity {
     String name=GAMEPAD[i];
     Button btn=new Button(this);btn.setText(name);btn.setTextSize(11);
     if("A".equals(name))aButton=btn;
+    if("B".equals(name))bButton=btn;
     btn.setContentDescription("NES "+name+" button");
     btn.setOnTouchListener((view,event)->{
      int type=event.getActionMasked();
@@ -144,7 +145,7 @@ public final class NesEmulatorActivity extends Activity {
  }
  private void publishEvidence(){
   if(resumed&&demoButton!=null)
-   GameLabEvidenceProvider.nes(dendy,frames,hash,demoButton,aButton);
+   GameLabEvidenceProvider.nes(dendy,frames,hash,demoButton,aButton,bButton);
  }
  private void launchRom(byte[] rom){
   if(!pageLoaded||web==null||rom==null||rom.length>MAX_ROM){
