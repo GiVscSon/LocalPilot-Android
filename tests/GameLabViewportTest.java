@@ -1,5 +1,7 @@
 package org.localpilot.gamelab;
 
+import org.localpilot.android.Board2048;
+
 public final class GameLabViewportTest {
  private static int checks;
  private static void yes(boolean condition,String message){
@@ -31,6 +33,22 @@ public final class GameLabViewportTest {
   GameLabEngine grid=new GameLabEngine(GameLabEngine.Game.MATCH,101);
   yes(grid.cellFrom(wide.x(wide.px(worldX)),wide.y(wide.py(worldY)))==row*n+col,
     "screen touch lands in the same logical grid cell that is drawn");
+  for(int i=0;i<Board2048.PALETTE.length;i++){
+   int tile=i==0?0:1<<i;
+   int argb=GameLab2048Palette.paint(tile);
+   yes((argb&0xffffff)==Board2048.PALETTE[i],
+      "GameLab tile paint matches the actual production vision palette "+tile);
+   yes(Board2048.colorTile(argb)==tile,
+      "strict production reader recognizes the test tile "+tile);
+  }
+  GameLabEngine exercise=new GameLabEngine(GameLabEngine.Game.BOARD2048,212);
+  Board2048 initial=new Board2048(exercise.cells);
+  yes(exercise.gesture(.40f,.45f,.70f,.45f,160)==GameLabEngine.Result.CHANGED,
+      "an actual swipe modifies the 2048 test game");
+  Board2048 result=new Board2048(exercise.cells);
+  yes(initial.verifies(result,Board2048.RIGHT),
+      "the external game makes exactly a legal merge and one verified spawn");
+  yes(exercise.simulatedChanges==1,"only synthetic GameLab changed, not a Market win");
   System.out.println("GAMELAB_VIEWPORT_PASS checks="+checks);
  }
 }
