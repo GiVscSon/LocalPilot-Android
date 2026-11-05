@@ -87,7 +87,8 @@ public final class NesEmulatorActivity extends Activity {
     Uri uri=request.getUrl();
     if(uri==null||!"file".equals(uri.getScheme())||
       !START_URL.equals(uri.toString())&&
-      !"file:///android_asset/nes/jsnes.min.js".equals(uri.toString()))return
+      !"file:///android_asset/nes/jsnes.min.js".equals(uri.toString())&&
+      !"file:///android_asset/nes/latched-buttons.js".equals(uri.toString()))return
        new WebResourceResponse("text/plain","UTF-8",new java.io.ByteArrayInputStream(new byte[0]));
     return super.shouldInterceptRequest(view,request);
    }
