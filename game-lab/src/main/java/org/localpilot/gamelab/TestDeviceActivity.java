@@ -100,8 +100,16 @@ public final class TestDeviceActivity extends Activity {
   String pilotPackage=getIntent().getStringExtra("pilot_package");
   if(HubContract.supportedPilotPackage(pilotPackage))
    addButton(retroRow,"К LocalPilot",()->{
-    Intent back=getPackageManager().getLaunchIntentForPackage(pilotPackage);
-    if(back!=null)startActivity(back);
+    // Explicit exported launcher avoids Android 11+ package-visibility false
+    // negatives. Launching Pilot never grants Accessibility consent.
+    try{
+     Intent back=new Intent(Intent.ACTION_MAIN)
+       .setClassName(pilotPackage,"org.localpilot.android.MainActivity")
+       .addCategory(Intent.CATEGORY_LAUNCHER);
+     startActivity(back);
+    }catch(android.content.ActivityNotFoundException notInstalled){
+     addLog("PILOT_LAUNCHER_NOT_FOUND");
+    }
    });
   status=label("",12);root.addView(status);
   setContentView(root);
