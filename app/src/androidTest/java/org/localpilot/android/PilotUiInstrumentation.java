@@ -387,15 +387,15 @@ public final class PilotUiInstrumentation extends Instrumentation {
         onMain(() -> { service.hidePanel(); return null; });
         launch(MainActivity.class);
         await(()->onMain(this::launcherInsetsApplied),3_000,"2048 launcher did not apply safe scroll viewport insets");
-        // The real launcher intentionally starts a selected built-in game when
-        // automatic control is enabled. Configure observation through its visible
-        // switch first so this manual-region scenario starts from a stopped game.
+        // Legacy 2048 remains a direct instrumentation fixture. Do not bring
+        // its obsolete launcher shortcut back: actual external games and GameLab
+        // must be selected as their own app packages via the visible picker.
         if(onMain(()->getTargetContext().getSharedPreferences(MainActivity.PREF,Context.MODE_PRIVATE).getBoolean("auto_control",true)))
             click("Автоуправление выбранной игрой");
         await(()->onMain(()->!getTargetContext().getSharedPreferences(MainActivity.PREF,Context.MODE_PRIVATE).getBoolean("auto_control",true)),3_000,"Launcher observation mode did not commit");
-        traceClick("2048 before input "+onMain(this::activitySummary));
-        click("Открыть 2048");
-        traceClick("2048 after input "+onMain(this::activitySummary));
+        traceClick("2048 legacy fixture before "+onMain(this::activitySummary));
+        launch(Game2048Activity.class);
+        traceClick("2048 legacy fixture after "+onMain(this::activitySummary));
         // Observe the real rendered destination. Older Android can publish an
         // Activity to the screen without notifying this process's class monitor.
         await(() -> markerBounds("LOCALPILOT_BOARD_2048") != null, 10_000, "Main screen did not show the actual 2048 board");
