@@ -28,7 +28,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.localpilot.shared.HubContract;
 
 /**
- * Working NES CPU/PPU/audio emulation: real JSNES 2.1.0 execution inside a
+ * NES CPU/PPU emulation: JSNES 2.1.0 execution inside a
  * separate local Android WebView. User-selected ROMs never leave this device.
  * All inputs are OS-delivered touch events, not artificial ACK or rewards.
  */
