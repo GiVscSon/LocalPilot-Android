@@ -50,7 +50,7 @@ public final class NesEmulatorActivity extends Activity {
   super.onCreate(bundle);
   dendy=getIntent().getBooleanExtra("dendy",false);
   LinearLayout root=new LinearLayout(this);
-  root.setOrientation(LinearLayout.VERTICAL);root.setPadding(8,8,8,8);
+  root.setOrientation(LinearLayout.VERTICAL);GameLabInsets.install(this,root,8);
   root.setBackgroundColor(HubContract.BACKGROUND);
   TextView label=new TextView(this);
   label.setText(dendy?"LocalPilot · Денди (50 Гц)":"LocalPilot · NES");
@@ -142,6 +142,7 @@ public final class NesEmulatorActivity extends Activity {
   note.setText(dendy?"50 Гц: программная совместимость, не точное железо Денди.":
    "JSNES 2.1.0 · Apache-2.0 · настоящее выполнение кода NES");
   setContentView(root);
+  root.requestApplyInsets();
   root.post(this::publishEvidence);
   web.loadUrl(START_URL);
  }
