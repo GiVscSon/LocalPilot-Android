@@ -34,11 +34,6 @@ def main():
         if qemu!='1' and boot_qemu!='1':
             raise RuntimeError('Isolated emulator required; refusing to change Accessibility settings on a physical device')
         isolated_emulator=True
-        # The real Android companion is installed, touched and visually
-        # checked before PilotService instrumented acceptance. Its simulated
-        # results are never credited as Market-game or neural rewards.
-        from gamelab_device_smoke import run as verify_gamelab_touch
-        verify_gamelab_touch()
         command(['adb', 'install', '-r', 'app/build/outputs/apk/debug/app-debug.apk'])
         command(['adb', 'install', '-r', 'app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk'])
         command(['adb','shell','settings','put','system','screen_off_timeout','600000'])
@@ -103,7 +98,11 @@ def main():
                                + '\n' + str(report.get('own_state',''))
                                + '\nUI: ' + str(report.get('visible_ui',''))[:2000]
                                + '\n' + str(report.get('stack', ''))[:1000])
-        annotation('notice', 'PASS: ' + str(len(report.get('checks', []))) + ' actual Android acceptance scenarios')
+        # Run companion testing AFTER PilotService acceptance. This prevents
+        # unrelated emulator/WebView load from altering the existing gate.
+        from gamelab_device_smoke import run as verify_gamelab_touch
+        verify_gamelab_touch()
+        annotation('notice', 'PASS: ' + str(len(report.get('checks', []))) + ' Pilot scenarios + genuine GameLab touch/pixel change')
         return 0
     except (OSError, RuntimeError, ValueError, subprocess.TimeoutExpired) as error:
         text = str(error)
