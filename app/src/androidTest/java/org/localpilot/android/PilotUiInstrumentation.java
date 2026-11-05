@@ -1066,18 +1066,16 @@ public final class PilotUiInstrumentation extends Instrumentation {
         String query="@contains:"+pkg;
         // Require the current live dialog, but do not equate decor bounds with
         // accessibility window frames: shadows/insets differ across Android.
-        await(()->{
-            String state=onMain(()->"epoch="+gate().epoch()+" note="+field("note")+" dialog="+(field("overlayDialog")!=null));
-            traceClick("window-selection "+state+" "+windowSummary());
-            return onMain(()->{
+        // Do not synchronously enumerate UiAutomation windows every 60ms:
+        // API30 shares its accessibility cache with the service's main looper.
+        await(()->onMain(()->{
                 Object object=field("overlayDialog");
                 if(!(object instanceof android.app.Dialog dialog)||!dialog.isShowing())return false;
                 View decor=dialog.getWindow().getDecorView();
                 if(!decor.isLaidOut())return false;
                 Rect row=ownControlBounds(decor,query);
                 return row!=null&&!row.isEmpty();
-            });
-        },3_000,"The current window dialog has no visible target row");
+            }),3_000,"The current window dialog has no visible target row");
         // click() performs a fresh lookup and refreshes the actionable node.
         click(query);
         // The Android 11 accessibility-window cache can report a focused

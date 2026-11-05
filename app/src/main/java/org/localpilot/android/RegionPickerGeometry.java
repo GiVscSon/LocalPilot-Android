@@ -52,6 +52,20 @@ public final class RegionPickerGeometry {
   int y2=Math.max(window.top(),Math.min(window.bottom(),screen(originY,localEndY)));
   return GameViewport.selection(window,x1,y1,x2,y2);
  }
+ /** A real 2048 board can be smaller than 25% of a tall tablet window.
+  * Keep strict >=160px square, finite coordinates and exact window bounds.
+  * No other game profile uses this narrower geometry rule. */
+ public static GameViewport.Box selection2048(GameViewport.Box window,int originX,int originY,
+   float startX,float startY,float endX,float endY){
+  window(window);
+  int x1=screen(originX,startX),y1=screen(originY,startY);
+  int x2=screen(originX,endX),y2=screen(originY,endY);
+  GameViewport.Box candidate=new GameViewport.Box(Math.min(x1,x2),Math.min(y1,y2),
+    Math.max(x1,x2),Math.max(y1,y2));
+  if(!window.contains(candidate)||!readable2048(candidate))
+   throw new IllegalArgumentException("2048 ROI must be a square >=160px inside the game window");
+  return candidate;
+ }
  public static GameViewport.Box local(GameViewport.Box screen,int originX,int originY){
   if(screen==null)throw new IllegalArgumentException("region");
   return new GameViewport.Box(Math.subtractExact(screen.left(),originX),Math.subtractExact(screen.top(),originY),

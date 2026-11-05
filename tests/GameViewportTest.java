@@ -17,6 +17,23 @@ public class GameViewportTest {
   check(GameViewport.selection(window,200,100,450,400).equals(new GameViewport.Box(200,100,450,400)),"portrait rectangle accepted");
   check(GameViewport.selection(window,450,400,200,100).equals(new GameViewport.Box(200,100,450,400)),"reverse drag accepted");
   for(int[] b:new int[][]{{0,0,400,400},{110,60,120,70},{200,100,200,300},{100,50,601,450}}){try{GameViewport.selection(window,b[0],b[1],b[2],b[3]);throw new AssertionError("bad selection accepted");}catch(IllegalArgumentException expected){checks++;}}
+  // Tablet regression: a correct 440px 2048 grid fits less than 25% of
+  // a 1920px target window but still exceeds the strict reader minimum.
+  GameViewport.Box tablet=new GameViewport.Box(0,0,1080,1920);
+  GameViewport.Box square=new GameViewport.Box(300,750,740,1190);
+  try{GameViewport.selection(tablet,300,750,740,1190);
+   throw new AssertionError("generic ROI accepted an undersized region");
+  }catch(IllegalArgumentException expected){checks++;}
+  check(RegionPickerGeometry.selection2048(tablet,0,0,300,750,740,1190).equals(square),
+    "strict 2048 accepts a physically square 440px board");
+  check(RegionPickerGeometry.selection2048(tablet,0,0,740,1190,300,750).equals(square),
+    "reverse 2048 drag preserves exact bounds");
+  for(int[] b:new int[][]{{300,750,425,875},{300,750,740,1110},
+      {-1,750,439,1190},{300,750,1081,1531}}){
+   try{RegionPickerGeometry.selection2048(tablet,0,0,b[0],b[1],b[2],b[3]);
+    throw new AssertionError("unsafe 2048 ROI accepted");
+   }catch(IllegalArgumentException expected){checks++;}
+  }
   for(int shift:new int[]{0,30,100}){
    GameViewport.Box b=new GameViewport.Box(shift,0,shift+720,480);
    GameViewport.Box c=GameViewport.detect((x,y)->scene.rgb(x-shift,y),b,null);
