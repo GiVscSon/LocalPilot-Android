@@ -132,7 +132,7 @@ public final class TestDeviceActivity extends Activity {
  }
  private void update(){
   if(status!=null&&engine!=null)status.setText("Только тестовое поле • профиль "+engine.game.localPilotProfile
-   +" • касаний "+engine.actions+" • изменений симулятора "+engine.simulatedChanges
+   +" • касаний "+engine.actions+" • изменений стенда "+engine.simulatedChanges
    +" • отказов "+engine.rejected+" • режим "+engine.fault);
  }
  private void addLog(String entry){
