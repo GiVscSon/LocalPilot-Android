@@ -18,7 +18,9 @@ const emulator=new jsnes.NES({emulateSound:false,onFrame:function(p){
 }});
 const cart=fs.readFileSync(romFile);
 assert.equal(cart.length,24592,"test cartridge must have PRG+CHR banks");
-// jsnes 2.1.0 loadROM accepts a binary string, not a Uint8Array.\n// Uint8Array silently corrupts ROM reads and eventually hits invalid opcodes.\nemulator.loadROM(cart.toString('latin1'));
+// jsnes 2.1.0 ROM decoder requires a binary string, not Uint8Array.
+// Decode each byte losslessly using latin1 (0x00..0xff).
+emulator.loadROM(cart.toString('latin1'));
 for(let i=0;i<150;i++)emulator.frame();
 assert(frames>80,"real PPU must render frames");
 assert(lastPixels&&lastPixels.length===256*240,"NES video output must be 256x240");
