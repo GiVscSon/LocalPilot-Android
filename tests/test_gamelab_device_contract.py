@@ -88,6 +88,31 @@ class GameLabDeviceStateContractTest(unittest.TestCase):
         finally:
             smoke._probe_only=previous
 
+    def test_independent_nes_b_button_bounds_read_only(self):
+        data={"scene":"nes","tertiary_left":470,"tertiary_top":1600,
+              "tertiary_right":590,"tertiary_bottom":1710}
+        previous=smoke._probe_only
+        try:
+            smoke._probe_only=True
+            with patch.object(smoke,"probe",return_value=data),patch.object(smoke,"adb",
+                side_effect=AssertionError("reading B bounds must not inject input")):
+                self.assertEqual(smoke.button_bounds("B"),[470,1600,590,1710])
+        finally:
+            smoke._probe_only=previous
+
+    def test_missing_b_button_bounds_fail_closed(self):
+        data={"scene":"nes","tertiary_left":0,"tertiary_top":0,
+              "tertiary_right":0,"tertiary_bottom":0}
+        previous=smoke._probe_only
+        try:
+            smoke._probe_only=True
+            with patch.object(smoke,"probe",return_value=data),patch.object(smoke,"adb",
+                side_effect=AssertionError("must not attempt fallback gesture")):
+                with self.assertRaises(RuntimeError):
+                    smoke.button_bounds("B")
+        finally:
+            smoke._probe_only=previous
+
     def test_ambiguous_state_rejected(self):
         root=self.build("gamelab-state-v1 synthetic=true game=BUBBLE "
                         "touches=0 changes=0 rejected=0 profile=9")
