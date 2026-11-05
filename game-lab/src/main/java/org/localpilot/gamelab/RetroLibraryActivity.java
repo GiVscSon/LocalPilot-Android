@@ -33,7 +33,7 @@ public final class RetroLibraryActivity extends Activity {
   super.onCreate(state);
   LinearLayout content=new LinearLayout(this);
   content.setOrientation(LinearLayout.VERTICAL);
-  content.setPadding(24,24,24,24);
+  GameLabInsets.install(this,content,16);
   TextView title=new TextView(this);
   title.setText("GameLab · DOS / NES / Денди");
   title.setTextSize(22);
@@ -74,7 +74,7 @@ public final class RetroLibraryActivity extends Activity {
    }
    @Override public void onNothingSelected(android.widget.AdapterView<?> view){}
   });
-  setContentView(content);report();
+  setContentView(content);content.requestApplyInsets();report();
   content.post(this::publishEvidence);
  }
  private RetroEmulatorCatalog.System selected(){
