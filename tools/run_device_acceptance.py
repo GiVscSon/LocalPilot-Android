@@ -34,6 +34,11 @@ def main():
         if qemu!='1' and boot_qemu!='1':
             raise RuntimeError('Isolated emulator required; refusing to change Accessibility settings on a physical device')
         isolated_emulator=True
+        # The real Android companion is installed, touched and visually
+        # checked before PilotService instrumented acceptance. Its simulated
+        # results are never credited as Market-game or neural rewards.
+        from gamelab_device_smoke import run as verify_gamelab_touch
+        verify_gamelab_touch()
         command(['adb', 'install', '-r', 'app/build/outputs/apk/debug/app-debug.apk'])
         command(['adb', 'install', '-r', 'app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk'])
         command(['adb','shell','settings','put','system','screen_off_timeout','600000'])
