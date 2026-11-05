@@ -1989,8 +1989,12 @@ public class PilotService extends AccessibilityService {
    int before=demoScore(root);
    if(before<0){stop("Демо: не читается счёт тестовой игры");compact(false);return;}
    Rect bounds=new Rect();node.getBoundsInScreen(bounds);
-   send(bounds.centerX(),bounds.centerY(),bounds.centerX(),bounds.centerY(),gate.offer(SystemClock.elapsedRealtime()),
-    ()->verifyDemoTouch(epoch,before,SystemClock.elapsedRealtime()+2000));
+   // Accessibility taps as short as 50 ms can be ACKed without delivering
+   // ACTION_UP to the target on Android 16. The isolated Demo control uses
+   // a deliberate 120 ms press. Real game-specific gesture profiles are unchanged.
+   sendObserved(bounds.centerX(),bounds.centerY(),bounds.centerX(),bounds.centerY(),
+    gate.offer(SystemClock.elapsedRealtime()),
+    ()->verifyDemoTouch(epoch,before,SystemClock.elapsedRealtime()+2000),-1,120);
   }finally{if(node!=null&&node!=root)node.recycle();if(root!=null)root.recycle();}
  }
  private void verifyDemoTouch(long epoch,int before,long until){
