@@ -322,8 +322,14 @@ public class PilotService extends AccessibilityService {
  private void chooseWindow(long epoch,long until){
   if(epoch!=gate.epoch()||destroying)return;
   java.util.List<String> owners=new java.util.ArrayList<>(),labels=new java.util.ArrayList<>();java.util.List<Integer> ids=new java.util.ArrayList<>();java.util.List<Rect> bounds=new java.util.ArrayList<>();
+  Point displaySize=new Point();wm.getDefaultDisplay().getRealSize(displaySize);
   for(AccessibilityWindowInfo w:getWindows())if(w.getType()==AccessibilityWindowInfo.TYPE_APPLICATION){AccessibilityNodeInfo r=windowRoot(w);if(r==null)continue;try{
    String pkg=String.valueOf(r.getPackageName());Rect b=new Rect();w.getBoundsInScreen(b);if(b.isEmpty())continue;
+   // Accessibility can briefly expose bounds beyond the physical display
+   // during an Activity transition. Selection may only name visible pixels;
+   // awaitChosenWindow still requires exact focused package, ID and bounds.
+   int[] visible=WindowFocus.visibleSelection(b.left,b.top,b.right,b.bottom,displaySize.x,displaySize.y);if(visible==null)continue;
+   b.set(visible[0],visible[1],visible[2],visible[3]);
    owners.add(pkg);ids.add(w.getId());bounds.add(b);labels.add(applicationLabel(pkg)+" · "+b.width()+"×"+b.height()+(w.isFocused()?" · активное":"")+"\n"+pkg);
   }finally{r.recycle();}}
   if(labels.isEmpty()){
@@ -334,9 +340,17 @@ public class PilotService extends AccessibilityService {
   }
   overlayMenu("Окно игры",labels.toArray(new String[0]),i->{explicitWindow=true;if(!owners.get(i).equals(visualOwner)||ids.get(i)!=visualWindow||!bounds.get(i).equals(visualWindowBounds)){visualRoi=null;manualVisualRoi=false;}visualOwner=owners.get(i);visualWindow=ids.get(i);visualWindowBounds=new Rect(bounds.get(i));awaitChosenWindow(owners.get(i),ids.get(i),bounds.get(i),epoch,SystemClock.elapsedRealtime()+12000);});
  }
+ // In-memory metadata for the isolated instrumentation report; no frame data.
+ private volatile String chosenWindowDebug="not sampled";
  private void awaitChosenWindow(String pkg,int id,Rect expected,long epoch,long until){
-  if(epoch!=gate.epoch())return;AccessibilityNodeInfo r=appRoot();boolean ready=false;
-  try{ready=r!=null&&unlocked()&&pkg.equals(String.valueOf(r.getPackageName()))&&id==r.getWindowId()&&expected.equals(windowBounds(r));}finally{if(r!=null)r.recycle();}
+  if(epoch!=gate.epoch()){chosenWindowDebug="epoch changed expected="+epoch+" current="+gate.epoch();return;}AccessibilityNodeInfo r=appRoot();boolean ready=false;
+  String reason="no focused root";String actualPkg="-";int actualId=-1;Rect actualBounds=null;
+  try{
+   if(r!=null){if(!unlocked())reason="locked";else{actualPkg=String.valueOf(r.getPackageName());
+    if(!pkg.equals(actualPkg))reason="package mismatch";else{actualId=r.getWindowId();
+     if(id!=actualId)reason="window id mismatch";else{actualBounds=windowBounds(r);ready=expected.equals(actualBounds);reason=ready?"ready":"bounds mismatch";}}}}
+  }finally{if(r!=null)r.recycle();}
+  chosenWindowDebug="reason="+reason+" expected="+pkg+"/"+id+"/"+expected.toShortString()+" actual="+actualPkg+"/"+actualId+"/"+(actualBounds==null?"-":actualBounds.toShortString())+" epoch="+epoch+" remaining_ms="+(until-SystemClock.elapsedRealtime());
   if(ready){arm();if(gate.armed()){note="Окно выбрано · "+targetLabel+". Выберите область или нажмите Старт";update();}return;}
   if(SystemClock.elapsedRealtime()>=until){note="Окно не стало активным. Коснитесь игры и выберите окно снова";update();return;}
   note="Коснитесь выбранного окна игры · ожидаю фокус";update();handler.postDelayed(()->awaitChosenWindow(pkg,id,expected,epoch,until),250);

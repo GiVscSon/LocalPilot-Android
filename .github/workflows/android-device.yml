@@ -34,6 +34,7 @@ jobs:
    - name: Build app and instrumentation with the same isolated CI signing key
      run: |
       set -euo pipefail
+      python3 -m unittest discover -s tests -p 'test_device_evidence.py'
       "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-35' 'build-tools;35.0.0'
       mkdir -p device-evidence
       if gradle --no-daemon :app:assembleDebug :app:assembleDebugAndroidTest :game-lab:assembleDebug 2>&1 | tee device-evidence/gradle-build.log; then
@@ -64,11 +65,6 @@ jobs:
       emulator-boot-timeout: 300
       emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
       script: python3 tools/run_device_acceptance.py
-   - name: Collect isolated synthetic-device crash evidence
-     if: always()
-     run: |
-      mkdir -p device-evidence
-      timeout 15s adb logcat -d -b crash > device-evidence/crash-logcat.txt 2>&1 || true
    - uses: actions/upload-artifact@v4
      if: always()
      with:

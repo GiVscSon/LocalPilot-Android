@@ -25,6 +25,13 @@ public final class WindowFocus {
  public static boolean interruptedArcade(boolean playingArcade,boolean arcadePending,boolean jumperPending){return playingArcade&&(arcadePending||jumperPending);}
  public static boolean interrupted2048(boolean playing,boolean pending){return playing&&pending;}
  public static boolean transientLoss(String reason){return "TARGET_WINDOW_UNAVAILABLE".equals(reason)||"WINDOW_STATE_UNAVAILABLE".equals(reason)||"TARGET_APP_CHANGED".equals(reason)||"FOCUS_PAUSED".equals(reason);}
+ /** Clip a selected snapshot to the physical display. This does not grant input:
+  * the focused window must still match the resulting bounds exactly. */
+ public static int[] visibleSelection(int l,int t,int r,int b,int width,int height){
+  if(width<=0||height<=0||r<=l||b<=t)return null;
+  int left=Math.max(0,l),top=Math.max(0,t),right=Math.min(width,r),bottom=Math.min(height,b);
+  return right>left&&bottom>top?new int[]{left,top,right,bottom}:null;
+ }
  /** Rebinding evidence is separate from input authority. All physical dimensions and
   * the focused window ID must remain identical for at least 600 ms. */
  public static final class RebindStability {

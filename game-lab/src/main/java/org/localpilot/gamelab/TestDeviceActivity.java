@@ -169,7 +169,7 @@ public final class TestDeviceActivity extends Activity {
   private final Paint brush=new Paint(3);
   private final RectF rect=new RectF();
   private Bitmap frozen;
-  private float downX,downY;private long downAt;
+  private float downX,downY;private long downAt;private boolean validDown;
   GameSurface(){super(TestDeviceActivity.this);
    setContentDescription("GameLab synthetic game display; never real Market acceptance");
   }
@@ -186,7 +186,11 @@ public final class TestDeviceActivity extends Activity {
   @Override protected void onDraw(Canvas c){
    super.onDraw(c);
    if(engine==null)return;
-   c.save();c.scale(getWidth()/360f,getHeight()/640f);
+   c.drawColor(HubContract.BACKGROUND);
+   GameLabViewport viewport=new GameLabViewport(getWidth(),getHeight());
+   c.save();
+   c.translate(viewport.offsetX,viewport.offsetY);
+   c.scale(viewport.scale,viewport.scale);
    if(frozen!=null)c.drawBitmap(frozen,0,0,brush);
    else render(c);
    c.restore();
@@ -311,7 +315,7 @@ public final class TestDeviceActivity extends Activity {
     int v=engine.cells[r*n+col];
     float x=left+col*cell,y=top+r*cell;
     int fill=engine.game==GameLabEngine.Game.BOARD2048
-      ?v==0?0xff6d7887:tint((int)(Math.log(v)/Math.log(2)))
+      ?GameLab2048Palette.paint(v)
       :v>=8?0xff2a2e37:tint(v);
     block(c,x+2,y+2,x+cell-2,y+cell-2,fill,6);
     if(v!=0){
@@ -323,11 +327,16 @@ public final class TestDeviceActivity extends Activity {
   }
   @Override public boolean onTouchEvent(MotionEvent event){
    if(engine==null)return false;
-   float x=event.getX()/Math.max(1,getWidth()),y=event.getY()/Math.max(1,getHeight());
+   GameLabViewport viewport=new GameLabViewport(getWidth(),getHeight());
+   float x=viewport.x(event.getX()),y=viewport.y(event.getY());
    if(event.getActionMasked()==MotionEvent.ACTION_DOWN){
+    validDown=viewport.inGame(event.getX(),event.getY());
     downX=x;downY=y;downAt=SystemClock.elapsedRealtime();return true;
    }
+   if(event.getActionMasked()==MotionEvent.ACTION_CANCEL){validDown=false;return true;}
    if(event.getActionMasked()!=MotionEvent.ACTION_UP)return true;
+   if(!validDown)return true;
+   validDown=false;
    long elapsed=SystemClock.elapsedRealtime()-downAt;
    if(engine.fault==GameLabEngine.Fault.PANEL_OVERLAP&&y>.63f&&x<.84f){
     addLog("PANEL_BLOCKED,game="+engine.game);return true;

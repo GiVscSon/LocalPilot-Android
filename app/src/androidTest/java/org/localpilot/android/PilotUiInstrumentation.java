@@ -45,7 +45,7 @@ import java.util.regex.Pattern;
  * 2048 progress is independently read from real screenshots, never Android ACK.
  */
 public final class PilotUiInstrumentation extends Instrumentation {
-    private static final long TEST_LIMIT_MS = 240_000;
+    private static final long TEST_LIMIT_MS = 300_000;
     private static final Pattern SCORE = Pattern.compile("^Счёт:\\s*(\\d+)");
 
     private final JSONObject evidence = new JSONObject();
@@ -157,6 +157,8 @@ public final class PilotUiInstrumentation extends Instrumentation {
             // service configuration can arrive before Activity recreation ends.
             checkRotationStopsInput();
             checkProjectionLifecycle();
+            checkExternalGameLabPilotGesture();
+            checkExternalGameLabAutoplay2048();
             evidence.put("capture_timing",service.captureTimingReport());
             evidence.put("metrics", onMain(() -> service.exportMetrics()));
             passed = true;
@@ -173,6 +175,7 @@ public final class PilotUiInstrumentation extends Instrumentation {
                 // Collect the metadata-only capture timeline before any Binder
                 // or UI automation query that may stall a sick main thread.
                 if (service != null) evidence.put("capture_timing",service.captureTimingReport());
+                if (service != null) evidence.put("chosen_window_debug",String.valueOf(field("chosenWindowDebug")));
                 evidence.put("failed_at_ms", SystemClock.uptimeMillis()-started);
                 evidence.put("windows", windowSummary());
                 evidence.put("stack", stack.toString());
@@ -620,6 +623,316 @@ public final class PilotUiInstrumentation extends Instrumentation {
         }finally{screenshot.recycle();}
     }
 
+    /**
+     * Missing release gate: PilotService itself must be able to dispatch a
+     * real ACTION_DOWN/UP into a DIFFERENT installed Android package.
+     *
+     * This uses a bounded, explicitly authorized manual probe, NOT an ADB
+     * injected gesture or a claim that an RL policy completed Market gameplay.
+     * The independent GameLab board pixels and accessibility counters must
+     * change after the service's gesture completion.
+     */
+    private void checkExternalGameLabPilotGesture() throws Exception {
+        final String external="org.localpilot.gamelab";
+        final String display="GameLab synthetic game display; never real Market acceptance";
+        onMain(()->{service.hidePanel();service.showPanel();return null;});
+        getTargetContext().startActivity(new Intent()
+                .setClassName(external,external+".TestDeviceActivity")
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_CLEAR_TASK));
+        await(()->markerBounds(display)!=null,10_000,
+                "Separate GameLab Android package did not show its actual game surface");
+        await(()->{
+            int[] state=gameLabBubbleCounts();
+            return state!=null&&state[0]==0&&state[1]==0;
+        },4_000,"GameLab did not start from a fresh synthetic Bubble state");
+        boolean automatic=onMain(()->getTargetContext()
+                .getSharedPreferences(MainActivity.PREF,Context.MODE_PRIVATE)
+                .getBoolean("auto_control",false));
+        if(!automatic){
+            click("Ещё");click("Включить автоуправление");
+            await(()->onMain(()->getTargetContext()
+                .getSharedPreferences(MainActivity.PREF,Context.MODE_PRIVATE)
+                .getBoolean("auto_control",false)),3_000,
+                "Explicit automatic input setting was not committed");
+        }
+        bindWindow(external);
+        await(()->onMain(()->permit().allows(gate().epoch(),SystemClock.elapsedRealtime())),
+                4_000,"Real external GameLab target did not get explicit input session");
+        Rect board=markerBounds(display);
+        require(board!=null&&board.width()>250&&board.height()>350,
+                "External GameLab touch surface disappeared or is too small");
+        int[] previous=gameLabBubbleCounts();
+        require(previous!=null&&previous[0]==0&&previous[1]==0,
+                "GameLab changed before the service dispatched its gesture");
+        long beforePixels=gameLabBubblePixels(board);
+        int alreadySent=onMain(()->intField("dispatchedInputs"));
+        // Use the production manual/gesture pipeline, with its real Ticket,
+        // InputPermit, STOP, TTL, window focus, panel intersection and audit.
+        // The instrumentation NEVER calls dispatchGesture directly.
+        onMain(()->{
+            java.lang.reflect.Method action=PilotService.class
+                .getDeclaredMethod("manual",int.class,int.class);
+            action.setAccessible(true);
+            action.invoke(service,1,0);return null;
+        });
+        await(()->onMain(()->intField("dispatchedInputs")==alreadySent+1
+                &&!booleanField("busy")),8_000,
+                "PilotService did not complete precisely one authorized cross-app gesture");
+        await(()->{
+            int[] state=gameLabBubbleCounts();
+            return state!=null&&state[0]==1&&state[1]==1;
+        },6_000,"GameLab did not receive the PilotService gesture and update its actual game state");
+        long afterPixels=gameLabBubblePixels(board);
+        require(afterPixels!=beforePixels,
+                "Independent Android compositor pixels did not show the external game change");
+        require(onMain(()->external.equals(field("target"))&&gate().armed()),
+                "PilotService lost the authorized GameLab target before the visible witness");
+        click("STOP");
+        await(()->!armed()&&!onMain(()->booleanField("busy")),4_000,
+                "STOP did not revoke the cross-app input session");
+        SystemClock.sleep(650);
+        int[] stopped=gameLabBubbleCounts();
+        require(stopped!=null&&stopped[0]==1&&stopped[1]==1,
+                "GameLab continued receiving gestures after STOP");
+        addCheck("pilotservice_real_cross_app_gesture_with_external_pixel_witness",
+            new JSONObject().put("source","GameLab synthetic only")
+                .put("market_acceptance",false)
+                .put("pilot_dispatched",true)
+                .put("input","PilotService.manual -> ActionGate -> dispatchGesture")
+                .put("external_package",external)
+                .put("verified_game_changes",stopped[1])
+                .put("independent_pixel_difference",true)
+                .put("stop_rearmed",false));
+    }
+
+    /**
+     * This time the policy is NOT a test-side gesture: start the actual
+     * production 2048 solver on a DIFFERENT Android application. The GameLab
+     * scene uses the exact public palette and rules, but no hidden board state
+     * can be read by PilotService.
+     */
+    private void checkExternalGameLabAutoplay2048() throws Exception {
+        final String external="org.localpilot.gamelab";
+        final String display="GameLab synthetic game display; never real Market acceptance";
+        onMain(()->{service.hidePanel();service.showPanel();return null;});
+        getTargetContext().startActivity(new Intent()
+                .setClassName(external,external+".TestDeviceActivity")
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_CLEAR_TASK));
+        await(()->markerBounds(display)!=null,10_000,
+                "Autoplay: separate GameLab did not render a game window");
+        // Select the independent 2048 game using a real Android accessibility
+        // control. Never inject a fake GameLab state or update its hidden cells.
+        await(this::openExternalGameLabSpinner,5_000,
+                "Autoplay: external game selection control inaccessible");
+        click("2048");
+        await(()->{
+            int[] state=gameLabCounts("BOARD2048",4);
+            return state!=null&&state[0]==0&&state[1]==0;
+        },5_000,"Autoplay: standalone 2048 did not start from the visible board");
+        Rect canvas=markerBounds(display);
+        require(canvas!=null&&!canvas.isEmpty(),"Autoplay: actual Canvas vanished");
+        float scale=Math.min(canvas.width()/360f,canvas.height()/640f);
+        float x0=canvas.left+(canvas.width()-360f*scale)*.5f;
+        float y0=canvas.top+(canvas.height()-640f*scale)*.5f;
+        Rect board=new Rect(Math.round(x0+22*scale),Math.round(y0+140*scale),
+                Math.round(x0+337*scale),Math.round(y0+455*scale));
+        require(Math.abs(board.width()-board.height())<=2&&board.width()>=160,
+                "Autoplay: GameLab board is not a physically square screenshot ROI");
+
+        click("Игра");click("2048");
+        await(()->onMain(()->intField("selectedProfile")==4
+                &&field("overlayDialog")==null),4_000,
+                "Autoplay: production Pilot mechanic did not select 2048");
+        bindWindow(external);
+        click("Область");
+        await(()->present("Готово")&&present("STOP · отмена"),5_000,
+                "Autoplay: 2048 visual ROI editor did not become available");
+        // Android 15/16 may not deliver two separate corner taps to the
+        // full-screen accessibility overlay after the panel compacts. Use
+        // one continuous, actual OS drag; the picker must visibly enable
+        // its confirmation button before we can commit the rectangle.
+        drag(board.left+2,board.top+2,board.right-2,board.bottom-2);
+        await(()->onMain(()->ownControlBounds("Готово")!=null),3_000,
+            "Autoplay: real ROI drag did not enable the visible Done control");
+        click("Готово");
+        await(()->onMain(()->booleanField("manualVisualRoi")
+            &&field("visualRoi") instanceof Rect rect
+            &&Math.abs(rect.left-board.left)<=3&&Math.abs(rect.top-board.top)<=3
+            &&Math.abs(rect.right-board.right)<=3&&Math.abs(rect.bottom-board.bottom)<=3),
+            4_000,"Autoplay: actual selected game field differs from rendered 4x4 board");
+        onMain(()->{service.hidePanel();return null;});
+        Board2048 before=readExternalGameLab2048(board);
+        onMain(()->{service.showPanel();return null;});
+        bindWindow(external);
+        click("Старт");
+        await(()->onMain(()->booleanField("playing2048")),12_000,
+                "Autoplay: production 2048 screenshot-policy loop did not start");
+        await(()->onMain(()->intField("moves2048")>=3),28_000,
+                "Autoplay: production 2048 policy made fewer than three visually confirmed moves");
+        click("STOP");
+        await(()->!armed()&&!onMain(()->booleanField("busy")),5_000,
+                "Autoplay: STOP did not disarm actual external gameplay");
+        int verified=onMain(()->intField("moves2048"));
+        onMain(()->{service.hidePanel();return null;});
+        Board2048 after=readExternalGameLab2048(board);
+        require(total(after)>total(before),
+                "Autoplay: external GameLab did not spawn tiles after production policy swipes");
+        int[] game=gameLabCounts("BOARD2048",4);
+        require(game!=null&&game[0]>=verified&&game[1]>=verified,
+                "Autoplay: independent game did not register production visually verified swipes");
+        SystemClock.sleep(600);
+        int[] still=gameLabCounts("BOARD2048",4);
+        require(still!=null&&still[0]==game[0]&&still[1]==game[1],
+                "Autoplay: production Pilot kept playing after STOP");
+        addCheck("pilotservice_external_2048_autonomous_vision_policy",new JSONObject()
+            .put("source","GameLab synthetic 2048")
+            .put("market_acceptance",false)
+            .put("pilot_dispatched",true)
+            .put("policy","production Board2048 screenshot reader and solver")
+            .put("verified_moves",verified)
+            .put("game_touch_count",game[0])
+            .put("game_transitions",game[1])
+            .put("spawned_tiles_visible",true));
+    }
+
+    /** Read only a visible title in the focused separate app, never our panel. */
+    private Rect externalGameLabTitleBounds(String pkg){
+        refreshAutomationCache();
+        AccessibilityNodeInfo root=automation.getRootInActiveWindow();
+        if(root==null)return null;
+        try{return externalGameLabTitleBounds(root,pkg,0,new int[]{1200});}
+        finally{root.recycle();}
+    }
+    private Rect externalGameLabTitleBounds(AccessibilityNodeInfo node,String pkg,
+                                            int depth,int[] remaining){
+        if(depth>35||--remaining[0]<0)return null;
+        if(node.isVisibleToUser()&&pkg.contentEquals(
+            node.getPackageName()==null?"":node.getPackageName())
+            &&"LocalPilot · GameLab".contentEquals(
+                node.getText()==null?"":node.getText())){
+            Rect b=new Rect();node.getBoundsInScreen(b);
+            return b.isEmpty()?null:b;
+        }
+        for(int i=0;i<node.getChildCount();i++){
+            AccessibilityNodeInfo child=node.getChild(i);
+            if(child==null)continue;
+            try{
+                Rect r=externalGameLabTitleBounds(child,pkg,depth+1,remaining);
+                if(r!=null)return r;
+            }finally{child.recycle();}
+        }
+        return null;
+    }
+
+    private boolean openExternalGameLabSpinner() {
+        refreshAutomationCache();
+        AccessibilityNodeInfo root=automation.getRootInActiveWindow();
+        if(root==null)return false;
+        try{return clickExternalGameLabSpinner(root,0,new int[]{1800});}
+        finally{root.recycle();}
+    }
+    private boolean clickExternalGameLabSpinner(AccessibilityNodeInfo node,
+                                                int depth,int[] remaining) {
+        if(depth>35||--remaining[0]<0)return false;
+        if("org.localpilot.gamelab".contentEquals(
+                 node.getPackageName()==null?"":node.getPackageName())
+             &&"android.widget.Spinner".contentEquals(
+                 node.getClassName()==null?"":node.getClassName())
+             &&node.isVisibleToUser()&&node.isEnabled()&&node.isClickable())
+            return node.performAction(AccessibilityNodeInfo.ACTION_CLICK);
+        for(int i=0;i<node.getChildCount();i++){
+            AccessibilityNodeInfo child=node.getChild(i);
+            if(child==null)continue;
+            try{if(clickExternalGameLabSpinner(child,depth+1,remaining))return true;}
+            finally{child.recycle();}
+        }
+        return false;
+    }
+    private Board2048 readExternalGameLab2048(Rect region) throws Exception{
+        // An overlay can disappear from the view hierarchy before Android's
+        // compositor has published a fresh unobscured frame. We never guess
+        // UNKNOWN tiles: wait for TWO independent and identical strict reads.
+        long end=Math.min(limit,SystemClock.uptimeMillis()+3_000);
+        Board2048 previous=null;
+        String lastReason="no stable frame";
+        do{
+            Bitmap image=automation.takeScreenshot();
+            require(image!=null,"Autoplay: no real Android screenshot after rendered 2048");
+            try{
+                try{
+                    Board2048 current=PixelBoardReader.read(
+                        image::getPixel,image.getWidth(),image.getHeight(),
+                        region.left,region.top,region.right,region.bottom);
+                    if(previous!=null&&previous.same(current))return current;
+                    previous=current;
+                    lastReason="consecutive frames differ";
+                }catch(IllegalArgumentException unknown){
+                    previous=null;lastReason=unknown.getMessage();
+                }
+            }finally{image.recycle();}
+            SystemClock.sleep(110);
+        }while(SystemClock.uptimeMillis()<end);
+        throw new AssertionError("Autoplay: no stable strict 2048 board at "
+            +region.toShortString()+" ("+lastReason+")");
+    }
+
+    private int[] gameLabBubbleCounts() {return gameLabCounts("BUBBLE",9);}
+
+    private int[] gameLabCounts(String game,int profile) {
+        refreshAutomationCache();
+        AccessibilityNodeInfo root=automation.getRootInActiveWindow();
+        if(root==null)return null;
+        try{
+            String[] state=new String[1];
+            findExternalLabState(root,0,new int[]{2500},state);
+            if(state[0]==null)return null;
+            java.util.regex.Matcher matched=java.util.regex.Pattern.compile(
+                "^gamelab-state-v1 synthetic=true game=([A-Z0-9_]+) touches=(\\d+)"
+                +" changes=(\\d+) rejected=(\\d+) profile=(-?\\d+)$").matcher(state[0]);
+            if(!matched.matches()||!game.equals(matched.group(1))
+                ||profile!=Integer.parseInt(matched.group(5)))return null;
+            return new int[]{Integer.parseInt(matched.group(2)),
+                Integer.parseInt(matched.group(3))};
+        }finally{root.recycle();}
+    }
+    private void findExternalLabState(AccessibilityNodeInfo node,int depth,
+                                      int[] remaining,String[] result){
+        if(depth>40||--remaining[0]<0||result[0]!=null)return;
+        CharSequence marker=node.getContentDescription();
+        if("org.localpilot.gamelab".contentEquals(node.getPackageName()==null?"":node.getPackageName())
+           &&node.isVisibleToUser()&&marker!=null
+           &&marker.toString().startsWith("gamelab-state-v1 ")){
+            result[0]=marker.toString();return;
+        }
+        for(int i=0;i<node.getChildCount();i++){
+            AccessibilityNodeInfo child=node.getChild(i);
+            if(child==null)continue;
+            try{findExternalLabState(child,depth+1,remaining,result);}
+            finally{child.recycle();}
+        }
+    }
+    /** Only the game-only board stripe: excludes the overlay, score and HUD. */
+    private long gameLabBubblePixels(Rect canvas)throws Exception{
+        Bitmap frame=automation.takeScreenshot();
+        require(frame!=null,"Android compositor did not provide an independent GameLab frame");
+        try{
+            // GameLab letterboxes its 360x640 world. Sample the actual
+            // logical bubble rows, not the surrounding wallpaper or overlay.
+            float scale=Math.min(canvas.width()/360f,canvas.height()/640f);
+            float x0=canvas.left+(canvas.width()-360*scale)*.5f;
+            float y0=canvas.top+(canvas.height()-640*scale)*.5f;
+            int l=Math.max(0,Math.round(x0+360*scale*.64f));
+            int r=Math.min(frame.getWidth(),Math.round(x0+360*scale*.90f));
+            int t=Math.max(0,Math.round(y0+640*scale*.27f));
+            int b=Math.min(frame.getHeight(),Math.round(y0+640*scale*.42f));
+            require(r-l>35&&b-t>20,"GameLab pixel witness ROI unavailable");
+            long digest=0xcbf29ce484222325L;
+            for(int y=t;y<b;y+=3)for(int x=l;x<r;x+=3)
+                digest=(digest^(frame.getPixel(x,y)&0xffffff))*0x100000001b3L;
+            return digest;
+        }finally{frame.recycle();}
+    }
+
     private void checkProjectionLifecycle() throws Exception {
         String fixturePackage = getContext().getPackageName();
         onMain(() -> { service.hidePanel(); service.showPanel(); return null; });
@@ -787,21 +1100,50 @@ public final class PilotUiInstrumentation extends Instrumentation {
         String query="@contains:"+pkg;
         // Require the current live dialog, but do not equate decor bounds with
         // accessibility window frames: shadows/insets differ across Android.
-        await(()->{
-            String state=onMain(()->"epoch="+gate().epoch()+" note="+field("note")+" dialog="+(field("overlayDialog")!=null));
-            traceClick("window-selection "+state+" "+windowSummary());
-            return onMain(()->{
+        // Do not synchronously enumerate UiAutomation windows every 60ms:
+        // API30 shares its accessibility cache with the service's main looper.
+        await(()->onMain(()->{
                 Object object=field("overlayDialog");
                 if(!(object instanceof android.app.Dialog dialog)||!dialog.isShowing())return false;
                 View decor=dialog.getWindow().getDecorView();
                 if(!decor.isLaidOut())return false;
                 Rect row=ownControlBounds(decor,query);
                 return row!=null&&!row.isEmpty();
-            });
-        },3_000,"The current window dialog has no visible target row");
+            }),3_000,"The current window dialog has no visible target row");
         // click() performs a fresh lookup and refreshes the actionable node.
         click(query);
-        await(()->onMain(()->gate().armed()&&pkg.equals(field("target"))&&field("overlayDialog")==null),3_000,"Window selection did not commit before the next control");
+        // The Android 11 accessibility-window cache can report a focused
+        // foreign window while the service still waits for its own fresh
+        // focus event. The companion has a strictly non-gameplay header:
+        // a single real OS tap there may trigger focus without a game move.
+        // This never arms the gate on behalf of PilotService.
+        if("org.localpilot.gamelab".equals(pkg)){
+            SystemClock.sleep(400);
+            boolean pending=onMain(()->!gate().armed()&&field("overlayDialog")==null
+                &&String.valueOf(field("note")).contains("ожидаю фокус"));
+            if(pending){
+                // Tap only a VERIFIED TextView outside the GameSurface.
+                // Even a nominally decorative Canvas coordinate can be
+                // transformed differently on Android 11 and count as a move.
+                Rect title=externalGameLabTitleBounds(pkg);
+                if(title!=null&&!title.isEmpty()){
+                    int[] before=gameLabCounts("BUBBLE",9);
+                    if(before==null)before=gameLabCounts("BOARD2048",4);
+                    require(tapAt(title.centerX(),title.centerY()),
+                        "Companion title focus probe was rejected by Android");
+                    int[] after=gameLabCounts("BUBBLE",9);
+                    if(after==null)after=gameLabCounts("BOARD2048",4);
+                    require(before!=null&&after!=null
+                        &&java.util.Arrays.equals(before,after),
+                        "Companion title focus probe mutated gameplay before="
+                        +java.util.Arrays.toString(before)+" after="
+                        +java.util.Arrays.toString(after));
+                }
+            }
+        }
+        await(()->onMain(()->gate().armed()&&pkg.equals(field("target"))
+            &&field("overlayDialog")==null),8_000,
+            "Window selection did not commit before the next control");
     }
     private void awaitBrowserMechanic()throws Exception{await(()->onMain(()->booleanField("browserProfileConfirmed")&&field("overlayDialog")==null),3_000,"Browser mechanic selection did not finish before the next action");}
 

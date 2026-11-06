@@ -50,9 +50,17 @@ final class GameAreaOverlay extends FrameLayout {
  private String areaLabel(){return rows==1&&cols==1?"Область игры":"Сетка "+rows+"×"+cols;}
  @Override protected void onSizeChanged(int width,int height,int oldWidth,int oldHeight){super.onSizeChanged(width,height,oldWidth,oldHeight);setSystemGestureExclusionRects(java.util.Collections.singletonList(new Rect(0,0,width,height)));}
  private void cancel(){if(!finished){finished=true;listener.cancelled();}}
+ private GameViewport.Box chooseSelection(int originX,int originY,
+   float startX,float startY,float endX,float endY){
+  return require2048
+    ?RegionPickerGeometry.selection2048(window,originX,originY,startX,startY,endX,endY)
+    :RegionPickerGeometry.selection(window,originX,originY,startX,startY,endX,endY);
+ }
  private void confirm(){
   if(finished||dragging||candidate==null)return;
-  GameViewport.Box selected=GameViewport.selection(window,candidate.left(),candidate.top(),candidate.right(),candidate.bottom());
+  GameViewport.Box selected=require2048
+    ?RegionPickerGeometry.selection2048(window,0,0,candidate.left(),candidate.top(),candidate.right(),candidate.bottom())
+    :GameViewport.selection(window,candidate.left(),candidate.top(),candidate.right(),candidate.bottom());
   if(requireSquare&&!RegionPickerGeometry.squareBoardAspect(selected,rows,cols)){
    message.setText("AUTO_BOARD_GEOMETRY: рамка должна охватывать только квадратную сетку. Переместите углы.");
    return;
@@ -96,14 +104,14 @@ final class GameAreaOverlay extends FrameLayout {
     if(event.getActionMasked()==MotionEvent.ACTION_UP){
      dragging=false;
      if(!cornerPending){cornerX=x+origin[0];cornerY=y+origin[1];cornerPending=true;candidate=null;message.setText("Первый угол отмечен · коснитесь противоположного угла поля");}
-     else{try{candidate=RegionPickerGeometry.selection(window,0,0,cornerX,cornerY,x+origin[0],y+origin[1]);cornerPending=false;message.setText(areaLabel()+" · нажмите «Готово» или задайте углы заново");}catch(IllegalArgumentException error){candidate=null;message.setText("Второй угол слишком близко · коснитесь противоположного угла");}}
+     else{try{candidate=chooseSelection(0,0,cornerX,cornerY,x+origin[0],y+origin[1]);cornerPending=false;message.setText(areaLabel()+" · нажмите «Готово» или задайте углы заново");}catch(IllegalArgumentException error){candidate=null;message.setText("Второй угол слишком близко · коснитесь противоположного угла");}}
      confirm.setEnabled(candidate!=null);invalidate();
     }
     return true;
    }
    cornerPending=false;
    try{
-    candidate=RegionPickerGeometry.selection(window,origin[0],origin[1],sx,sy,x,y);
+    candidate=chooseSelection(origin[0],origin[1],sx,sy,x,y);
     message.setText(areaLabel()+" · "+candidate.width()+"×"+candidate.height()+" · «Готово» подтвердит область");
    }catch(IllegalArgumentException error){candidate=null;message.setText("Выделите поле целиком внутри голубого окна");}
    if(event.getActionMasked()==MotionEvent.ACTION_UP){dragging=false;confirm.setEnabled(candidate!=null);}
