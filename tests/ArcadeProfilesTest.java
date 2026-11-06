@@ -121,7 +121,10 @@ public final class ArcadeProfilesTest {
   breakouts.rect(.68f,.60f,.87f,.65f,0xefb91a);
   ArcadeObservation blocksFirst=breakouts.read(ArcadeProfile.PADDLE,1000,null);
   check(blocksFirst.usable(),"karcanoid detects ball and basket with mixed blocks");
-  check(blocksFirst.obstacles.size()>=3,"different-size mixed-colour blocks are visible");
+  check(blocksFirst.obstacles.size()>=3,"different-size mixed-colour blocks are visible: got "+
+    blocksFirst.obstacles.size()+" at "+blocksFirst.obstacles.stream()
+     .map(b->String.format(Locale.ROOT,"(%.2f,%.2f;%.2fx%.2f)",b.x(),b.y(),b.width(),b.height()))
+     .toList());
   check(blocksFirst.obstacles.stream().anyMatch(b->b.x()>.7f&&b.y()>.59f),
     "nearby approaching block represented separately");
   check(blocksFirst.obstacles.stream().noneMatch(b->b.y()>.78f),
