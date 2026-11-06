@@ -175,6 +175,7 @@ public final class PilotUiInstrumentation extends Instrumentation {
                 // Collect the metadata-only capture timeline before any Binder
                 // or UI automation query that may stall a sick main thread.
                 if (service != null) evidence.put("capture_timing",service.captureTimingReport());
+                if (service != null) evidence.put("chosen_window_debug",String.valueOf(field("chosenWindowDebug")));
                 evidence.put("failed_at_ms", SystemClock.uptimeMillis()-started);
                 evidence.put("windows", windowSummary());
                 evidence.put("stack", stack.toString());

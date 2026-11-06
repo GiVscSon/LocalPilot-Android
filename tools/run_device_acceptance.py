@@ -25,6 +25,30 @@ def annotation(level, message):
     print('::' + level + ' title=Android device acceptance::' + safe, flush=True)
 
 
+def collect_failure_evidence():
+    """Capture synthetic emulator evidence while the emulator is still alive."""
+    for filename, arguments in (
+        ('crash-logcat.txt', ['adb', 'logcat', '-d', '-b', 'crash']),
+        ('logcat.txt', ['adb', 'logcat', '-d', '-t', '4000', '-v', 'threadtime']),
+        ('activities.txt', ['adb', 'shell', 'dumpsys', 'activity', 'activities']),
+        ('accessibility.txt', ['adb', 'shell', 'dumpsys', 'accessibility']),
+    ):
+        try:
+            content = command(arguments, 10)
+            (OUT / filename).write_text(content[-256000:], encoding='utf-8')
+        except (OSError, RuntimeError, subprocess.TimeoutExpired) as error:
+            annotation('warning', 'Could not collect ' + filename + ': ' + str(error))
+    try:
+        shot = subprocess.run(['adb', 'exec-out', 'screencap', '-p'],
+                              stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                              stderr=subprocess.PIPE, timeout=10, check=True).stdout
+        if not shot.startswith(b'\x89PNG\r\n\x1a\n') or len(shot) > 8_000_000:
+            raise ValueError('Invalid or oversized screenshot')
+        (OUT / 'failure-screen.png').write_bytes(shot)
+    except (OSError, ValueError, subprocess.SubprocessError) as error:
+        annotation('warning', 'Could not collect synthetic screenshot: ' + str(error))
+
+
 def main():
     OUT.mkdir(exist_ok=True)
     isolated_emulator=False
@@ -122,19 +146,7 @@ def main():
         (OUT / 'runner-error.txt').write_text(text[:8000], encoding='utf-8')
         annotation('error', text)
         if not isolated_emulator:return 1
-        try:
-            crash=command(['adb','logcat','-d','-b','crash'],10)
-            (OUT/'crash-logcat.txt').write_text(crash[-16000:],encoding='utf-8')
-            if crash.strip():annotation('error','Isolated test device crash buffer:\n'+crash[-3000:])
-            activity=command(['adb','shell','dumpsys','activity','activities'],10)
-            (OUT/'activities.txt').write_text(activity,encoding='utf-8')
-            summary=[line for line in activity.splitlines() if any(key in line for key in ['mResumedActivity','topResumedActivity','mFocusedApp','localpilot'])]
-            annotation('notice','Activity state:\n'+'\n'.join(summary)[:3000])
-            state=command(['adb','shell','dumpsys','accessibility'],10)
-            (OUT/'accessibility.txt').write_text(state[:32000],encoding='utf-8')
-            own=[line for line in state.splitlines() if 'localpilot' in line.lower() or 'UiAutomation' in line or 'mIsAccessibilityEnabled' in line]
-            annotation('notice','Accessibility test state:\n'+'\n'.join(own)[:3000])
-        except (OSError,RuntimeError,subprocess.TimeoutExpired):pass
+        collect_failure_evidence()
         return 1
 
 
