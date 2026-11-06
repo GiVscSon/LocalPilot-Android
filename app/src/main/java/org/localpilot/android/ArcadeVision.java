@@ -7,7 +7,7 @@ import java.util.concurrent.CancellationException;
 
 /** Bounded, resolution-normalized perception for the three recorded Market games. */
 public final class ArcadeVision {
- private static final int RED=1,WOOD=2,BLUE=4,LIGHT=8,DARK=16,GREEN=32,BALL=64,DARK_CAR=128,SATURATED=256;
+ private static final int RED=1,WOOD=2,BLUE=4,LIGHT=8,DARK=16,GREEN=32,BALL=64,DARK_CAR=128,SATURATED=256,BRICK_BLUE=512;
  private ArcadeVision(){}
 
  public static ArcadeObservation detect(ArcadeProfile profile,PixelBoardReader.Pixels pixels,
@@ -67,7 +67,7 @@ public final class ArcadeVision {
  private static List<ArcadeObservation.Box> paddleBlocks(Frame f,ArcadeObservation.Box ball,
      ArcadeObservation.Box paddle){
   List<ArcadeObservation.Box> targets=new ArrayList<>();
-  for(int mask:new int[]{WOOD,BLUE,GREEN,LIGHT,RED,SATURATED}){
+  for(int mask:new int[]{WOOD,BRICK_BLUE,GREEN,LIGHT,RED,SATURATED}){
    for(Blob part:f.blobs(mask)){
     ArcadeObservation.Box b=part.box;
     if(b.top<.065f||b.bottom>.78f
@@ -347,6 +347,8 @@ public final class ArcadeVision {
     if(red>85&&red>green*2.5f&&red>blue*2.2f&&green<100&&blue<100)mask[index]|=BALL;
     if(red>100&&green>45&&blue<150&&red>green*1.22f&&green>blue*1.12f&&red-blue>45)mask[index]|=WOOD;
     if(blue>85&&blue>red*1.3f&&blue>green*1.08f)mask[index]|=BLUE;
+    // Cyan sky must not merge with deep-blue blocks into one background blob.
+    if(blue>90&&blue>red*1.40f&&blue>green*1.35f)mask[index]|=BRICK_BLUE;
     if(low>185)mask[index]|=LIGHT;
     if(high<125&&high-low<65&&high>12)mask[index]|=DARK;
     if(high<65&&high-low<30&&high>12)mask[index]|=DARK_CAR;
