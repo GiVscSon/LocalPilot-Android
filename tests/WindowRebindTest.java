@@ -27,6 +27,22 @@ public final class WindowRebindTest {
   check(grace.observe(11,"TARGET_WINDOW_UNAVAILABLE",1000,true)==WindowFocus.State.WAITING,"temporary visible focus loss");
   check(grace.observe(11,null,2500,true)==WindowFocus.State.ACTIVE,"recovered identity resets wait");
   check(grace.observe(12,"TARGET_BOUNDS_CHANGED",2600,true)==WindowFocus.State.STOP,"changed bounds never get focus grace");
-  System.out.println("Window rebind stability and focus grace: 20 assertions PASS");
+  // 6 Nov on-device: Android 16 briefly reported [0,2712][1220,5424]
+  // against a 1220x2712 display, despite matching app/window dimensions.
+  check(WindowFocus.completelyOutsideDisplay(0,2712,1220,5424,1220,2712),"one-screen y offset is invalid metadata");
+  check(WindowFocus.completelyOutsideDisplay(1220,0,2440,2712,1220,2712),"one-screen x offset is invalid metadata");
+  check(!WindowFocus.completelyOutsideDisplay(0,0,1220,2712,1220,2712),"full-screen bounds remain valid");
+  check(!WindowFocus.completelyOutsideDisplay(0,2700,1220,3100,1220,2712),"partially onscreen geometry must not be falsely normalized");
+  check(!WindowFocus.completelyOutsideDisplay(0,0,1220,2712,0,2712),"missing physical geometry never grants a recovery");
+  WindowFocus transientMetadata=new WindowFocus();
+  check(transientMetadata.observe(13,"WINDOW_STATE_UNAVAILABLE",1000,false)==WindowFocus.State.WAITING,
+    "out-of-display metadata pauses first, never grants input");
+  check(transientMetadata.observe(13,null,1300,false)==WindowFocus.State.ACTIVE,
+    "original window may recover only after a fresh valid observation");
+  check(transientMetadata.observe(14,"WINDOW_STATE_UNAVAILABLE",1500,false)==WindowFocus.State.WAITING,
+    "second episode gets its own bounded pause");
+  check(transientMetadata.observe(14,"WINDOW_STATE_UNAVAILABLE",2100,false)==WindowFocus.State.STOP,
+    "persistent invalid metadata stops within 600ms");
+  System.out.println("Window rebind stability, offscreen metadata, and focus grace: PASS");
  }
 }
