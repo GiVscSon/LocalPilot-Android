@@ -53,6 +53,7 @@ jobs:
       java tests/Upgrade727Verify.java
       java tests/ResultVerify.java
       java tests/UniversalVerify.java
+      java tests/ArcadeVerify.java
       java tests/ControllerVerify.java
       java tests/SystemVerify.java
       java tests/RlVerify.java
@@ -71,6 +72,14 @@ jobs:
       set -euo pipefail
       chmod +x ./gradlew
       ./gradlew --no-daemon testDebugUnitTest lintDebug
+   - name: Confirm NES engine and user ROM chooser are included in main APK
+     shell: bash
+     run: |
+      set -euo pipefail
+      test -f app/build/generated/jsnes/assets/nes/jsnes.min.js
+      test -f app/build/generated/jsnes/assets/nes/JSNES-LICENSE.txt
+      test -f app/build/generated/localpilot-nes/java/org/localpilot/gamelab/HomebrewNes.java
+      grep -q 'EmbeddedNesActivity' app/src/main/AndroidManifest.xml
    - name: Build standalone GameLab companion APK
      run: |
       set -euo pipefail

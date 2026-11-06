@@ -11,7 +11,7 @@ class RealGameNeuralVerify {
   Path out=Files.createTempDirectory("pilot-real-neural-");
   var inputs=new ArrayList<String>(List.of("--release","17","-d",out.toString()));
   for(String name:List.of("ArcadeProfile","ArcadeObservation","ArcadePolicy",
-    "ArcadeController","ArcadeLearningStore","VisualGameTarget","PaddleTransfer",
+    "PaddleThreats","ArcadeController","ArcadeLearningStore","VisualGameTarget","PaddleTransfer",
     "RealGameNeuralCritic"))
    inputs.add("app/src/main/java/org/localpilot/android/"+name+".java");
   inputs.add("app/src/main/java/org/localpilot/android/rl/PaddleWeightLab.java");

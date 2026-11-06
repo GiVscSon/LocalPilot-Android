@@ -111,6 +111,34 @@ public final class ArcadeProfilesTest {
    tall.rect(.46f,.86f,.54f,.89f,0x80c9ec);
    check(!tall.read(ArcadeProfile.PADDLE,1125,actual).usable(),"wooden brick alone cannot authorize paddle input");
   }
+  // Variable Karcanoid targets: detect rectangular blocks independently
+  // of the ball/basket and without assuming a particular row/column count.
+  Scene breakouts=new Scene(480,720,0x80c9ec);
+  breakouts.circle(.48f,.57f,.022f,0xc00c0e);
+  breakouts.rect(.35f,.84f,.65f,.885f,0xb56d32);
+  breakouts.rect(.10f,.20f,.25f,.25f,0x24b32a);
+  breakouts.rect(.36f,.34f,.61f,.38f,0x2864da);
+  breakouts.rect(.68f,.60f,.87f,.65f,0xefb91a);
+  ArcadeObservation blocksFirst=breakouts.read(ArcadeProfile.PADDLE,1000,null);
+  check(blocksFirst.usable(),"karcanoid detects ball and basket with mixed blocks");
+  check(blocksFirst.obstacles.size()>=3,"different-size mixed-colour blocks are visible: got "+
+    blocksFirst.obstacles.size()+" at "+blocksFirst.obstacles.stream()
+     .map(b->String.format(Locale.ROOT,"(%.2f,%.2f;%.2fx%.2f)",b.x(),b.y(),b.width(),b.height()))
+     .toList());
+  check(blocksFirst.obstacles.stream().anyMatch(b->b.x()>.7f&&b.y()>.59f),
+    "nearby approaching block represented separately");
+  check(blocksFirst.obstacles.stream().noneMatch(b->b.y()>.78f),
+    "basket itself is not a block");
+  check(blocksFirst.obstacles.stream().noneMatch(b->Math.abs(b.x()-.48f)<.03f&&Math.abs(b.y()-.57f)<.03f),
+    "tracked red ball never classified as a block");
+  // A changed number of targets in the next frame must be observed, not
+  // reconstructed from an old fixed grid or old obstacle list.
+  breakouts.rect(.68f,.60f,.87f,.65f,0x80c9ec);
+  ArcadeObservation blocksNext=breakouts.read(ArcadeProfile.PADDLE,1140,blocksFirst);
+  check(blocksNext.usable()&&blocksNext.obstacles.size()>=2
+    &&blocksNext.obstacles.stream().noneMatch(b->b.x()>.70f&&b.y()>.58f),
+    "disappeared block is not carried into the next game frame");
+
   Scene road=new Scene(480,720,0x3d8f28);road.rect(.2f,0,.8f,1,0x7b7578);
   road.rect(.44f,.75f,.56f,.93f,0xe43020);road.rect(.44f,.45f,.56f,.61f,0x126bd8);
   ArcadeObservation driving=road.read(ArcadeProfile.TRAFFIC,1000,null);

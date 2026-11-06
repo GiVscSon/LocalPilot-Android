@@ -14,3 +14,73 @@ android {
  lint { checkTestSources true }
  compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
 }
+
+
+// Embed the existing verified GameLab NES runtime in the *main* LocalPilot APK.
+// No second APK is required for NES, and no commercial ROM is redistributed.
+def generatedNesJava = file("$buildDir/generated/localpilot-nes/java")
+android.sourceSets.main.java.srcDirs += [generatedNesJava]
+android.sourceSets.main.assets.srcDirs += [file('../game-lab/src/main/assets')]
+tasks.register('stageEmbeddedNesJava', Copy) {
+ from('../game-lab/src/main/java/org/localpilot/gamelab') {
+  include 'HomebrewNes.java', 'GameLabInsets.java', 'RetroEmulatorCatalog.java'
+ }
+ into file("$generatedNesJava/org/localpilot/gamelab")
+}
+tasks.named('preBuild').configure { dependsOn(tasks.named('stageEmbeddedNesJava')) }
+
+/*
+ * Bundled, OFFLINE-at-runtime NES engine. Source: bfirsh/jsnes v2.1.0,
+ * Apache-2.0, https://github.com/bfirsh/jsnes.
+ *
+ * The npm tarball is pinned to its published SHA-512 integrity value.
+ * GameLab builds fail if the engine cannot be verified or bundled.
+ */
+def jsnesVersion = '2.1.0'
+def jsnesSRI = 'LUa++E5Dfs1A6ZYB5HiSOR4JrUzrZEXGLZ5Imczhu9lkg7f+94SqnLZ/MXwGa7oc02+j/xYyHR0azGQ6LCU68g=='
+def generatedNesAssets = file("$buildDir/generated/jsnes/assets")
+android.sourceSets.main.assets.srcDirs += [generatedNesAssets]
+tasks.register('bundleVerifiedNesEngine') {
+ outputs.files(file("$generatedNesAssets/nes/jsnes.min.js"),
+   file("$generatedNesAssets/nes/JSNES-LICENSE.txt"))
+ doLast {
+  File cache = new File(gradle.gradleUserHomeDir,
+    "caches/localpilot-embedded-nes/jsnes-${jsnesVersion}.tgz")
+  cache.parentFile.mkdirs()
+  byte[] data
+  if(cache.exists()){
+   data=cache.bytes
+  }else{
+   URL url=new URL("https://registry.npmjs.org/jsnes/-/jsnes-${jsnesVersion}.tgz")
+   def connection=url.openConnection()
+   connection.setConnectTimeout(15000)
+   connection.setReadTimeout(45000)
+   connection.connect()
+   try(InputStream stream=connection.getInputStream()){
+    data=stream.readNBytes(5*1024*1024+1)
+   }
+   if(data.length>5*1024*1024)
+    throw new GradleException('JSNES package unexpectedly large')
+  }
+  String actual=java.util.Base64.encoder.encodeToString(
+    java.security.MessageDigest.getInstance('SHA-512').digest(data))
+  if(actual!=jsnesSRI)
+   throw new GradleException('JSNES package SHA-512 integrity mismatch')
+  if(!cache.exists())cache.bytes=data
+  generatedNesAssets.mkdirs()
+  copy {
+   from tarTree(resources.gzip(cache))
+   include 'package/dist/jsnes.min.js', 'package/LICENSE'
+   eachFile { file ->
+    file.path = file.path == 'package/LICENSE'
+      ? 'nes/JSNES-LICENSE.txt' : 'nes/jsnes.min.js'
+   }
+   includeEmptyDirs=false
+   into generatedNesAssets
+  }
+  if(!new File(generatedNesAssets,'nes/jsnes.min.js').isFile()
+    ||!new File(generatedNesAssets,'nes/JSNES-LICENSE.txt').isFile())
+   throw new GradleException('JSNES runtime missing from GameLab assets')
+ }
+}
+tasks.named('preBuild').configure { dependsOn(tasks.named('bundleVerifiedNesEngine')) }

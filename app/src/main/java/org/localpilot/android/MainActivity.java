@@ -29,9 +29,14 @@ public class MainActivity extends Activity {
   TextView autoHelp=new TextView(this);autoHelp.setText("Для сетки фишек: Игра → Мэтч Ворлд · обмен соседей или Фишки · удалить группу → выберите 6×6, 7×7 либо другой размер → обведите клетки → Старт. Настройки и типы фишек сохраняются. Поддерживаются различимые цветные фишки без специальных эффектов; цели уровня и усилители пока не распознаются. Для аркад другого оформления: Ещё → Настроить распознавание. Для разных игр одного браузера: Игра → Имя игры. STOP всегда останавливает ввод.");box.addView(autoHelp);
   section(box,"03 · Игровая лаборатория");
   TextView labCaption=new TextView(this);
-  labCaption.setText("10 тестовых игр в отдельном Android-приложении. NES / Денди: встроенное JSNES-ядро проходит проверку; DOS: пока проверка файлов, без исполнения. Тесты GameLab не считаются успешными ходами в Маркете.");
+  labCaption.setText("NES / Денди запускается прямо в этом APK, офлайн (JSNES). Выберите собственный .nes-файл или откройте оригинальную тестовую игру. Тестовые игры GameLab доступны отдельно; их результаты не засчитываются как ходы Маркета.");
   labCaption.setTextColor(HubContract.SECONDARY);box.addView(labCaption);
-  button(box,"Открыть GameLab · 10 игр / ретро",this::openGameLab);
+  button(box,"NES / Денди · встроенный эмулятор",()->new AlertDialog.Builder(this)
+   .setTitle("Офлайн NES / Денди")
+   .setItems(new String[]{"NES (60 Гц)","Денди (совместимый режим 50 Гц)"},(dialog,index)->
+     startActivity(new Intent(this,EmbeddedNesActivity.class).putExtra("dendy",index==1)))
+   .setNegativeButton("Отмена",null).show());
+  button(box,"GameLab · отдельные тестовые игры",this::openGameLab);
   section(box,"04 · Диагностика и контроль");
   button(box,"Отчёт с кадром игры",this::beginDiagnosticReport);
   button(box,"Экспорт задержек",()->{if(PilotService.instance==null){toast("Сначала включите службу");return;}PilotService.instance.exportMetrics();startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT).setType("text/plain").addCategory(Intent.CATEGORY_OPENABLE).putExtra(Intent.EXTRA_TITLE,"localpilot-latency.txt"),10);});

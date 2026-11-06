@@ -7,7 +7,7 @@ import java.util.concurrent.CancellationException;
 
 /** Bounded, resolution-normalized perception for the three recorded Market games. */
 public final class ArcadeVision {
- private static final int RED=1,WOOD=2,BLUE=4,LIGHT=8,DARK=16,GREEN=32,BALL=64,DARK_CAR=128,SATURATED=256;
+ private static final int RED=1,WOOD=2,BLUE=4,LIGHT=8,DARK=16,GREEN=32,BALL=64,DARK_CAR=128,SATURATED=256,BRICK_BLUE=512,BRICK_GOLD=1024;
  private ArcadeVision(){}
 
  public static ArcadeObservation detect(ArcadeProfile profile,PixelBoardReader.Pixels pixels,
@@ -52,8 +52,40 @@ public final class ArcadeVision {
    // Real woven baskets can fragment into many brown strands instead of one
    // connected wooden blob. Require a long coherent multi-row lower band.
    if(paddle==null)paddle=f.paddleBand();
-  return observation(ArcadeProfile.PADDLE,time,ball,paddle,List.of(),0,.07f,1,.96f,0,0,
+  // Detect independently sized blocks/targets on every frame. The upper
+  // playfield is not a fixed grid, and blocks are OBSERVATIONS only: a
+  // colourful rectangle must never be substituted for the tracked red ball.
+  List<ArcadeObservation.Box> blocks=paddleBlocks(f,ball,paddle);
+  return observation(ArcadeProfile.PADDLE,time,ball,paddle,blocks,0,.07f,1,.96f,0,0,
     ball!=null&&paddle!=null?.88f:0,false,previous);
+ }
+
+ /** Variable-count Karcanoid blocks, including low moving blocks. No
+  * synthetic cells or guessed grid dimensions are used. Avoid the paddle and
+  * ball by identity/position, and deduplicate multi-colour fragments.
+  * These targets are observational only; the ball trajectory still owns input. */
+ private static List<ArcadeObservation.Box> paddleBlocks(Frame f,ArcadeObservation.Box ball,
+     ArcadeObservation.Box paddle){
+  List<ArcadeObservation.Box> targets=new ArrayList<>();
+  for(int mask:new int[]{WOOD,BRICK_BLUE,BRICK_GOLD,GREEN,LIGHT,RED,SATURATED}){
+   for(Blob part:f.blobs(mask)){
+    ArcadeObservation.Box b=part.box;
+    if(b.top<.065f||b.bottom>.78f
+      ||b.width()<.047f||b.width()>.38f
+      ||b.height()<.012f||b.height()>.13f
+      ||part.aspect()<1.30f||part.aspect()>13f||part.density()<.27f)continue;
+    if(ball!=null&&(overlap(b,ball)>.08f
+       ||Math.abs(b.x()-ball.x())<(b.width()+ball.width())*.45f
+         &&Math.abs(b.y()-ball.y())<(b.height()+ball.height())*.65f))continue;
+    if(paddle!=null&&(overlap(b,paddle)>.08f||b.top>=paddle.top-.035f))continue;
+    // A coherent rectangular blob is stronger evidence than scattered
+    // scene texture. Do not fabricate an obstacle from thin single-row trim.
+    if(part.height<3||part.width<7)continue;
+    addVehicle(targets,b);
+    if(targets.size()>=64)return targets;
+   }
+  }
+  return targets;
  }
 
  private static ArcadeObservation traffic(Frame f,long time,ArcadeObservation previous){
@@ -315,6 +347,10 @@ public final class ArcadeVision {
     if(red>85&&red>green*2.5f&&red>blue*2.2f&&green<100&&blue<100)mask[index]|=BALL;
     if(red>100&&green>45&&blue<150&&red>green*1.22f&&green>blue*1.12f&&red-blue>45)mask[index]|=WOOD;
     if(blue>85&&blue>red*1.3f&&blue>green*1.08f)mask[index]|=BLUE;
+    // Cyan sky must not merge with deep-blue blocks into one background blob.
+    if(blue>90&&blue>red*1.40f&&blue>green*1.35f)mask[index]|=BRICK_BLUE;
+    // Bright yellow/gold targets have a separate channel from brown basket mesh.
+    if(red>145&&green>115&&blue<105&&red>green*.90f&&red<green*1.80f)mask[index]|=BRICK_GOLD;
     if(low>185)mask[index]|=LIGHT;
     if(high<125&&high-low<65&&high>12)mask[index]|=DARK;
     if(high<65&&high-low<30&&high>12)mask[index]|=DARK_CAR;
