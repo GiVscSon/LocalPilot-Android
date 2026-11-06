@@ -52,8 +52,40 @@ public final class ArcadeVision {
    // Real woven baskets can fragment into many brown strands instead of one
    // connected wooden blob. Require a long coherent multi-row lower band.
    if(paddle==null)paddle=f.paddleBand();
-  return observation(ArcadeProfile.PADDLE,time,ball,paddle,List.of(),0,.07f,1,.96f,0,0,
+  // Detect independently sized blocks/targets on every frame. The upper
+  // playfield is not a fixed grid, and blocks are OBSERVATIONS only: a
+  // colourful rectangle must never be substituted for the tracked red ball.
+  List<ArcadeObservation.Box> blocks=paddleBlocks(f,ball,paddle);
+  return observation(ArcadeProfile.PADDLE,time,ball,paddle,blocks,0,.07f,1,.96f,0,0,
     ball!=null&&paddle!=null?.88f:0,false,previous);
+ }
+
+ /** Variable-count Karcanoid blocks, including low moving blocks. No
+  * synthetic cells or guessed grid dimensions are used. Avoid the paddle and
+  * ball by identity/position, and deduplicate multi-colour fragments.
+  * These targets are observational only; the ball trajectory still owns input. */
+ private static List<ArcadeObservation.Box> paddleBlocks(Frame f,ArcadeObservation.Box ball,
+     ArcadeObservation.Box paddle){
+  List<ArcadeObservation.Box> targets=new ArrayList<>();
+  for(int mask:new int[]{WOOD,BLUE,GREEN,LIGHT,RED,SATURATED}){
+   for(Blob part:f.blobs(mask)){
+    ArcadeObservation.Box b=part.box;
+    if(b.top<.065f||b.bottom>.78f
+      ||b.width()<.047f||b.width()>.38f
+      ||b.height()<.012f||b.height()>.13f
+      ||part.aspect()<1.30f||part.aspect()>13f||part.density()<.27f)continue;
+    if(ball!=null&&(overlap(b,ball)>.08f
+       ||Math.abs(b.x()-ball.x())<(b.width()+ball.width())*.45f
+         &&Math.abs(b.y()-ball.y())<(b.height()+ball.height())*.65f))continue;
+    if(paddle!=null&&(overlap(b,paddle)>.08f||b.top>=paddle.top-.035f))continue;
+    // A coherent rectangular blob is stronger evidence than scattered
+    // scene texture. Do not fabricate an obstacle from thin single-row trim.
+    if(part.height<3||part.width<7)continue;
+    addVehicle(targets,b);
+    if(targets.size()>=64)return targets;
+   }
+  }
+  return targets;
  }
 
  private static ArcadeObservation traffic(Frame f,long time,ArcadeObservation previous){
