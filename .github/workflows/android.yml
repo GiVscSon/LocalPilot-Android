@@ -21,6 +21,12 @@ jobs:
       set -euo pipefail
       test -x "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
       "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-35' 'build-tools;35.0.0'
+   - name: Verify published game model catalog offline
+     run: python3 -m unittest discover -s tests -p 'test_video_game_model_catalog.py' -v
+   - name: Verify OpenAI hide-and-seek model inventory offline
+     run: python3 -m unittest discover -s tests -p 'test_hide_seek_video_models.py' -v
+   - name: Check provenance of three new video game models
+     run: python3 -m unittest discover -s tests -p 'test_three_game_video_registry.py' -v
    - name: Release tooling regression checks
      run: python3 -m unittest discover -s tests -p 'test_release_tools.py' -v
    - name: Verify optional HTTPS telemetry receiver
