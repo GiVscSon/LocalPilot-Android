@@ -341,7 +341,34 @@ public class PilotService extends AccessibilityService {
   if(SystemClock.elapsedRealtime()>=until){note="Окно не стало активным. Коснитесь игры и выберите окно снова";update();return;}
   note="Коснитесь выбранного окна игры · ожидаю фокус";update();handler.postDelayed(()->awaitChosenWindow(pkg,id,expected,epoch,until),250);
  }
- private void chooseProfile(){stop("Выберите механику игры");overlayMenu("Механика · выбирайте по управлению, не по оформлению",new String[]{ArcadeProfile.ARI.label,ArcadeProfile.PADDLE.label,ArcadeProfile.TRAFFIC.label,ArcadeProfile.FLAPPY.label,"2048","Цветной2048","Мэтч Ворлд · обмен соседей","Фишки · удалить группу","Имя игры · отдельное обучение","Шипучка · обычные шары (эксперимент)","Фишки · провести прямую цепочку","Нащупай ход · обмен соседей, защита черепов"},i->{if(i==8){nameLearningGame();return;}unsupportedGame=false;if(selectedProfile!=i){visualRoi=null;manualVisualRoi=false;boardRoi=null;}selectedProfile=i;if(i<4)captureProfile=ArcadeProfile.values()[i];getSharedPreferences("panel",MODE_PRIVATE).edit().putInt("profile",i).apply();AccessibilityNodeInfo root=appRoot();try{if(root!=null){String pkg=String.valueOf(root.getPackageName());getSharedPreferences("game-profiles",MODE_PRIVATE).edit().putInt(profileChoiceKey(pkg),i).apply();browserProfileConfirmed=true;confirmedProfileScope=profileChoiceKey(pkg);}}finally{if(root!=null)root.recycle();}note="Выбрано: "+profileLabel()+". Другая графика: Ещё → Настроить распознавание. Затем Старт";update();if(i==9){if(bindSelectedWindow())selectVisualRegion();}else if(i>=6)configureGrid();});}
+ private void chooseProfile(){
+  stop("Выберите механику игры");
+  // Named Market mechanics only: generic unsupported examples are no
+  // longer shown as if they were additional real games.
+  final int[] ids={9,0,6,1,2,3,4,5,11};
+  final String[] labels={
+   "Шипучка · шары (эксперимент)",
+   "Прыгун Ари", "Мэтч Ворлд · обмен",
+   "Карканоид · шар и платформа", "Маркет Раш", "Гошан",
+   "2048", "2048 · цветной вариант",
+   "Нащупай ход · обмен, защита черепов"
+  };
+  overlayMenu("Реальные игры · выберите механику",labels,i->{
+   int profile=ids[i];unsupportedGame=false;
+   if(selectedProfile!=profile){visualRoi=null;manualVisualRoi=false;boardRoi=null;}
+   selectedProfile=profile;
+   if(profile<4)captureProfile=ArcadeProfile.values()[profile];
+   getSharedPreferences("panel",MODE_PRIVATE).edit().putInt("profile",profile).apply();
+   AccessibilityNodeInfo root=appRoot();
+   try{if(root!=null){String pkg=String.valueOf(root.getPackageName());
+    getSharedPreferences("game-profiles",MODE_PRIVATE).edit().putInt(profileChoiceKey(pkg),profile).apply();
+    browserProfileConfirmed=true;confirmedProfileScope=profileChoiceKey(pkg);
+   }}finally{if(root!=null)root.recycle();}
+   note="Выбрано: "+profileLabel()+" · настройте область и нажмите Старт";update();
+   if(profile==9){if(bindSelectedWindow())selectVisualRegion();}
+   else if(gridSelected())configureGrid();
+  });
+ }
  private void nameLearningGame(){
   AccessibilityNodeInfo root=appRoot();if(root==null){note="Сначала откройте приложение с игрой";update();return;}
   final String pkg;try{pkg=String.valueOf(root.getPackageName());}finally{root.recycle();}
@@ -432,8 +459,8 @@ public class PilotService extends AccessibilityService {
  }
  private void moreOptions(){
   stop("Дополнительные действия · STOP");
-  final int[] actions={0,3,4,5,7,8,9,10,11,12,13,14,15,16};
-  overlayMenu("Ещё",new String[]{"Диагностика сеанса","Выбрать установленную игру","Только чтение","Включить автоуправление","Скрыть панель","Отключить службу","Настроить распознавание","Способ управления","Вернуть стандартное распознавание","Размер сетки фишек","Приоритетный цвет фишек","Помощь по панели и играм","Неизвестные клетки","Журнал обучения"},i->{switch(actions[i]){
+  final int[] actions={0,3,4,5,7,8,9,10,11,12,13,14,15,16,17};
+  overlayMenu("Ещё",new String[]{"Диагностика сеанса","Выбрать установленную игру","Только чтение","Включить автоуправление","Скрыть панель","Отключить службу","Настроить распознавание","Способ управления","Вернуть стандартное распознавание","Размер сетки фишек","Приоритетный цвет фишек","Помощь по панели и играм","Неизвестные клетки","Журнал обучения","Имя игры · отдельный профиль"},i->{switch(actions[i]){
    case 0->showServiceDialog(new AlertDialog.Builder(this).setTitle("Последний сеанс").setMessage(lastSessionReport+"\n"+captureStartup.report()).setPositiveButton("Закрыть",null).create());
    case 3->startActivity(new Intent(this,GamePickerActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));case 4->setAutomatic(false);case 5->setAutomatic(true);case 7->hidePanel();case 8->disableSelf();
    case 9->startCustomCalibration();case 10->chooseControlMode();case 11->resetCustomVision();
@@ -442,6 +469,7 @@ public class PilotService extends AccessibilityService {
    case 14->showPanelHelp();
    case 15->showServiceDialog(new AlertDialog.Builder(this).setTitle("Последнее чтение сетки").setMessage(gridReview).setPositiveButton("Закрыть",null).create());
    case 16->showVisionTrainingReport();
+   case 17->nameLearningGame();
   }});
  }
 
@@ -449,7 +477,7 @@ public class PilotService extends AccessibilityService {
  private void showPanelHelp(){
   String message="Окно — выберите окно игры. Игра — выберите её механику. Область — отметьте игровое поле, если требуется. Старт — начать выбранный режим. Ещё — настройки и диагностика; открытие останавливает игру. Свернуть — уменьшить панель. STOP — немедленно остановить ввод.\n\n"
    +"Для сетки: откройте игру → Окно → Игра → выберите механику → Область → обведите поле → Старт. Размер сетки задаётся в «Ещё». Неизвестные клетки: только наблюдение. 2048: обведите плитки 4×4; Шипучка: обведите ряды шаров до пушки. Шипучка: экспериментально только обычные шары. Прыгун Ари, Карканоид, Маркет Раш и Гошан: отдельные аркадные профили.\n\n"
-   +"Для другой игры выбирайте механику по её правилам. Неподдерживаемые специальные элементы требуют отдельной проверки.";
+   +"Выбирайте фактическую механику. Число строк и столбцов подтверждайте для каждой игры; без подтверждения ввод сетки запрещён. Гексон и Котобашня пока не имеют проверенных автоматических профилей.";
   showServiceDialog(new AlertDialog.Builder(this).setTitle("Панель и игры").setMessage(message).setPositiveButton("Закрыть",null).create());
  }
 
@@ -1106,7 +1134,12 @@ public class PilotService extends AccessibilityService {
  private void configureGrid(){
   if(!gridSelected()){note="Сначала Игра → Фишки: обмен или группы";update();return;}
   if(!bindSelectedWindow())return;loadGridConfig();
-  overlayMenu("Сетка фишек · "+gridConfig.rows+"×"+gridConfig.cols,new String[]{"8×7 (Мэтч Ворлд на снимке)","7×7","6×6","Другие строки и столбцы (3–10)"},i->{if(i<3){int rows=i==0?8:i==1?7:6,cols=i==0?7:rows;setGridSize(rows,cols,GridProfileRules.minimum(selectedProfile));selectVisualRegion();}else showGridSizeForm();});
+  overlayMenu("Подтвердите число клеток · "+gridConfig.rows+"×"+gridConfig.cols,
+   new String[]{"Указать строки и столбцы вручную (3–10)","6×6","7×7","8×7"},i->{
+    if(i==0){showGridSizeForm();return;}
+    int rows=i==1?6:i==2?7:8,cols=i==3?7:rows;
+    setGridSize(rows,cols,GridProfileRules.minimum(selectedProfile));selectVisualRegion();
+   });
  }
  private void chooseGridGoal(){
   if(!gridSelected()){note="Сначала Игра → Фишки: обмен или группы";update();return;}if(!bindSelectedWindow())return;
@@ -1122,7 +1155,10 @@ public class PilotService extends AccessibilityService {
  }
  private void setGridSize(int rows,int cols,int minimum){
   gridConfig=new GridPuzzleConfig(rows,cols,minimum);gridPalette=null;visualRoi=null;manualVisualRoi=false;boardRoi=null;clearDiagnosticFrame();
-  getSharedPreferences("grid-puzzle",MODE_PRIVATE).edit().putString(gridKey()+".config",gridConfig.encode()).remove(gridKey()+".palette").apply();
+  getSharedPreferences("grid-puzzle",MODE_PRIVATE).edit()
+   .putString(gridKey()+".config",gridConfig.encode())
+   .putBoolean(gridKey()+".dimensions_confirmed",true)
+   .remove(gridKey()+".palette").apply();
  }
  private String bubbleKey(){return profileChoiceKey(target)+".area";}
  private void saveBubbleRegion(Rect area){
@@ -1214,7 +1250,14 @@ public class PilotService extends AccessibilityService {
   if(playingGrid&&gridSession.paused()){stop("Повторная проверка поля");if(!bindSelectedWindow())return;}
   if(busy||captureBusy||discoveringBoard||autoLeft>0||playing2048||playingMini||playingJumper||playingGrid){note="Сначала остановите текущий режим";update();return;}
   if(!VisualGameTarget.allowed(target,getPackageName())){note="Выберите окно сторонней игры";update();return;}
-  loadGridConfig();if(!manualVisualRoi||visualRoi==null||!armedBounds.contains(visualRoi)){note="Область → обведите только клетки сетки "+gridConfig.rows+"×"+gridConfig.cols;update();return;}
+  loadGridConfig();
+  // Grid counts can differ by game. A historical default never authorizes
+  // gestures until the dimensions are explicitly confirmed for this slot.
+  if(!getSharedPreferences("grid-puzzle",MODE_PRIVATE)
+      .getBoolean(gridKey()+".dimensions_confirmed",false)){
+   note="Подтвердите число строк и столбцов перед запуском";update();configureGrid();return;
+  }
+  if(!manualVisualRoi||visualRoi==null||!armedBounds.contains(visualRoi)){note="Область → обведите только клетки сетки "+gridConfig.rows+"×"+gridConfig.cols;update();return;}
   if(visualRoi.width()/gridConfig.cols<18||visualRoi.height()/gridConfig.rows<18){note="Клетки слишком малы: проверьте размер и выделение поля";update();return;}
   if(gridConfig.rows==gridConfig.cols&&!RegionPickerGeometry.squareBoardAspect(
       new GameViewport.Box(visualRoi.left,visualRoi.top,visualRoi.right,visualRoi.bottom),gridConfig.rows,gridConfig.cols)){
