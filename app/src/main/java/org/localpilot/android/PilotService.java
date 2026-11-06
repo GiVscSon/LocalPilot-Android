@@ -1668,7 +1668,7 @@ public class PilotService extends AccessibilityService {
  private void showArcadeDiagnostics(){
   ArcadeObservation s=arcadeState;
   String text=s==null?"Запустите профиль на открытой игровой сцене.\n"+captureStartup.report():
-    (captureProfile==ArcadeProfile.TRAFFIC?"Машины: "+s.obstacles.size()+" · канистры: "+s.collectibles.size():"Объекты: "+s.obstacles.size())
+    (captureProfile==ArcadeProfile.TRAFFIC?"Машины: "+s.obstacles.size()+" · канистры: "+s.collectibles.size():captureProfile==ArcadeProfile.PADDLE?"Блоки: "+s.obstacles.size()+" · приближаются: "+arcadeController.approachingPaddleBlocks():"Объекты: "+s.obstacles.size())
     +" · уверенность "+String.format(java.util.Locale.ROOT,"%.2f",s.confidence)
     +"\nИгрок: "+(s.player==null?"не найден":Math.round(s.player.x()*100)+"% × "+Math.round(s.player.y()*100)+"%")
     +"\nСкорость Y: "+String.format(java.util.Locale.ROOT,"%.2f",s.vy)
@@ -1778,7 +1778,9 @@ public class PilotService extends AccessibilityService {
   metrics.record(StageMetrics.Stage.POLICY,SystemClock.elapsedRealtimeNanos()-policyStarted);
   uiStats=captureProfile.label+(captureProfile==ArcadeProfile.TRAFFIC
     ?" · машины "+observation.obstacles.size()+" · топливо "+observation.collectibles.size()
-    :" · объекты "+observation.obstacles.size())+" · ответов "+arcadeVerified;
+    :captureProfile==ArcadeProfile.PADDLE
+      ?" · блоки "+observation.obstacles.size()+" · приближаются "+arcadeController.approachingPaddleBlocks()
+      :" · объекты "+observation.obstacles.size())+" · ответов "+arcadeVerified;
   note="5/5 · "+action.reason;update();if(!action.sendsInput())return;
   if(now-timestampMs>ActionGate.TTL_MS){failStage(StageMetrics.Stage.CAPTURE,"ARCADE_FRAME_STALE","Кадр устарел до касания");return;}
   ArcadeControls.Gesture gesture=ArcadeControls.map(action,observation,controlMode);
