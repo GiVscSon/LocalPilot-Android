@@ -10,14 +10,15 @@ public final class ArcadeController {
  private long lastFlap=-10000,lastLane=-10000,verifiedFlap=-10000;
  private int intendedLane=-1,lastHold=150;
  private float steeringSpeed=1.1f,laneStartX;
+ private int approachingPaddleBlocks;
  private boolean continuousSteering;
  /** Explicitly promoted, scoped model used for real PADDLE decisions. */
  private String paddleTransfer;
  /** Trained from confirmed real game effects; never grants input by itself. */
  private RealGameNeuralCritic neural;
- public void reset(){paddleTransfer=null;neural=null;previous=earlier=null;trafficSpeed=.55f;scrollSpeed=.28f;gravity=1.5f;flapVelocity=-.44f;lastFlap=lastLane=verifiedFlap=-10000;intendedLane=-1;steeringSpeed=1.1f;lastHold=150;continuousSteering=false;}
+ public void reset(){paddleTransfer=null;neural=null;previous=earlier=null;approachingPaddleBlocks=0;trafficSpeed=.55f;scrollSpeed=.28f;gravity=1.5f;flapVelocity=-.44f;lastFlap=lastLane=verifiedFlap=-10000;intendedLane=-1;steeringSpeed=1.1f;lastHold=150;continuousSteering=false;}
  /** New episode in the same window: keep learned physics, discard old objects/actions. */
- public void nextRound(){previous=earlier=null;lastFlap=lastLane=verifiedFlap=-10000;intendedLane=-1;}
+ public void nextRound(){previous=earlier=null;approachingPaddleBlocks=0;lastFlap=lastLane=verifiedFlap=-10000;intendedLane=-1;}
  /** A loss is an outcome, not a measurement of gravity or flap impulse. */
  public void penalize(){nextRound();}
  public ArcadePolicy.Decision decide(ArcadeObservation s,long now){
@@ -26,6 +27,7 @@ public final class ArcadeController {
   if(previous!=null&&previous.profile!=s.profile)reset();
   // Replayed/out-of-order pixels cannot erase the saved physics or renew input.
   if(previous!=null&&s.timestampMs<=previous.timestampMs)return waitFor("Ожидаю следующий кадр");
+  approachingPaddleBlocks=PaddleThreats.approaching(s,previous);
   learn(s,now);earlier=previous;previous=s;
   ArcadePolicy.Decision physics=switch(s.profile){case TRAFFIC->drive(s,now);case FLAPPY->fly(s,now);
    case PADDLE->paddleTransfer==null?ArcadePolicy.next(s):PaddleTransfer.decide(s,paddleTransfer);
@@ -79,6 +81,7 @@ public final class ArcadeController {
  public String neuralStatus(){return neural==null?"neural=not-installed":neural.report();}
  public void disablePaddleTransfer(){paddleTransfer=null;}
  public boolean paddleTransferActive(){return paddleTransfer!=null;}
+ public int approachingPaddleBlocks(){return approachingPaddleBlocks;}
  public String report(){return model()+(paddleTransfer==null?" paddleTransfer=off":" paddleTransfer=on")+" "+neuralStatus();}
  public void restore(String saved){
   if(saved==null||saved.isEmpty())return;
