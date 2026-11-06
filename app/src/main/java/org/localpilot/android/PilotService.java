@@ -780,6 +780,12 @@ public class PilotService extends AccessibilityService {
       +" displayGeometry="+(geometry==null?"unavailable":geometry.width()+"x"+geometry.height()+"/rotation="+geometry.rotation())
       +" timestamp_ms="+System.currentTimeMillis()+" uptimeMillis="+lastBoundsRejectionUptimeMs
       +" session_epoch="+lastBoundsRejectionEpoch;
+    // Invalid OEM metadata is not a safe coordinate-space change: pause input
+    // and re-read the ORIGINAL window during the bounded focus grace.
+    // Never fabricate in-display bounds by subtracting a screen height.
+    if(geometry!=null&&WindowFocus.completelyOutsideDisplay(bounds.left,bounds.top,bounds.right,bounds.bottom,
+      geometry.width(),geometry.height())&&gate.matches(pkg,id,bounds.width(),bounds.height()))
+     return "WINDOW_STATE_UNAVAILABLE";
     return "TARGET_BOUNDS_CHANGED";
    }
    long now=SystemClock.elapsedRealtime();
