@@ -21,6 +21,14 @@ public final class WindowFocus {
   if(lostAt<0)lostAt=now;
   return State.WAITING;
  }
+ /** A window rectangle entirely outside the physical display is not usable
+  * gesture geometry. OEM accessibility metadata can briefly return an offset
+  * of exactly one screen. This is only a reason to pause and re-observe, never
+  * evidence that the original window is still safe for input. */
+ public static boolean completelyOutsideDisplay(int left,int top,int right,int bottom,int displayWidth,int displayHeight){
+  if(displayWidth<=0||displayHeight<=0||right<=left||bottom<=top)return false;
+  return right<=0||bottom<=0||left>=displayWidth||top>=displayHeight;
+ }
  /** An interrupted arcade gesture cannot be safely recovered by dropping feedback. */
  public static boolean interruptedArcade(boolean playingArcade,boolean arcadePending,boolean jumperPending){return playingArcade&&(arcadePending||jumperPending);}
  public static boolean interrupted2048(boolean playing,boolean pending){return playing&&pending;}
