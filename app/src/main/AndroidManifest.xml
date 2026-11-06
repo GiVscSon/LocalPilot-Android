@@ -11,6 +11,7 @@
   <activity android:name=".MainActivity" android:exported="true"><intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter></activity>
   <activity android:name=".Game2048Activity" android:exported="false"/>
   <activity android:name=".MiniGamesActivity" android:exported="false"/>
+  <activity android:name=".EmbeddedNesActivity" android:exported="false"/>
   <activity android:name=".DemoActivity" android:exported="false"/>
   <activity android:name=".GamePickerActivity" android:exported="false"/>
   <activity android:name=".OnlineDiagnosticsActivity" android:exported="false"/>
