@@ -27,6 +27,12 @@ public final class WindowRebindTest {
   check(grace.observe(11,"TARGET_WINDOW_UNAVAILABLE",1000,true)==WindowFocus.State.WAITING,"temporary visible focus loss");
   check(grace.observe(11,null,2500,true)==WindowFocus.State.ACTIVE,"recovered identity resets wait");
   check(grace.observe(12,"TARGET_BOUNDS_CHANGED",2600,true)==WindowFocus.State.STOP,"changed bounds never get focus grace");
-  System.out.println("Window rebind stability and focus grace: 20 assertions PASS");
+  int[] selected=WindowFocus.visibleSelection(0,0,1082,1922,1080,1920);
+  check(java.util.Arrays.equals(selected,new int[]{0,0,1080,1920}),"oversized API30 snapshot selects only physical display");
+  check(!java.util.Arrays.equals(selected,new int[]{0,0,1079,1920}),"in-display bounds change is still different");
+  check(java.util.Arrays.equals(WindowFocus.visibleSelection(50,70,900,1800,1080,1920),new int[]{50,70,900,1800}),"in-display window remains exact");
+  check(WindowFocus.visibleSelection(1080,0,1100,100,1080,1920)==null,"off-display window cannot be selected");
+  check(WindowFocus.visibleSelection(0,0,1080,1920,0,1920)==null,"unknown display cannot be selected");
+  System.out.println("Window rebind stability, focus grace and visible selection: 25 assertions PASS");
  }
 }

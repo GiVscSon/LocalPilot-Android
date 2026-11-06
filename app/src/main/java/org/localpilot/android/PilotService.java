@@ -322,8 +322,14 @@ public class PilotService extends AccessibilityService {
  private void chooseWindow(long epoch,long until){
   if(epoch!=gate.epoch()||destroying)return;
   java.util.List<String> owners=new java.util.ArrayList<>(),labels=new java.util.ArrayList<>();java.util.List<Integer> ids=new java.util.ArrayList<>();java.util.List<Rect> bounds=new java.util.ArrayList<>();
+  Point displaySize=new Point();wm.getDefaultDisplay().getRealSize(displaySize);
   for(AccessibilityWindowInfo w:getWindows())if(w.getType()==AccessibilityWindowInfo.TYPE_APPLICATION){AccessibilityNodeInfo r=windowRoot(w);if(r==null)continue;try{
    String pkg=String.valueOf(r.getPackageName());Rect b=new Rect();w.getBoundsInScreen(b);if(b.isEmpty())continue;
+   // Accessibility can briefly expose bounds beyond the physical display
+   // during an Activity transition. Selection may only name visible pixels;
+   // awaitChosenWindow still requires exact focused package, ID and bounds.
+   int[] visible=WindowFocus.visibleSelection(b.left,b.top,b.right,b.bottom,displaySize.x,displaySize.y);if(visible==null)continue;
+   b.set(visible[0],visible[1],visible[2],visible[3]);
    owners.add(pkg);ids.add(w.getId());bounds.add(b);labels.add(applicationLabel(pkg)+" · "+b.width()+"×"+b.height()+(w.isFocused()?" · активное":"")+"\n"+pkg);
   }finally{r.recycle();}}
   if(labels.isEmpty()){
