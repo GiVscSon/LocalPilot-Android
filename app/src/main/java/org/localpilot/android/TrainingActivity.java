@@ -7,15 +7,18 @@ import android.os.*;
 import android.view.View;
 import android.widget.*;
 import org.localpilot.android.rl.*;
+import org.localpilot.shared.GameLabReplay;
+import java.nio.charset.StandardCharsets;
 import java.io.*;
 import java.util.Locale;
 import java.util.concurrent.Executors;
 
 /** Native on-device training. Activity disappearance pauses the single application worker. */
 public final class TrainingActivity extends Activity {
+ private static final int IMPORT_LAB_REPLAY=72;
  private static Runtime runtime;
  private final Handler handler=new Handler(Looper.getMainLooper());
- private TextView status;private Spinner genre,paddleScenario;private View scene;
+ private TextView status,shadowStatus;private Spinner genre,paddleScenario;private View scene;
  private Button train,evaluate,play,export,paddleTrain,paddleDemo,paddleApply,weightSpaceTest;
  private final Runnable refresh=new Runnable(){public void run(){status.setText(runtime.message);scene.invalidate();boolean idle=!runtime.busy;genre.setEnabled(idle);train.setEnabled(idle);evaluate.setEnabled(idle);play.setEnabled(idle);export.setEnabled(idle);
   paddleScenario.setEnabled(idle);paddleTrain.setEnabled(idle);paddleDemo.setEnabled(idle);
@@ -26,6 +29,22 @@ public final class TrainingActivity extends Activity {
   TextView title=new TextView(this);title.setText("Аркады · обучение на Android");title.setTextSize(20);box.addView(title);
   genre=new Spinner(this);genre.setAdapter(new ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,new String[]{"Вертикальный джампер","Вертикальный платформер","Раннер по полосам","Jetpack"}));genre.setSelection(Math.max(0,Math.min(3,getSharedPreferences(MainActivity.PREF,MODE_PRIVATE).getInt("training_genre",0))));box.addView(genre);
   TextView help=new TextView(this);help.setText("Четыре исходные DQN-модели остаются учебными и не переносятся напрямую: их схемы действий отличаются от настоящих игр. Ниже отдельный Карканоид: его маленькая сеть обучается на восьми физических сценариях и может быть вручную перенесена в реальную зрительную модель после проверки.");box.addView(help);
+  TextView labHeading=new TextView(this);
+  labHeading.setText("GameLab → игровой агент · экспериментальный опыт");
+  labHeading.setTextSize(18);box.addView(labHeading);
+  TextView labWarning=new TextView(this);
+  labWarning.setText("Импортируется только опыт симуляций. Обучается отдельный shadow-prior; он не исполняет жесты и не меняет веса реальных игр.");
+  box.addView(labWarning);
+  shadowStatus=new TextView(this);shadowStatus.setTextSize(12);box.addView(shadowStatus);
+  try{
+   shadowStatus.setText(GameLabReplay.Shadow.load(shadowFile()).report());
+  }catch(Exception invalid){shadowStatus.setText("Учебная модель недоступна: "+invalid.getClass().getSimpleName());}
+  button(box,"Импортировать опыт из GameLab (CSV)",()->{
+   if(runtime.busy){toast("Остановите обучение перед импортом");return;}
+   Intent pick=new Intent(Intent.ACTION_OPEN_DOCUMENT).setType("*/*")
+     .addCategory(Intent.CATEGORY_OPENABLE);
+   startActivityForResult(pick,IMPORT_LAB_REPLAY);
+  });
   scene=new View(this){private final Paint p=new Paint(3);@Override public void onDraw(Canvas c){super.onDraw(c);c.drawColor(0xff101d2d);
  PaddleWeightLab.Scene physics=runtime.paddleScene;
  if(physics!=null){
@@ -68,13 +87,44 @@ public final class TrainingActivity extends Activity {
      pilot.installPaddleTransfer(candidate));
   });
  }
+ private File shadowFile(){return new File(getFilesDir(),"gamelab-shadow-v1.txt");}
  private int dp(int n){return (int)(n*getResources().getDisplayMetrics().density);}
  private ArcadeEnv.Genre selected(){int index=genre.getSelectedItemPosition();getSharedPreferences(MainActivity.PREF,MODE_PRIVATE).edit().putInt("training_genre",index).apply();return ArcadeEnv.Genre.values()[index];}
  private Button button(LinearLayout box,String text,Runnable run){Button b=new Button(this);b.setText(text);b.setTextSize(12);b.setOnClickListener(v->run.run());box.addView(b,box.getOrientation()==LinearLayout.HORIZONTAL?new LinearLayout.LayoutParams(0,-2,1):new LinearLayout.LayoutParams(-1,-2));return b;}
  @Override protected void onResume(){super.onResume();handler.post(refresh);}
  @Override protected void onStop(){runtime.pause();handler.removeCallbacks(refresh);super.onStop();}
  private void toast(String s){Toast.makeText(this,s,Toast.LENGTH_LONG).show();}
- @Override protected void onActivityResult(int req,int result,Intent data){super.onActivityResult(req,result,data);if(req!=71||result!=RESULT_OK||data==null)return;final File source=runtime.checkpoint;if(runtime.busy||source==null)return;
+ @Override protected void onActivityResult(int req,int result,Intent data){
+  super.onActivityResult(req,result,data);
+  if(result!=RESULT_OK||data==null||data.getData()==null)return;
+  if(req==IMPORT_LAB_REPLAY){
+   if(runtime.busy){toast("Остановите обучение перед импортом");return;}
+   android.net.Uri uri=data.getData();
+   runtime.executor.execute(()->{
+    try(InputStream input=getContentResolver().openInputStream(uri)){
+     if(input==null)throw new IOException("No replay stream");
+     ByteArrayOutputStream out=new ByteArrayOutputStream();
+     byte[] buffer=new byte[8192];int n;
+     while((n=input.read(buffer))!=-1){
+      if(out.size()+n>256*1024)throw new IOException("Replay exceeds 256 KiB");
+      out.write(buffer,0,n);
+     }
+     String replay=new String(out.toByteArray(),StandardCharsets.UTF_8);
+     GameLabReplay.Shadow shadow=GameLabReplay.Shadow.load(shadowFile());
+     boolean imported=shadow.importReplay(replay);
+     if(imported)shadow.save(shadowFile());
+     runOnUiThread(()->{
+      shadowStatus.setText(shadow.report());
+      toast(imported?"Опыт GameLab добавлен только в учебную модель":"Этот журнал уже импортирован");
+     });
+    }catch(Exception invalid){
+     runOnUiThread(()->toast("Опыт отклонён: "+invalid.getMessage()));
+    }
+   });
+   return;
+  }
+  if(req!=71)return;
+  final File source=runtime.checkpoint;if(runtime.busy||source==null)return;
   runtime.executor.execute(()->{try(InputStream in=new FileInputStream(source);OutputStream out=getContentResolver().openOutputStream(data.getData())){if(out==null)throw new IOException("output");byte[] b=new byte[8192];int n;while((n=in.read(b))!=-1)out.write(b,0,n);runOnUiThread(()->toast("Checkpoint экспортирован"));}catch(IOException e){runOnUiThread(()->toast("Ошибка экспорта: "+e.getMessage()));}});
  }
  private static final class Runtime {
