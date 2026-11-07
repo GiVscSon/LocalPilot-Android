@@ -100,6 +100,8 @@ jobs:
           lines[position:position]=fixture
           path.write_text("".join(lines))
           PY
+      - name: Restore strictly opt-in online diagnostics in unified service
+        run: python3 ci/restore_online_diagnostics.py
       - name: Align integrated test APIs without bypassing safety
         run: python3 ci/repair_unified_081_integration.py
       - name: Verify genuine unified API contracts
