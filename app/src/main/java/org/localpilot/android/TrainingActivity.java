@@ -7,6 +7,8 @@ import android.os.*;
 import android.view.View;
 import android.widget.*;
 import org.localpilot.android.rl.*;
+import org.localpilot.shared.SimExperience;
+import org.localpilot.shared.SimLabPolicy;
 import java.io.*;
 import java.util.Locale;
 import java.util.concurrent.Executors;
@@ -15,7 +17,8 @@ import java.util.concurrent.Executors;
 public final class TrainingActivity extends Activity {
  private static Runtime runtime;
  private final Handler handler=new Handler(Looper.getMainLooper());
- private TextView status;private Spinner genre,paddleScenario;private View scene;
+ private TextView status,labReport;private Spinner genre,paddleScenario;private View scene;
+ private static final int IMPORT_LAB_EXPERIENCE=72;
  private Button train,evaluate,play,export,paddleTrain,paddleDemo,paddleApply,weightSpaceTest;
  private final Runnable refresh=new Runnable(){public void run(){status.setText(runtime.message);scene.invalidate();boolean idle=!runtime.busy;genre.setEnabled(idle);train.setEnabled(idle);evaluate.setEnabled(idle);play.setEnabled(idle);export.setEnabled(idle);
   paddleScenario.setEnabled(idle);paddleTrain.setEnabled(idle);paddleDemo.setEnabled(idle);
@@ -50,6 +53,19 @@ public final class TrainingActivity extends Activity {
   LinearLayout row=new LinearLayout(this);box.addView(row);train=button(row,"Обучать",()->runtime.start(selected(),0));evaluate=button(row,"Оценить ×50",()->runtime.start(selected(),1));
   LinearLayout row2=new LinearLayout(this);box.addView(row2);play=button(row2,"Показать модель",()->runtime.start(selected(),2));button(row2,"Пауза / STOP",()->runtime.pause());
   export=button(box,"Экспорт checkpoint",()->{if(runtime.checkpoint==null||!runtime.checkpoint.isFile()){toast("Сначала обучите и поставьте на паузу");return;}startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT).setType("application/zip").addCategory(Intent.CATEGORY_OPENABLE).putExtra(Intent.EXTRA_TITLE,"localpilot-"+runtime.current+"-checkpoint.zip"),71);});
+  TextView labHeading=new TextView(this);
+  labHeading.setText("GameLab → автономное обучение (без реальных жестов)");
+  labHeading.setTextSize(18);box.addView(labHeading);
+  TextView labHelp=new TextView(this);
+  labHelp.setText("В GameLab нажмите «Опыт GameLab» после нескольких ходов. Здесь импортируйте .lpx: обучается отдельная симуляционная политика. Результаты не изменяют веса настоящих игр и не дают разрешения на ввод.");
+  box.addView(labHelp);
+  button(box,"Импортировать опыт GameLab (.lpx)",()->{
+   Intent pick=new Intent(Intent.ACTION_OPEN_DOCUMENT).setType("*/*")
+     .addCategory(Intent.CATEGORY_OPENABLE);
+   startActivityForResult(pick,IMPORT_LAB_EXPERIENCE);
+  });
+  labReport=new TextView(this);labReport.setTextSize(12);box.addView(labReport);
+  readSavedLabExperience();
   TextView heading=new TextView(this);heading.setText("Карканоид · перенос в игровую модель");heading.setTextSize(18);box.addView(heading);
   paddleScenario=new Spinner(this);
   paddleScenario.setAdapter(new ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,
@@ -74,8 +90,54 @@ public final class TrainingActivity extends Activity {
  @Override protected void onResume(){super.onResume();handler.post(refresh);}
  @Override protected void onStop(){runtime.pause();handler.removeCallbacks(refresh);super.onStop();}
  private void toast(String s){Toast.makeText(this,s,Toast.LENGTH_LONG).show();}
- @Override protected void onActivityResult(int req,int result,Intent data){super.onActivityResult(req,result,data);if(req!=71||result!=RESULT_OK||data==null)return;final File source=runtime.checkpoint;if(runtime.busy||source==null)return;
+ @Override protected void onActivityResult(int req,int result,Intent data){
+  super.onActivityResult(req,result,data);
+  if(req==IMPORT_LAB_EXPERIENCE){
+   if(result==RESULT_OK&&data!=null&&data.getData()!=null)
+    importLabExperience(data);
+   return;
+  }
+  if(req!=71||result!=RESULT_OK||data==null)return;final File source=runtime.checkpoint;if(runtime.busy||source==null)return;
   runtime.executor.execute(()->{try(InputStream in=new FileInputStream(source);OutputStream out=getContentResolver().openOutputStream(data.getData())){if(out==null)throw new IOException("output");byte[] b=new byte[8192];int n;while((n=in.read(b))!=-1)out.write(b,0,n);runOnUiThread(()->toast("Checkpoint экспортирован"));}catch(IOException e){runOnUiThread(()->toast("Ошибка экспорта: "+e.getMessage()));}});
+ }
+ private File labReplayFile(){return new File(getFilesDir(),"gamelab-sim-experience-v1.lpx");}
+ private void readSavedLabExperience(){
+  File saved=labReplayFile();
+  if(!saved.isFile()){
+   labReport.setText("Опыт GameLab ещё не импортирован. Симуляционная модель не обучена.");return;
+  }
+  try(FileInputStream in=new FileInputStream(saved)){
+   byte[] bytes=in.readNBytes(SimExperience.MAX_BYTES+1);
+   if(bytes.length>SimExperience.MAX_BYTES)throw new IOException("bounded replay exceeded");
+   SimLabPolicy policy=SimLabPolicy.train(SimExperience.decode(
+     new String(bytes,java.nio.charset.StandardCharsets.UTF_8)));
+   labReport.setText(policy.report());
+  }catch(IOException|IllegalArgumentException invalid){
+   labReport.setText("Сохранённый лабораторный опыт повреждён или несовместим. Реальные модели не затронуты.");
+  }
+ }
+ private void importLabExperience(Intent data){
+  try(InputStream in=getContentResolver().openInputStream(data.getData())){
+   if(in==null)throw new IOException("no SAF stream");
+   byte[] bytes=in.readNBytes(SimExperience.MAX_BYTES+1);
+   if(bytes.length>SimExperience.MAX_BYTES)throw new IOException("replay too large");
+   SimLabPolicy policy=SimLabPolicy.train(SimExperience.decode(
+     new String(bytes,java.nio.charset.StandardCharsets.UTF_8)));
+   if(policy.accepted()==0)throw new IllegalArgumentException("no normal simulator actions");
+   File saved=labReplayFile();
+   File temporary=File.createTempFile("gamelab-import-",".tmp",getFilesDir());
+   try{
+    try(FileOutputStream out=new FileOutputStream(temporary)){
+     out.write(bytes);out.getFD().sync();
+    }
+    java.nio.file.Files.move(temporary.toPath(),saved.toPath(),
+      java.nio.file.StandardCopyOption.ATOMIC_MOVE,
+      java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+   }finally{temporary.delete();}
+   labReport.setText("Импорт завершён. Отдельная учебная политика обновлена.\n"+policy.report());
+  }catch(IOException|IllegalArgumentException invalid){
+   labReport.setText("Импорт GameLab отклонён: неверный формат, размеры или контрольная сумма. Реальные модели не изменены.");
+  }
  }
  private static final class Runtime {
   final java.util.concurrent.ExecutorService executor=Executors.newSingleThreadExecutor();final File directory;
