@@ -23,6 +23,8 @@ public final class GridPuzzleVision {
   private final float[][] descriptors;
   private Palette(List<float[]> values){descriptors=new float[values.size()][];for(int i=0;i<descriptors.length;i++)descriptors[i]=values.get(i).clone();}
   public int size(){return descriptors.length;}
+  /** Copies a calibrated descriptor without exposing mutable palette storage. */
+  void copyDescriptor(int type,float[] out){if(type<1||type>size()||out==null||out.length<FEATURES)throw new IllegalArgumentException("descriptor buffer");System.arraycopy(descriptors[type-1],0,out,0,FEATURES);}
   public int representativeColor(int type){if(type<1||type>size())throw new IllegalArgumentException("type");float[] d=descriptors[type-1];int r=0,g=0,b=0;for(int i=0;i<27;i+=3){r+=Math.round(d[i]*255);g+=Math.round(d[i+1]*255);b+=Math.round(d[i+2]*255);}return ((r/9)<<16)|((g/9)<<8)|(b/9);}
   public String encode(){StringBuilder s=new StringBuilder("v1");for(float[] d:descriptors){s.append(';');for(int i=0;i<d.length;i++){if(i>0)s.append(',');s.append(d[i]);}}return s.toString();}
   public static Palette decode(String value){
@@ -42,7 +44,7 @@ public final class GridPuzzleVision {
   private final java.util.BitSet specialCellsMask;
   private final CellReason[] cellReasons;
   private final String[] cellSamples;
-  private Observation(int rows,int cols,long time,int[] cells,Palette palette,float confidence,boolean usable,boolean partialUsable,java.util.BitSet special,CellReason[] reasons,String[] samples){
+  Observation(int rows,int cols,long time,int[] cells,Palette palette,float confidence,boolean usable,boolean partialUsable,java.util.BitSet special,CellReason[] reasons,String[] samples){
    specialCellsMask=(java.util.BitSet)special.clone();this.rows=rows;this.cols=cols;timestampMs=time;
    values=cells.clone();this.palette=palette;this.confidence=confidence;this.usable=usable;this.partialUsable=partialUsable;
    cellReasons=reasons.clone();cellSamples=samples.clone();
@@ -214,7 +216,7 @@ public final class GridPuzzleVision {
  static boolean matchWorldHole(int row,int col){
   return (row==0||row==6)&&(col<=1||col>=5)||(row==1||row==5)&&(col==0||col==6);
  }
- private static boolean matchWorldFlatBlue(Pixels pixels,float l,float t,float r,float b){
+ static boolean matchWorldFlatBlue(Pixels pixels,float l,float t,float r,float b){
   long rs=0,gs=0,bs=0;int[] colors=new int[25];int k=0;
   for(int y=0;y<5;y++)for(int x=0;x<5;x++){
    int rgb=sampleSquare(pixels,l,t,r,b,.2f+x*.15f,.2f+y*.15f);
@@ -230,7 +232,7 @@ public final class GridPuzzleVision {
  }
  /** Wooden square needs textured brown material including four corners:
   * flat brown or round orange tokens are never recognized as crates. */
- private static boolean matchWorldWoodCrate(Pixels pixels,float l,float t,float r,float b){
+ static boolean matchWorldWoodCrate(Pixels pixels,float l,float t,float r,float b){
   int count=0,lo=255,hi=0;boolean corners=true;
   for(int y=0;y<9;y++)for(int x=0;x<9;x++){
    int rgb=sampleSquare(pixels,l,t,r,b,.15f+x*.0875f,.15f+y*.0875f);
@@ -278,7 +280,7 @@ public final class GridPuzzleVision {
  private static boolean bone(int rgb){int high=brightness(rgb),low=Math.min(rgb>>16&255,Math.min(rgb>>8&255,rgb&255));return high>=75&&high-low<high*.32f;}
  /** Red tile, pale head, two separate dark eyes and two lower bones must agree.
   * Uniform grey tokens, a red fruit, a white bonus or an occluded cell cannot qualify. */
- private static boolean protectedSkull(Pixels pixels,float l,float t,float r,float b){
+ static boolean protectedSkull(Pixels pixels,float l,float t,float r,float b){
   int red=0,rim=0;
   for(int yy=0;yy<17;yy++)for(int xx=0;xx<17;xx++)if(xx<3||xx>13||yy<3||yy>13){
    int rgb=sample(pixels,l,t,r,b,.14f+xx*.045f,.14f+yy*.045f),rr=rgb>>16&255,g=rgb>>8&255,bb=rgb&255;
@@ -336,26 +338,30 @@ public final class GridPuzzleVision {
  }
 
  private static float[] describe(Pixels pixels,float l,float t,float r,float b){
-  float[] d=new float[FEATURES];float[] mean=new float[3],sq=new float[3];
+  float[] d=new float[FEATURES];return describeInto(pixels,l,t,r,b,d,new float[9])?d:null;
+ }
+ /** Allocation-free descriptor sampling for a caller-owned calibrated reader. */
+ static boolean describeInto(Pixels pixels,float l,float t,float r,float b,float[] d,float[] work){
+  java.util.Arrays.fill(d,0);java.util.Arrays.fill(work,0);
   int count=0;
   for(int yy=0;yy<17;yy++)for(int xx=0;xx<17;xx++){
    float nx=.14f+.72f*xx/16,ny=.14f+.72f*yy/16;int rgb=pixels.get((int)(l+nx*(r-l)),(int)(t+ny*(b-t)));
    float red=(rgb>>16&255)/255f,green=(rgb>>8&255)/255f,blue=(rgb&255)/255f;
-   mean[0]+=red;mean[1]+=green;mean[2]+=blue;sq[0]+=red*red;sq[1]+=green*green;sq[2]+=blue*blue;count++;
+   work[0]+=red;work[1]+=green;work[2]+=blue;work[3+0]+=red*red;work[3+1]+=green*green;work[3+2]+=blue*blue;count++;
    float max=Math.max(red,Math.max(green,blue)),min=Math.min(red,Math.min(green,blue)),delta=max-min,sat=max==0?0:delta/max;
    if(sat<.18f||max<.12f)d[27+(max<.3f?12:max<.75f?13:14)]++;
    else{float hue=(max==red?(green-blue)/delta:max==green?2+(blue-red)/delta:4+(red-green)/delta)/6;if(hue<0)hue++;float bin=hue*12;int base=(int)bin;float fraction=bin-base;d[27+base%12]+=1-fraction;d[27+(base+1)%12]+=fraction;}
   }
-  for(int ch=0;ch<3;ch++)mean[ch]/=count;
-  float spread=0;for(int ch=0;ch<3;ch++)spread+=Math.max(0,sq[ch]/count-mean[ch]*mean[ch]);spread=(float)Math.sqrt(spread/3);
-  float[] rim=new float[3];int rimCount=0;
+  for(int ch=0;ch<3;ch++)work[ch]/=count;
+  float spread=0;for(int ch=0;ch<3;ch++)spread+=Math.max(0,work[3+ch]/count-work[ch]*work[ch]);spread=(float)Math.sqrt(spread/3);
+  int rimCount=0;
   for(int side=0;side<4;side++)for(int n=0;n<9;n++){
    float p=.07f+.86f*n/8;float x=side<2?(side==0?.045f:.955f):p,y=side>=2?(side==2?.045f:.955f):p;
-   int rgb=pixels.get((int)(l+x*(r-l)),(int)(t+y*(b-t)));rim[0]+=(rgb>>16&255)/255f;rim[1]+=(rgb>>8&255)/255f;rim[2]+=(rgb&255)/255f;rimCount++;
+   int rgb=pixels.get((int)(l+x*(r-l)),(int)(t+y*(b-t)));work[6+0]+=(rgb>>16&255)/255f;work[6+1]+=(rgb>>8&255)/255f;work[6+2]+=(rgb&255)/255f;rimCount++;
   }
-  float contrast=0;for(int ch=0;ch<3;ch++){float v=mean[ch]-rim[ch]/rimCount;contrast+=v*v;}contrast=(float)Math.sqrt(contrast/3);
+  float contrast=0;for(int ch=0;ch<3;ch++){float v=work[ch]-work[6+ch]/rimCount;contrast+=v*v;}contrast=(float)Math.sqrt(contrast/3);
   // A flat field or a smooth background provides no evidence of an actual token.
-  if(spread<.045f&&contrast<.09f)return null;
+  if(spread<.045f&&contrast<.09f)return false;
   // Grey/white special icons (e.g. skulls) need semantic handling. Do not merge
   // those into a similarly coloured ordinary piece and silently treat them as safe.
   if((d[39]+d[40]+d[41])/count>.30f){
@@ -368,7 +374,7 @@ public final class GridPuzzleVision {
     float lo=Math.min(rgb>>16&255,Math.min(rgb>>8&255,rgb&255))/255f;
     if(hi>=.2f&&hi-lo>=.12f&&(hi-lo)/hi>=.3f)chromatic++;
    }
-   if(chromatic<40)return null;
+   if(chromatic<40)return false;
   }
   for(int gy=0;gy<3;gy++)for(int gx=0;gx<3;gx++){
    int base=(gy*3+gx)*3;
@@ -379,7 +385,7 @@ public final class GridPuzzleVision {
   }
   for(int i=27;i<FEATURES;i++)d[i]/=count;
   for(int i=0;i<FEATURES;i++)d[i]=Math.max(0,Math.min(1,d[i]));
-  return d;
+  return true;
  }
 
  private static float distance(float[] a,float[] b){float rgb=0,hist=0;for(int i=0;i<27;i++){float v=a[i]-b[i];rgb+=v*v;}for(int i=27;i<FEATURES;i++)hist+=Math.abs(a[i]-b[i]);return .55f*(float)Math.sqrt(rgb/27)+.225f*hist;}

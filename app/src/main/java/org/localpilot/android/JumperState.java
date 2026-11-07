@@ -60,12 +60,34 @@ public final class JumperState {
     public boolean usable() {
         if(player==null||player.confidence<.55f||platforms.size()<5||confidence<.55f)return false;
         float min=Float.MAX_VALUE,max=-Float.MAX_VALUE;boolean nearby=false;
-        for(ObjectBox platform:platforms){
+        for(int i=0;i<platforms.size();i++){
+            ObjectBox platform=platforms.get(i);
             min=Math.min(min,platform.centerY());max=Math.max(max,platform.centerY());
             if(Math.abs(platform.centerY()-player.centerY())<=frameHeight*.34f
                     &&Math.abs(horizontalDistance(player.centerX(),platform.centerX(),roiRight-roiLeft))<=(roiRight-roiLeft)*.42f)nearby=true;
         }
         return nearby&&max-min>=frameHeight*.14f;
+    }
+
+    /** Explicitly calibrated enemy mode may use a visible enemy surface without five Ari platforms. */
+    public boolean usableForMechanics(boolean stompEnemies) {
+        if (usable()) return true;
+        if (!stompEnemies || player == null || player.confidence < .75f || !Float.isFinite(confidence)
+                || confidence < .65f || roiRight <= roiLeft || roiBottom <= roiTop
+                || player.left < roiLeft || player.right > roiRight || player.top < roiTop || player.bottom > roiBottom)
+            return false;
+        for (int i=0;i<hazards.size();i++) {
+            ObjectBox enemy=hazards.get(i);
+            if (enemy.confidence >= .75f && enemy.left >= roiLeft && enemy.right <= roiRight
+                    && enemy.top >= roiTop && enemy.bottom <= roiBottom
+                    && Math.abs(enemy.centerY()-player.centerY()) <= (roiBottom-roiTop)*.5f) return true;
+        }
+        return false;
+    }
+
+    static boolean sameGeometry(JumperState a,JumperState b) {
+        return a!=null && b!=null && a.frameWidth==b.frameWidth && a.frameHeight==b.frameHeight
+                && a.roiLeft==b.roiLeft && a.roiTop==b.roiTop && a.roiRight==b.roiRight && a.roiBottom==b.roiBottom;
     }
 
     /** Shortest horizontal distance in this explicitly wrapping Ari field. */

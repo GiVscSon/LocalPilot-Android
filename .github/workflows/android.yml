@@ -61,6 +61,10 @@ jobs:
       java tests/WeightSpaceSkillsVerify.java
       java tests/TextRepetitionGuardVerify.java
       java tests/JumperWeightShadowVerify.java
+      java tests/CaptureRoiVerify.java
+      java tests/HexaVerify.java
+      java tests/DeferredJumperVerify.java
+      java tests/AdaptiveVisionVerify.java
       java tests/VisionV2Verify.java
       java tests/RealGameNeuralVerify.java
       java tests/GameLabRetroVerify.java
