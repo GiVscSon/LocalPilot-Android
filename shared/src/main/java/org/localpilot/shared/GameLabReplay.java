@@ -166,7 +166,7 @@ public final class GameLabReplay {
   }
   public static Shadow load(File file)throws IOException{
    if(!file.isFile())return new Shadow();
-   return decode(Files.readString(file.toPath(),StandardCharsets.UTF_8));
+   return decode(new String(Files.readAllBytes(file.toPath()),StandardCharsets.UTF_8));
   }
   public void save(File file)throws IOException{
    Path path=file.toPath(),parent=path.getParent();
@@ -174,7 +174,7 @@ public final class GameLabReplay {
    Files.createDirectories(parent);
    Path temp=Files.createTempFile(parent,"gamelab-shadow-", ".pending");
    try{
-    Files.writeString(temp,encode(),StandardCharsets.UTF_8);
+    Files.write(temp,encode().getBytes(StandardCharsets.UTF_8));
     try{Files.move(temp,path,StandardCopyOption.ATOMIC_MOVE,StandardCopyOption.REPLACE_EXISTING);}
     catch(AtomicMoveNotSupportedException e){
      Files.move(temp,path,StandardCopyOption.REPLACE_EXISTING);
