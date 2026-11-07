@@ -6,6 +6,8 @@ public final class BubblePolicy {
   /** Gesture endpoint follows the initial ray. For a reflection it ends at the first wall. */
   public final float aimX,aimY,impactX,impactY,bounceX,bounceY;
   public final int landing,removed,dropped,bounces;
+  /** For a bomb landing is the occupied impact cell; no new colored cell is attached. */
+  public final BubbleBoard.Projectile projectile;
   private final BubbleBoard source;
   private final int[] expected;
   private Shot(BubbleBoard source,float aimX,float aimY,float impactX,float impactY,
@@ -13,6 +15,7 @@ public final class BubblePolicy {
    this.source=source;this.aimX=aimX;this.aimY=aimY;this.impactX=impactX;this.impactY=impactY;
    this.bounceX=bounceX;this.bounceY=bounceY;this.bounces=bounces;
    this.landing=landing;this.removed=removed;this.dropped=dropped;this.expected=expected;
+   this.projectile=source.projectile;
   }
   boolean belongsTo(BubbleBoard board){return source.same(board);}
   public int[] expectedCells(){return expected.clone();}
@@ -28,7 +31,7 @@ public final class BubblePolicy {
   if(b==null||b.count()==0||!b.ceilingConnected())return null;
   // With one remaining candy, only build a pair of its own color. Geometry
   // must already have been acquired; an unrelated loaded color is ambiguous.
-  if(b.count()==1){int remaining=0;for(int i=0;i<b.size();i++)if(b.color(i)>0)remaining=b.color(i);
+  if(!b.candidateSpecial()&&b.count()==1){int remaining=0;for(int i=0;i<b.size();i++)if(b.color(i)>0)remaining=b.color(i);
    if(remaining!=b.loadedColor)return null;}
   for(int i=0;i<b.size();i++)if(b.color(i)>0){float x=b.launcherX-b.x(i),y=b.launcherY-b.y(i);
    if(x*x+y*y<=b.step*b.step)return null;}
@@ -71,6 +74,25 @@ public final class BubblePolicy {
      ||hit>=0&&finalTrace.root<b.radius*.18f)continue;
    float originX=bounces==0?b.launcherX:bounceX,originY=bounces==0?b.launcherY:bounceY;
    if(!clearSegment(b,originX,originY,bounces==0?dx:-dx,dy,finalTrace.travel,hit))continue;
+   if(b.candidateSpecial()){
+    if(hit<0)continue;
+    int[] cells=b.cells(),distance=new int[b.size()],queue=new int[b.size()];
+    java.util.Arrays.fill(distance,-1);int head=0,tail=1;queue[0]=hit;distance[hit]=0;
+    int removed=0;
+    while(head<tail){int at=queue[head++];if(cells[at]>0){cells[at]=0;removed++;}
+     if(distance[at]>=2)continue;
+     for(int n=Math.max(0,at-b.cols-1);n<Math.min(b.size(),at+b.cols+2);n++)
+      if(distance[n]<0&&b.neighbor(at,n)){distance[n]=distance[at]+1;queue[tail++]=n;}
+    }
+    java.util.Arrays.fill(distance,-1);head=tail=0;
+    for(int i=0;i<b.cols;i++)if(cells[i]>0){distance[i]=0;queue[tail++]=i;}
+    while(head<tail){int at=queue[head++];for(int n=Math.max(0,at-b.cols-1);n<Math.min(b.size(),at+b.cols+2);n++)
+     if(distance[n]<0&&cells[n]>0&&b.neighbor(at,n)){distance[n]=0;queue[tail++]=n;}}
+    int dropped=0;for(int i=0;i<cells.length;i++)if(cells[i]>0&&distance[i]<0){cells[i]=0;dropped++;}
+    float score=removed*100+dropped*120-(hit/b.cols)*.2f-bounces*3;
+    if(score>bestScore){bestScore=score;best=new Shot(b,aimX,aimY,x,y,bounceX,bounceY,bounces,hit,removed,dropped,cells);}
+    continue;
+   }
    int landing=-1;float nearest=Float.POSITIVE_INFINITY,second=Float.POSITIVE_INFINITY;
    for(int i=0;i<b.size();i++)if(b.slot(i)&&b.color(i)==0&&(hit<0?i<b.cols:b.neighbor(i,hit))){
     float distance=(float)Math.hypot(x-b.x(i),y-b.y(i));

@@ -21,6 +21,14 @@ public final class JumperVision {
         return retry.usable()?retry:raw;
     }
 
+    public static JumperState detectRecovering(PixelBoardReader.Pixels pixels,int width,int height,
+            int left,int top,int right,int bottom,int el,int et,int er,int eb,long timestamp,
+            JumperState previous,ColorProfile colors,SceneRecovery.Pass pass,boolean stompEnemies) {
+        if(!stompEnemies)return detectRecovering(pixels,width,height,left,top,right,bottom,el,et,er,eb,timestamp,previous,colors,pass);
+        // Calibrated enemy identities are never inferred from an uncalibrated color transform.
+        return detect(pixels,width,height,left,top,right,bottom,el,et,er,eb,timestamp,previous,colors,true);
+    }
+
     public static final class ColorProfile {
         private final int player, platform, hazard;
         public ColorProfile(int player, int platform, int hazard) {
@@ -47,6 +55,16 @@ public final class JumperVision {
                                      int left, int top, int right, int bottom,
                                      int excludedLeft, int excludedTop, int excludedRight, int excludedBottom,
                                      long timestampMs, JumperState previous, ColorProfile profile) {
+        return detect(pixels,width,height,left,top,right,bottom,excludedLeft,excludedTop,excludedRight,excludedBottom,
+                timestampMs,previous,profile,false);
+    }
+
+    /** Enemy interpretation is available only after explicit three-kind color calibration. */
+    public static JumperState detect(PixelBoardReader.Pixels pixels,int width,int height,
+                                     int left,int top,int right,int bottom,
+                                     int excludedLeft,int excludedTop,int excludedRight,int excludedBottom,
+                                     long timestampMs,JumperState previous,ColorProfile profile,boolean stompEnemies) {
+        if(stompEnemies&&profile==null)throw new IllegalArgumentException("calibrated stomp colors required");
         if (pixels == null || width < 1 || height < 1 || (long) width * height > MAX_PIXELS
                 || left < 0 || top < 0 || right > width || bottom > height
                 || right - left < 120 || bottom - top < 180 || timestampMs < 0
@@ -96,7 +114,7 @@ public final class JumperVision {
             }
         }
         float confidence = player == null ? 0 : Math.min(player.confidence,
-                Math.min(1, .45f + platforms.size() * .12f));
+                Math.min(1, .45f + (platforms.size()+(stompEnemies?hazards.size():0)) * .12f));
         return new JumperState(width, height, left, top, right, bottom, timestampMs,
                 player, platforms, hazards, confidence, vx, vy, scrollVy);
     }

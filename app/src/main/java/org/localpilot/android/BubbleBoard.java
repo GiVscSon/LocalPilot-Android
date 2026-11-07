@@ -2,10 +2,12 @@ package org.localpilot.android;
 
 import java.util.Arrays;
 
-/** Immutable normal-bubble board in original ROI pixels. 0=empty; 1..4=known colors. */
+/** Immutable bubble board in original ROI pixels. Cells: 0=empty; 1..4=known colors. */
 public final class BubbleBoard {
+ public enum Projectile { NORMAL, BOMB }
  public static final int MAX_CELLS=384;
  public final int width,height,cols,rows,loadedColor,shortRowParity;
+ public final Projectile projectile;
  public final float x0,y0,step,radius,launcherX,launcherY;
  private final int[] cells;
  public BubbleBoard(int width,int height,int cols,int rows,float x0,float y0,float step,
@@ -14,8 +16,14 @@ public final class BubbleBoard {
  }
  public BubbleBoard(int width,int height,int cols,int rows,float x0,float y0,float step,
    float launcherX,float launcherY,int loadedColor,int[] cells,int shortRowParity){
+  this(width,height,cols,rows,x0,y0,step,launcherX,launcherY,loadedColor,cells,shortRowParity,Projectile.NORMAL);
+ }
+ /** A calibrated bomb has no ordinary color; it is never represented as a wildcard board cell. */
+ public BubbleBoard(int width,int height,int cols,int rows,float x0,float y0,float step,
+   float launcherX,float launcherY,int loadedColor,int[] cells,int shortRowParity,Projectile projectile){
   if((shortRowParity!=0&&shortRowParity!=1)||width<80||height<120||cols<4||cols>16||rows<2||rows>24||cols*rows>MAX_CELLS
-    ||cells==null||cells.length!=cols*rows||loadedColor<1||loadedColor>4
+    ||cells==null||cells.length!=cols*rows||projectile==null
+    ||(projectile==Projectile.NORMAL?(loadedColor<1||loadedColor>4):loadedColor!=0)
     ||!Float.isFinite(x0)||!Float.isFinite(y0)||!Float.isFinite(step)
     ||!Float.isFinite(launcherX)||!Float.isFinite(launcherY)||step<8
     ||x0<step*.5f||x0+(cols-1)*step+step*.5f>width||y0<step*.5f
@@ -24,7 +32,7 @@ public final class BubbleBoard {
    throw new IllegalArgumentException("bubble geometry");
   this.width=width;this.height=height;this.cols=cols;this.rows=rows;this.x0=x0;this.y0=y0;
   this.step=step;this.radius=step/2;this.launcherX=launcherX;this.launcherY=launcherY;
-  this.loadedColor=loadedColor;this.shortRowParity=shortRowParity;this.cells=cells.clone();
+  this.loadedColor=loadedColor;this.projectile=projectile;this.shortRowParity=shortRowParity;this.cells=cells.clone();
   for(int i=0;i<this.cells.length;i++)if(this.cells[i]<0||this.cells[i]>4||!slot(i)&&this.cells[i]!=0)
    throw new IllegalArgumentException("bubble cell");
  }
@@ -38,7 +46,8 @@ public final class BubbleBoard {
  public boolean sameGeometry(BubbleBoard b){return b!=null&&width==b.width&&height==b.height&&cols==b.cols&&rows==b.rows
    &&shortRowParity==b.shortRowParity&&Math.abs(x0-b.x0)<radius*.12f&&Math.abs(y0-b.y0)<radius*.12f&&Math.abs(step-b.step)<radius*.04f
    &&Math.abs(launcherX-b.launcherX)<radius*.15f&&Math.abs(launcherY-b.launcherY)<radius*.15f;}
- public boolean same(BubbleBoard b){return sameGeometry(b)&&loadedColor==b.loadedColor&&Arrays.equals(cells,b.cells);}
+ public boolean candidateSpecial(){return projectile==Projectile.BOMB;}
+ public boolean same(BubbleBoard b){return sameGeometry(b)&&projectile==b.projectile&&loadedColor==b.loadedColor&&Arrays.equals(cells,b.cells);}
  public int count(){int n=0;for(int c:cells)if(c>0)n++;return n;}
  public boolean ceilingConnected(){return connected(cells)==count();}
  int connected(int[] values){

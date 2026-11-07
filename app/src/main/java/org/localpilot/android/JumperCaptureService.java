@@ -7,7 +7,6 @@ import android.app.PendingIntent;
 import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
-import android.graphics.Bitmap;
 import android.graphics.PixelFormat;
 import android.hardware.display.DisplayManager;
 import android.hardware.display.VirtualDisplay;
@@ -47,7 +46,7 @@ public final class JumperCaptureService extends Service {
     private volatile boolean closing;
     private final CapturePacer framePacer=new CapturePacer();
     private int width,height,density,screenWidth,screenHeight,screenDisplayId;
-    private int[] argbBuffer;
+    private DecodedFrameBuffer decodedBuffer;
 
     @Override public void onCreate() {
         super.onCreate();
@@ -119,9 +118,9 @@ public final class JumperCaptureService extends Service {
                 getResources().getConfiguration().smallestScreenWidthDp);
         width=size.width;height=size.height;
         CrashDiagnostics.phase("CAPTURE_SURFACE_"+width+"x"+height);
-        argbBuffer=new int[width*height];
         density = metrics.densityDpi;
         if (width < 120 || height < 180 || (long) width * height > 8_000_000) throw new IllegalStateException("display bounds");
+        decodedBuffer=new DecodedFrameBuffer(width,height);
         reader = ImageReader.newInstance(width, height, PixelFormat.RGBA_8888, 2);
         display = projection.createVirtualDisplay("LocalPilot Arcade", width, height, density,
                 DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR, reader.getSurface(), null, worker);
@@ -160,31 +159,30 @@ public final class JumperCaptureService extends Service {
         // onDestroy must not close native plane storage while this callback reads it.
         if (closing || source != reader) return;
         Image image = null;
-        Bitmap frame = null;
+        DecodedFrameBuffer buffer=decodedBuffer;
+        long lease=0;
+        boolean handedOver=false;
         try {
             image = source.acquireLatestImage();
             if (image == null) return;
             long now = SystemClock.elapsedRealtime();
             PilotService pilot = PilotService.instance;
-            boolean accepted=framePacer.accept(SystemClock.elapsedRealtimeNanos(),pilot!=null&&pilot.wantsJumperFrame(session));
+            boolean accepted=framePacer.accept(SystemClock.elapsedRealtimeNanos(),pilot!=null&&buffer!=null&&!buffer.isLeased()&&pilot.wantsJumperFrame(session));
             if(pilot!=null)pilot.onCapturePacing(session,framePacer.acceptedFrames(),framePacer.skippedFrames(),framePacer.throttledFrames(),framePacer.unwantedFrames(),framePacer.invalidClockFrames());
             if(!accepted)return;
             if (image.getWidth() != width || image.getHeight() != height) throw new IllegalStateException("display changed");
             Image.Plane plane = image.getPlanes()[0];
             ByteBuffer bytes = plane.getBuffer();
-            int[] argb=argbBuffer;
-            RgbaFrameDecoder.decode(bytes, width, height, plane.getPixelStride(), plane.getRowStride(), argb);
-            frame = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
-            frame.setPixels(argb, 0, width, 0, 0, width, height);
-            Bitmap owned = frame;
-            frame = null;
-            pilot.onJumperFrame(session,owned, now);
+            FrameDecodePlan plan=pilot.captureDecodePlan(session,width,height);
+            lease=buffer.decode(bytes,plane.getRowStride(),plane.getPixelStride(),session,plan);
+            pilot.onJumperDecodedFrame(session,buffer,lease,now);
+            handedOver=true;
         } catch (RuntimeException|OutOfMemoryError error) {
             frameFailure(error);
         } finally {
             // Native releases can fail too. Never let finally throw past this worker
             // and terminate the whole application via its uncaught handler.
-            if(frame!=null)try{frame.recycle();}catch(RuntimeException|OutOfMemoryError error){frameFailure(error);}
+            if(!handedOver&&buffer!=null&&lease>0)buffer.release(lease);
             if(image!=null)try{image.close();}catch(RuntimeException|OutOfMemoryError error){frameFailure(error);}
         }
     }
@@ -225,7 +223,8 @@ public final class JumperCaptureService extends Service {
 
     @Override public synchronized void onDestroy() {
         closing = true;
-        argbBuffer=null;
+        DecodedFrameBuffer oldBuffer=decodedBuffer;decodedBuffer=null;
+        if(oldBuffer!=null)oldBuffer.close();
         ImageReader oldReader=reader;reader=null;
         VirtualDisplay oldDisplay=display;display=null;
         MediaProjection oldProjection=projection;projection=null;

@@ -8,6 +8,13 @@ public final class GridPuzzleConfigTest {
  private static void invalid(Runnable action,String message){try{action.run();throw new AssertionError(message);}catch(IllegalArgumentException expected){checks++;}}
  public static void main(String[] args){
   GridPuzzleConfig initial=new GridPuzzleConfig(6,7,2);
+  check(!initial.hexOffsetRows&&initial.encode().equals("v1,6,7,2,0.0,0.0,0.0,0.0,0.0"),"ordinary geometry retains exact legacy encoding");
+  GridPuzzleConfig hex=new GridPuzzleConfig(6,7,2,true).region(10,20,700,600,1000,2000);
+  check(hex.hexOffsetRows&&GridPuzzleConfig.decode(hex.encode()).hexOffsetRows,"hex flag survives selection and v2 persistence");
+  check(hex.encode().startsWith("v2,")&&hex.cellCenterX(1,2,10,100)==310&&initial.cellCenterX(1,2,10,100)==260,"only odd hex rows receive half a cell shift");
+  check(GridPuzzleConfig.decode(initial.encode()).encode().equals(initial.encode()),"v1 input retains exact v1 output");
+  invalid(()->GridPuzzleConfig.decode("v2,6,7,2,0,0,0,0,0,0"),"unsupported v2 flag accepted");
+
   check(initial.rows==6&&initial.cols==7&&initial.minGroup==2,"mode settings are retained");
   check(!initial.fits(1080,2400),"unselected area cannot be reused as valid geometry");
   check(GridPuzzleConfig.decode(initial.encode()).encode().equals(initial.encode()),"unselected config roundtrip");

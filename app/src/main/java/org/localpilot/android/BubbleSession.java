@@ -21,13 +21,13 @@ public final class BubbleSession {
  private BubbleBoard candidate,stable,before;
  private int[] expected;
  private long candidateAt=-1,lastFrame=-1,sentAt=-1,ackAt=-1;
- private int verified;private Status status=Status.SEARCHING;
+ private int verified,verifiedBombs;private Status status=Status.SEARCHING;
  private Reason reason=Reason.RESET,lastWait=Reason.RESET;
  private final long[] reasonCounts=new long[Reason.values().length];
  private long observations,frameAge=-1,sentAge=-1,ackAge=-1,candidateAge=-1;
  private int observedCells=-1,expectedCells=-1,mismatchedCells=-1;
  private String visionReason="none";
- public void reset(){candidate=stable=before=null;expected=null;candidateAt=lastFrame=sentAt=ackAt=-1;verified=0;status=Status.SEARCHING;lateWaiting=lateRecoveryRevoked=false;
+ public void reset(){candidate=stable=before=null;expected=null;candidateAt=lastFrame=sentAt=ackAt=-1;verified=verifiedBombs=0;status=Status.SEARCHING;lateWaiting=lateRecoveryRevoked=false;
   reason=lastWait=Reason.RESET;Arrays.fill(reasonCounts,0);observations=0;frameAge=sentAge=ackAge=candidateAge=-1;observedCells=expectedCells=mismatchedCells=-1;visionReason="none";}
  public boolean pending(){return before!=null;}
  public boolean paused(){return status==Status.PAUSED;}
@@ -37,6 +37,7 @@ public final class BubbleSession {
  public boolean acknowledged(){return pending()&&ackAt>=0;}
  public Reason lastWait(){return lastWait;}
  public int verified(){return verified;}
+ public int verifiedBombs(){return verifiedBombs;}
  /** Only the bounded reader's explanation is retained; no frame, pixels or board array enters the report. */
  public void visionReason(String value){
   if(value==null){visionReason="none";return;}
@@ -72,6 +73,7 @@ public final class BubbleSession {
   if(pending()){
    if(!before.sameGeometry(board))return observed(waitingStatus(),Reason.GEOMETRY_MISMATCH);
    if(!Arrays.equals(expected,board.cells()))return observed(waitingStatus(),Reason.CELLS_MISMATCH);
+   if(before.candidateSpecial())verifiedBombs++;
    before=null;expected=null;sentAt=ackAt=-1;lateWaiting=lateRecoveryRevoked=false;verified++;stable=board;return observed(Status.VERIFIED,Reason.VERIFIED);
   }
   stable=board;return observed(Status.READY,Reason.READY);
@@ -94,7 +96,7 @@ public final class BubbleSession {
  }
  public void acknowledge(long now){if(!pending()||paused())return;if(now<sentAt)throw new IllegalArgumentException("ACK before shot");if(now-sentAt>=responseTimeoutMs)return;if(ackAt<0){ackAt=now;clearCandidate();reason=Reason.ANDROID_ACK;ages(lastFrame,now);}}
  public String report(){
-  StringBuilder out=new StringBuilder("BUBBLE_SESSION: status=").append(status).append(" pending=").append(pending()).append(" android_ack=").append(ackAt>=0).append(" verified_shots=").append(verified).append(" late_waiting=").append(lateWaiting).append(" late_recovery_revoked=").append(lateRecoveryRevoked).append(" final_paused=").append(finalPaused()).append(" response_timeout_ms=").append(responseTimeoutMs).append(" final_timeout_ms=").append(finalTimeoutMs)
+  StringBuilder out=new StringBuilder("BUBBLE_SESSION: status=").append(status).append(" pending=").append(pending()).append(" android_ack=").append(ackAt>=0).append(" verified_shots=").append(verified).append(" verified_bombs=").append(verifiedBombs).append(" late_waiting=").append(lateWaiting).append(" late_recovery_revoked=").append(lateRecoveryRevoked).append(" final_paused=").append(finalPaused()).append(" response_timeout_ms=").append(responseTimeoutMs).append(" final_timeout_ms=").append(finalTimeoutMs)
    .append(" reason=").append(reason).append(" last_wait=").append(lastWait).append(" frame_age_ms=").append(frameAge).append(" sent_age_ms=").append(sentAge).append(" ack_age_ms=").append(ackAge).append(" candidate_age_ms=").append(candidateAge)
    .append(" observations=").append(observations).append(" observed_cells=").append(observedCells).append(" expected_cells=").append(expectedCells).append(" mismatched_cells=").append(mismatchedCells).append(" reason_counts=");
   boolean first=true;for(Reason value:Reason.values())if(reasonCounts[value.ordinal()]>0){if(!first)out.append(',');out.append(value).append(':').append(reasonCounts[value.ordinal()]);first=false;}
