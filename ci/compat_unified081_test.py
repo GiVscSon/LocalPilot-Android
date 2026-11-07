@@ -1,6 +1,12 @@
 from pathlib import Path
 p=Path("tests/Unified081IntegrationTest.java")
 s=p.read_text()
+# Another test normalizer may already have migrated the stale API calls.
+# In that case verify its real fail-closed checks rather than rewriting them.
+if "        List<VisionV2Core.Blob> blobs =" not in s:
+    assert "Replayed timestamp rejected" in s and "Missing visual response never" in s and "Cross-game critic checkpoint rejected" in s, "Expected safety tests missing"
+    print("Unified 0.8.1 test already aligned to current APIs; safety assertions intact")
+    raise SystemExit(0)
 a=s.index("        List<VisionV2Core.Blob> blobs =")
 b=s.index("        // 3. Verify PaddleTransfer",a)
 s=s[:a]+'''        VisionV2Core.Region region = new VisionV2Core.Region(0, 0, 100, 100);
