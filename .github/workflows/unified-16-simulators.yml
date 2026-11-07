@@ -45,6 +45,17 @@ jobs:
             z.extractall('.')
           print('Overlay verified and extracted.')
           PY
+      - name: Complete JVM test source dependencies
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path=Path("tests/TenGamesVerify.java")
+          source=path.read_text()
+          original='List.of("--release", "17", "-d", out.toString())'
+          updated='List.of("--release", "17", "-sourcepath", "app/src/main/java", "-d", out.toString())'
+          assert source.count(original)==1, "Unexpected TenGames verifier source"
+          path.write_text(source.replace(original, updated))
+          PY
       - name: Integrate and run real JVM test suite
         run: python3 tools/integrate_adaptive_engine_into_081.py
       - name: Assemble both APK modules
