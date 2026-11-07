@@ -2,7 +2,7 @@ import java.nio.file.*;
 import java.util.*;
 import org.localpilot.shared.GameLabReplay;
 
-class GameLabReplayTest {
+public class GameLabReplayTest {
  private static void yes(boolean ok,String why){if(!ok)throw new AssertionError(why);}
  private static void bad(Runnable r){try{r.run();throw new AssertionError("expected rejection");}
   catch(IllegalArgumentException expected){}}
