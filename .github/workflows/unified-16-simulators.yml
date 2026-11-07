@@ -21,12 +21,15 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      - name: Android SDK
-        uses: android-actions/setup-android@v3
       - name: Install Android 35 build tools
+        shell: bash
         run: |
-          sdkmanager --install 'platforms;android-35' 'build-tools;35.0.0'
-          yes | sdkmanager --licenses >/dev/null || true
+          # GitHub's Ubuntu runner already includes Android SDK cmdline tools.
+          # Do not call setup-android@v3: it still requests the removed 'tools' package.
+          export ANDROID_HOME="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          SDKMGR="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | head -n 1)"
+          if [ -z "$SDKMGR" ]; then echo "No Android SDK command-line tools" >&2; exit 1; fi
+          "$SDKMGR" --install 'platforms;android-35' 'build-tools;35.0.0'
       - name: Verify and extract corrected 16-model overlay
         run: |
           python3 - <<'PY'
