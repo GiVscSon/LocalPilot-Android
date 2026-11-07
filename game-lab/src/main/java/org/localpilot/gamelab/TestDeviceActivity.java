@@ -98,7 +98,8 @@ public final class TestDeviceActivity extends Activity {
       .setType("text/csv").addCategory(Intent.CATEGORY_OPENABLE)
       .putExtra(Intent.EXTRA_TITLE,"localpilot-gamelab-actions.csv"),EXPORT));
   // User-selected export: synthetic experiences never become Market rewards.
-  addButton(root,"Опыт GameLab → LocalPilot (учебный CSV)",()->startActivityForResult(
+  LinearLayout replayRow=new LinearLayout(this);root.addView(replayRow);
+  addButton(replayRow,"Опыт GameLab → LocalPilot (учебный CSV)",()->startActivityForResult(
       new Intent(Intent.ACTION_CREATE_DOCUMENT).setType("text/csv")
        .addCategory(Intent.CATEGORY_OPENABLE)
        .putExtra(Intent.EXTRA_TITLE,"localpilot-gamelab-replay-v1.csv"),EXPORT_REPLAY));
