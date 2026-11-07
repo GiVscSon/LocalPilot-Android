@@ -90,18 +90,15 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           path=Path("tests/AdaptiveEngineTest.java")
-          source=path.read_text()
-          declarations="""   ObservationEncoder.EncodedState beforeEnc = ObservationEncoder.encode2048(b2048);
-   Board2048 after2048 = b2048.move(dir2048).board;
-   ObservationEncoder.EncodedState afterEnc = ObservationEncoder.encode2048(after2048);
-"""
-          first="  // SIMULATED curriculum steps must never become REAL verified outcomes."
-          second="  // 5. Real-game verified transition recording vs unverified ACK rejection:"
-          assert source.count(declarations)==1 and source.count(first)==1 and source.count(second)==1, "Unexpected adaptive 2048 fixture"
-          assert source.index(first)<source.index(second)<source.index(declarations), "Fixture already declared before use"
-          source=source.replace(declarations,"",1)
-          source=source.replace(first,declarations+"\n"+first,1)
-          path.write_text(source)
+          lines=path.read_text().splitlines(keepends=True)
+          start=next(i for i,s in enumerate(lines) if s.lstrip().startswith("ObservationEncoder.EncodedState beforeEnc ="))
+          assert lines[start+1].lstrip().startswith("Board2048 after2048 =")
+          assert lines[start+2].lstrip().startswith("ObservationEncoder.EncodedState afterEnc =")
+          fixture=lines[start:start+3]
+          del lines[start:start+3]
+          position=next(i for i,s in enumerate(lines) if "SIMULATED curriculum steps must never become REAL verified outcomes." in s)
+          lines[position:position]=fixture
+          path.write_text("".join(lines))
           PY
       - name: Integrate and run real JVM test suite
         run: python3 tools/integrate_adaptive_engine_into_081.py
