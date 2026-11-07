@@ -56,6 +56,24 @@ jobs:
           assert content.count(before)==1, "Unexpected adaptive engine initializer"
           path.write_text(content.replace(before,after))
           PY
+      - name: Fix SIM-vs-REAL JVM test fixture ordering
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path=Path("tests/AdaptiveEngineTest.java")
+          text=path.read_text()
+          first="  ObservationEncoder.EncodedState beforeEnc = ObservationEncoder.encode2048(b2048);"
+          last="  check(!engine.recordRealGameOutcome(TaskSchema.GameId.GAME_2048,"
+          marker="  // SIMULATED curriculum steps must never become REAL verified outcomes."
+          assert text.count(first)==1 and text.count(last)==1 and text.count(marker)==1
+          p=text.index(first)
+          q=text.index(last,p)
+          declarations=text[p:q]
+          text=text[:p]+text[q:]
+          insertion=text.index(marker)
+          text=text[:insertion]+declarations+text[insertion:]
+          path.write_text(text)
+          PY
       - name: Complete JVM test source dependencies
         run: |
           python3 - <<'PY'
