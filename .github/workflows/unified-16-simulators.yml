@@ -45,6 +45,24 @@ jobs:
             z.extractall('.')
           print('Overlay verified and extracted.')
           PY
+      - name: Restrict real-game neural critic to supported arcade profiles
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path=Path("app/src/main/java/org/localpilot/android/learning/AdaptiveLearningEngine.java")
+          content=path.read_text()
+          before='''  for (ArcadeProfile ap : ArcadeProfile.values()) {
+   neuralCritics.put(ap, new RealGameNeuralCritic(ap));
+  }'''
+          after='''  // ARI uses a separate control path and has no RealGameNeuralCritic schema.
+  // Do not create a critic for an unsupported profile or fabricate its action mask.
+  for (ArcadeProfile ap : ArcadeProfile.values()) {
+   if (ap == ArcadeProfile.ARI) continue;
+   neuralCritics.put(ap, new RealGameNeuralCritic(ap));
+  }'''
+          assert content.count(before)==1, "Unexpected adaptive engine initializer"
+          path.write_text(content.replace(before,after))
+          PY
       - name: Complete JVM test source dependencies
         run: |
           python3 - <<'PY'
