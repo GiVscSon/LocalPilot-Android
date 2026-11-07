@@ -49,7 +49,7 @@ bridge=r'''
    report.put("last_stop_code",code);
    return report.toString();
   }catch(org.json.JSONException error){
-   return "{\\"schema\\":\\"localpilot-telemetry-v1\\",\\"error\\":\\"ENCODING_FAILED\\"}";
+   return "{\"schema\":\"localpilot-telemetry-v1\",\"error\":\"ENCODING_FAILED\"}";
   }
  }
 '''
