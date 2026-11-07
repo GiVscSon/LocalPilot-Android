@@ -1,5 +1,6 @@
 package org.localpilot.gamelab;
 import org.localpilot.shared.HubContract;
+import org.localpilot.shared.GameLabReplay;
 
 import android.app.Activity;
 import android.app.AlertDialog;
@@ -34,8 +35,10 @@ import java.util.ArrayList;
 public final class TestDeviceActivity extends Activity {
  public static final String BUILD_ID="GameLab-1.0";
  private static final int EXPORT=61;
+ private static final int EXPORT_REPLAY=62;
  private final Handler handler=new Handler(Looper.getMainLooper());
  private final ArrayList<String> records=new ArrayList<>();
+ private final ArrayList<String> replayRecords=new ArrayList<>();
  private GameLabEngine engine;
  private GameSurface surface;
  private TextView status;
@@ -94,6 +97,12 @@ public final class TestDeviceActivity extends Activity {
   addButton(row,"CSV",()->startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT)
       .setType("text/csv").addCategory(Intent.CATEGORY_OPENABLE)
       .putExtra(Intent.EXTRA_TITLE,"localpilot-gamelab-actions.csv"),EXPORT));
+  // User-selected export: synthetic experiences never become Market rewards.
+  LinearLayout replayRow=new LinearLayout(this);root.addView(replayRow);
+  addButton(replayRow,"Опыт GameLab → LocalPilot (учебный CSV)",()->startActivityForResult(
+      new Intent(Intent.ACTION_CREATE_DOCUMENT).setType("text/csv")
+       .addCategory(Intent.CATEGORY_OPENABLE)
+       .putExtra(Intent.EXTRA_TITLE,"localpilot-gamelab-replay-v1.csv"),EXPORT_REPLAY));
   LinearLayout retroRow=new LinearLayout(this);root.addView(retroRow);
   retroLauncher=addButton(retroRow,"Ретро · NES / Денди / DOS",()->startActivity(new Intent(this,RetroLibraryActivity.class)));
   TextView retroStatus=label("NES и Денди: запуск реального ROM. DOS: пока подготовка ядра.",11);
@@ -155,9 +164,10 @@ public final class TestDeviceActivity extends Activity {
  @Override protected void onDestroy(){if(surface!=null)surface.release();super.onDestroy();}
  @Override protected void onActivityResult(int req,int result,Intent data){
   super.onActivityResult(req,result,data);
-  if(req!=EXPORT||result!=RESULT_OK||data==null||data.getData()==null)return;
-  StringBuilder body=new StringBuilder("uptime_ms,event\n");
-  for(String record:records)body.append(record).append('\n');
+  if((req!=EXPORT&&req!=EXPORT_REPLAY)||result!=RESULT_OK||data==null||data.getData()==null)return;
+  StringBuilder body=new StringBuilder(req==EXPORT
+    ?"uptime_ms,event\n":GameLabReplay.PREFIX);
+  for(String record:(req==EXPORT?records:replayRecords))body.append(record).append('\n');
   try(OutputStream stream=getContentResolver().openOutputStream(data.getData())){
    if(stream==null)throw new IOException("no writer");
    stream.write(body.toString().getBytes(StandardCharsets.UTF_8));
@@ -334,8 +344,17 @@ public final class TestDeviceActivity extends Activity {
    }
    int old=engine.fingerprint();
    GameLabEngine.Result response=engine.gesture(downX,downY,x,y,elapsed);
+   int after=engine.fingerprint();
    addLog("TOUCH_RECEIVED,game="+engine.game+",result="+response+
-    ",changed_state="+(old!=engine.fingerprint())+",fault="+engine.fault);
+    ",changed_state="+(old!=after)+",fault="+engine.fault);
+   try{
+    String sample=GameLabReplay.row(engine.game.name(),engine.game.localPilotProfile,
+      engine.fault.name(),downX,downY,x,y,elapsed,old,after,response.name());
+    if(replayRecords.size()==512)replayRecords.remove(0);
+    replayRecords.add(sample);
+   }catch(IllegalArgumentException invalid){
+    // Out-of-bounds gestures are not valid replay examples.
+   }
    invalidate();update();
    return true;
   }
