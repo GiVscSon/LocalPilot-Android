@@ -100,6 +100,16 @@ public final class TrainingActivity extends Activity {
   if(req!=71||result!=RESULT_OK||data==null)return;final File source=runtime.checkpoint;if(runtime.busy||source==null)return;
   runtime.executor.execute(()->{try(InputStream in=new FileInputStream(source);OutputStream out=getContentResolver().openOutputStream(data.getData())){if(out==null)throw new IOException("output");byte[] b=new byte[8192];int n;while((n=in.read(b))!=-1)out.write(b,0,n);runOnUiThread(()->toast("Checkpoint экспортирован"));}catch(IOException e){runOnUiThread(()->toast("Ошибка экспорта: "+e.getMessage()));}});
  }
+ private static byte[] readBoundedReplay(InputStream in)throws IOException{
+  ByteArrayOutputStream buffer=new ByteArrayOutputStream();
+  byte[] data=new byte[8192];int amount;
+  while((amount=in.read(data))!=-1){
+   if(buffer.size()+amount>SimExperience.MAX_BYTES)
+    throw new IOException("simulator replay exceeds limit");
+   buffer.write(data,0,amount);
+  }
+  return buffer.toByteArray();
+ }
  private File labReplayFile(){return new File(getFilesDir(),"gamelab-sim-experience-v1.lpx");}
  private void readSavedLabExperience(){
   File saved=labReplayFile();
@@ -107,7 +117,7 @@ public final class TrainingActivity extends Activity {
    labReport.setText("Опыт GameLab ещё не импортирован. Симуляционная модель не обучена.");return;
   }
   try(FileInputStream in=new FileInputStream(saved)){
-   byte[] bytes=in.readNBytes(SimExperience.MAX_BYTES+1);
+   byte[] bytes=readBoundedReplay(in);
    if(bytes.length>SimExperience.MAX_BYTES)throw new IOException("bounded replay exceeded");
    SimLabPolicy policy=SimLabPolicy.train(SimExperience.decode(
      new String(bytes,java.nio.charset.StandardCharsets.UTF_8)));
@@ -119,7 +129,7 @@ public final class TrainingActivity extends Activity {
  private void importLabExperience(Intent data){
   try(InputStream in=getContentResolver().openInputStream(data.getData())){
    if(in==null)throw new IOException("no SAF stream");
-   byte[] bytes=in.readNBytes(SimExperience.MAX_BYTES+1);
+   byte[] bytes=readBoundedReplay(in);
    if(bytes.length>SimExperience.MAX_BYTES)throw new IOException("replay too large");
    SimLabPolicy policy=SimLabPolicy.train(SimExperience.decode(
      new String(bytes,java.nio.charset.StandardCharsets.UTF_8)));
