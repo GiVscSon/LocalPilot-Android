@@ -102,6 +102,8 @@ jobs:
           PY
       - name: Align integrated test APIs without bypassing safety
         run: python3 ci/repair_unified_081_integration.py
+      - name: Verify genuine unified API contracts
+        run: python3 ci/compat_unified081_test.py
       - name: Integrate and run real JVM test suite
         run: python3 tools/integrate_adaptive_engine_into_081.py
       - name: Assemble both APK modules
