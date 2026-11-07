@@ -85,6 +85,24 @@ jobs:
           assert source.count(original)==1, "Unexpected TenGames verifier source"
           path.write_text(source.replace(original, updated))
           PY
+      - name: Fix 2048 test-fixture declaration order
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path=Path("tests/AdaptiveEngineTest.java")
+          source=path.read_text()
+          declarations="""   ObservationEncoder.EncodedState beforeEnc = ObservationEncoder.encode2048(b2048);
+   Board2048 after2048 = b2048.move(dir2048).board;
+   ObservationEncoder.EncodedState afterEnc = ObservationEncoder.encode2048(after2048);
+"""
+          first="  // SIMULATED curriculum steps must never become REAL verified outcomes."
+          second="  // 5. Real-game verified transition recording vs unverified ACK rejection:"
+          assert source.count(declarations)==1 and source.count(first)==1 and source.count(second)==1, "Unexpected adaptive 2048 fixture"
+          assert source.index(first)<source.index(second)<source.index(declarations), "Fixture already declared before use"
+          source=source.replace(declarations,"",1)
+          source=source.replace(first,declarations+"\n"+first,1)
+          path.write_text(source)
+          PY
       - name: Integrate and run real JVM test suite
         run: python3 tools/integrate_adaptive_engine_into_081.py
       - name: Assemble both APK modules
