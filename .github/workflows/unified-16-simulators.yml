@@ -51,8 +51,8 @@ jobs:
           from pathlib import Path
           path=Path("app/src/main/java/org/localpilot/android/learning/AdaptiveLearningEngine.java")
           content=path.read_text()
-          before="  for (ArcadeProfile ap : ArcadeProfile.values()) {\\n   neuralCritics.put(ap, new RealGameNeuralCritic(ap));\\n  }"
-          after="// ARI has no outcome-critic schema.\\n  for (ArcadeProfile ap : ArcadeProfile.values()) {\\n   if (ap == ArcadeProfile.ARI) continue;\\n   neuralCritics.put(ap, new RealGameNeuralCritic(ap));\\n  }"
+          before="  for (ArcadeProfile ap : ArcadeProfile.values()) {\n   neuralCritics.put(ap, new RealGameNeuralCritic(ap));\n  }"
+          after="// ARI has no outcome-critic schema.\n  for (ArcadeProfile ap : ArcadeProfile.values()) {\n   if (ap == ArcadeProfile.ARI) continue;\n   neuralCritics.put(ap, new RealGameNeuralCritic(ap));\n  }"
           assert content.count(before)==1, "Unexpected adaptive engine initializer"
           path.write_text(content.replace(before,after))
           PY
