@@ -17,14 +17,20 @@ GAMES = (
 )
 SEEDS = (20261108, 20261201, 177777)
 
-def classify(deltas: list[float], score_deltas: list[float]) -> str:
-    if len(deltas) != 3 or len(score_deltas) != 3:
+def classify(deltas: list[float], score_deltas: list[float],
+             coach_lag: list[float], coach_score_lag: list[float]) -> str:
+    if any(len(series) != 3 for series in
+           (deltas, score_deltas, coach_lag, coach_score_lag)):
         raise ValueError("three independent seeds required")
-    if not all(math.isfinite(n) for n in deltas + score_deltas):
+    if not all(math.isfinite(n) for n in deltas + score_deltas + coach_lag + coach_score_lag):
         raise ValueError("nonfinite metric")
     # A single material regression is a veto; averages cannot hide it.
     if any(d < -2 for d in deltas):
         return "LAB_QUARANTINED_REGRESSION"
+    # A scripted expert provides a second reference beyond easy random-play wins.
+    if (sum(lag >= 5 and score_lag > 0 for lag, score_lag in
+            zip(coach_lag, coach_score_lag)) >= 2):
+        return "LAB_BELOW_SCRIPTED_REFERENCE"
     # A candidate must improve on a majority of seeds and never regress.
     if (all(d >= -0.002 for d in deltas)
          and sum(d >= 5 for d in deltas) >= 2
@@ -54,11 +60,19 @@ def produce(base: Path) -> dict:
         score_delta = [round(float(src[game]["lab_mean_score"]) -
                              float(src[game]["random_mean_score"]), 3)
                        for src in sources]
+        coach_lag = [round(float(src[game]["scripted_change_rate"]) -
+                           float(src[game]["lab_change_rate"]), 3)
+                     for src in sources]
+        coach_score_lag = [round(float(src[game]["scripted_mean_score"]) -
+                                 float(src[game]["lab_mean_score"]), 3)
+                           for src in sources]
         decisions.append({
             "game":game,
             "change_rate_delta_pp":delta,
             "score_delta":score_delta,
-            "status":classify(delta,score_delta),
+            "scripted_reference_gap_pp":coach_lag,
+            "scripted_reference_score_gap":coach_score_lag,
+            "status":classify(delta,score_delta,coach_lag,coach_score_lag),
             "scope":"SIMULATOR_ONLY",
             "may_change_real_model":False,
         })
@@ -85,7 +99,9 @@ def main() -> int:
                          +"Δ изменившихся ходов (п.п.): "
                          +", ".join(str(d) for d in row["change_rate_delta_pp"])
                          +"; Δ среднего счёта: "
-                         +", ".join(str(d) for d in row["score_delta"]))
+                         +", ".join(str(d) for d in row["score_delta"])
+                         +"; отставание от сценарного контроллера (п.п.): "
+                         +", ".join(str(d) for d in row["scripted_reference_gap_pp"]))
         lines += ["", "Ни одна из политик не перенесена в Market или реальные веса.",
                   "LAB_CANDIDATE_ONLY означает лишь устойчивый результат в трёх упрощённых стендах.\n"]
         (base/"model-gate.md").write_text("\n".join(lines),encoding="utf-8")
