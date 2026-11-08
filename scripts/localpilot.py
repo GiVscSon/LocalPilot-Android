@@ -88,6 +88,39 @@ def ci_status(_: argparse.Namespace) -> None:
         )
 
 
+def cmd_script_map(_: argparse.Namespace) -> None:
+    """Display the installed, declarative game policy and learning boundary."""
+    manifest = ROOT / "app/src/main/assets/localpilot-game-script.lps"
+    text = manifest.read_text(encoding="utf-8")
+    if not text.startswith("LPS1\n"):
+        raise RuntimeError("Game script schema mismatch")
+    routes, models = [], []
+    for line in text.splitlines()[1:]:
+        if not line or line.startswith("#"):
+            continue
+        fields = line.split("|")
+        if len(fields) == 6 and fields[0] == "route":
+            routes.append(dict(profile=int(fields[1]),controller=fields[2],
+                               experience=fields[3],max_stalls=int(fields[4]),frame_ms=int(fields[5])))
+        elif len(fields) == 4 and fields[0] == "model":
+            models.append(dict(game=fields[1],controller=fields[2],experience=fields[3]))
+        else:
+            raise RuntimeError("Invalid LPS1 directive; run JVM verification")
+    if len(routes) != 11 or len(models) != 16:
+        raise RuntimeError("Incomplete scripted game catalog; fail closed")
+    print(json.dumps({"schema":"LPS1","native_controller_routes":routes,
+                      "simulation_models":models,
+                      "note":"SIM_ONLY is not REAL visual reward; native Android gates still own actions"},
+                     ensure_ascii=False, indent=2))
+
+
+def cmd_sim_train(args: argparse.Namespace) -> None:
+    """Trigger the isolated GitHub 16-model curriculum and build workflow."""
+    print("Requesting 16-simulator JVM curriculum with strictly SIM provenance.")
+    print("No physical game has been played, and this does not grant Android input.")
+    ci_start(args)
+
+
 def ci_download(args: argparse.Namespace) -> None:
     latest = latest_success(list_runs())
     if latest is None:
@@ -218,6 +251,8 @@ def parser() -> argparse.ArgumentParser:
     sub = p.add_subparsers(dest="action", required=True)
     for name, fn in (("ci-start", ci_start), ("ci-status", ci_status)):
         sub.add_parser(name).set_defaults(func=fn)
+    sub.add_parser("script-map", help="Show safe native controller routes and 16 simulation models").set_defaults(func=cmd_script_map)
+    sub.add_parser("sim-train", help="Run isolated SIM-only curriculum and Unified CI").set_defaults(func=cmd_sim_train)
     down = sub.add_parser("ci-download", help="Download ONLY last successful unified workflow APK")
     down.add_argument("--output", default="downloads/unified")
     down.set_defaults(func=ci_download)
