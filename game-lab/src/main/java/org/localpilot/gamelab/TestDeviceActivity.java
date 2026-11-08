@@ -39,6 +39,7 @@ public final class TestDeviceActivity extends Activity {
  private final Handler handler=new Handler(Looper.getMainLooper());
  private final ArrayList<String> records=new ArrayList<>();
  private final ArrayList<SimExperience.Step> labSteps=new ArrayList<>();
+ private int savedLabStepIndex;
  private GameLabEngine engine;
  private GameSurface surface;
  private TextView status;
@@ -163,7 +164,48 @@ public final class TestDeviceActivity extends Activity {
   records.add(SystemClock.elapsedRealtime()+","+entry.replace(',',';'));
  }
  @Override protected void onResume(){super.onResume();handler.post(clock);}
- @Override protected void onPause(){handler.removeCallbacks(clock);GameLabEvidenceProvider.clear("gamelab");super.onPause();}
+ /** Save GameLab episodes to the SAME APK's private lab-only training store.
+  * The separately installed companion retains its normal SAF export mode.
+  * This never writes real-game verified experience or changes input permits.
+  */
+ private void saveEmbeddedExperience(){
+  if(!getPackageName().startsWith("org.localpilot.android")||savedLabStepIndex>=labSteps.size())return;
+  java.io.File file=new java.io.File(getFilesDir(),"gamelab-sim-experience-v1.lpx");
+  java.io.File temp=null;
+  try{
+   ArrayList<SimExperience.Step> all=new ArrayList<>();
+   if(file.isFile()){
+    if(file.length()>SimExperience.MAX_BYTES)throw new IOException("oversize existing lab replay");
+    byte[] prior=java.nio.file.Files.readAllBytes(file.toPath());
+    all.addAll(SimExperience.decode(new String(prior,StandardCharsets.UTF_8)));
+   }
+   int available=Math.min(SimExperience.MAX_ROWS-all.size(),labSteps.size()-savedLabStepIndex);
+   if(available<=0){addLog("SIM_REPLAY_FULL");return;}
+   for(int i=0;i<available;i++){
+    SimExperience.Step observed=labSteps.get(savedLabStepIndex+i);
+    all.add(new SimExperience.Step(all.size()+1,
+      observed.game,observed.fault,observed.fromX,observed.fromY,
+      observed.toX,observed.toY,observed.durationMs,
+      observed.beforeHash,observed.afterHash,observed.scoreBefore,
+      observed.scoreAfter,observed.result));
+   }
+   byte[] data=SimExperience.encode(all).getBytes(StandardCharsets.UTF_8);
+   temp=java.io.File.createTempFile("gamelab-lab-only-",".tmp",getFilesDir());
+   try(java.io.FileOutputStream out=new java.io.FileOutputStream(temp)){
+    out.write(data);out.getFD().sync();
+   }
+   java.nio.file.Files.move(temp.toPath(),file.toPath(),
+      java.nio.file.StandardCopyOption.ATOMIC_MOVE,
+      java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+   savedLabStepIndex+=available;
+  }catch(IOException|IllegalArgumentException failure){
+   addLog("SIM_REPLAY_SAVE_FAILED");
+  }finally{if(temp!=null)temp.delete();}
+ }
+ @Override protected void onPause(){
+  saveEmbeddedExperience();handler.removeCallbacks(clock);
+  GameLabEvidenceProvider.clear("gamelab");super.onPause();
+ }
  @Override protected void onDestroy(){if(surface!=null)surface.release();super.onDestroy();}
  @Override protected void onActivityResult(int req,int result,Intent data){
   super.onActivityResult(req,result,data);
