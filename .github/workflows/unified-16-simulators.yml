@@ -127,6 +127,19 @@ jobs:
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs app/build/outputs/apk/debug/app-debug.apk
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging app/build/outputs/apk/debug/app-debug.apk | head -12
           sha256sum app/build/outputs/apk/debug/app-debug.apk
+      - name: Verify shipped LPS1 game controller scripts
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib, zipfile
+          original=Path("app/src/main/assets/localpilot-game-script.lps").read_bytes()
+          apk=Path("app/build/outputs/apk/debug/app-debug.apk")
+          with zipfile.ZipFile(apk) as z:
+            embedded=z.read("assets/localpilot-game-script.lps")
+          assert embedded==original, "Compiled APK game scripts differ from reviewed source"
+          assert embedded.startswith(b"LPS1\n"), "Unexpected script language"
+          print("APK_SCRIPT_ROUTING_PASS sha256="+hashlib.sha256(embedded).hexdigest())
+          PY
       - name: Upload unsigned-release-excluded debug candidates
         if: success()
         uses: actions/upload-artifact@v4
