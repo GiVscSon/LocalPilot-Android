@@ -147,6 +147,7 @@ public final class PilotUiInstrumentation extends Instrumentation {
 
             checkLauncherAndPicker();
             checkOpenRouterAdvisorPicker();
+            checkTrainingManualControls();
             checkCollapseAndReopen();
             checkFullDemo();
             checkStopDuringDemo();
@@ -217,6 +218,7 @@ public final class PilotUiInstrumentation extends Instrumentation {
     private void checkOpenRouterAdvisorPicker() throws Exception {
         onMain(()->{service.hidePanel();return null;});
         launch(MainActivity.class);
+        click("Дополнительные инструменты ▾");
         click("Онлайн-диагностика и модели");
         // Each button must be independently reachable on narrow-phone screens,
         // where the keyboard and long content require scrolling.
@@ -285,6 +287,47 @@ public final class PilotUiInstrumentation extends Instrumentation {
         launchedActivity=activity;
         waitForIdleSync();
         return activity;
+    }
+
+    /** Proves that the built-in native simulator receives a real OS touchscreen
+     * event and changes its original physics state, not merely UI click metadata.
+     * No learning reward or Market gesture is claimed here. */
+    private void checkTrainingManualControls() throws Exception {
+        onMain(()->{service.hidePanel();return null;});
+        launch(TrainingActivity.class);
+        await(()->present("Играть самому"),3_000,"Manual-training entry not visible");
+        require(!present("Смотреть ИИ"),
+            "An untrained model should not be shown as a functional autoplayer");
+        click("Играть самому");
+        await(()->present("← Влево"),4_000,"Manual controls did not appear");
+        float before=onMain(this::trainingPlayerX);
+        require(touchOwnControl("← Влево"),
+            "Actual Android touchscreen could not reach enabled LEFT simulator control");
+        await(()->onMain(this::trainingPlayerX)<before-.2f,3_000,
+            "A real LEFT button touch did not move the simulator player");
+        click("STOP");
+        await(()->onMain(()->trainingPlayer()==null),2_000,
+            "STOP failed to detach manual input controller");
+        require(!armed(),"Training simulator must not arm Market game input");
+        addCheck("native_manual_training_real_touch_changes_scene_and_stop",
+            new JSONObject().put("initial_x",before)
+              .put("origin","SIM_ONLY").put("android_touch",true)
+              .put("market_acceptance",false));
+    }
+
+    private ArcadeManualController trainingPlayer() throws Exception {
+        Field root=TrainingActivity.class.getDeclaredField("runtime");
+        root.setAccessible(true);
+        Object state=root.get(null);
+        if(state==null)return null;
+        Field manual=state.getClass().getDeclaredField("manual");
+        manual.setAccessible(true);
+        return (ArcadeManualController)manual.get(state);
+    }
+    private float trainingPlayerX()throws Exception {
+        ArcadeManualController player=trainingPlayer();
+        if(player==null)throw new AssertionError("Manual training session is unavailable");
+        return player.env.x;
     }
 
     private void checkCollapseAndReopen() throws Exception {
