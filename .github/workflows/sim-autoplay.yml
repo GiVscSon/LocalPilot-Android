@@ -12,6 +12,7 @@ on:
       - 'tools/run_sim_autoplay.sh'
       - 'tools/verify_sim_autoplay_report.py'
       - 'tools/gate_sim_autoplay_candidates.py'
+      - 'tests/test_sim_autoplay_gate.py'
       - 'shared/src/main/java/org/localpilot/shared/SimExperience.java'
       - 'shared/src/main/java/org/localpilot/shared/SimLabPolicy.java'
       - 'game-lab/src/main/java/org/localpilot/gamelab/GameLabEngine.java'
@@ -24,6 +25,7 @@ on:
       - 'tools/run_sim_autoplay.sh'
       - 'tools/verify_sim_autoplay_report.py'
       - 'tools/gate_sim_autoplay_candidates.py'
+      - 'tests/test_sim_autoplay_gate.py'
       - 'shared/src/main/java/org/localpilot/shared/SimExperience.java'
       - 'shared/src/main/java/org/localpilot/shared/SimLabPolicy.java'
       - 'game-lab/src/main/java/org/localpilot/gamelab/GameLabEngine.java'
@@ -42,7 +44,7 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
-      - name: Verify all ten GameLab games with independent held-out seeds
+      - name: Verify regression quarantine and scripted reference gate\n        run: python3 -m unittest discover -s tests -p 'test_sim_autoplay_gate.py' -v\n      - name: Verify all ten GameLab games with independent held-out seeds
         shell: bash
         run: |
           set -euo pipefail
