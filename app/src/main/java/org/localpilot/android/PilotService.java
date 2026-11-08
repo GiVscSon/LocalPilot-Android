@@ -1737,7 +1737,12 @@ public class PilotService extends AccessibilityService {
     ?" · машины "+observation.obstacles.size()+" · топливо "+observation.collectibles.size()
     :" · объекты "+observation.obstacles.size())+" · ответов "+arcadeVerified;
   note="5/5 · "+action.reason;update();if(!action.sendsInput())return;
-  if(now-timestampMs>ActionGate.TTL_MS){failStage(StageMetrics.Stage.CAPTURE,"ARCADE_FRAME_STALE","Кадр устарел до касания");return;}
+  if(now-timestampMs>ActionGate.TTL_MS){
+   // No input was dispatched. Drop this stale observation but preserve the
+   // bound session; the next fresh frame will still require valid authority.
+   metrics.failure(StageMetrics.Stage.CAPTURE,"ARCADE_FRAME_STALE");
+   note="Аркада: кадр устарел · пропускаю жест, ожидаю свежий";update();return;
+  }
   ArcadeControls.Gesture gesture=ArcadeControls.map(action,observation,controlMode);
   float x=geometry.toScreenX(geometry.left+(geometry.right-geometry.left)*gesture.toX());
   float y=geometry.toScreenY(geometry.top+(geometry.bottom-geometry.top)*gesture.toY());
@@ -1874,7 +1879,11 @@ public class PilotService extends AccessibilityService {
   float y=geometry.toScreenY(geometry.top+(geometry.bottom-geometry.top)*.56f);
   float fromX=geometry.toScreenX(geometry.left+(geometry.right-geometry.left)*gesture.fromX());
   if(panelBounds().contains((int)x,(int)y)){failStage(StageMetrics.Stage.POLICY,"JUMPER_TAP_OVERLAY","Переместите панель STOP от зоны управления");return;}
-  if(timestampMs>now||now-timestampMs>ActionGate.TTL_MS){failStage(StageMetrics.Stage.CAPTURE,"JUMPER_FRAME_STALE","Кадр устарел до касания");return;}
+  if(timestampMs>now||now-timestampMs>ActionGate.TTL_MS){
+   // No action has started. Never reuse the old frame or action ticket.
+   metrics.failure(StageMetrics.Stage.CAPTURE,"JUMPER_FRAME_STALE");
+   note="Ари: кадр устарел · без касания, ожидаю следующий";update();return;
+  }
   jumperPendingAction=action;jumperPendingStartX=state.player.centerX();jumperPendingActionMs=now;
   jumperLastActionMs=now;jumperAwaitingVerification=true;
   long policyStart=SystemClock.elapsedRealtimeNanos();metrics.attempt(StageMetrics.Stage.POLICY);
