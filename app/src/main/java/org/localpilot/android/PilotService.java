@@ -1800,7 +1800,12 @@ public class PilotService extends AccessibilityService {
     ?" · машины "+observation.obstacles.size()+" · топливо "+observation.collectibles.size()
     :" · объекты "+observation.obstacles.size())+" · ответов "+arcadeVerified;
   note="5/5 · "+action.reason;update();if(!action.sendsInput())return;
-  if(now-timestampMs>ActionGate.TTL_MS){failStage(StageMetrics.Stage.CAPTURE,"ARCADE_FRAME_STALE","Кадр устарел до касания");return;}
+  if(timestampMs>now||now-timestampMs>ActionGate.TTL_MS){
+   // Observation expired BEFORE dispatch; skip it and wait for a fresh frame.
+   // No previous ActionGate ticket is reused and no gesture is authorized.
+   metrics.failure(StageMetrics.Stage.CAPTURE,"ARCADE_FRAME_STALE");
+   note="Аркада: кадр устарел · пропускаю жест, ожидаю свежий";update();return;
+  }
   ArcadeControls.Gesture gesture=ArcadeControls.map(action,observation,controlMode);
   float x=geometry.toScreenX(geometry.left+(geometry.right-geometry.left)*gesture.toX());
   float y=geometry.toScreenY(geometry.top+(geometry.bottom-geometry.top)*gesture.toY());
@@ -1937,7 +1942,10 @@ public class PilotService extends AccessibilityService {
   float y=geometry.toScreenY(geometry.top+(geometry.bottom-geometry.top)*.56f);
   float fromX=geometry.toScreenX(geometry.left+(geometry.right-geometry.left)*gesture.fromX());
   if(panelBounds().contains((int)x,(int)y)){failStage(StageMetrics.Stage.POLICY,"JUMPER_TAP_OVERLAY","Переместите панель STOP от зоны управления");return;}
-  if(timestampMs>now||now-timestampMs>ActionGate.TTL_MS){failStage(StageMetrics.Stage.CAPTURE,"JUMPER_FRAME_STALE","Кадр устарел до касания");return;}
+  if(timestampMs>now||now-timestampMs>ActionGate.TTL_MS){
+   metrics.failure(StageMetrics.Stage.CAPTURE,"JUMPER_FRAME_STALE");
+   note="Ари: кадр устарел · без касания, ожидаю следующий";update();return;
+  }
   jumperPendingAction=action;jumperPendingStartX=state.player.centerX();jumperPendingActionMs=now;
   jumperLastActionMs=now;jumperAwaitingVerification=true;
   long policyStart=SystemClock.elapsedRealtimeNanos();metrics.attempt(StageMetrics.Stage.POLICY);
@@ -2286,7 +2294,13 @@ public class PilotService extends AccessibilityService {
   if(epoch!=gate.epoch()||!captureEnabled())return;
   metrics.attempt(StageMetrics.Stage.CAPTURE);
   ActionGate.Ticket ticket=gate.offer(SystemClock.elapsedRealtime());if(!valid(ticket)||boardRoi==null){if(deferFocus(invalidReason(ticket)))return;failStage(StageMetrics.Stage.CAPTURE,"BINDING_OR_ROI_MISSING","Нет привязки/поля");return;}
-  if(captureBusy){failStage(StageMetrics.Stage.CAPTURE,"CAPTURE_INFLIGHT","Предыдущий захват ещё выполняется");return;}final Rect roi=new Rect(boardRoi);
+  if(captureBusy){
+   // A concurrent read request does not invalidate the session. The current
+   // screenshot watchdog remains bounded and no second capture is dispatched.
+   metrics.cancelled(StageMetrics.Stage.CAPTURE);
+   note="Захват уже выполняется · повторный запрос пропущен";update();return;
+  }
+  final Rect roi=new Rect(boardRoi);
   if(!discoveringBoard&&panelOccludesCapture(roi)){
    // A user can drag the STOP panel back over the active board. Recover once
    // per armed session without making a gesture, without reading masked cells,
