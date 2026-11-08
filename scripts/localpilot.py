@@ -187,6 +187,50 @@ def safe_read(serial: str, *arguments: str) -> str:
         return f"UNAVAILABLE: {error}"
 
 
+STOP_HINTS = {
+    10: "TARGET_BOUNDS_CHANGED: compare reported window geometry, orientation and exact target window.",
+    11: "PANEL_COVERS_ROI: move or compact STOP panel; never read covered objects.",
+    12: "SCREENSHOT_TIMEOUT: inspect screenshot callback timings and capture freshness.",
+    13: "GRID_PALETTE_DRIFT: re-check manually selected grid and identity of known cells.",
+    14: "PARSE_REJECTED: inspect unknown objects; do not guess object labels.",
+    15: "RESPONSE_TIMEOUT: ACK did not yield verified movement; inspect original game frame.",
+    16: "WINDOW_UNAVAILABLE: inspect target focus and transient offscreen metadata.",
+    17: "CAPTURE_FAILURE: inspect Android screenshot permission/bitmap errors.",
+    18: "REBIND_ROI: manually verify the game region before any further input.",
+    19: "SERVICE_PANEL_FAILURE: STOP panel must remain visible and detached from ROI.",
+}
+
+
+def summarize_stop_events(log: str) -> dict:
+    events = {"STOP": 0, "PAUSE": 0, "RECOVER": 0}
+    recent = []
+    codes = []
+    for line in log.splitlines():
+        if "LocalPilotStop" not in line:
+            continue
+        match = re.search(r"\\b(STOP|PAUSE|RECOVER)\\b", line)
+        if not match:
+            continue
+        status = match.group(1)
+        events[status] += 1
+        if status == "STOP":
+            code = re.search(r"\\bcode=(\\d+)\\b", line)
+            if code:
+                codes.append(int(code.group(1)))
+        recent.append(status)
+    last = codes[-1] if codes else None
+    return {"event_counts": events, "last_stop_code": last,
+            "last_stop_hint": STOP_HINTS.get(last, "No classified STOP in available logs."),
+            "recent_events": recent[-15:],
+            "source": "localpilot-service-process-logcat-only",
+            "android_ack_not_visual_confirmation": True}
+
+
+def cmd_stop_report(args: argparse.Namespace) -> None:
+    log = Path(args.log).expanduser().read_text(encoding="utf-8")
+    print(json.dumps(summarize_stop_events(log), ensure_ascii=False, indent=2))
+
+
 def cmd_device_report(args: argparse.Namespace) -> None:
     serial = args.serial
     device = str(adb(serial, "get-state")).strip()
@@ -221,7 +265,12 @@ def cmd_device_report(args: argparse.Namespace) -> None:
     if pid.isdigit():
         log = safe_read(serial, "logcat", "-d", "--pid", pid, "-v", "time")
         relevant = [line for line in log.splitlines() if SAFE_LOG.search(line)]
-        (destination / "pilot-logcat.txt").write_text("\n".join(relevant[-300:]) + "\n", encoding="utf-8")
+        tail = "\n".join(relevant[-300:]) + "\n"
+        (destination / "pilot-logcat.txt").write_text(tail, encoding="utf-8")
+        summary = summarize_stop_events(tail)
+        (destination / "stop-summary.json").write_text(
+            json.dumps(summary, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        print("STOP diagnosis:", summary["last_stop_hint"])
     else:
         (destination / "pilot-logcat.txt").write_text(
             "No single LocalPilot process PID. No logcat evidence collected.\n", encoding="utf-8"
@@ -265,6 +314,9 @@ def parser() -> argparse.ArgumentParser:
     report.add_argument("--output", default="device-reports")
     report.add_argument("--screenshot", action="store_true", help="Opt in to capturing visible private screen")
     report.set_defaults(func=cmd_device_report)
+    stops = sub.add_parser("stop-report", help="Classify STOP/PAUSE/RECOVER from saved script log")
+    stops.add_argument("--log", required=True)
+    stops.set_defaults(func=cmd_stop_report)
     install = sub.add_parser("install", help="Explicit ADB APK install without uninstall/pm clear")
     install.add_argument("--serial", required=True)
     install.add_argument("--apk", required=True)
