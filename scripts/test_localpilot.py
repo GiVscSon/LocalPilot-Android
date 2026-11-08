@@ -52,6 +52,18 @@ class OperatorTests(unittest.TestCase):
         self.assertTrue(all(item["experience"] == "SIM_ONLY"
                             for item in state["simulation_models"]))
 
+    def test_stop_report_classifies_actual_localpilot_logcat_without_ack_reward(self):
+        log = (
+            "11-08 01:00:01.001 I/LocalPilotStop(123): PAUSE code=WINDOW_STATE_UNAVAILABLE epoch=9 input=disabled\n"
+            "11-08 01:00:01.200 I/LocalPilotStop(123): RECOVER focus=verified epoch=9 old_tickets=invalid\n"
+            "11-08 01:02:00.001 I/LocalPilotStop(123): STOP code=10 epoch=9 profile=4 sent=3 ack=3 grid_verified=0\n"
+        )
+        summary = op.summarize_stop_events(log)
+        self.assertEqual(summary["event_counts"], {"STOP": 1, "PAUSE": 1, "RECOVER": 1})
+        self.assertEqual(summary["last_stop_code"], 10)
+        self.assertIn("TARGET_BOUNDS_CHANGED", summary["last_stop_hint"])
+        self.assertTrue(summary["android_ack_not_visual_confirmation"])
+
     def test_no_implicit_unsafe_device_serial(self):
         for bad in ("", "abc;rm -rf", "foo bar", "$(cat secret)", "\n"):
             with self.assertRaisesRegex(RuntimeError, "serial"):
