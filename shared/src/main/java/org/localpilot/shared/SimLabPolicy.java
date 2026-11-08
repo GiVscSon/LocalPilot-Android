@@ -77,8 +77,13 @@ public final class SimLabPolicy {
   for(int a=0;a<ACTIONS.length;a++){
    int n=attempts[g][z][a];
    if(n<3)continue;
-   // Laplace posterior prevents a single lucky transition dominating.
-   double estimate=(changed[g][z][a]+1.0)/(n+2.0);
+   // The previous policy rewarded ANY state mutation, even a useless
+   // paddle drag. Incorporate actual simulator score gained by an action,
+   // conservatively clipped to prevent one large reward dominating.
+   double response=(changed[g][z][a]+1.0)/(n+2.0);
+   double rewardPerAction=scoreDelta[g][z][a]/(double)n;
+   double rewardBonus=Math.max(-.20,Math.min(.35,rewardPerAction/64.0));
+   double estimate=response+rewardBonus;
    if(estimate>score){score=estimate;best=a;}
   }
   return best<0?"UNKNOWN":ACTIONS[best];
