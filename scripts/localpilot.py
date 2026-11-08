@@ -19,9 +19,9 @@ import sys
 import zipfile
 
 REPO = "GiVscSon/LocalPilot-Android"
-BRANCH = "feature/unified-16-simulators-build-20261107"
+BRANCH = "integration/unified-one-apk-script-engine-20261108"
 WORKFLOW = "unified-16-simulators.yml"
-ARTIFACT = "localpilot-unified-16-simulators-debug"
+ARTIFACT = "localpilot-unified-script-one-apk-debug"
 PACKAGE = "org.localpilot.android.dev.install1081"
 ROOT = Path(__file__).resolve().parents[1]
 SIGNATURE = b"PK\x03\x04"
@@ -143,8 +143,17 @@ def inspect_apk(apk: Path, require_models: int | None = None) -> dict:
         broken = archive.testzip()
         if broken is not None:
             raise RuntimeError(f"APK ZIP CRC failed: {broken}")
-        assets = [name for name in archive.namelist()
+        names = set(archive.namelist())
+        assets = [name for name in names
                   if name.startswith("assets/adaptive-engine-v1/") and name.endswith(".zip")]
+        if require_models is not None:
+            required = {
+                "assets/nes/jsnes.min.js", "assets/nes/index.html",
+                "assets/nes/latched-buttons.js",
+                "assets/localpilot-game-script.lps",
+            }
+            if not required.issubset(names):
+                raise RuntimeError(f"Unified APK missing embedded simulator/NES files: {sorted(required-names)}")
     if require_models is not None and len(assets) != require_models:
         raise RuntimeError(
             f"Unified candidate requires {require_models} model assets, found {len(assets)}"
@@ -295,6 +304,19 @@ def cmd_install(args: argparse.Namespace) -> None:
     print("A signature mismatch is not automatically repaired by uninstalling the app.")
 
 
+def cmd_unified_pipeline(args: argparse.Namespace) -> None:
+    """Run all selected offline scripts with NO ADB or real game gestures."""
+    path = ROOT / "scripts" / "unified_pipeline.py"
+    command = [sys.executable, str(path), args.stage, "--out", args.output]
+    if args.apk:
+        command.extend(["--apk", args.apk])
+    if args.require_sdk:
+        command.append("--require-sdk")
+    # The local operator can trigger this whole pipeline, but cannot invent
+    # a completed APK or claim that a simulator won a physical Market game.
+    print(str(run(command, timeout=1800)))
+
+
 def parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description=__doc__)
     sub = p.add_subparsers(dest="action", required=True)
@@ -317,6 +339,12 @@ def parser() -> argparse.ArgumentParser:
     stops = sub.add_parser("stop-report", help="Classify STOP/PAUSE/RECOVER from saved script log")
     stops.add_argument("--log", required=True)
     stops.set_defaults(func=cmd_stop_report)
+    unified = sub.add_parser("unified", help="Run scripted contract tests, self-play, model gating and single-APK verification")
+    unified.add_argument("stage", choices=("verify", "selfplay", "apk", "all"), nargs="?", default="selfplay")
+    unified.add_argument("--output", default="build/reports/unified-script-engine")
+    unified.add_argument("--apk")
+    unified.add_argument("--require-sdk", action="store_true")
+    unified.set_defaults(func=cmd_unified_pipeline)
     install = sub.add_parser("install", help="Explicit ADB APK install without uninstall/pm clear")
     install.add_argument("--serial", required=True)
     install.add_argument("--apk", required=True)
