@@ -198,7 +198,43 @@ status=new TextView(this);status.setTextSize(12);ScrollView stats=new ScrollView
  }
  private static final class Runtime {
   final java.util.concurrent.ExecutorService executor=Executors.newSingleThreadExecutor();final File directory;
-  volatile boolean busy,running;volatile String message="Выберите жанр и нажмите «Обучать»";
+  volatile boolean busy,running;
+  volatile ArcadeManualController manual;
+  volatile String message="Выбери учебную механику: «Играть самому» или «Обучать ИИ»";
+  boolean hasTrainedCheckpoint(ArcadeEnv.Genre genre){
+   if(genre==null)return false;
+   if(current==genre&&trainer!=null&&trainer.updates>0)return true;
+   File saved=new File(directory,genre+".zip");
+   return saved.isFile()&&saved.length()>256;
+  }
+  synchronized boolean startManual(ArcadeEnv.Genre genre){
+   if(busy||genre==null)return false;
+   manual=new ArcadeManualController(genre,20261108L);
+   busy=true;running=false;paddleScene=null;
+   publish(manual.env);
+   message="Ручная игра · "+genre+" · касания и кнопки работают; это НЕ обучение ИИ";
+   return true;
+  }
+  synchronized void manualAction(int action){
+   ArcadeManualController input=manual;
+   if(input==null)return;
+   try{
+    if(!input.step(action)){
+     message="Уровень завершён · нажми «Заново» или STOP";
+     return;
+    }
+    publish(input.env);
+    message=String.format(Locale.ROOT,
+      "Ручное управление %s · шагов %d · награда симулятора %.2f · прогресс %.1f%s",
+      input.env.genre,input.steps(),input.reward(),input.env.progress,
+      input.active()?"":" · ФИНИШ: Заново/STOP");
+   }catch(RuntimeException rejected){message="Ввод симулятора отклонён: "+rejected.getClass().getSimpleName();}
+  }
+  synchronized void manualReset(){
+   if(manual==null)return;
+   manual.reset();publish(manual.env);
+   message="Ручная игра сброшена · можешь управлять заново";
+  }
   volatile float[] scene;volatile PaddleWeightLab.Scene paddleScene;
   volatile PaddleTransfer.Candidate paddleCandidate;
   volatile File checkpoint;volatile ArcadeEnv.Genre current;DqnTrainer trainer;
@@ -207,6 +243,9 @@ status=new TextView(this);status.setTextSize(12);ScrollView stats=new ScrollView
    executor.execute(()->{try{
     if(trainer==null||current!=genre){File f=new File(directory,genre+".zip");DqnTrainer loaded;
      loaded=DqnTrainer.loadRecovering(f,genre,20261021);trainer=loaded;checkpoint=f;current=genre;
+    }
+    if(mode!=0&&trainer.updates<=0){
+     message="У модели нет обученных обновлений. Сначала нажми «Обучать ИИ»";return;
     }
     publish(trainer.env);
     if(mode==1){message="Оценка модели · 50 эпизодов…";message=trainer.evaluate(50,900000,()->!running);new File(directory,"evaluation").mkdirs();File report=new File(directory,"evaluation/"+genre+".txt");try(FileOutputStream out=new FileOutputStream(report)){out.write(message.getBytes(java.nio.charset.StandardCharsets.UTF_8));out.getFD().sync();}return;}
@@ -285,12 +324,12 @@ status=new TextView(this);status.setTextSize(12);ScrollView stats=new ScrollView
     finally{running=false;busy=false;}
    });
   }
-  void pause(){running=false;}
+  synchronized void pause(){running=false;if(manual!=null){manual=null;busy=false;message="STOP · ручное управление выключено";}}
   String stats(){return String.format(Locale.ROOT,"%s · шаги %d · эпизоды %d\nОбновления %d · replay %d · epsilon %.3f\nНаграда %.3f · лучший прогресс %.1f · loss %.4f",current,trainer.steps,trainer.episodes,trainer.updates,trainer.replaySize(),trainer.epsilon(),trainer.lastReturn,trainer.bestProgress,trainer.loss);}
   void publish(ArcadeEnv e){
    float[] s=new float[2+e.objects.size()*5];boolean vertical=e.genre==ArcadeEnv.Genre.JUMPER||e.genre==ArcadeEnv.Genre.PLATFORMER;
    s[0]=e.genre==ArcadeEnv.Genre.JETPACK?70:e.x;s[1]=e.genre==ArcadeEnv.Genre.LANES?550-e.y:640-(e.y-(vertical?e.camera:0));
-   int i=2;for(ArcadeEnv.Entity o:e.objects){s[i++]=e.genre==ArcadeEnv.Genre.JETPACK?70+o.x-e.progress:o.x;s[i++]=e.genre==ArcadeEnv.Genre.LANES?550-(o.y-e.progress):640-(o.y-(vertical?e.camera:0));s[i++]=o.used&&o.type==3?0:o.w;s[i++]=o.h;s[i++]=o.type;}scene=s;message=stats();
+   int i=2;for(ArcadeEnv.Entity o:e.objects){s[i++]=e.genre==ArcadeEnv.Genre.JETPACK?70+o.x-e.progress:o.x;s[i++]=e.genre==ArcadeEnv.Genre.LANES?550-(o.y-e.progress):640-(o.y-(vertical?e.camera:0));s[i++]=o.used&&o.type==3?0:o.w;s[i++]=o.h;s[i++]=o.type;}scene=s;if(manual==null&&trainer!=null)message=stats();
   }
  }
 }
