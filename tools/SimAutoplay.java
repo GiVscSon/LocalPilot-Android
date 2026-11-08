@@ -112,9 +112,20 @@ public final class SimAutoplay {
   return Math.abs(dx)>=Math.abs(dy)?(dx<0?"LEFT":"RIGHT"):(dy<0?"UP":"DOWN");
  }
  private static Move decide(GameLabEngine engine,Random rng,SimLabPolicy lab,
-                            double exploreProbability){
+                            double exploreProbability,boolean scripted){
   List<Move> possibilities=candidates(engine);
   if(possibilities.isEmpty())return null;
+  // A scripted coach is a stronger LAB comparator, never a real-game policy.
+  // During training, alternate demonstrations and random exploration.
+  if(scripted||(lab==null&&rng.nextDouble()>exploreProbability)){
+   List<float[]> inputs=new ArrayList<>();
+   for(Move c:possibilities)
+    inputs.add(new float[]{c.x(),c.y(),c.toX(),c.toY()});
+   int index=GameLabCoach.choose(engine,inputs);
+   if(index<0||index>=possibilities.size())
+    throw new AssertionError("coach selected invalid action");
+   return possibilities.get(index);
+  }
   if(lab!=null&&rng.nextDouble()>exploreProbability){
    List<Move> favored=new ArrayList<>();
    for(Move candidate:possibilities){
@@ -132,7 +143,7 @@ public final class SimAutoplay {
  }
  private static Results simulate(GameLabEngine.Game game,int episodes,int steps,
                                  long seed,SimLabPolicy lab,double exploreProbability,
-                                 List<SimExperience.Step> replay){
+                                 List<SimExperience.Step> replay,boolean scripted){
   Results results=new Results();
   for(int episode=0;episode<episodes;episode++){
    GameLabEngine engine=new GameLabEngine(game,episodeSeed(seed,game,episode));
@@ -141,7 +152,7 @@ public final class SimAutoplay {
     // Physics advances independently. Only gesture-induced state change is
     // used for a transition label, never a passive game tick.
     for(int tick=0;tick<3;tick++)engine.tick();
-    Move candidate=decide(engine,rng,lab,exploreProbability);
+    Move candidate=decide(engine,rng,lab,exploreProbability,scripted);
     if(candidate==null)throw new IllegalStateException(
       "no safe GameLab simulator action for "+game);
     int before=engine.fingerprint(),scoreBefore=engine.score;
@@ -190,7 +201,7 @@ public final class SimAutoplay {
   List<SimExperience.Step> training=new ArrayList<>();
   // Train on synthetic experience only. Do not use evaluation seeds in training.
   for(GameLabEngine.Game game:GameLabEngine.Game.values())
-   simulate(game,trainEpisodes,steps,seed,null,1.0,training);
+   simulate(game,trainEpisodes,steps,seed,null,.50,training,false);
   String serialized=SimExperience.encode(training);
   List<SimExperience.Step> decoded=SimExperience.decode(serialized);
   if(decoded.size()!=total*trainEpisodes*steps)
@@ -198,13 +209,14 @@ public final class SimAutoplay {
   SimLabPolicy learned=SimLabPolicy.train(decoded);
   StringBuilder baselineCsv=new StringBuilder();
   StringBuilder learnedCsv=new StringBuilder();
+  StringBuilder scriptedCsv=new StringBuilder();
   StringBuilder json=new StringBuilder();
   StringBuilder markdown=new StringBuilder(
     "# GameLab automated self-play · simulator only\n\n"+
     "This is offline GameLab, not a Market acceptance test or production neural transfer.\n"+
     "No Android ACK, AccessibilityService or real-game gesture is produced.\n\n"+
-    "| Game | Random change % | Lab-policy change % | Delta pp | Random mean score | Lab mean score |\n"+
-    "|---|---:|---:|---:|---:|---:|\n");
+    "| Game | Random change % | Learned change % | Scripted change % | Learned delta pp | Random score | Learned score | Scripted score |\n"+
+    "|---|---:|---:|---:|---:|---:|---:|---:|\n");
   json.append("{\n  \"schema\": \"localpilot-gamelab-autoplay-v1\",\n")
     .append("  \"source\": \"SIMULATED_GAME\",\n")
     .append("  \"real_game_accepted\": false,\n")
@@ -214,18 +226,22 @@ public final class SimAutoplay {
     .append("  \"evaluation_episodes_per_game\": ").append(evalEpisodes).append(",\n")
     .append("  \"steps_per_episode\": ").append(steps).append(",\n")
     .append("  \"training_events\": ").append(decoded.size()).append(",\n")
+    .append("  \"training_exploration_probability\": 0.5,\n")
     .append("  \"games\": [\n");
   int index=0;
   for(GameLabEngine.Game game:GameLabEngine.Game.values()){
    long holdoutSeed=seed+987654321L;
-   Results random=simulate(game,evalEpisodes,steps,holdoutSeed,null,1.0,null);
-   Results policy=simulate(game,evalEpisodes,steps,holdoutSeed,learned,.20,null);
+   Results random=simulate(game,evalEpisodes,steps,holdoutSeed,null,1.0,null,false);
+   Results policy=simulate(game,evalEpisodes,steps,holdoutSeed,learned,.20,null,false);
+   Results coach=simulate(game,evalEpisodes,steps,holdoutSeed,null,0,null,true);
    if(index==0){
     baselineCsv.append(random.events);
     learnedCsv.append(policy.events);
+    scriptedCsv.append(coach.events);
    }else{
     baselineCsv.append(random.events.substring(random.events.indexOf("\n")+1));
     learnedCsv.append(policy.events.substring(policy.events.indexOf("\n")+1));
+    scriptedCsv.append(coach.events.substring(coach.events.indexOf("\n")+1));
    }
    double delta=policy.changedPct()-random.changedPct();
    if(index++>0)json.append(",\n");
@@ -233,26 +249,33 @@ public final class SimAutoplay {
      .append(" \"training_actions\": ").append(learned.samples(game.name()))
      .append(", \"random_change_rate\": ").append(fmt(random.changedPct()))
      .append(", \"lab_change_rate\": ").append(fmt(policy.changedPct()))
+     .append(", \"scripted_change_rate\": ").append(fmt(coach.changedPct()))
      .append(", \"delta_percentage_points\": ").append(fmt(delta))
      .append(", \"random_mean_score\": ").append(fmt(random.meanScore()))
      .append(", \"lab_mean_score\": ").append(fmt(policy.meanScore()))
+     .append(", \"scripted_mean_score\": ").append(fmt(coach.meanScore()))
      .append("}");
    markdown.append("| ").append(game.name()).append(" | ")
      .append(fmt(random.changedPct())).append(" | ")
      .append(fmt(policy.changedPct())).append(" | ")
+     .append(fmt(coach.changedPct())).append(" | ")
      .append(fmt(delta)).append(" | ")
      .append(fmt(random.meanScore())).append(" | ")
-     .append(fmt(policy.meanScore())).append(" |\n");
+     .append(fmt(policy.meanScore())).append(" | ")
+     .append(fmt(coach.meanScore())).append(" |\n");
   }
   json.append("\n  ]\n}\n");
   markdown.append("\n## Training summary\n\n")
     .append(learned.report()).append("\n\n")
+    .append("Training mixes scripted demonstrations with random exploration. ")
+    .append("Scripted is NOT a learned model. ")
     .append("All ten scenes were simulated on separate held-out seeds. ")
     .append("A positive delta is measured only for that scene and seed, ")
     .append("not evidence of generalization or success in real Market games.\n");
   Files.writeString(output.resolve("training-experience.lpx"),serialized,StandardCharsets.UTF_8);
   Files.writeString(output.resolve("evaluation-random.csv"),baselineCsv,StandardCharsets.UTF_8);
   Files.writeString(output.resolve("evaluation-lab-policy.csv"),learnedCsv,StandardCharsets.UTF_8);
+  Files.writeString(output.resolve("evaluation-scripted.csv"),scriptedCsv,StandardCharsets.UTF_8);
   Files.writeString(output.resolve("report.json"),json,StandardCharsets.UTF_8);
   Files.writeString(output.resolve("report.md"),markdown,StandardCharsets.UTF_8);
   System.out.println("GAMELAB_AUTOPLAY_PASS scenes="+total+" train_events="+decoded.size()+
