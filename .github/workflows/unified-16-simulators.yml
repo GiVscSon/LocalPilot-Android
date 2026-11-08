@@ -1,9 +1,11 @@
-name: Unified 16 Simulators APK (candidate)
+name: LocalPilot One APK scripted games and training (candidate)
 
 on:
   push:
     branches:
       - feature/unified-16-simulators-build-20261107
+      - integration/unified-one-apk-script-engine-20261108
+  pull_request:
   workflow_dispatch:
 
 permissions:
@@ -21,10 +23,14 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      - name: Test script-only LocalPilot operator
+      - name: Run unified script contracts and static safety checks
         run: |
-          python3 -m unittest discover -s scripts -p 'test_*.py' -v
-          python3 scripts/localpilot.py --help
+          python3 scripts/unified_pipeline.py verify
+          python3 scripts/localpilot.py script-map
+      - name: Play, train and evaluate ten simulators by scripts
+        run: |
+          python3 scripts/unified_pipeline.py selfplay
+          cat build/reports/unified-script-engine/selfplay/model-gate.md
       - name: Test script router and STOP recovery invariants
         run: |
           java tests/GameScriptVerify.java
@@ -117,13 +123,15 @@ jobs:
         run: python3 ci/compat_unified081_test.py
       - name: Integrate and run real JVM test suite
         run: python3 tools/integrate_adaptive_engine_into_081.py
-      - name: Assemble both APK modules
+      - name: Assemble ONE user APK and optional external-only GameLab test target
         run: |
           chmod +x ./gradlew
           ./gradlew --no-daemon :app:assembleDebug :game-lab:assembleDebug
       - name: Validate APK contents and signing
         run: |
           python3 tools/verify_adaptive_apk.py app/build/outputs/apk/debug/app-debug.apk
+          python3 scripts/unified_pipeline.py apk \
+            --apk app/build/outputs/apk/debug/app-debug.apk --require-sdk
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs app/build/outputs/apk/debug/app-debug.apk
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging app/build/outputs/apk/debug/app-debug.apk | head -12
           sha256sum app/build/outputs/apk/debug/app-debug.apk
@@ -140,13 +148,19 @@ jobs:
           assert embedded.startswith(b"LPS1\n"), "Unexpected script language"
           print("APK_SCRIPT_ROUTING_PASS sha256="+hashlib.sha256(embedded).hexdigest())
           PY
-      - name: Upload unsigned-release-excluded debug candidates
+      - name: Upload one unified debug APK
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: localpilot-unified-16-simulators-debug
-          path: |
-            app/build/outputs/apk/debug/*.apk
-            game-lab/build/outputs/apk/debug/*.apk
+          name: localpilot-unified-script-one-apk-debug
+          path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
           retention-days: 14
+      - name: Upload synthetic game training and selection reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: localpilot-unified-script-evidence
+          path: build/reports/unified-script-engine/
+          if-no-files-found: ignore
+          retention-days: 30
