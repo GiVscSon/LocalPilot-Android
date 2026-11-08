@@ -23,7 +23,7 @@ public final class GameScriptCatalogTest {
     "Bubble routes to normal launcher/board detector");
   check(catalog.route(4).controller()==GameScriptCatalog.Controller.BOARD2048,
     "2048 script routes to existing verified board policy");
-  check(catalog.route(6).softStalls()==2&&catalog.route(9).softStalls()==0,
+  check(catalog.route(6).softStalls()==2&&catalog.route(4).softStalls()==2&&catalog.route(9).softStalls()==0,
     "scripts allow only bounded grid recovery, never blind Bubble retry");
   check(catalog.model("hexon").controller()==GameScriptCatalog.Controller.SIM_ONLY,
     "unverified Hexon real controller stays simulator-only");
