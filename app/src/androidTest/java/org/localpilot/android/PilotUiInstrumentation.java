@@ -299,6 +299,9 @@ public final class PilotUiInstrumentation extends Instrumentation {
         require(!present("Смотреть ИИ"),
             "An untrained model should not be shown as a functional autoplayer");
         click("Играть самому");
+        // First accessibility action scrolls the new control into a safe
+        // viewport. The NEXT input must be a genuine injected OS touch.
+        click("← Влево");
         await(()->present("← Влево"),4_000,"Manual controls did not appear");
         float before=onMain(this::trainingPlayerX);
         require(touchOwnControl("← Влево"),
