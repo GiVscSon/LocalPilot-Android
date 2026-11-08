@@ -780,6 +780,14 @@ public class PilotService extends AccessibilityService {
       +" displayGeometry="+(geometry==null?"unavailable":geometry.width()+"x"+geometry.height()+"/rotation="+geometry.rotation())
       +" timestamp_ms="+System.currentTimeMillis()+" uptimeMillis="+lastBoundsRejectionUptimeMs
       +" session_epoch="+lastBoundsRejectionEpoch;
+    // Android 16/MIUI sometimes reports [0,H][W,2H] for the SAME
+    // accessibility window on a W×H display. Do not normalize or act on
+    // this rectangle. Use the existing bounded read-only focus watcher;
+    // any in-flight unverified action still hard-stops in deferFocus().
+    if(geometry!=null&&gate.matches(pkg,id,bounds.width(),bounds.height())
+      &&WindowFocus.impossibleScreenOffset(bounds.left,bounds.top,bounds.right,bounds.bottom,
+        geometry.width(),geometry.height()))
+     return "WINDOW_STATE_UNAVAILABLE";
     return "TARGET_BOUNDS_CHANGED";
    }
    long now=SystemClock.elapsedRealtime();
