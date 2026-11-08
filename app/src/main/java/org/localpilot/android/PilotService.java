@@ -120,6 +120,23 @@ public class PilotService extends AccessibilityService {
  private int boardReadMisses;private long boardReadGeneration;
  /** Recover at most two independently proved no-response grid gestures per visual run. */
  private int gridSoftRecoveries;
+ private GameScriptCatalog gameScripts;
+ /** Signed-APK script routes only. Scripts never contain executable Android code. */
+ private GameScriptCatalog.Route scriptedRoute(int profile){
+  if(gameScripts==null){
+   try(java.io.InputStream source=getAssets().open("localpilot-game-script.lps");
+       java.io.InputStreamReader reader=new java.io.InputStreamReader(source,java.nio.charset.StandardCharsets.UTF_8)){
+    gameScripts=GameScriptCatalog.parse(reader);
+   }catch(java.io.IOException|RuntimeException invalid){
+    note="SCRIPT_INVALID: сценарий не проверен, ввод выключен";update();return null;
+   }
+  }
+  return gameScripts.route(profile);
+ }
+ private int gridScriptStallBudget(){
+  GameScriptCatalog.Route route=gameScripts==null?null:gameScripts.route(selectedProfile);
+  return route==null?0:route.softStalls();
+ }
  private final WindowFocus windowFocus=new WindowFocus();
  private volatile boolean focusPaused;private boolean focusWatch;private long focusRecoveredAt,focusWatchId;
  private volatile long captureSession;
@@ -374,8 +391,11 @@ public class PilotService extends AccessibilityService {
    if(unsupportedGame||VisualGameTarget.requiresProfileChoice(saved,targetIsBrowser,browserProfileConfirmed&&profileChoiceKey(target).equals(confirmedProfileScope))){chooseProfile();return;}
    if(selectedProfile!=saved){selectedProfile=saved;visualRoi=null;manualVisualRoi=false;boardRoi=null;}
   }
-  if(selectedProfile==9){startBubble();return;}
-  if(gridSelected()){startGrid();return;}
+  GameScriptCatalog.Route script=scriptedRoute(selectedProfile);
+  if(script==null){stop("SCRIPT_ROUTE_UNAVAILABLE: жесты запрещены");return;}
+  // Script selects the controller; native policy and ActionGate still verify EVERY gesture.
+  if(script.controller()==GameScriptCatalog.Controller.BUBBLE){startBubble();return;}
+  if(script.controller().grid()){startGrid();return;}
   if(playingJumper&&(arcadeFeedback.paused()||jumperResponsePaused)&&selectedProfile<4&&ArcadeProfile.values()[selectedProfile]==captureProfile){
    if(busy){note="Дождитесь завершения касания";update();return;}
    arcadeController.reset();if(arcadeLearning!=null)arcadeController.restore(arcadeLearning.get(target,modelSlot,captureProfile));installRealGameNeural(captureProfile);arcadeFeedback.reset();jumperFeedback.reset();jumperProgressGuard.reset();arcadePending=null;arcadeBefore=null;arcadeAck=false;arcadeLastUsable=null;sceneRecovery.reset();jumperResponsePaused=false;jumperResponseFailures=0;jumperAwaitingVerification=false;
@@ -1341,7 +1361,7 @@ public class PilotService extends AccessibilityService {
     // No reward and no retry of the failed move. Re-prime the reader with TWO
     // new frames before trying a different, independently legal action.
     // An unacknowledged/unknown/partial gesture never reaches this path.
-    if(!busy&&gridSoftRecoveries<2&&gridSession.restartObservationAfterUnchangedAck(quarantined)){
+    if(!busy&&gridSoftRecoveries<gridScriptStallBudget()&&gridSession.restartObservationAfterUnchangedAck(quarantined)){
      gridSoftRecoveries++;gridPendingDecision=null;gridPendingBoard=null;gridPendingSpecial=null;
      note="Ход не ответил; исключил его для этой сетки · ищу другой по новым кадрам ("+gridSoftRecoveries+"/2)";
      update();scheduleGrid(epoch);return;
@@ -2315,7 +2335,11 @@ public class PilotService extends AccessibilityService {
     failStage(StageMetrics.Stage.CAPTURE,"SCREENSHOT_TIMEOUT","Захват: повторный таймаут, STOP без ввода");
   }},4000);
  }
- private long captureDelay(){return Build.VERSION.SDK_INT>=31?400:1100;}
+ private long captureDelay(){
+  long platform=Build.VERSION.SDK_INT>=31?400:1100;
+  GameScriptCatalog.Route route=gameScripts==null?null:gameScripts.route(selectedProfile);
+  return route==null?platform:Math.max(platform,route.minimumFrameMs());
+ }
  private void stable(long epoch,BoardResult result){
   long generation=boardReadGeneration;
   screenshot(epoch,(a,t,ms)->{
