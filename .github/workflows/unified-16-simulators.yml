@@ -21,6 +21,10 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
+      - name: Test script-only LocalPilot operator
+        run: |
+          python3 -m unittest discover -s scripts -p 'test_*.py' -v
+          python3 scripts/localpilot.py --help
       - name: Install Android 35 build tools
         shell: bash
         run: |
