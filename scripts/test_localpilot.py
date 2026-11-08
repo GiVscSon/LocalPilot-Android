@@ -30,7 +30,12 @@ class OperatorTests(unittest.TestCase):
             with zipfile.ZipFile(apk, "w") as a:
                 for i in range(16):
                     a.writestr(f"assets/adaptive-engine-v1/shape-{i}.zip", b"model")
-                a.writestr("classes.dex", b"dex\n035")
+                a.writestr("classes.dex", b"dex\\n035")
+                a.writestr("assets/nes/jsnes.min.js", b"emulator")
+                a.writestr("assets/nes/index.html", b"<html></html>")
+                a.writestr("assets/nes/latched-buttons.js", b"controller")
+                a.writestr("assets/localpilot-game-script.lps",
+                           b"LPS1\\n" + b"model|x|SIM_ONLY|SIM_ONLY\\n" * 16)
             with mock.patch.object(op.shutil, "which", return_value=None):
                 checked = op.inspect_apk(apk, 16)
                 self.assertEqual(checked["model_assets"], 16)
