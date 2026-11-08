@@ -29,7 +29,7 @@ public final class GameScriptCatalog {
    if(expected(profile)!=controller||training!=Evidence.VISUAL_REAL
       ||softStalls<0||softStalls>2||minimumFrameMs<80||minimumFrameMs>1200)
     throw new IllegalArgumentException("unsafe or incompatible real-game script");
-   if(!controller.grid()&&softStalls!=0)
+   if(!controller.grid()&&controller!=Controller.BOARD2048&&softStalls!=0)
     throw new IllegalArgumentException("no soft-recovery adapter for this controller");
   }
  }
