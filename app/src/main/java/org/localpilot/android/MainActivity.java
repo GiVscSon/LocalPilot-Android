@@ -32,7 +32,6 @@ public class MainActivity extends Activity {
   labCaption.setText("Единый APK: 10 интерактивных симуляторов и офлайн NES/Денди. Скрипты обучают отдельные лабораторные модели. DOS: только проверка файлов, без исполнения. Симуляция не является приёмкой Маркета.");
   labCaption.setTextColor(HubContract.SECONDARY);box.addView(labCaption);
   button(box,"Открыть встроенный GameLab · 10 игр / NES",this::openGameLab);
-  button(advanced,"Внешний GameLab · только тест Accessibility",this::openExternalGameLab);
   section(box,"04 · Диагностика и контроль");
   button(box,"Отчёт с кадром игры",this::beginDiagnosticReport);
   button(box,"Экспорт задержек",()->{if(PilotService.instance==null){toast("Сначала включите службу");return;}PilotService.instance.exportMetrics();startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT).setType("text/plain").addCategory(Intent.CATEGORY_OPENABLE).putExtra(Intent.EXTRA_TITLE,"localpilot-latency.txt"),10);});
@@ -41,6 +40,7 @@ public class MainActivity extends Activity {
   button(box,"Дополнительные инструменты ▾",()->advanced.setVisibility(
     advanced.getVisibility()==android.view.View.VISIBLE?android.view.View.GONE:android.view.View.VISIBLE));
   box.addView(advanced);
+  button(advanced,"Внешний GameLab · только тест Accessibility",this::openExternalGameLab);
   button(advanced,"Включить сбор примеров",()->{if(PilotService.instance==null){toast("Сначала включите службу");return;}new AlertDialog.Builder(this).setTitle("Сохранять игровые примеры?").setMessage("В памяти приложения останутся только распознанные поля до/после и проверенное действие, без снимков. До 256 примеров / 256 КиБ. Это не обучение. При заполнении сбор выключается, игра продолжается. При ошибке записи управление остановится.").setPositiveButton("Включить",(d,w)->{if(PilotService.instance!=null)PilotService.instance.enableExamples();else toast("Служба отключена");}).setNegativeButton("Отмена",null).show();});
   button(advanced,"Выключить сбор примеров",()->{if(PilotService.instance!=null)PilotService.instance.disableExamples();});
   button(advanced,"Экспорт примеров",()->{if(PilotService.instance==null){toast("Сначала включите службу");return;}try{PilotService.instance.exportExamples();startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT).setType("text/plain").addCategory(Intent.CATEGORY_OPENABLE).putExtra(Intent.EXTRA_TITLE,"localpilot-experience-v1.log"),11);}catch(java.io.IOException e){toast("Хранилище недоступно; исходник сохранён");}});
