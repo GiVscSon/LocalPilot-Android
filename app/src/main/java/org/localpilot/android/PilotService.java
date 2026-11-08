@@ -763,6 +763,11 @@ public class PilotService extends AccessibilityService {
   }catch(RuntimeException|OutOfMemoryError ignored){lastSessionReport="Сеанс остановлен; метаданные недоступны";}
   if(playingGrid&&selectedProfile==9)
    lastBubbleSessionReport=bubbleSession.report()+" decision="+bubbleDecisionReason;
+  // Stable, non-identifying event for script-driven Termux/Windows diagnosis.
+  // Never log game package, raw user message, screenshot or ROI coordinates.
+  android.util.Log.i("LocalPilotStop","STOP code="+AuditStopCode.from(reason)
+    +" epoch="+stopEpoch+" profile="+selectedProfile+" sent="+captureSent
+    +" ack="+captureCompleted+" grid_verified="+gridVerified);
   board2048Stalls.reset();
   permit.revoke();gate.stop();browserSceneGate.reset();visionV2.reset();visionV2Snapshot=null;
   rebindGeneration++;rebindStability.reset();
@@ -866,6 +871,7 @@ public class PilotService extends AccessibilityService {
    captureBusy=false;pendingCapture=++captureCounter;
    if(visionPending&&visionTask!=null){visionTask.cancel(true);visionTask=null;}visionPending=false;visionRequest++;
    gridSession.invalidateCandidate();bubbleSession.invalidateCandidate();
+   android.util.Log.i("LocalPilotStop","PAUSE code="+reason+" epoch="+gate.epoch()+" input=disabled");
    note="Фокус временно потерян · ввод приостановлен, захват сохранён";update();
   }
   if(!focusWatch){focusWatch=true;long epoch=gate.epoch(),watch=++focusWatchId;handler.postDelayed(()->watchFocus(epoch,watch),75);}
@@ -882,6 +888,7 @@ public class PilotService extends AccessibilityService {
    handler.postDelayed(()->watchFocus(epoch,watch),75);return;
   }
   gate.resume();focusPaused=false;focusWatch=false;focusWatchId++;focusRecoveredAt=SystemClock.elapsedRealtime();
+  android.util.Log.i("LocalPilotStop","RECOVER focus=verified epoch="+epoch+" old_tickets=invalid");
   note="Прежнее окно восстановлено · ожидаю свежий кадр";update();
   if(playingGrid)scheduleGrid(epoch);
   else if(playing2048)postBoardTask(epoch,captureDelay(),()->round2048(epoch));
@@ -1376,6 +1383,7 @@ public class PilotService extends AccessibilityService {
     // An unacknowledged/unknown/partial gesture never reaches this path.
     if(!busy&&gridSoftRecoveries<gridScriptStallBudget()&&gridSession.restartObservationAfterUnchangedAck(quarantined)){
      gridSoftRecoveries++;gridPendingDecision=null;gridPendingBoard=null;gridPendingSpecial=null;
+     android.util.Log.i("LocalPilotStop","RECOVER GRID no_response=quarantined ack=observed attempts="+gridSoftRecoveries);
      note="Ход не ответил; исключил его для этой сетки · ищу другой по новым кадрам ("+gridSoftRecoveries+"/2)";
      update();scheduleGrid(epoch);return;
     }
@@ -2414,7 +2422,9 @@ public class PilotService extends AccessibilityService {
       stop("2048: несколько ходов не дали визуального ответа · проверьте область и жесты");return;
      }
      if(plan==Board2048StallRecovery.Next.REPLAN_READ_ONLY){
-      before2048=null;note="2048: направление не ответило · исключаю его и перечитываю поле без ввода";
+      before2048=null;
+      android.util.Log.i("LocalPilotStop","RECOVER 2048 no_response=quarantined ack=observed");
+      note="2048: направление не ответило · исключаю его и перечитываю поле без ввода";
       update();long generation=boardReadGeneration;
       handler.postDelayed(()->{if(epoch==gate.epoch()&&generation==boardReadGeneration&&playing2048&&!focusPaused)round2048(epoch);},captureDelay());
       return;
