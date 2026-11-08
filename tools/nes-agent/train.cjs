@@ -72,13 +72,27 @@ class NesEnvironment{
   finally{this.machine.buttonUp(1,code);}
   for(let i=0;i<3;i++)this.machine.frame();
   assert(this.frames>framesBefore,"No NES CPU/PPU frames after controller action");
-  const after=visualPlayerX(this.video);
   this.steps++;
-  const done=after>=this.goalX;
-  const reward=Math.max(-1,Math.min(1,(after-before)/Math.max(1,this.frameHold)))-0.025
-    +(done?5:0);
-  return {x:after,state:bins(after),frame:this.frames,done,reward,
-          evidence:"NES_EMULATED_PPU_PIXELS",changed:Math.abs(after-before)>=0.5};
+  let after;
+  try{after=visualPlayerX(this.video);}
+  catch(error){
+   // An object leaving the visible video is an *observation failure*,
+   // not a winning game state and never a guessed position.
+   if(!String(error.message||error).includes("visually locate"))throw error;
+   return {x:null,state:null,frame:this.frames,done:true,success:false,
+           reward:-2,evidence:"NES_EMULATED_VISUAL_LOSS",changed:false};
+  }
+  const delta=after-before;
+  const wrapped=action==="RIGHT"?delta<(-2*this.frameHold):delta>(2*this.frameHold);
+  if(wrapped){
+   return {x:after,state:bins(after),frame:this.frames,done:true,success:false,
+           reward:-2,evidence:"NES_EMULATED_DISCONTINUITY",changed:true};
+  }
+  const success=after>=this.goalX&&delta>0&&action==="RIGHT";
+  const reward=Math.max(-1,Math.min(1,delta/Math.max(1,this.frameHold)))-0.025
+    +(success?5:0);
+  return {x:after,state:bins(after),frame:this.frames,done:success,success,reward,
+          evidence:"NES_EMULATED_PPU_PIXELS",changed:Math.abs(delta)>=0.5};
  }
 }
 function bestAction(q,s){
@@ -105,7 +119,7 @@ function oneEpisode(env,q,random,training,settings){
   total+=next.reward;obs=next;
   if(obs.done)break;
  }
- return {success:obs.done,steps:records.length,reward:+total.toFixed(4),records};
+ return {success:obs.success===true,steps:records.length,reward:+total.toFixed(4),records};
 }
 function train(core,rom,options={}){
  const settings={episodes:options.episodes??160,horizon:options.horizon??15,
