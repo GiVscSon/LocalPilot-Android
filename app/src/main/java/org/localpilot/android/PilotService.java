@@ -1737,7 +1737,7 @@ public class PilotService extends AccessibilityService {
     ?" · машины "+observation.obstacles.size()+" · топливо "+observation.collectibles.size()
     :" · объекты "+observation.obstacles.size())+" · ответов "+arcadeVerified;
   note="5/5 · "+action.reason;update();if(!action.sendsInput())return;
-  if(now-timestampMs>ActionGate.TTL_MS){
+  if(timestampMs>now||now-timestampMs>ActionGate.TTL_MS){
    // No input was dispatched. Drop this stale observation but preserve the
    // bound session; the next fresh frame will still require valid authority.
    metrics.failure(StageMetrics.Stage.CAPTURE,"ARCADE_FRAME_STALE");
@@ -2232,7 +2232,13 @@ public class PilotService extends AccessibilityService {
   if(epoch!=gate.epoch()||!captureEnabled())return;
   metrics.attempt(StageMetrics.Stage.CAPTURE);
   ActionGate.Ticket ticket=gate.offer(SystemClock.elapsedRealtime());if(!valid(ticket)||boardRoi==null){if(deferFocus(invalidReason(ticket)))return;failStage(StageMetrics.Stage.CAPTURE,"BINDING_OR_ROI_MISSING","Нет привязки/поля");return;}
-  if(captureBusy){failStage(StageMetrics.Stage.CAPTURE,"CAPTURE_INFLIGHT","Предыдущий захват ещё выполняется");return;}final Rect roi=new Rect(boardRoi);
+  if(captureBusy){
+   // A concurrent read request is not a reason to disarm. The existing
+   // 4-second watchdog expires the outstanding screenshot if it really hangs.
+   metrics.cancelled(StageMetrics.Stage.CAPTURE);
+   note="Захват уже выполняется · повторный запрос пропущен";update();return;
+  }
+  final Rect roi=new Rect(boardRoi);
   if(!discoveringBoard&&panelOccludesCapture(roi)){
    // A user can drag the STOP panel back over the active board. Recover once
    // per armed session without making a gesture, without reading masked cells,
