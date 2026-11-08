@@ -134,6 +134,13 @@ public class PilotService extends AccessibilityService {
   }
   return gameScripts.route(profile);
  }
+ private boolean requireScriptController(GameScriptCatalog.Controller expected){
+  GameScriptCatalog.Route route=scriptedRoute(selectedProfile);
+  if(route==null||route.controller()!=expected){
+   stop("SCRIPT_CONTROLLER_MISMATCH: выберите подтверждённую механику");return false;
+  }
+  return true;
+ }
  private int gridScriptStallBudget(){
   GameScriptCatalog.Route route=gameScripts==null?null:gameScripts.route(selectedProfile);
   return route==null?0:route.softStalls();
@@ -953,6 +960,7 @@ public class PilotService extends AccessibilityService {
  private void startJumper(){startVisualArcade(ArcadeProfile.ARI);}
  private void startVisualArcade(ArcadeProfile profile){
   if(busy||captureBusy||discoveringBoard||autoLeft>0||playing2048||playingMini||playingJumper||playingGrid){note="Сначала остановите другой режим";update();return;}
+  if(profile==null||!requireScriptController(GameScriptCatalog.Controller.valueOf(profile.name())))return;
   if(explicitWindow&&(!gate.armed()||!valid(gate.offer(SystemClock.elapsedRealtime())))){note="Выбранное окно недоступно · выберите Окно снова";update();return;}
   if(!gate.armed()||!valid(gate.offer(SystemClock.elapsedRealtime())))arm();
   if(!gate.armed()||!unlocked()){note="Откройте игру, выберите её окно и подходящий профиль на панели";update();return;}
@@ -1175,6 +1183,7 @@ public class PilotService extends AccessibilityService {
  }
  private void startBubble(){
   if(playingGrid&&bubbleSession.paused()){stop("Повторная проверка Шипучки");if(!bindSelectedWindow())return;}
+  if(!requireScriptController(GameScriptCatalog.Controller.BUBBLE))return;
   if(busy||captureBusy||discoveringBoard||autoLeft>0||playing2048||playingMini||playingJumper||playingGrid){note="Сначала остановите текущий режим";update();return;}
   if(!VisualGameTarget.allowed(target,getPackageName())){note="Выберите окно сторонней игры";update();return;}
   loadBubbleRegion();
@@ -1244,6 +1253,8 @@ public class PilotService extends AccessibilityService {
  }
  private void startGrid(){
   if(playingGrid&&gridSession.paused()){stop("Повторная проверка поля");if(!bindSelectedWindow())return;}
+  GameScriptCatalog.Route script=scriptedRoute(selectedProfile);
+  if(script==null||!script.controller().grid()){stop("SCRIPT_CONTROLLER_MISMATCH: сетка требует совместимого сценария");return;}
   if(busy||captureBusy||discoveringBoard||autoLeft>0||playing2048||playingMini||playingJumper||playingGrid){note="Сначала остановите текущий режим";update();return;}
   if(!VisualGameTarget.allowed(target,getPackageName())){note="Выберите окно сторонней игры";update();return;}
   loadGridConfig();if(!manualVisualRoi||visualRoi==null||!armedBounds.contains(visualRoi)){note="Область → обведите только клетки сетки "+gridConfig.rows+"×"+gridConfig.cols;update();return;}
@@ -2364,7 +2375,7 @@ public class PilotService extends AccessibilityService {
    stop("AUTO_BOARD_GEOMETRY: 2048 требует минимум 160 пикселей и разницу сторон до 8%");return;
   }
   loadVisionTraining();
-  if(scriptedRoute(selectedProfile)==null){stop("SCRIPT_ROUTE_UNAVAILABLE: 2048 заблокирован");return;}
+  if(!requireScriptController(GameScriptCatalog.Controller.BOARD2048))return;
   board2048Stalls.reset();
   boardReadGeneration++;boardReadMisses=0;moves2048=0;colorSession.reset();colorSession.setStrictMode(strictVision);before2048=null;colored2048=colored;
   if(colored2048||selectedProfile==4&&VisualGameTarget.legacyMarket(target)){String saved=getSharedPreferences("color-2048",MODE_PRIVATE).getString(color2048PaletteKey(),null);if(saved!=null)try{colorSession.restoreLearned(saved);}catch(IllegalArgumentException invalidPalette){note="Сохранённая цветовая палитра повреждена · начинаю с базовых плиток";}}
