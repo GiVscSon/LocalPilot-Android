@@ -7,7 +7,9 @@ public final class Board2048StallRecoveryTest {
   try{action.run();throw new AssertionError(reason);}catch(IllegalArgumentException expected){checks++;}
  }
  public static void main(String[] args){
-  Board2048 before=new Board2048(new int[]{2,0,0,0,4,2,0,0,8,4,0,0,16,8,2,0});
+  // The third-direction test needs a field with at least THREE independently
+  // legal directions. The previous fixture had only UP and RIGHT.
+  Board2048 before=new Board2048(new int[]{0,0,0,0,0,2,0,0,0,0,4,0,0,0,0,0});
   Board2048StallRecovery guard=new Board2048StallRecovery();
   int best=before.choose();
   check(best>=0,"board has legal best direction");
@@ -46,6 +48,15 @@ public final class Board2048StallRecoveryTest {
   check(guard.failedMask(changed,10)==0,"changed board never inherits old move exclusions");
   guard.verified();
   check(guard.failedMask(before,10)==0,"verified visual transition resets stale quarantine");
+  // Separate regression: a board with exactly two possible directions must
+  // not fabricate a third action after both are quarantined. No new gesture.
+  Board2048 limited=new Board2048(new int[]{2,0,0,0,4,2,0,0,8,4,0,0,16,8,2,0});
+  int first=limited.choose();
+  int second=limited.chooseAvoiding(1<<first);
+  check(first>=0&&second>=0&&first!=second,
+    "two distinct legal directions exist for exhaustion fixture");
+  check(limited.chooseAvoiding((1<<first)|(1<<second))==-1,
+    "when two legal directions are exhausted, policy returns no action");
   System.out.println("2048 ACK/no-response script-bounded recovery: "+checks+" PASS");
  }
 }
