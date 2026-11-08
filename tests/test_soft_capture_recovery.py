@@ -46,7 +46,7 @@ class SoftCaptureRecovery(unittest.TestCase):
         self.assertIn('CaptureFreshness.valid(', p)
         self.assertIn('public static final long TTL_MS=700', self.gate)
         self.assertIn('if(paused)return "FOCUS_PAUSED"', self.gate)
-        self.assertIn('now-timestamp>700', self.fresh)
+        self.assertIn('nowUptime-timestamp<=700', self.fresh)
 
     def test_no_ack_is_substituted_for_visual_confirmation(self):
         p = self.pilot
