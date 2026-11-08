@@ -146,6 +146,7 @@ public final class PilotUiInstrumentation extends Instrumentation {
             service = onMain(() -> PilotService.instance);
 
             checkLauncherAndPicker();
+            checkModelLibrary();
             checkOpenRouterAdvisorPicker();
             checkCollapseAndReopen();
             checkFullDemo();
@@ -212,6 +213,29 @@ public final class PilotUiInstrumentation extends Instrumentation {
             catch(org.json.JSONException error){result.putString("result","FAIL");passed=false;}
             finish(passed ? Activity.RESULT_OK : Activity.RESULT_CANCELED, result);
         }
+    }
+
+    private boolean hasText(android.view.View root,String fragment) {
+        if(root instanceof android.widget.TextView text && String.valueOf(text.getText()).contains(fragment))return true;
+        if(root instanceof android.view.ViewGroup group)for(int i=0;i<group.getChildCount();i++)if(hasText(group.getChildAt(i),fragment))return true;
+        return false;
+    }
+    private void checkModelLibrary() throws Exception {
+        onMain(()->{service.hidePanel();return null;});
+        launch(MainActivity.class);
+        click("Библиотека · 16 моделей и версии");
+        await(()->onMain(()->resumedActivity instanceof ModelLibraryActivity
+          &&hasText(resumedActivity.getWindow().getDecorView(),"16 профилей загружены")),15_000,
+          "Model library did not verify and load all bundled profiles");
+        require(!armed(),"Opening model library cannot arm real input");
+        click("Оценить на отдельных seed");
+        await(()->onMain(()->resumedActivity instanceof ModelLibraryActivity
+          &&hasText(resumedActivity.getWindow().getDecorView(),"SELECTED_LAB")),15_000,
+          "Model library evaluation did not finish");
+        require(!armed(),"Laboratory evaluation cannot authorize gestures");
+        addCheck("model_library_16_profiles_and_lab_evaluation",new JSONObject()
+          .put("profiles",16).put("source","SIMULATED_GAME").put("input_armed",false));
+        sendKeyDownUpSync(KeyEvent.KEYCODE_BACK);waitForIdleSync();
     }
 
     private void checkOpenRouterAdvisorPicker() throws Exception {

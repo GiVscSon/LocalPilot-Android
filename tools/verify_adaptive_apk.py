@@ -36,6 +36,10 @@ EXPECTED = {
     "sega_brawler_rungun-sega-16bit-brawler-v1.zip": "sega_brawler_rungun",
 }
 REQUIRED_DESCRIPTORS = [
+    b"Lorg/localpilot/android/ModelLibraryActivity;",
+    b"Lorg/localpilot/android/learning/LabModelStore;",
+    b"Lorg/localpilot/android/learning/ShadowEvaluation;",
+    b"Lorg/localpilot/shared/NesExperience;",
     b"Lorg/localpilot/android/learning/AdaptiveLearningEngine;",
     b"Lorg/localpilot/android/learning/AutonomousSelfTrainer;",
     b"Lorg/localpilot/android/learning/UnifiedSimulatorHub;",

@@ -247,7 +247,7 @@ public final class AdaptiveLearningEngine {
    candidate = current.copy();
   }
   ModelEvaluator.PromotionDecision decision = ModelEvaluator.checkPromotionGate(
-    gameId, current, candidate, 16, seed ^ 0x9e3779b9L);
+    gameId, current, candidate, 16, seed ^ 0x6a09e667f3bcc909L);
   telemetryCounts[decision.event.ordinal()]++;
   if (decision.accepted) {
    activePolicies.put(gameId, candidate);

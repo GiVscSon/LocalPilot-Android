@@ -78,7 +78,7 @@ def verify_contracts() -> dict:
     for test in (
         "GameScriptVerify.java", "StopRecoveryVerify.java",
         "Board2048StallVerify.java", "SimExperienceVerify.java",
-        "GameLabCoachVerify.java",
+        "GameLabCoachVerify.java", "ModelLibraryVerify.java",
     ):
         execute("java", "tests/" + test)
     # For lab-only replay, a scripts path should NOT grant a new gesture issuer.
@@ -141,6 +141,31 @@ def play_train(out: Path) -> dict:
             "gate": decisions, "real_model_transfer": False}
 
 
+def browser_shadow(out: Path) -> dict:
+    """Optional public-site evaluation; never substitutes for Android acceptance."""
+    out.mkdir(parents=True, exist_ok=True)
+    classes = out / "classes"
+    classes.mkdir(exist_ok=True)
+    execute("javac", "--release", "17", "-sourcepath", "app/src/main/java",
+            "-d", str(classes), "tools/ShadowFrameEvaluate.java")
+    execute("node", "tools/browser_shadow_2048.cjs", str(out), str(classes), timeout=240)
+    report = json.loads(strict_file_bytes(out / "report.json", 100_000))
+    if (report.get("android_verified") is not False
+            or report.get("model_transfer") is not False
+            or len(report.get("results", [])) != 2):
+        raise RuntimeError("Invalid browser shadow provenance")
+    for site in report["results"]:
+        steps = site.get("steps", [])
+        if (site.get("result") != "PASS" or len(steps) != 13
+                or any(step.get("recognition_mismatches") != 0
+                       or step.get("may_dispatch") is not False
+                       or step.get("may_promote") is not False for step in steps)
+                or any(step.get("transition_verified") is not True for step in steps[1:])):
+            raise RuntimeError("Browser shadow evaluation incomplete or rejected")
+    return {"source": "BROWSER_GAME", "sites": report["results"],
+            "android_verified": False, "model_transfer": False}
+
+
 def sdk_tool(name: str) -> Path | None:
     found = shutil.which(name)
     if found:
@@ -167,7 +192,7 @@ def verify_apk(apk: Path, require_sdk: bool) -> dict:
         models = [n for n in names if n.startswith(prefix) and n.endswith(".zip")]
         wanted = {
             "assets/nes/jsnes.min.js", "assets/nes/index.html",
-            "assets/nes/latched-buttons.js",
+            "assets/nes/latched-buttons.js", "assets/nes/nes-observation.js",
             "assets/localpilot-game-script.lps",
         }
         missing = sorted(wanted - names)
@@ -214,7 +239,7 @@ def verify_apk(apk: Path, require_sdk: bool) -> dict:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("stage",
-        choices=("verify", "selfplay", "apk", "all"))
+        choices=("verify", "selfplay", "shadow", "apk", "all"))
     parser.add_argument("--out", default=str(DEFAULT_OUT))
     parser.add_argument("--apk", default="app/build/outputs/apk/debug/app-debug.apk")
     parser.add_argument("--require-sdk", action="store_true")
@@ -261,6 +286,10 @@ def main() -> int:
             current_stage = "selfplay"
             report["selfplay"] = play_train(out / "selfplay")
             report["stages"]["selfplay"] = {"status": "PASS", **report["selfplay"]}
+        if opts.stage == "shadow":
+            current_stage = "shadow"
+            report["shadow"] = browser_shadow(out / "browser-shadow")
+            report["stages"]["shadow"] = {"status": "PASS", **report["shadow"]}
         if opts.stage in ("apk", "all"):
             current_stage = "apk"
             report["apk"] = verify_apk(

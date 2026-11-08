@@ -10,6 +10,7 @@
 </style>
 <script src="jsnes.min.js"></script>
 <script src="latched-buttons.js"></script>
+<script src="nes-observation.js"></script>
 </head><body><main><canvas id="screen" width="256" height="240"></canvas>
 <div id="status" role="status">Откройте NES-картридж в Android-приложении.</div></main>
 <script>
@@ -67,7 +68,16 @@ function sendFrame(rgb){
   let hash=2166136261>>>0;
   for(let i=0;i<256*240;i+=241)hash=Math.imul(hash^rgb[i],16777619)>>>0;
   validFrame=hash;
-  try{if(window.GameLabBridge)window.GameLabBridge.onFrame(frames,hash|0);}catch(error){}
+  try{if(window.GameLabBridge){
+   window.GameLabBridge.onFrame(frames,hash|0);
+   if(typeof nesObservation==='function'&&window.GameLabBridge.onObservation){
+    let buttons=0;
+    for(const [i,key] of ['UP','LEFT','DOWN','RIGHT','SELECT','START','B','A'].entries())
+     if(gamepadLatch&&gamepadLatch.down.has(key))buttons|=1<<i;
+    const seen=nesObservation(rgb,frames,buttons);
+    window.GameLabBridge.onObservation(window.retroEpisodeId||'',seen.frame,seen.pixelHash,buttons,seen.features.join(','));
+   }
+  }}catch(error){}
  }
 }
 function tick(){
@@ -93,7 +103,8 @@ window.retroResume=function(){
  timer=setInterval(tick,window.retroDendy?20:1000/60);
  return true;
 };
-window.retroLoadRom=function(encoded,dendy){
+window.retroLoadRom=function(encoded,dendy,episodeId){
+ window.retroEpisodeId=String(episodeId||'');
  try{
   stop();
   if(!window.jsnes||typeof jsnes.NES!=="function"||!jsnes.Controller)

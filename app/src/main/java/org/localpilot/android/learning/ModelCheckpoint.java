@@ -62,7 +62,7 @@ public final class ModelCheckpoint {
       Map.entry("manifest.json", manifestBytes),
       Map.entry("weights.bin", weights),
       Map.entry("SHA256SUMS", sumsBytes))) {
-     z.putNextEntry(new ZipEntry(e.getKey()));
+     ZipEntry entry=new ZipEntry(e.getKey());entry.setTime(0L);z.putNextEntry(entry);
      z.write(e.getValue());
      z.closeEntry();
     }
@@ -108,16 +108,35 @@ public final class ModelCheckpoint {
   if (!expectedSums.equals(new String(entries.get("SHA256SUMS"), StandardCharsets.UTF_8)))
    throw new IOException("checkpoint SHA-256 verification failed");
 
-  String manifestStr = new String(manifestBytes, StandardCharsets.UTF_8);
-  if (!manifestStr.contains("\"scope\":\"" + expectedSchema.scopeKey() + "\""))
-   throw new IOException("checkpoint schema/scope mismatch");
-
   StudentPolicy policy = new StudentPolicy(expectedSchema.gameId, 1L, false);
   try (DataInputStream in = new DataInputStream(new ByteArrayInputStream(weights))) {
    policy.readWeights(in);
    if (in.read() != -1) throw new IOException("trailing bytes in weights.bin");
   }
+  if (!fields(new String(manifestBytes, StandardCharsets.UTF_8))
+      .equals(fields(manifest(expectedSchema, policy))))
+   throw new IOException("checkpoint schema/scope mismatch");
   return policy;
+ }
+
+ /** Our checkpoint schema is a flat JSON object. Reject duplicates, extra keys,
+  * nested values and escapes rather than searching untrusted JSON substrings. */
+ private static Map<String,String> fields(String json) throws IOException {
+  if(json.length()>8192)throw new IOException("manifest too large");
+  java.util.regex.Pattern token=java.util.regex.Pattern.compile(
+    "\\s*\"([a-z_]+)\"\\s*:\\s*(\"[^\"\\\\\\x00-\\x1f]*\"|true|false|[0-9]+)\\s*");
+  String text=json.trim();
+  if(!text.startsWith("{")||!text.endsWith("}"))throw new IOException("invalid manifest JSON");
+  text=text.substring(1,text.length()-1);
+  Map<String,String> result=new HashMap<>();int pos=0;
+  while(pos<text.length()){
+   java.util.regex.Matcher match=token.matcher(text);match.region(pos,text.length());
+   if(!match.lookingAt()||result.putIfAbsent(match.group(1),match.group(2))!=null)
+    throw new IOException("invalid/duplicate manifest field");
+   pos=match.end();if(pos==text.length())break;
+   if(text.charAt(pos++)!=','||pos==text.length())throw new IOException("invalid manifest separator");
+  }
+  return result;
  }
 
  public static StudentPolicy loadRecovering(File file, TaskSchema expectedSchema) throws IOException {
