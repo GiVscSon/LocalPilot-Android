@@ -76,7 +76,7 @@ def validate(directory: pathlib.Path) -> dict:
         raise ValueError("training does not cover all ten games")
 
     evaluations = {}
-    for name in ("random", "lab-policy"):
+    for name in ("random", "lab-policy", "scripted"):
         filename = directory / f"evaluation-{name}.csv"
         counts = {game: [0, 0] for game in GAMES}
         with filename.open(encoding="utf-8", newline="") as handle:
@@ -113,15 +113,19 @@ def validate(directory: pathlib.Path) -> dict:
             raise ValueError("training sample count inconsistent")
         a = evaluations["random"][game]
         b = evaluations["lab-policy"][game]
+        c = evaluations["scripted"][game]
         for key in ("random_change_rate", "lab_change_rate",
-                    "delta_percentage_points", "random_mean_score",
-                    "lab_mean_score"):
+                    "scripted_change_rate", "delta_percentage_points",
+                    "random_mean_score", "lab_mean_score",
+                    "scripted_mean_score"):
             if not math.isfinite(float(row[key])):
                 raise ValueError("nonfinite game metric")
         if abs(row["random_change_rate"] - 100 * a[1] / a[0]) > 0.002:
             raise ValueError("random change rate not supported by CSV")
         if abs(row["lab_change_rate"] - 100 * b[1] / b[0]) > 0.002:
             raise ValueError("learned change rate not supported by CSV")
+        if abs(row["scripted_change_rate"] - 100 * c[1] / c[0]) > 0.002:
+            raise ValueError("scripted change rate not supported by CSV")
         delta = row["lab_change_rate"] - row["random_change_rate"]
         if abs(delta - row["delta_percentage_points"]) > 0.002:
             raise ValueError("evaluation delta mismatch")
