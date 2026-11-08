@@ -33,6 +33,32 @@ public final class GridPuzzleSessionTest {
   GridPuzzleSession paused=s;illegal(()->paused.sent(a,4100),"paused controller sent an automatic retry");
   s.reset();check(!s.paused()&&!s.pending()&&s.verifiedChanges()==0&&s.status()==GridPuzzleSession.Status.WAIT_STABLE,"explicit reset clears the session");
 
+  GridPuzzleSession stalled=ready();stalled.sent(board(),1200);stalled.acknowledge(1250);
+  stalled.observe(3,3,board(),1500,1500);
+  stalled.observe(3,3,board(),1600,1600);
+  check(stalled.observe(3,3,board(),3700,3700)==GridPuzzleSession.Status.PAUSED,
+    "unchanged full frames and ACK reach bounded final pause");
+  check(stalled.unchangedAtTimeout()&&stalled.acknowledged(),
+    "final timeout independently proves no visual response, not success");
+  check(!stalled.restartObservationAfterUnchangedAck(false),
+    "cannot restart without first quarantining failed move");
+  check(stalled.restartObservationAfterUnchangedAck(true),
+    "quarantined ACKed unchanged action may restart read-only observation");
+  check(!stalled.pending()&&stalled.verifiedChanges()==0,
+    "restart is not a verified move and never retains an old pending action");
+  GridPuzzleSession waitingStalled=stalled;
+  illegal(()->waitingStalled.sent(board(),3750),
+    "recovered loop cannot issue an action before two new frames");
+  check(stalled.observe(3,3,board(),3800,3800)==GridPuzzleSession.Status.WAIT_STABLE,
+    "first post-stall frame only primes the reader");
+  check(stalled.observe(3,3,board(),3900,3900)==GridPuzzleSession.Status.READY,
+    "second fresh frame independently validates current board");
+  GridPuzzleSession noAck=ready();noAck.sent(board(),1200);
+  noAck.observe(3,3,board(),1500,1500);noAck.observe(3,3,board(),1600,1600);
+  noAck.observe(3,3,board(),3700,3700);
+  check(!noAck.restartObservationAfterUnchangedAck(true),
+    "missing ACK must remain paused after timeout");
+
   GridPuzzleSession interrupted=ready();interrupted.sent(board(),1200);interrupted.invalidateCandidate();
   check(interrupted.pending()&&!interrupted.acknowledged()&&interrupted.status()==GridPuzzleSession.Status.WAIT_RESPONSE,"focus loss preserves unresolved gesture without inventing ACK");
   int[] changed=board();changed[0]=4;interrupted.observe(3,3,changed,1500,1500);
