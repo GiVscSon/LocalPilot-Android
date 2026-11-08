@@ -14,6 +14,15 @@
   }
   return {frame,pixelHash:hash|0,buttons,features};
  }
- root.nesObservation=nesObservation;
- if(typeof module!=='undefined'&&module.exports)module.exports={nesObservation};
+ class NesFrameSampler{
+  constructor(){this.lastFrame=-1;this.seenFrame=-1;this.buttons=-1;}
+  sample(rgb,frame,buttons){
+   if(!Number.isSafeInteger(frame)||frame<0||frame<=this.seenFrame)return null;
+   this.seenFrame=frame;
+   if(buttons===this.buttons&&frame-this.lastFrame<15)return null;
+   const result=nesObservation(rgb,frame,buttons);this.lastFrame=frame;this.buttons=buttons;return result;
+  }
+ }
+ root.nesObservation=nesObservation;root.NesFrameSampler=NesFrameSampler;
+ if(typeof module!=='undefined'&&module.exports)module.exports={nesObservation,NesFrameSampler};
 })(typeof window!=='undefined'?window:{});
