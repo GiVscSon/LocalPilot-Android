@@ -21,6 +21,15 @@ public final class WindowFocus {
   if(lostAt<0)lostAt=now;
   return State.WAITING;
  }
+ /** Offscreen OEM accessibility metadata: pause only when the SAME window still
+  * has its bound dimensions. Never translate a bad rectangle into gesture coordinates.
+  * This is not evidence of correct focused window or a verified game frame.
+  */
+ public static boolean impossibleScreenOffset(int left,int top,int right,int bottom,
+                                               int screenWidth,int screenHeight){
+  if(screenWidth<=0||screenHeight<=0||right<=left||bottom<=top)return false;
+  return left>=screenWidth||top>=screenHeight||right<=0||bottom<=0;
+ }
  /** An interrupted arcade gesture cannot be safely recovered by dropping feedback. */
  public static boolean interruptedArcade(boolean playingArcade,boolean arcadePending,boolean jumperPending){return playingArcade&&(arcadePending||jumperPending);}
  public static boolean interrupted2048(boolean playing,boolean pending){return playing&&pending;}

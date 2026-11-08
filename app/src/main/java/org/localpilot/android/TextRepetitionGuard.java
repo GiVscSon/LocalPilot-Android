@@ -5,7 +5,19 @@ package org.localpilot.android;
  * looping response from being treated as an actionable game instruction.
  */
 public final class TextRepetitionGuard {
- private TextRepetitionGuard(){}
+ /** Instance-level loop veto for an optional external teacher; never issues input. */
+ public TextRepetitionGuard(){}
+ private String lastAction="";
+ private int consecutive;
+ /** Accept no more than two identical action strings in a row.
+  * The result is only a veto; it is never authority to dispatch a gesture. */
+ public synchronized boolean checkAndRecord(String action){
+  if(inspect(action)!=Result.OK)return false;
+  String normalized=action.trim().toLowerCase(java.util.Locale.ROOT);
+  consecutive=normalized.equals(lastAction)?Math.min(3,consecutive+1):1;
+  lastAction=normalized;
+  return consecutive<=2;
+ }
  public enum Result { OK, EMPTY, TOO_LONG, REPEATED_BLOCK, REPEATED_WORD }
  public static Result inspect(String text){
   if(text==null||text.isBlank())return Result.EMPTY;

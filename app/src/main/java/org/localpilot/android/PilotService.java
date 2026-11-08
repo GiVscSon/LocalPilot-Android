@@ -98,6 +98,7 @@ public class PilotService extends AccessibilityService {
  private BubbleBoard trainingPreviousBubble;private int trainingBubbleStable;
  private float learnedBubbleLauncher=Float.NaN;
  private boolean playingMini;private int miniKind,miniAction;private long miniMoves;private int[] miniBefore;private Rect boardRoi;private View picker;private boolean playing2048=false,colored2048=false,captureBusy=false;private long moves2048;private long captureCounter,pendingCapture,lastShotTimestamp=-1;private long mergeTotal;private Board2048 before2048;private int direction2048;private AlertDialog preview,overlayDialog;
+ private final Board2048StallRecovery board2048Stalls=new Board2048StallRecovery();
  private final CaptureStartup captureStartup=new CaptureStartup();
  private final SceneRecovery sceneRecovery=new SceneRecovery();
  /** Shared frame authority for MediaProjection and screenshot game sessions. */
@@ -118,6 +119,32 @@ public class PilotService extends AccessibilityService {
  private final PixelBoardLocator.Stability boardSearch=new PixelBoardLocator.Stability();
  private int panelCoverRecoveryAttempts;
  private int boardReadMisses;private long boardReadGeneration;
+ /** Recover at most two independently proved no-response grid gestures per visual run. */
+ private int gridSoftRecoveries;
+ private GameScriptCatalog gameScripts;
+ /** Signed-APK script routes only. Scripts never contain executable Android code. */
+ private GameScriptCatalog.Route scriptedRoute(int profile){
+  if(gameScripts==null){
+   try(java.io.InputStream source=getAssets().open("localpilot-game-script.lps");
+       java.io.InputStreamReader reader=new java.io.InputStreamReader(source,java.nio.charset.StandardCharsets.UTF_8)){
+    gameScripts=GameScriptCatalog.parse(reader);
+   }catch(java.io.IOException|RuntimeException invalid){
+    note="SCRIPT_INVALID: сценарий не проверен, ввод выключен";update();return null;
+   }
+  }
+  return gameScripts.route(profile);
+ }
+ private boolean requireScriptController(GameScriptCatalog.Controller expected){
+  GameScriptCatalog.Route route=scriptedRoute(selectedProfile);
+  if(route==null||route.controller()!=expected){
+   stop("SCRIPT_CONTROLLER_MISMATCH: выберите подтверждённую механику");return false;
+  }
+  return true;
+ }
+ private int gridScriptStallBudget(){
+  GameScriptCatalog.Route route=gameScripts==null?null:gameScripts.route(selectedProfile);
+  return route==null?0:route.softStalls();
+ }
  private final WindowFocus windowFocus=new WindowFocus();
  private volatile boolean focusPaused;private boolean focusWatch;private long focusRecoveredAt,focusWatchId;
  private volatile long captureSession;
@@ -372,8 +399,11 @@ public class PilotService extends AccessibilityService {
    if(unsupportedGame||VisualGameTarget.requiresProfileChoice(saved,targetIsBrowser,browserProfileConfirmed&&profileChoiceKey(target).equals(confirmedProfileScope))){chooseProfile();return;}
    if(selectedProfile!=saved){selectedProfile=saved;visualRoi=null;manualVisualRoi=false;boardRoi=null;}
   }
-  if(selectedProfile==9){startBubble();return;}
-  if(gridSelected()){startGrid();return;}
+  GameScriptCatalog.Route script=scriptedRoute(selectedProfile);
+  if(script==null){stop("SCRIPT_ROUTE_UNAVAILABLE: жесты запрещены");return;}
+  // Script selects the controller; native policy and ActionGate still verify EVERY gesture.
+  if(script.controller()==GameScriptCatalog.Controller.BUBBLE){startBubble();return;}
+  if(script.controller().grid()){startGrid();return;}
   if(playingJumper&&(arcadeFeedback.paused()||jumperResponsePaused)&&selectedProfile<4&&ArcadeProfile.values()[selectedProfile]==captureProfile){
    if(busy){note="Дождитесь завершения касания";update();return;}
    arcadeController.reset();if(arcadeLearning!=null)arcadeController.restore(arcadeLearning.get(target,modelSlot,captureProfile));installRealGameNeural(captureProfile);arcadeFeedback.reset();jumperFeedback.reset();jumperProgressGuard.reset();arcadePending=null;arcadeBefore=null;arcadeAck=false;arcadeLastUsable=null;sceneRecovery.reset();jumperResponsePaused=false;jumperResponseFailures=0;jumperAwaitingVerification=false;
@@ -733,6 +763,12 @@ public class PilotService extends AccessibilityService {
   }catch(RuntimeException|OutOfMemoryError ignored){lastSessionReport="Сеанс остановлен; метаданные недоступны";}
   if(playingGrid&&selectedProfile==9)
    lastBubbleSessionReport=bubbleSession.report()+" decision="+bubbleDecisionReason;
+  // Stable, non-identifying event for script-driven Termux/Windows diagnosis.
+  // Never log game package, raw user message, screenshot or ROI coordinates.
+  android.util.Log.i("LocalPilotStop","STOP code="+AuditStopCode.from(reason)
+    +" epoch="+stopEpoch+" profile="+selectedProfile+" sent="+captureSent
+    +" ack="+captureCompleted+" grid_verified="+gridVerified);
+  board2048Stalls.reset();
   permit.revoke();gate.stop();browserSceneGate.reset();visionV2.reset();visionV2Snapshot=null;
   rebindGeneration++;rebindStability.reset();
   if(playingJumper)CrashDiagnostics.captureStopped();
@@ -780,6 +816,14 @@ public class PilotService extends AccessibilityService {
       +" displayGeometry="+(geometry==null?"unavailable":geometry.width()+"x"+geometry.height()+"/rotation="+geometry.rotation())
       +" timestamp_ms="+System.currentTimeMillis()+" uptimeMillis="+lastBoundsRejectionUptimeMs
       +" session_epoch="+lastBoundsRejectionEpoch;
+    // Android 16/MIUI sometimes reports [0,H][W,2H] for the SAME
+    // accessibility window on a W×H display. Do not normalize or act on
+    // this rectangle. Use the existing bounded read-only focus watcher;
+    // any in-flight unverified action still hard-stops in deferFocus().
+    if(geometry!=null&&gate.matches(pkg,id,bounds.width(),bounds.height())
+      &&WindowFocus.impossibleScreenOffset(bounds.left,bounds.top,bounds.right,bounds.bottom,
+        geometry.width(),geometry.height()))
+     return "WINDOW_STATE_UNAVAILABLE";
     return "TARGET_BOUNDS_CHANGED";
    }
    long now=SystemClock.elapsedRealtime();
@@ -827,6 +871,7 @@ public class PilotService extends AccessibilityService {
    captureBusy=false;pendingCapture=++captureCounter;
    if(visionPending&&visionTask!=null){visionTask.cancel(true);visionTask=null;}visionPending=false;visionRequest++;
    gridSession.invalidateCandidate();bubbleSession.invalidateCandidate();
+   android.util.Log.i("LocalPilotStop","PAUSE code="+reason+" epoch="+gate.epoch()+" input=disabled");
    note="Фокус временно потерян · ввод приостановлен, захват сохранён";update();
   }
   if(!focusWatch){focusWatch=true;long epoch=gate.epoch(),watch=++focusWatchId;handler.postDelayed(()->watchFocus(epoch,watch),75);}
@@ -843,6 +888,7 @@ public class PilotService extends AccessibilityService {
    handler.postDelayed(()->watchFocus(epoch,watch),75);return;
   }
   gate.resume();focusPaused=false;focusWatch=false;focusWatchId++;focusRecoveredAt=SystemClock.elapsedRealtime();
+  android.util.Log.i("LocalPilotStop","RECOVER focus=verified epoch="+epoch+" old_tickets=invalid");
   note="Прежнее окно восстановлено · ожидаю свежий кадр";update();
   if(playingGrid)scheduleGrid(epoch);
   else if(playing2048)postBoardTask(epoch,captureDelay(),()->round2048(epoch));
@@ -921,6 +967,7 @@ public class PilotService extends AccessibilityService {
  private void startJumper(){startVisualArcade(ArcadeProfile.ARI);}
  private void startVisualArcade(ArcadeProfile profile){
   if(busy||captureBusy||discoveringBoard||autoLeft>0||playing2048||playingMini||playingJumper||playingGrid){note="Сначала остановите другой режим";update();return;}
+  if(profile==null||!requireScriptController(GameScriptCatalog.Controller.valueOf(profile.name())))return;
   if(explicitWindow&&(!gate.armed()||!valid(gate.offer(SystemClock.elapsedRealtime())))){note="Выбранное окно недоступно · выберите Окно снова";update();return;}
   if(!gate.armed()||!valid(gate.offer(SystemClock.elapsedRealtime())))arm();
   if(!gate.armed()||!unlocked()){note="Откройте игру, выберите её окно и подходящий профиль на панели";update();return;}
@@ -1143,6 +1190,7 @@ public class PilotService extends AccessibilityService {
  }
  private void startBubble(){
   if(playingGrid&&bubbleSession.paused()){stop("Повторная проверка Шипучки");if(!bindSelectedWindow())return;}
+  if(!requireScriptController(GameScriptCatalog.Controller.BUBBLE))return;
   if(busy||captureBusy||discoveringBoard||autoLeft>0||playing2048||playingMini||playingJumper||playingGrid){note="Сначала остановите текущий режим";update();return;}
   if(!VisualGameTarget.allowed(target,getPackageName())){note="Выберите окно сторонней игры";update();return;}
   loadBubbleRegion();
@@ -1212,6 +1260,8 @@ public class PilotService extends AccessibilityService {
  }
  private void startGrid(){
   if(playingGrid&&gridSession.paused()){stop("Повторная проверка поля");if(!bindSelectedWindow())return;}
+  GameScriptCatalog.Route script=scriptedRoute(selectedProfile);
+  if(script==null||!script.controller().grid()){stop("SCRIPT_CONTROLLER_MISMATCH: сетка требует совместимого сценария");return;}
   if(busy||captureBusy||discoveringBoard||autoLeft>0||playing2048||playingMini||playingJumper||playingGrid){note="Сначала остановите текущий режим";update();return;}
   if(!VisualGameTarget.allowed(target,getPackageName())){note="Выберите окно сторонней игры";update();return;}
   loadGridConfig();if(!manualVisualRoi||visualRoi==null||!armedBounds.contains(visualRoi)){note="Область → обведите только клетки сетки "+gridConfig.rows+"×"+gridConfig.cols;update();return;}
@@ -1227,6 +1277,7 @@ public class PilotService extends AccessibilityService {
   try{gridGoal=GridPuzzleGoal.Color.valueOf(getSharedPreferences("grid-puzzle",MODE_PRIVATE).getString(gridKey()+".goal","ANY"));}catch(IllegalArgumentException error){gridGoal=GridPuzzleGoal.Color.ANY;}
   loadVisionTraining();
   gridAdaptiveCandidate=null;gridAdaptiveFrames=gridUnknownStreak=0;
+  gridSoftRecoveries=0;
   gridSession.reset();clearRetainedGridFrame();gridUnknownReasons="none";gridReasonDetails="none";gridLastStatus="WAIT_STABLE";gridReview="Ожидаю чтение текущей сетки.";gridMoves=gridVerified=0;gridResultVisible=gridSawAction=false;playingGrid=true;clearDiagnosticFrame();captureFrames=captureReads=captureDecisions=captureSent=captureCompleted=0;
   gridPendingDecision=null;gridPendingBoard=null;gridPendingSpecial=null;
   GridOnlineLearning previousLearning=gridLearning;gridLearning=new GridOnlineLearning();
@@ -1319,10 +1370,22 @@ public class PilotService extends AccessibilityService {
      note="Ожидаю завершения анимации · наблюдение без ввода";update();scheduleGrid(epoch);return;
     }
     if(gridPendingDecision!=null)incrementGridStat("unconfirmed");
+    boolean quarantined=false;
     if(gridPendingDecision!=null&&gridSession.acknowledged()){
      if(gridSession.unchangedAtTimeout()){gridLearning.recordNoResponse(gridPendingDecision);saveGridLearning();}
-     if(gridSession.unchangedAtTimeout()&&gridPendingBoard!=null&&gridPendingSpecial!=null
-       &&gridLearning.avoidUnchangedMove(gridPendingBoard,new GridPuzzle(gridConfig.rows,gridConfig.cols,observedCells),gridPendingSpecial,observation.specialCellsMask(),gridPendingDecision))gridAvoidScope=gridPendingScope;
+     if(gridSession.unchangedAtTimeout()&&observation.usable()&&unknownCount==0&&gridPendingBoard!=null&&gridPendingSpecial!=null
+       &&gridLearning.avoidUnchangedMove(gridPendingBoard,new GridPuzzle(gridConfig.rows,gridConfig.cols,observedCells),gridPendingSpecial,observation.specialCellsMask(),gridPendingDecision)){
+      gridAvoidScope=gridPendingScope;quarantined=true;
+     }
+    }
+    // No reward and no retry of the failed move. Re-prime the reader with TWO
+    // new frames before trying a different, independently legal action.
+    // An unacknowledged/unknown/partial gesture never reaches this path.
+    if(!busy&&gridSoftRecoveries<gridScriptStallBudget()&&gridSession.restartObservationAfterUnchangedAck(quarantined)){
+     gridSoftRecoveries++;gridPendingDecision=null;gridPendingBoard=null;gridPendingSpecial=null;
+     android.util.Log.i("LocalPilotStop","RECOVER GRID no_response=quarantined ack=observed attempts="+gridSoftRecoveries);
+     note="Ход не ответил; исключил его для этой сетки · ищу другой по новым кадрам ("+gridSoftRecoveries+"/2)";
+     update();scheduleGrid(epoch);return;
     }
     gridPendingDecision=null;gridPendingBoard=null;gridPendingSpecial=null;
     note=(gridSession.acknowledged()?"Android завершил жест, но игра не подтвердила ход":"Нет подтверждения Android для жеста")+" · продолжаю наблюдение без ввода. Старт — повторная проверка";
@@ -1344,7 +1407,7 @@ public class PilotService extends AccessibilityService {
     if(!audit(SafeJournal.Event.VERIFIED_GRID,0,gridVerified+1)){
      stop("Не удалось записать подтверждение изменения сетки");return;
     }
-    gridVerified++;incrementGridStat("visual_changes");
+    gridSoftRecoveries=0;gridVerified++;incrementGridStat("visual_changes");
     if(gridPendingDecision!=null){
      // Store only the stable, visually verified transition, never raw ACK.
      if(gridPendingBoard!=null&&gridPendingDecision.mode==GridPuzzlePolicy.Mode.SWAP_MATCH3
@@ -2293,7 +2356,11 @@ public class PilotService extends AccessibilityService {
     failStage(StageMetrics.Stage.CAPTURE,"SCREENSHOT_TIMEOUT","Захват: повторный таймаут, STOP без ввода");
   }},4000);
  }
- private long captureDelay(){return Build.VERSION.SDK_INT>=31?400:1100;}
+ private long captureDelay(){
+  long platform=Build.VERSION.SDK_INT>=31?400:1100;
+  GameScriptCatalog.Route route=gameScripts==null?null:gameScripts.route(selectedProfile);
+  return route==null?platform:Math.max(platform,route.minimumFrameMs());
+ }
  private void stable(long epoch,BoardResult result){
   long generation=boardReadGeneration;
   screenshot(epoch,(a,t,ms)->{
@@ -2316,6 +2383,8 @@ public class PilotService extends AccessibilityService {
    stop("AUTO_BOARD_GEOMETRY: 2048 требует минимум 160 пикселей и разницу сторон до 8%");return;
   }
   loadVisionTraining();
+  if(!requireScriptController(GameScriptCatalog.Controller.BOARD2048))return;
+  board2048Stalls.reset();
   boardReadGeneration++;boardReadMisses=0;moves2048=0;colorSession.reset();colorSession.setStrictMode(strictVision);before2048=null;colored2048=colored;
   if(colored2048||selectedProfile==4&&VisualGameTarget.legacyMarket(target)){String saved=getSharedPreferences("color-2048",MODE_PRIVATE).getString(color2048PaletteKey(),null);if(saved!=null)try{colorSession.restoreLearned(saved);}catch(IllegalArgumentException invalidPalette){note="Сохранённая цветовая палитра повреждена · начинаю с базовых плиток";}}
   long epoch=gate.epoch(),generation=boardReadGeneration;playing2048=true;compact(true);note=colored2048?"Читаю цветное поле 2048 · изучено цветов "+colorSession.learnedCount():"Читаю поле в памяти…";update();
@@ -2343,20 +2412,41 @@ public class PilotService extends AccessibilityService {
   if(epoch!=gate.epoch()||!playing2048||focusPaused)return;
   stable(epoch,(board,ticket,captureMs)->{
    if(epoch!=gate.epoch()||!playing2048)return;
-   if(before2048!=null&&!before2048.verifies(board,direction2048)){Board2048.Verification why=before2048.verification(board,direction2048);note="2048: Android завершил жест · "+(why==Board2048.Verification.UNCHANGED?"поле не изменилось":why==Board2048.Verification.MISSING_SPAWN?"нет ожидаемой новой плитки":"поле отличается от расчёта")+" · наблюдаю без ввода";update();long generation=boardReadGeneration;handler.postDelayed(()->{if(epoch==gate.epoch()&&generation==boardReadGeneration&&playing2048&&!focusPaused)round2048(epoch);},Math.max(1000,captureDelay()));return;}
-   if(before2048!=null){if(!saveExample("2048",before2048.cells,direction2048,board.cells))return;mergeTotal+=Verified2048.mergeReward(before2048,direction2048,board);if(!audit(SafeJournal.Event.VERIFIED_2048,0,mergeTotal)){stop("Ошибка журнала результатов");return;}before2048=null;}
+   if(before2048!=null&&!before2048.verifies(board,direction2048)){
+    Board2048.Verification why=before2048.verification(board,direction2048);
+    if(why==Board2048.Verification.UNCHANGED){
+     GameScriptCatalog.Route route=gameScripts==null?null:gameScripts.route(selectedProfile);
+     int allowed=route==null?0:route.softStalls();
+     Board2048StallRecovery.Next plan=board2048Stalls.unchanged(board,epoch,SystemClock.elapsedRealtime(),allowed);
+     if(plan==Board2048StallRecovery.Next.STOP){
+      stop("2048: несколько ходов не дали визуального ответа · проверьте область и жесты");return;
+     }
+     if(plan==Board2048StallRecovery.Next.REPLAN_READ_ONLY){
+      before2048=null;
+      android.util.Log.i("LocalPilotStop","RECOVER 2048 no_response=quarantined ack=observed");
+      note="2048: направление не ответило · исключаю его и перечитываю поле без ввода";
+      update();long generation=boardReadGeneration;
+      handler.postDelayed(()->{if(epoch==gate.epoch()&&generation==boardReadGeneration&&playing2048&&!focusPaused)round2048(epoch);},captureDelay());
+      return;
+     }
+    }
+    note="2048: Android завершил жест · "+(why==Board2048.Verification.UNCHANGED?"поле не изменилось":why==Board2048.Verification.MISSING_SPAWN?"нет ожидаемой новой плитки":"поле отличается от расчёта")+" · наблюдаю без ввода";update();long generation=boardReadGeneration;handler.postDelayed(()->{if(epoch==gate.epoch()&&generation==boardReadGeneration&&playing2048&&!focusPaused)round2048(epoch);},Math.max(1000,captureDelay()));return;}
+   if(before2048!=null){board2048Stalls.verified();if(!saveExample("2048",before2048.cells,direction2048,board.cells))return;mergeTotal+=Verified2048.mergeReward(before2048,direction2048,board);if(!audit(SafeJournal.Event.VERIFIED_2048,0,mergeTotal)){stop("Ошибка журнала результатов");return;}before2048=null;}
    if(board.max()>=2048){stop("2048: распознана плитка 2048; сверить визуально");return;}
    if(targetIsBrowser&&!browserSceneGate.observe(SystemClock.elapsedRealtime()-Math.max(0,SystemClock.uptimeMillis()-lastShotTimestamp),true)){
     note="2048: перепроверяю сцену браузера · без ввода";update();long generation=boardReadGeneration;
     handler.postDelayed(()->{if(epoch==gate.epoch()&&generation==boardReadGeneration&&playing2048&&!focusPaused)round2048(epoch);},captureDelay());return;
    }
-   metrics.attempt(StageMetrics.Stage.POLICY);long policyNs=SystemClock.elapsedRealtimeNanos();long started=SystemClock.elapsedRealtime();int d;try{d=board.choose();}catch(RuntimeException error){failStage(StageMetrics.Stage.POLICY,"POLICY_FAILED","Не удалось выбрать ход");return;}metrics.record(StageMetrics.Stage.POLICY,SystemClock.elapsedRealtimeNanos()-policyNs);long think=SystemClock.elapsedRealtime()-started;if(d<0){stop("2048: допустимых ходов нет");return;}if(!Verified2048.mask(board)[d]){stop("2048: ход вне маски");return;}if(!valid(ticket)){if(deferFocus(invalidReason(ticket)))return;stop("План устарел");return;}
+   metrics.attempt(StageMetrics.Stage.POLICY);long policyNs=SystemClock.elapsedRealtimeNanos();long started=SystemClock.elapsedRealtime();int d;try{d=board.chooseAvoiding(board2048Stalls.failedMask(board,epoch));}
+   catch(RuntimeException error){failStage(StageMetrics.Stage.POLICY,"POLICY_FAILED","Не удалось выбрать ход");return;}metrics.record(StageMetrics.Stage.POLICY,SystemClock.elapsedRealtimeNanos()-policyNs);long think=SystemClock.elapsedRealtime()-started;if(d<0){stop(board2048Stalls.failedMask(board,epoch)!=0?"2048: альтернативные подтверждаемые направления закончились · проверьте ROI и управление":"2048: допустимых ходов нет");return;}if(!Verified2048.mask(board)[d]){stop("2048: ход вне маски");return;}if(!valid(ticket)){if(deferFocus(invalidReason(ticket)))return;stop("План устарел");return;}
    Rect r=new Rect(boardRoi);float x=r.exactCenterX(),y=r.exactCenterY(),dx=0,dy=0;switch(d){case Board2048.LEFT:dx=-r.width()*.30f;break;case Board2048.RIGHT:dx=r.width()*.30f;break;case Board2048.UP:dy=-r.height()*.30f;break;case Board2048.DOWN:dy=r.height()*.30f;break;}
+   try{board2048Stalls.sent(board,d,epoch,SystemClock.elapsedRealtime());}
+   catch(IllegalArgumentException rejected){stop("2048: скрипт отклонил повтор неответившего направления");return;}
    before2048=board;direction2048=d;moves2048++;uiStats="кадр "+captureMs+" мс · CPU "+think+" мс · проверено "+(moves2048-1);note="Ход "+moves2048+" · max "+board.max()+" · кадр "+captureMs+"мс · CPU "+think+"мс";update();
    long sentBefore=dispatchedInputs;
-   send(x-dx/2,y-dy/2,x+dx/2,y+dy/2,ticket,()->{note="Проверяю исход хода "+moves2048;update();long generation=boardReadGeneration;handler.postDelayed(()->{if(generation==boardReadGeneration)round2048(epoch);},captureDelay());});
+   send(x-dx/2,y-dy/2,x+dx/2,y+dy/2,ticket,()->{board2048Stalls.ack(epoch,SystemClock.elapsedRealtime());note="Проверяю исход хода "+moves2048;update();long generation=boardReadGeneration;handler.postDelayed(()->{if(generation==boardReadGeneration)round2048(epoch);},captureDelay());});
    if(dispatchedInputs==sentBefore&&playing2048&&epoch==gate.epoch()){
-    before2048=null;moves2048--;long generation=boardReadGeneration;
+    board2048Stalls.cancelledUnsent(epoch);before2048=null;moves2048--;long generation=boardReadGeneration;
     if(!focusPaused)handler.postDelayed(()->{if(generation==boardReadGeneration)round2048(epoch);},captureDelay());
    }
   });

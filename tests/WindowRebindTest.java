@@ -27,6 +27,25 @@ public final class WindowRebindTest {
   check(grace.observe(11,"TARGET_WINDOW_UNAVAILABLE",1000,true)==WindowFocus.State.WAITING,"temporary visible focus loss");
   check(grace.observe(11,null,2500,true)==WindowFocus.State.ACTIVE,"recovered identity resets wait");
   check(grace.observe(12,"TARGET_BOUNDS_CHANGED",2600,true)==WindowFocus.State.STOP,"changed bounds never get focus grace");
-  System.out.println("Window rebind stability and focus grace: 20 assertions PASS");
+  check(WindowFocus.impossibleScreenOffset(0,2712,1220,5424,1220,2712),
+    "same-size y offset beyond screen is unusable metadata");
+  check(WindowFocus.impossibleScreenOffset(1220,0,2440,2712,1220,2712),
+    "same-size x offset beyond screen is unusable metadata");
+  check(!WindowFocus.impossibleScreenOffset(0,0,1220,2712,1220,2712),
+    "valid full window remains valid");
+  check(!WindowFocus.impossibleScreenOffset(0,2700,1220,3100,1220,2712),
+    "partly visible bounds require explicit mismatch handling");
+  check(!WindowFocus.impossibleScreenOffset(0,0,1220,2712,0,2712),
+    "unknown screen geometry cannot authorize recovery");
+  WindowFocus transientOffset=new WindowFocus();
+  check(transientOffset.observe(16,"WINDOW_STATE_UNAVAILABLE",1000,false)==WindowFocus.State.WAITING,
+    "invalid metadata only pauses; never grants gesture");
+  check(transientOffset.observe(16,null,1250,false)==WindowFocus.State.ACTIVE,
+    "original window resumes only on new matching observation");
+  check(transientOffset.observe(16,"WINDOW_STATE_UNAVAILABLE",1500,false)==WindowFocus.State.WAITING,
+    "new temporary loss gets own bounded wait");
+  check(transientOffset.observe(16,"WINDOW_STATE_UNAVAILABLE",2100,false)==WindowFocus.State.STOP,
+    "persistent offset still hard-stops at 600ms");
+  System.out.println("Window rebind stability, offscreen metadata and focus grace: PASS");
  }
 }

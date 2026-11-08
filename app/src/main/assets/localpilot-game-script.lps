@@ -1,0 +1,31 @@
+LPS1
+# Real-game policy selection; native vision, verification and ActionGate always decide whether any gesture is legal.
+route|0|ARI|VISUAL_REAL|0|250
+route|1|PADDLE|VISUAL_REAL|0|140
+route|2|TRAFFIC|VISUAL_REAL|0|140
+route|3|FLAPPY|VISUAL_REAL|0|180
+route|4|BOARD2048|VISUAL_REAL|2|400
+route|5|BOARD2048|VISUAL_REAL|2|400
+route|6|GRID_SWAP|VISUAL_REAL|2|400
+route|7|GRID_GROUP|VISUAL_REAL|2|400
+route|9|BUBBLE|VISUAL_REAL|0|400
+route|10|GRID_TRACE|VISUAL_REAL|2|400
+route|11|GRID_PROTECTED|VISUAL_REAL|2|400
+# All sixteen simulation models share the same outcome-provenance boundary.
+# Hexon and Kotobashnya have no verified matching real-game controller yet.
+model|shipuchka|BUBBLE|SIM_ONLY
+model|prygun_ari|ARI|SIM_ONLY
+model|match_world|GRID_SWAP|SIM_ONLY
+model|karkanoid|PADDLE|SIM_ONLY
+model|market_rush|TRAFFIC|SIM_ONLY
+model|goshan|FLAPPY|SIM_ONLY
+model|game_2048|BOARD2048|SIM_ONLY
+model|hexon|SIM_ONLY|SIM_ONLY
+model|nashchupay_khod|GRID_PROTECTED|SIM_ONLY
+model|kotobashnya|SIM_ONLY|SIM_ONLY
+model|nes_platformer|SIM_ONLY|SIM_ONLY
+model|nes_tactical_arena|SIM_ONLY|SIM_ONLY
+model|dos_platform_explorer|SIM_ONLY|SIM_ONLY
+model|dos_corridor_action|SIM_ONLY|SIM_ONLY
+model|sega_high_speed_act|SIM_ONLY|SIM_ONLY
+model|sega_brawler_rungun|SIM_ONLY|SIM_ONLY
