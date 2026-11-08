@@ -52,6 +52,22 @@ jobs:
         run: |
           node tests/jsnes_nes_smoke.cjs build/nes-gym/core/package/dist/jsnes.min.js build/nes-gym/training.nes
           node tests/nes_training_contract.cjs build/nes-gym/core/package/dist/jsnes.min.js build/nes-gym/training.nes
+      - name: Capture reusable reward-free NES PPU dataset
+        run: |
+          node tests/nes_record_contract.cjs build/nes-gym/core/package/dist/jsnes.min.js build/nes-gym/training.nes
+          mkdir -p build/nes-gym/learned
+          node tools/nes-agent/record.cjs --core build/nes-gym/core/package/dist/jsnes.min.js --rom build/nes-gym/training.nes --output build/nes-gym/learned/nes-ppu-dataset.jsonl --steps 24
+          python3 - <<'PY'
+          import json,pathlib
+          lines=pathlib.Path("build/nes-gym/learned/nes-ppu-dataset.jsonl").read_text().splitlines()
+          assert len(lines)==24
+          for raw in lines:
+            row=json.loads(raw)
+            assert row["reward"] is None and row["terminal"] is None
+            assert row["origin"]=="NES_EMULATED_PPU_ONLY" and row["market_verified"] is False
+            assert len(row["observation"])==960
+          print("NES_GENERIC_DATASET_NO_REWARD_PASS")
+          PY
       - name: Train, evaluate and export episode-level NES policy
         run: |
           node tools/nes-agent/train.cjs --core build/nes-gym/core/package/dist/jsnes.min.js --rom build/nes-gym/training.nes --output build/nes-gym/learned --episodes 160
@@ -76,5 +92,6 @@ jobs:
           path: |
             build/nes-gym/learned/nes-policy.json
             build/nes-gym/learned/nes-episodes.jsonl
+            build/nes-gym/learned/nes-ppu-dataset.jsonl
           if-no-files-found: error
           retention-days: 14
