@@ -1,5 +1,7 @@
 package org.localpilot.android;
 import org.localpilot.shared.HubContract;
+import org.localpilot.android.learning.BundledModelInstaller;
+import org.localpilot.android.learning.AdaptiveLearningEngine;
 import android.app.*;import android.os.*;import android.content.*;import android.provider.Settings;import android.widget.*;
 public class MainActivity extends Activity {
  public static final String PREF="pilot";
@@ -27,6 +29,9 @@ public class MainActivity extends Activity {
   automatic=new Switch(this);automatic.setText("Автоуправление выбранной игрой");automatic.setChecked(getSharedPreferences(PREF,MODE_PRIVATE).getBoolean("auto_control",true));automatic.setOnCheckedChangeListener((v,on)->{getSharedPreferences(PREF,MODE_PRIVATE).edit().putBoolean("auto_control",on).apply();if(PilotService.instance!=null)PilotService.instance.setAutomatic(on);});box.addView(automatic);
   button(box,"Выбрать игру или браузер",()->startActivity(new Intent(this,GamePickerActivity.class)));
   TextView autoHelp=new TextView(this);autoHelp.setText("Для сетки фишек: Игра → Мэтч Ворлд · обмен соседей или Фишки · удалить группу → выберите 6×6, 7×7 либо другой размер → обведите клетки → Старт. Настройки и типы фишек сохраняются. Поддерживаются различимые цветные фишки без специальных эффектов; цели уровня и усилители пока не распознаются. Для аркад другого оформления: Ещё → Настроить распознавание. Для разных игр одного браузера: Игра → Имя игры. STOP всегда останавливает ввод.");box.addView(autoHelp);
+  try{BundledModelInstaller.install(getFilesDir(),name->getAssets().open(name));}
+  catch(java.io.IOException failure){toast("Не удалось загрузить лабораторные модели: "+failure.getMessage());}
+  AdaptiveLearningEngine.initGlobal(getFilesDir());
   section(box,"03 · Игровая лаборатория");
   TextView labCaption=new TextView(this);
   labCaption.setText("Единый APK: 10 интерактивных симуляторов и офлайн NES/Денди. Скрипты обучают отдельные лабораторные модели. DOS: только проверка файлов, без исполнения. Симуляция не является приёмкой Маркета.");
