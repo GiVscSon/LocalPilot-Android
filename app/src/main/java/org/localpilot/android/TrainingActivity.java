@@ -87,7 +87,6 @@ public final class TrainingActivity extends Activity {
  private int dp(int n){return (int)(n*getResources().getDisplayMetrics().density);}
  private ArcadeEnv.Genre selected(){int index=genre.getSelectedItemPosition();getSharedPreferences(MainActivity.PREF,MODE_PRIVATE).edit().putInt("training_genre",index).apply();return ArcadeEnv.Genre.values()[index];}
  private Button button(LinearLayout box,String text,Runnable run){Button b=new Button(this);b.setText(text);b.setTextSize(12);b.setOnClickListener(v->run.run());box.addView(b,box.getOrientation()==LinearLayout.HORIZONTAL?new LinearLayout.LayoutParams(0,-2,1):new LinearLayout.LayoutParams(-1,-2));return b;}
- @Override protected void onResume(){super.onResume();handler.post(refresh);}
  @Override protected void onStop(){runtime.pause();handler.removeCallbacks(refresh);super.onStop();}
  private void toast(String s){Toast.makeText(this,s,Toast.LENGTH_LONG).show();}
  @Override protected void onActivityResult(int req,int result,Intent data){
@@ -112,6 +111,7 @@ public final class TrainingActivity extends Activity {
  }
  @Override protected void onResume(){
   super.onResume();
+  handler.post(refresh);
   // Embedded GameLab writes lab-only episodes when its screen closes.
   if(labReport!=null)readSavedLabExperience();
  }
