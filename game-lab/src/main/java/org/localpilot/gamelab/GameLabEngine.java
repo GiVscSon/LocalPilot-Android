@@ -94,9 +94,10 @@ public final class GameLabEngine {
       x<.5f?-.09f:.09f));playerY=clamp(playerY-.025f,.26f,.76f);}
    case CAT_TOWER -> {playerX=wrap(playerX+clamp(dx*1.3f,-.20f,.20f));
     playerY=clamp(playerY-.055f,.20f,.78f);score+=2;}
-   case BUBBLE -> {int col=(int)(clamp(toX,0,.999f)*n);
-    int row=0;while(row<n&&cells[row*n+col]!=0)row++;
-    if(row<n){cells[row*n+col]=1+launches%4;launches++;score+=3;}
+   case BUBBLE -> {
+    int launchedColor=1+launches%4;
+    GameLabBubbleRules.Shot shot=GameLabBubbleRules.fire(cells,n,launchedColor,toX*360f,toY*640f);
+    if(shot.placed()){launches++;score+=(shot.cleared()+shot.dropped())*10;}
     else rejected++;
    }
    case HEXON -> {int slot=Math.min(2,(int)(clamp(toX,0,.999f)*3));
