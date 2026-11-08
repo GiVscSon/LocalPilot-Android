@@ -118,6 +118,8 @@ public class PilotService extends AccessibilityService {
  private final PixelBoardLocator.Stability boardSearch=new PixelBoardLocator.Stability();
  private int panelCoverRecoveryAttempts;
  private int boardReadMisses;private long boardReadGeneration;
+ /** Recover at most two independently proved no-response grid gestures per visual run. */
+ private int gridSoftRecoveries;
  private final WindowFocus windowFocus=new WindowFocus();
  private volatile boolean focusPaused;private boolean focusWatch;private long focusRecoveredAt,focusWatchId;
  private volatile long captureSession;
@@ -1235,6 +1237,7 @@ public class PilotService extends AccessibilityService {
   try{gridGoal=GridPuzzleGoal.Color.valueOf(getSharedPreferences("grid-puzzle",MODE_PRIVATE).getString(gridKey()+".goal","ANY"));}catch(IllegalArgumentException error){gridGoal=GridPuzzleGoal.Color.ANY;}
   loadVisionTraining();
   gridAdaptiveCandidate=null;gridAdaptiveFrames=gridUnknownStreak=0;
+  gridSoftRecoveries=0;
   gridSession.reset();clearRetainedGridFrame();gridUnknownReasons="none";gridReasonDetails="none";gridLastStatus="WAIT_STABLE";gridReview="Ожидаю чтение текущей сетки.";gridMoves=gridVerified=0;gridResultVisible=gridSawAction=false;playingGrid=true;clearDiagnosticFrame();captureFrames=captureReads=captureDecisions=captureSent=captureCompleted=0;
   gridPendingDecision=null;gridPendingBoard=null;gridPendingSpecial=null;
   GridOnlineLearning previousLearning=gridLearning;gridLearning=new GridOnlineLearning();
@@ -1327,10 +1330,21 @@ public class PilotService extends AccessibilityService {
      note="Ожидаю завершения анимации · наблюдение без ввода";update();scheduleGrid(epoch);return;
     }
     if(gridPendingDecision!=null)incrementGridStat("unconfirmed");
+    boolean quarantined=false;
     if(gridPendingDecision!=null&&gridSession.acknowledged()){
      if(gridSession.unchangedAtTimeout()){gridLearning.recordNoResponse(gridPendingDecision);saveGridLearning();}
-     if(gridSession.unchangedAtTimeout()&&gridPendingBoard!=null&&gridPendingSpecial!=null
-       &&gridLearning.avoidUnchangedMove(gridPendingBoard,new GridPuzzle(gridConfig.rows,gridConfig.cols,observedCells),gridPendingSpecial,observation.specialCellsMask(),gridPendingDecision))gridAvoidScope=gridPendingScope;
+     if(gridSession.unchangedAtTimeout()&&observation.usable()&&unknownCount==0&&gridPendingBoard!=null&&gridPendingSpecial!=null
+       &&gridLearning.avoidUnchangedMove(gridPendingBoard,new GridPuzzle(gridConfig.rows,gridConfig.cols,observedCells),gridPendingSpecial,observation.specialCellsMask(),gridPendingDecision)){
+      gridAvoidScope=gridPendingScope;quarantined=true;
+     }
+    }
+    // No reward and no retry of the failed move. Re-prime the reader with TWO
+    // new frames before trying a different, independently legal action.
+    // An unacknowledged/unknown/partial gesture never reaches this path.
+    if(!busy&&gridSoftRecoveries<2&&gridSession.restartObservationAfterUnchangedAck(quarantined)){
+     gridSoftRecoveries++;gridPendingDecision=null;gridPendingBoard=null;gridPendingSpecial=null;
+     note="Ход не ответил; исключил его для этой сетки · ищу другой по новым кадрам ("+gridSoftRecoveries+"/2)";
+     update();scheduleGrid(epoch);return;
     }
     gridPendingDecision=null;gridPendingBoard=null;gridPendingSpecial=null;
     note=(gridSession.acknowledged()?"Android завершил жест, но игра не подтвердила ход":"Нет подтверждения Android для жеста")+" · продолжаю наблюдение без ввода. Старт — повторная проверка";
@@ -1352,7 +1366,7 @@ public class PilotService extends AccessibilityService {
     if(!audit(SafeJournal.Event.VERIFIED_GRID,0,gridVerified+1)){
      stop("Не удалось записать подтверждение изменения сетки");return;
     }
-    gridVerified++;incrementGridStat("visual_changes");
+    gridSoftRecoveries=0;gridVerified++;incrementGridStat("visual_changes");
     if(gridPendingDecision!=null){
      // Store only the stable, visually verified transition, never raw ACK.
      if(gridPendingBoard!=null&&gridPendingDecision.mode==GridPuzzlePolicy.Mode.SWAP_MATCH3
