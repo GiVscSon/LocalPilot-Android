@@ -27,7 +27,9 @@ jobs:
      run: python3 -m unittest discover -s tests -p 'test_telemetry_receiver.py' -v
    - name: Verify Android GameLab evidence schema offline
      run: python3 -m unittest discover -s tests -p 'test_gamelab_device_contract.py' -v
-   - name: Verify recovery without unsafe input bypass\n     run: python3 -m unittest discover -s tests -p 'test_soft_capture_recovery.py' -v\n   - name: JVM regressions
+   - name: Verify recovery without unsafe input bypass
+     run: python3 -m unittest discover -s tests -p 'test_soft_capture_recovery.py' -v
+   - name: JVM regressions
      shell: bash
      run: |
       set -euo pipefail
