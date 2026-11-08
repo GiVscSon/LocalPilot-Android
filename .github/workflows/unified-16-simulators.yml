@@ -53,6 +53,7 @@ jobs:
           java tests/RetroConsoleVerify.java
           java tests/AdaptiveEngineVerify.java
           java tests/Unified081IntegrationVerify.java
+          git diff --exit-code
       - name: Assemble ONE user APK and optional external-only GameLab test target
         run: |
           chmod +x ./gradlew

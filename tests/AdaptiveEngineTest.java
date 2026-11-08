@@ -241,14 +241,27 @@ public final class AdaptiveEngineTest {
 
   System.out.println(engine.diagnosticSummary());
   File assetsDir = new File("app/src/main/assets");
-  AdaptiveLearningEngine assetEngine = new AdaptiveLearningEngine(assetsDir);
+  File trainingRoot;
+  try {
+   trainingRoot = Files.createTempDirectory("lp-bundled-training-").toFile();
+   BundledModelInstaller.Result installed = BundledModelInstaller.install(trainingRoot,
+     name -> Files.newInputStream(new File(assetsDir, name).toPath()));
+   check(installed.complete(), "all bundled models copied into isolated training storage");
+  } catch (java.io.IOException error) { throw new RuntimeException(error); }
+  AdaptiveLearningEngine assetEngine = new AdaptiveLearningEngine(trainingRoot);
   for (TaskSchema.GameId g : TaskSchema.GameId.values()) {
+   File original = new File(assetsDir, "adaptive-engine-v1/" + g.id + "-" + g.mechanicsVersion + ".zip");
+   byte[] originalBytes;
+   try { originalBytes = Files.readAllBytes(original.toPath()); }
+   catch (java.io.IOException error) { throw new RuntimeException(error); }
    assetEngine.trainCurriculumAndPromote(g, 12, PpoGaeTrainer.MIN_ROLLOUT_STEPS, 424242L + g.ordinal() * 101L);
    File ckpt = assetEngine.checkpointFile(TaskSchema.forGame(g));
    try {
     ModelCheckpoint.save(ckpt, TaskSchema.forGame(g), assetEngine.activePolicy(g));
     StudentPolicy loaded = ModelCheckpoint.loadRecovering(ckpt, TaskSchema.forGame(g));
-    check(loaded != null, "bundled asset checkpoint verified for " + g.id);
+    check(loaded != null, "isolated trained checkpoint verified for " + g.id);
+    check(java.util.Arrays.equals(originalBytes, Files.readAllBytes(original.toPath())),
+      "training must never overwrite the reviewed bundled checkpoint: " + g.id);
    } catch (Exception e) {
     throw new RuntimeException(e);
    }

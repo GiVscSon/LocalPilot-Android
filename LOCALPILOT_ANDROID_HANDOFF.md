@@ -1,3 +1,7 @@
+## Продолжение 08.11.2026: объединённый APK
+
+Исправления PR #89 публикуются в draft [PR #90](https://github.com/GiVscSon/LocalPilot-Android/pull/90), ветка `fix/unified-engine-validation-20261108`. Перед продолжением сверить HEAD и CI. [Аудит, фактические проверки и ограничения](docs/UNIFIED_AUDIT_2026-11-08.ru.md). Исходная интеграция сохранена в `archive/unified-before-audit-20261108`. Не считать draft релизом; реальные кадры/телефон/планшет не проверены.
+
 # Продолжение · 29 октября 2026
 
 В отдельной ветке `fix/api36-bubble-acceptance-20261029` от `91b1a15`
