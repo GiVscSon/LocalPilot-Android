@@ -44,7 +44,9 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
-      - name: Verify regression quarantine and scripted reference gate\n        run: python3 -m unittest discover -s tests -p 'test_sim_autoplay_gate.py' -v\n      - name: Verify all ten GameLab games with independent held-out seeds
+      - name: Verify regression quarantine and scripted reference gate
+        run: python3 -m unittest discover -s tests -p 'test_sim_autoplay_gate.py' -v
+      - name: Verify all ten GameLab games with independent held-out seeds
         shell: bash
         run: |
           set -euo pipefail
