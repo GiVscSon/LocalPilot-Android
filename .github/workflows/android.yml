@@ -66,6 +66,7 @@ jobs:
       java tests/GameLabRetroVerify.java
       java tests/GameLabContractVerify.java
       java tests/SimExperienceVerify.java
+      java tests/GameLabCoachVerify.java
    - name: Explicit unit tests and Android lint
      shell: bash
      run: |
