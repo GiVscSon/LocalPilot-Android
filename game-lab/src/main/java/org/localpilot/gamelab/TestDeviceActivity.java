@@ -40,12 +40,22 @@ public final class TestDeviceActivity extends Activity {
  private GameSurface surface;
  private TextView status;
  private Spinner games,faults;
- private Button retroLauncher;
- private boolean playing=true;
+ private Button retroLauncher,auto2048Button;
+ private boolean playing=true,auto2048;
  private long seed=20261104L;
  private final Runnable clock=new Runnable(){public void run(){
   if(engine!=null&&surface!=null&&playing){
-   if(engine.fault!=GameLabEngine.Fault.FROZEN_VIEW)engine.tick();
+   if(engine.fault!=GameLabEngine.Fault.FROZEN_VIEW){
+    engine.tick();
+    // Baseline demonstration only: this does NOT train an AI, and a 2048
+    // result cannot become an Android Market verified example.
+    if(auto2048&&engine.game==GameLabEngine.Game.BOARD2048&&engine.ticks%7==0){
+     int before=engine.fingerprint();
+     engine.demo2048Step();
+     addLog("AUTO_2048,real_game=false,learned=false,board_changed="+
+       (engine.fingerprint()!=before));
+    }
+   }
    surface.invalidate();
   }
   update();handler.postDelayed(this,55);
@@ -55,15 +65,31 @@ public final class TestDeviceActivity extends Activity {
   game(0);
   LinearLayout root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);
   GameLabInsets.install(this,root,12);root.setBackgroundColor(HubContract.BACKGROUND);
-  TextView title=label("LocalPilot · GameLab",21);
+  TextView title=label("GameLab · NES и тестовые стенды",21);
   title.setTextColor(HubContract.ACCENT);
   root.addView(title);
   TextView warning=label(HubContract.Evidence.SIMULATED_GAME.label
     +" • отдельное приложение • не испытание игр Маркета",12);
   warning.setTextColor(HubContract.WARNING);root.addView(warning);
+  Button primaryNes=new Button(this);
+  primaryNes.setText("Играть в настоящий NES / Денди");
+  primaryNes.setOnClickListener(v->startActivity(new Intent(this,NesEmulatorActivity.class)));
+  root.addView(primaryNes);
+  TextView fixtures=label("Ниже 10 диагностических стендов: 2048 с игровыми правилами, " +
+    "Карканоид и Шипучка с приближённой физикой, остальные проверяют касания. " +
+    "Не являются копиями игр Маркета и не обучают нейросеть.",12);
+  fixtures.setTextColor(HubContract.SECONDARY);root.addView(fixtures);
   games=new Spinner(this);
   String[] labels=new String[GameLabEngine.Game.values().length];
-  for(int i=0;i<labels.length;i++)labels[i]=GameLabEngine.Game.values()[i].label;
+  for(int i=0;i<labels.length;i++){
+   GameLabEngine.Game mode=GameLabEngine.Game.values()[i];
+   String precision=switch(mode){
+    case BOARD2048->" · правила 2048";
+    case PADDLE,BUBBLE->" · упрощённая физика";
+    default->" · проверка ввода";
+   };
+   labels[i]=mode.label+precision;
+  }
   games.setAdapter(new ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,labels));
   games.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener(){
    @Override public void onItemSelected(android.widget.AdapterView<?> v,View selected,int position,long id){
@@ -86,7 +112,7 @@ public final class TestDeviceActivity extends Activity {
   root.addView(faults);
   surface=new GameSurface();root.addView(surface,new LinearLayout.LayoutParams(-1,0,1));
   LinearLayout row=new LinearLayout(this);root.addView(row);
-  addButton(row,"Сброс",()->{engine.reset();surface.clearFreeze();faults.setSelection(0);addLog("RESET");});
+  addButton(row,"Сброс",()->{auto2048=false;refreshAutoButton();engine.reset();surface.clearFreeze();faults.setSelection(0);addLog("RESET");});
   addButton(row,"Пауза",()->{playing=!playing;addLog(playing?"RESUME":"PAUSE");});
   addButton(row,"Фокус",()->new AlertDialog.Builder(this).setTitle("Проверка потери фокуса")
     .setMessage("Это реальное Android-диалоговое окно. Проверяй, что LocalPilot остановит ввод и не примет старые кадры.")
@@ -94,6 +120,16 @@ public final class TestDeviceActivity extends Activity {
   addButton(row,"CSV",()->startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT)
       .setType("text/csv").addCategory(Intent.CATEGORY_OPENABLE)
       .putExtra(Intent.EXTRA_TITLE,"localpilot-gamelab-actions.csv"),EXPORT));
+  auto2048Button=new Button(this);
+  auto2048Button.setText("Автоходы 2048 · без обучения");
+  auto2048Button.setOnClickListener(v->{
+   if(engine.game!=GameLabEngine.Game.BOARD2048){auto2048=false;refreshAutoButton();return;}
+   auto2048=!auto2048;
+   addLog(auto2048?"AUTO_2048_START_SIM_ONLY":"AUTO_2048_STOP");
+   refreshAutoButton();
+  });
+  root.addView(auto2048Button);
+  refreshAutoButton();
   LinearLayout retroRow=new LinearLayout(this);root.addView(retroRow);
   retroLauncher=addButton(retroRow,"Ретро · NES / Денди / DOS",()->startActivity(new Intent(this,RetroLibraryActivity.class)));
   TextView retroStatus=label("NES и Денди: запуск реального ROM. DOS: пока подготовка ядра.",11);
@@ -128,16 +164,24 @@ public final class TestDeviceActivity extends Activity {
  }
  private void game(int index){
   if(index<0||index>=GameLabEngine.Game.values().length)return;
+  auto2048=false;
   engine=new GameLabEngine(GameLabEngine.Game.values()[index],seed+index*101);
   if(surface!=null)surface.clearFreeze();
+  refreshAutoButton();
   addLog("GAME "+engine.game+" pilotProfile="+engine.game.localPilotProfile);
   update();
  }
  private void update(){
   if(status==null||engine==null)return;
-  status.setText("Только тестовое поле • профиль "+engine.game.localPilotProfile
-   +" • касаний "+engine.actions+" • изменений стенда "+engine.simulatedChanges
-   +" • отказов "+engine.rejected+" • режим "+engine.fault);
+  String fidelity=switch(engine.game){
+   case BOARD2048->"правила 2048, не нейросеть";
+   case BUBBLE,PADDLE->"упрощённая физика, не реальная игра";
+   default->"диагностическая имитация, не обучение";
+  };
+  status.setText("GameLab • "+fidelity+" • профиль "+engine.game.localPilotProfile
+   +" • действий "+engine.actions+" • изменений "+engine.simulatedChanges
+   +" • ошибок ввода "+engine.rejected+" • автопоказ 2048="+auto2048
+   +" • обучение=false • "+engine.fault);
   // Stable, machine-readable ACCESSIBILITY evidence. This is an actual
   // Android-rendered TextView value updated only after real UI event handling.
   // It is deliberately marked "synthetic", not a Market-game reward.
@@ -145,6 +189,14 @@ public final class TestDeviceActivity extends Activity {
     +" touches="+engine.actions+" changes="+engine.simulatedChanges
     +" rejected="+engine.rejected+" profile="+engine.game.localPilotProfile);
   GameLabEvidenceProvider.game(engine,surface,retroLauncher);
+ }
+ private void refreshAutoButton(){
+  if(auto2048Button==null||engine==null)return;
+  boolean eligible=engine.game==GameLabEngine.Game.BOARD2048;
+  auto2048Button.setVisibility(eligible?View.VISIBLE:View.GONE);
+  auto2048Button.setEnabled(eligible);
+  auto2048Button.setText(auto2048?"Остановить автоходы 2048":
+    "Автоходы 2048 · без обучения");
  }
  private void addLog(String entry){
   if(records.size()>=512)records.remove(0);
@@ -332,6 +384,7 @@ public final class TestDeviceActivity extends Activity {
    if(engine.fault==GameLabEngine.Fault.PANEL_OVERLAP&&y>.63f&&x<.84f){
     addLog("PANEL_BLOCKED,game="+engine.game);return true;
    }
+   if(auto2048){auto2048=false;refreshAutoButton();addLog("AUTO_2048_INTERRUPTED_BY_MANUAL_INPUT");}
    int old=engine.fingerprint();
    GameLabEngine.Result response=engine.gesture(downX,downY,x,y,elapsed);
    addLog("TOUCH_RECEIVED,game="+engine.game+",result="+response+
