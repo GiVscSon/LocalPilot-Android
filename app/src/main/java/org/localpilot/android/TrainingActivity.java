@@ -124,6 +124,15 @@ status=new TextView(this);status.setTextSize(12);ScrollView stats=new ScrollView
   manualControls=new LinearLayout(this);manualControls.setOrientation(LinearLayout.VERTICAL);
   box.addView(manualControls);manualControls.setVisibility(View.GONE);
   manualHelp.setVisibility(View.GONE);
+  // Put the controls BEFORE the tall game canvas. Otherwise the user has to
+  // scroll away from the scene just to press a gamepad button.
+  int playfieldIndex=box.indexOfChild(scene);
+  box.removeView(manualNote);box.removeView(manualRow);
+  box.removeView(manualHelp);box.removeView(manualControls);
+  box.addView(manualNote,playfieldIndex++);
+  box.addView(manualRow,playfieldIndex++);
+  box.addView(manualHelp,playfieldIndex++);
+  box.addView(manualControls,playfieldIndex);
   LinearLayout row=new LinearLayout(this);box.addView(row);
   train=button(row,"Обучать ИИ",()->runtime.start(selected(),0));
   evaluate=button(row,"Оценить модель",()->runtime.start(selected(),1));
