@@ -110,6 +110,11 @@ public final class TrainingActivity extends Activity {
   }
   return buffer.toByteArray();
  }
+ @Override protected void onResume(){
+  super.onResume();
+  // Embedded GameLab writes lab-only episodes when its screen closes.
+  if(labReport!=null)readSavedLabExperience();
+ }
  private File labReplayFile(){return new File(getFilesDir(),"gamelab-sim-experience-v1.lpx");}
  private void readSavedLabExperience(){
   File saved=labReplayFile();
