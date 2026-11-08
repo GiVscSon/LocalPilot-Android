@@ -98,6 +98,7 @@ public class PilotService extends AccessibilityService {
  private BubbleBoard trainingPreviousBubble;private int trainingBubbleStable;
  private float learnedBubbleLauncher=Float.NaN;
  private boolean playingMini;private int miniKind,miniAction;private long miniMoves;private int[] miniBefore;private Rect boardRoi;private View picker;private boolean playing2048=false,colored2048=false,captureBusy=false;private long moves2048;private long captureCounter,pendingCapture,lastShotTimestamp=-1;private long mergeTotal;private Board2048 before2048;private int direction2048;private AlertDialog preview,overlayDialog;
+ private final Board2048StallRecovery board2048Stalls=new Board2048StallRecovery();
  private final CaptureStartup captureStartup=new CaptureStartup();
  private final SceneRecovery sceneRecovery=new SceneRecovery();
  /** Shared frame authority for MediaProjection and screenshot game sessions. */
@@ -755,6 +756,7 @@ public class PilotService extends AccessibilityService {
   }catch(RuntimeException|OutOfMemoryError ignored){lastSessionReport="Сеанс остановлен; метаданные недоступны";}
   if(playingGrid&&selectedProfile==9)
    lastBubbleSessionReport=bubbleSession.report()+" decision="+bubbleDecisionReason;
+  board2048Stalls.reset();
   permit.revoke();gate.stop();browserSceneGate.reset();visionV2.reset();visionV2Snapshot=null;
   rebindGeneration++;rebindStability.reset();
   if(playingJumper)CrashDiagnostics.captureStopped();
@@ -2362,6 +2364,8 @@ public class PilotService extends AccessibilityService {
    stop("AUTO_BOARD_GEOMETRY: 2048 требует минимум 160 пикселей и разницу сторон до 8%");return;
   }
   loadVisionTraining();
+  if(scriptedRoute(selectedProfile)==null){stop("SCRIPT_ROUTE_UNAVAILABLE: 2048 заблокирован");return;}
+  board2048Stalls.reset();
   boardReadGeneration++;boardReadMisses=0;moves2048=0;colorSession.reset();colorSession.setStrictMode(strictVision);before2048=null;colored2048=colored;
   if(colored2048||selectedProfile==4&&VisualGameTarget.legacyMarket(target)){String saved=getSharedPreferences("color-2048",MODE_PRIVATE).getString(color2048PaletteKey(),null);if(saved!=null)try{colorSession.restoreLearned(saved);}catch(IllegalArgumentException invalidPalette){note="Сохранённая цветовая палитра повреждена · начинаю с базовых плиток";}}
   long epoch=gate.epoch(),generation=boardReadGeneration;playing2048=true;compact(true);note=colored2048?"Читаю цветное поле 2048 · изучено цветов "+colorSession.learnedCount():"Читаю поле в памяти…";update();
@@ -2389,20 +2393,39 @@ public class PilotService extends AccessibilityService {
   if(epoch!=gate.epoch()||!playing2048||focusPaused)return;
   stable(epoch,(board,ticket,captureMs)->{
    if(epoch!=gate.epoch()||!playing2048)return;
-   if(before2048!=null&&!before2048.verifies(board,direction2048)){Board2048.Verification why=before2048.verification(board,direction2048);note="2048: Android завершил жест · "+(why==Board2048.Verification.UNCHANGED?"поле не изменилось":why==Board2048.Verification.MISSING_SPAWN?"нет ожидаемой новой плитки":"поле отличается от расчёта")+" · наблюдаю без ввода";update();long generation=boardReadGeneration;handler.postDelayed(()->{if(epoch==gate.epoch()&&generation==boardReadGeneration&&playing2048&&!focusPaused)round2048(epoch);},Math.max(1000,captureDelay()));return;}
-   if(before2048!=null){if(!saveExample("2048",before2048.cells,direction2048,board.cells))return;mergeTotal+=Verified2048.mergeReward(before2048,direction2048,board);if(!audit(SafeJournal.Event.VERIFIED_2048,0,mergeTotal)){stop("Ошибка журнала результатов");return;}before2048=null;}
+   if(before2048!=null&&!before2048.verifies(board,direction2048)){
+    Board2048.Verification why=before2048.verification(board,direction2048);
+    if(why==Board2048.Verification.UNCHANGED){
+     GameScriptCatalog.Route route=gameScripts==null?null:gameScripts.route(selectedProfile);
+     int allowed=route==null?0:route.softStalls();
+     Board2048StallRecovery.Next plan=board2048Stalls.unchanged(board,epoch,SystemClock.elapsedRealtime(),allowed);
+     if(plan==Board2048StallRecovery.Next.STOP){
+      stop("2048: несколько ходов не дали визуального ответа · проверьте область и жесты");return;
+     }
+     if(plan==Board2048StallRecovery.Next.REPLAN_READ_ONLY){
+      before2048=null;note="2048: направление не ответило · исключаю его и перечитываю поле без ввода";
+      update();long generation=boardReadGeneration;
+      handler.postDelayed(()->{if(epoch==gate.epoch()&&generation==boardReadGeneration&&playing2048&&!focusPaused)round2048(epoch);},captureDelay());
+      return;
+     }
+    }
+    note="2048: Android завершил жест · "+(why==Board2048.Verification.UNCHANGED?"поле не изменилось":why==Board2048.Verification.MISSING_SPAWN?"нет ожидаемой новой плитки":"поле отличается от расчёта")+" · наблюдаю без ввода";update();long generation=boardReadGeneration;handler.postDelayed(()->{if(epoch==gate.epoch()&&generation==boardReadGeneration&&playing2048&&!focusPaused)round2048(epoch);},Math.max(1000,captureDelay()));return;}
+   if(before2048!=null){board2048Stalls.verified();if(!saveExample("2048",before2048.cells,direction2048,board.cells))return;mergeTotal+=Verified2048.mergeReward(before2048,direction2048,board);if(!audit(SafeJournal.Event.VERIFIED_2048,0,mergeTotal)){stop("Ошибка журнала результатов");return;}before2048=null;}
    if(board.max()>=2048){stop("2048: распознана плитка 2048; сверить визуально");return;}
    if(targetIsBrowser&&!browserSceneGate.observe(SystemClock.elapsedRealtime()-Math.max(0,SystemClock.uptimeMillis()-lastShotTimestamp),true)){
     note="2048: перепроверяю сцену браузера · без ввода";update();long generation=boardReadGeneration;
     handler.postDelayed(()->{if(epoch==gate.epoch()&&generation==boardReadGeneration&&playing2048&&!focusPaused)round2048(epoch);},captureDelay());return;
    }
-   metrics.attempt(StageMetrics.Stage.POLICY);long policyNs=SystemClock.elapsedRealtimeNanos();long started=SystemClock.elapsedRealtime();int d;try{d=board.choose();}catch(RuntimeException error){failStage(StageMetrics.Stage.POLICY,"POLICY_FAILED","Не удалось выбрать ход");return;}metrics.record(StageMetrics.Stage.POLICY,SystemClock.elapsedRealtimeNanos()-policyNs);long think=SystemClock.elapsedRealtime()-started;if(d<0){stop("2048: допустимых ходов нет");return;}if(!Verified2048.mask(board)[d]){stop("2048: ход вне маски");return;}if(!valid(ticket)){if(deferFocus(invalidReason(ticket)))return;stop("План устарел");return;}
+   metrics.attempt(StageMetrics.Stage.POLICY);long policyNs=SystemClock.elapsedRealtimeNanos();long started=SystemClock.elapsedRealtime();int d;try{d=board.chooseAvoiding(board2048Stalls.failedMask(board,epoch));}
+   catch(RuntimeException error){failStage(StageMetrics.Stage.POLICY,"POLICY_FAILED","Не удалось выбрать ход");return;}metrics.record(StageMetrics.Stage.POLICY,SystemClock.elapsedRealtimeNanos()-policyNs);long think=SystemClock.elapsedRealtime()-started;if(d<0){stop(board2048Stalls.failedMask(board,epoch)!=0?"2048: альтернативные подтверждаемые направления закончились · проверьте ROI и управление":"2048: допустимых ходов нет");return;}if(!Verified2048.mask(board)[d]){stop("2048: ход вне маски");return;}if(!valid(ticket)){if(deferFocus(invalidReason(ticket)))return;stop("План устарел");return;}
    Rect r=new Rect(boardRoi);float x=r.exactCenterX(),y=r.exactCenterY(),dx=0,dy=0;switch(d){case Board2048.LEFT:dx=-r.width()*.30f;break;case Board2048.RIGHT:dx=r.width()*.30f;break;case Board2048.UP:dy=-r.height()*.30f;break;case Board2048.DOWN:dy=r.height()*.30f;break;}
+   try{board2048Stalls.sent(board,d,epoch,SystemClock.elapsedRealtime());}
+   catch(IllegalArgumentException rejected){stop("2048: скрипт отклонил повтор неответившего направления");return;}
    before2048=board;direction2048=d;moves2048++;uiStats="кадр "+captureMs+" мс · CPU "+think+" мс · проверено "+(moves2048-1);note="Ход "+moves2048+" · max "+board.max()+" · кадр "+captureMs+"мс · CPU "+think+"мс";update();
    long sentBefore=dispatchedInputs;
-   send(x-dx/2,y-dy/2,x+dx/2,y+dy/2,ticket,()->{note="Проверяю исход хода "+moves2048;update();long generation=boardReadGeneration;handler.postDelayed(()->{if(generation==boardReadGeneration)round2048(epoch);},captureDelay());});
+   send(x-dx/2,y-dy/2,x+dx/2,y+dy/2,ticket,()->{board2048Stalls.ack(epoch,SystemClock.elapsedRealtime());note="Проверяю исход хода "+moves2048;update();long generation=boardReadGeneration;handler.postDelayed(()->{if(generation==boardReadGeneration)round2048(epoch);},captureDelay());});
    if(dispatchedInputs==sentBefore&&playing2048&&epoch==gate.epoch()){
-    before2048=null;moves2048--;long generation=boardReadGeneration;
+    board2048Stalls.cancelledUnsent(epoch);before2048=null;moves2048--;long generation=boardReadGeneration;
     if(!focusPaused)handler.postDelayed(()->{if(generation==boardReadGeneration)round2048(epoch);},captureDelay());
    }
   });
