@@ -45,88 +45,18 @@ jobs:
           SDKMGR="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | head -n 1)"
           if [ -z "$SDKMGR" ]; then echo "No Android SDK command-line tools" >&2; exit 1; fi
           "$SDKMGR" --install 'platforms;android-35' 'build-tools;35.0.0'
-      - name: Verify and extract corrected 16-model overlay
+      - name: Verify checked-in models and integrated JVM APIs
         run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          import zipfile, hashlib
-          archive=Path('ci/unified081_overlay.zip')
-          expected='7b165fbab9824b299acf93df7a0c9c7e32acd21fa157b71649f081c53b8a186d'
-          assert hashlib.sha256(archive.read_bytes()).hexdigest()==expected, 'Wrong overlay SHA256'
-          with zipfile.ZipFile(archive) as z:
-            assert z.testzip() is None, 'ZIP CRC error'
-            for n in z.namelist():
-              assert not n.startswith('/') and '..' not in Path(n).parts, 'unsafe ZIP path'
-            z.extractall('.')
-          print('Overlay verified and extracted.')
-          PY
-      - name: Restrict real-game neural critic to supported arcade profiles
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          path=Path("app/src/main/java/org/localpilot/android/learning/AdaptiveLearningEngine.java")
-          content=path.read_text()
-          before='neuralCritics.put(ap, new RealGameNeuralCritic(ap));'
-          after='if (ap != ArcadeProfile.ARI) neuralCritics.put(ap, new RealGameNeuralCritic(ap));'
-          assert content.count(before)==1, "Unexpected adaptive engine initializer"
-          path.write_text(content.replace(before,after))
-          PY
-      - name: Fix SIM-vs-REAL JVM test fixture ordering
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          path=Path("tests/AdaptiveEngineTest.java")
-          text=path.read_text()
-          first="  ObservationEncoder.EncodedState beforeEnc = ObservationEncoder.encode2048(b2048);"
-          last="  check(!engine.recordRealGameOutcome(TaskSchema.GameId.GAME_2048,"
-          marker="  // SIMULATED curriculum steps must never become REAL verified outcomes."
-          assert text.count(first)==1 and text.count(last)==1 and text.count(marker)==1
-          p=text.index(first)
-          q=text.index(last,p)
-          declarations=text[p:q]
-          text=text[:p]+text[q:]
-          insertion=text.index(marker)
-          text=text[:insertion]+declarations+text[insertion:]
-          path.write_text(text)
-          PY
-      - name: Complete JVM test source dependencies
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          path=Path("tests/TenGamesVerify.java")
-          source=path.read_text()
-          original='List.of("--release", "17", "-d", out.toString())'
-          updated='List.of("--release", "17", "-sourcepath", "app/src/main/java", "-d", out.toString())'
-          assert source.count(original)==1, "Unexpected TenGames verifier source"
-          path.write_text(source.replace(original, updated))
-          PY
-      - name: Fix 2048 test-fixture declaration order
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          path=Path("tests/AdaptiveEngineTest.java")
-          lines=path.read_text().splitlines(keepends=True)
-          start=next(i for i,s in enumerate(lines) if s.lstrip().startswith("ObservationEncoder.EncodedState beforeEnc ="))
-          assert lines[start+1].lstrip().startswith("Board2048 after2048 =")
-          assert lines[start+2].lstrip().startswith("ObservationEncoder.EncodedState afterEnc =")
-          fixture=lines[start:start+3]
-          del lines[start:start+3]
-          position=next(i for i,s in enumerate(lines) if "SIMULATED curriculum steps must never become REAL verified outcomes." in s)
-          lines[position:position]=fixture
-          path.write_text("".join(lines))
-          PY
-      - name: Restore strictly opt-in online diagnostics in unified service
-        run: python3 ci/restore_online_diagnostics.py
-      - name: Align integrated test APIs without bypassing safety
-        run: python3 ci/repair_unified_081_integration.py
-      - name: Verify genuine unified API contracts
-        run: python3 ci/compat_unified081_test.py
-      - name: Integrate and run real JVM test suite
-        run: python3 tools/integrate_adaptive_engine_into_081.py
+          python3 training/sync_rl_lab_to_android.py
+          java tests/WeightSpaceSkillsVerify.java
+          java tests/TenGamesVerify.java
+          java tests/RetroConsoleVerify.java
+          java tests/AdaptiveEngineVerify.java
+          java tests/Unified081IntegrationVerify.java
       - name: Assemble ONE user APK and optional external-only GameLab test target
         run: |
           chmod +x ./gradlew
-          ./gradlew --no-daemon :app:assembleDebug :game-lab:assembleDebug
+          ./gradlew --no-daemon :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :game-lab:assembleDebug
       - name: Validate APK contents and signing
         run: |
           python3 tools/verify_adaptive_apk.py app/build/outputs/apk/debug/app-debug.apk

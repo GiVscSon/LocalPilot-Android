@@ -23,6 +23,31 @@ VALID_RESULTS = {"CHANGED", "NO_CHANGE", "BLOCKED"}
 MAX_BYTES = 512 * 1024
 
 
+def validate_seed_split(report: dict) -> None:
+    games = ("BUBBLE", "ARI", "MATCH", "PADDLE", "TRAFFIC", "FLAPPY",
+             "BOARD2048", "HEXON", "PROTECTED_SWAP", "CAT_TOWER")
+    schedules = []
+    for key, offset, count_key in (
+        ("training_seeds", 0, "train_episodes_per_game"),
+        ("evaluation_seeds", 987654321, "evaluation_episodes_per_game"),
+    ):
+        schedule = report.get(key)
+        if not isinstance(schedule, dict) or set(schedule) != set(games):
+            raise ValueError("missing seed schedule")
+        flattened = []
+        for index, game in enumerate(games):
+            expected = [report["seed"] + offset + index * 1000003 + episode * 9127
+                        for episode in range(report[count_key])]
+            if schedule[game] != expected:
+                raise ValueError("seed schedule differs from simulator inputs")
+            flattened.extend(schedule[game])
+        if len(set(flattened)) != len(flattened):
+            raise ValueError("duplicate episode seeds")
+        schedules.append(set(flattened))
+    if schedules[0] & schedules[1]:
+        raise ValueError("training/evaluation seed leakage")
+
+
 def validate(directory: pathlib.Path) -> dict:
     report_file = directory / "report.json"
     report = json.loads(report_file.read_text(encoding="utf-8"))
@@ -41,6 +66,7 @@ def validate(directory: pathlib.Path) -> dict:
         raise ValueError("invalid episode bounds")
     if not 1 <= steps <= 80:
         raise ValueError("invalid step bound")
+    validate_seed_split(report)
     expected_train = len(GAMES) * train_episodes * steps
     expected_eval = len(GAMES) * eval_episodes * steps
     if expected_train > 1024 or report["training_events"] != expected_train:

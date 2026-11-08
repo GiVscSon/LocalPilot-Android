@@ -141,6 +141,20 @@ public final class SimAutoplay {
  private static long episodeSeed(long seed,GameLabEngine.Game game,int episode){
   return seed+game.ordinal()*1000003L+episode*9127L;
  }
+ private static String seedSchedule(long seed,int episodes){
+  StringBuilder json=new StringBuilder("{");
+  int gameIndex=0;
+  for(GameLabEngine.Game game:GameLabEngine.Game.values()){
+   if(gameIndex++>0)json.append(',');
+   json.append('"').append(game.name()).append("\":[");
+   for(int episode=0;episode<episodes;episode++){
+    if(episode>0)json.append(',');
+    json.append(episodeSeed(seed,game,episode));
+   }
+   json.append(']');
+  }
+  return json.append('}').toString();
+ }
  private static Results simulate(GameLabEngine.Game game,int episodes,int steps,
                                  long seed,SimLabPolicy lab,double exploreProbability,
                                  List<SimExperience.Step> replay,boolean scripted){
@@ -226,6 +240,8 @@ public final class SimAutoplay {
     .append("  \"evaluation_episodes_per_game\": ").append(evalEpisodes).append(",\n")
     .append("  \"steps_per_episode\": ").append(steps).append(",\n")
     .append("  \"training_events\": ").append(decoded.size()).append(",\n")
+    .append("  \"training_seeds\": ").append(seedSchedule(seed,trainEpisodes)).append(",\n")
+    .append("  \"evaluation_seeds\": ").append(seedSchedule(seed+987654321L,evalEpisodes)).append(",\n")
     .append("  \"training_exploration_probability\": 0.5,\n")
     .append("  \"games\": [\n");
   int index=0;

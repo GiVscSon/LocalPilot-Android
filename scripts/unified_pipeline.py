@@ -41,6 +41,24 @@ def execute(*args: str, timeout: int = 900) -> str:
     return output
 
 
+def source_revision() -> tuple[str, str]:
+    """Bind local and CI evidence to the actual checkout and tracked contents."""
+    head = subprocess.check_output(
+        ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
+    ci_sha = os.environ.get("GITHUB_SHA")
+    if ci_sha and ci_sha != head:
+        raise RuntimeError("GITHUB_SHA differs from checked-out HEAD")
+    paths = subprocess.check_output(
+        ["git", "ls-files", "-z"], cwd=ROOT).split(b"\0")
+    digest = hashlib.sha256()
+    for raw in sorted(filter(None, paths)):
+        path = ROOT / os.fsdecode(raw)
+        digest.update(raw + b"\0")
+        digest.update(hashlib.sha256(path.read_bytes()).digest()
+                      if path.is_file() else b"MISSING")
+    return head, digest.hexdigest()
+
+
 def strict_file_bytes(path: Path, max_size: int = 1024 * 1024) -> bytes:
     if not path.is_file() or path.stat().st_size > max_size:
         raise RuntimeError(f"Missing or oversized evidence: {path}")
@@ -53,6 +71,7 @@ def verify_contracts() -> dict:
             "-s", "scripts", "-p", "test_*.py", "-v")
     for test in (
         "test_soft_capture_recovery.py", "test_sim_autoplay_gate.py",
+        "test_sim_seed_split.py",
     ):
         execute(sys.executable, "-m", "unittest", "discover",
                 "-s", "tests", "-p", test, "-v")
@@ -205,13 +224,14 @@ def main() -> int:
         out = ROOT / out
     out.mkdir(parents=True, exist_ok=True)
     state_file = out / "unified-pipeline.json"
-    github_sha = os.environ.get("GITHUB_SHA", "")
+    github_sha, source_sha256 = source_revision()
     prior_stages = {}
     if state_file.exists():
         try:
             prior = json.loads(state_file.read_text(encoding="utf-8"))
             if (prior.get("schema") != "localpilot-script-orchestrator-v1"
-                    or prior.get("github_sha") != github_sha):
+                    or prior.get("github_sha") != github_sha
+                    or prior.get("source_sha256") != source_sha256):
                 raise RuntimeError("Old report belongs to a different source revision")
             prior_stages = prior.get("stages", {})
             if not isinstance(prior_stages, dict):
@@ -221,6 +241,7 @@ def main() -> int:
     report = {
         "schema": "localpilot-script-orchestrator-v1",
         "github_sha": github_sha,
+        "source_sha256": source_sha256,
         "stages": prior_stages,
         "origin": "GITHUB_OR_LOCAL_SCRIPT",
         "stage": opts.stage,
@@ -255,6 +276,7 @@ def main() -> int:
         report["reason"] = str(exc)[:400]
         print(f"UNIFIED_SCRIPT_ENGINE_FAIL: {exc}", file=sys.stderr)
         return_code = 1
+    report["release_ready"] = False  # Device acceptance is a separate mandatory gate.
     report["complete"] = all(
         report["stages"].get(name, {}).get("status") == "PASS"
         for name in ("verify", "selfplay", "apk")
