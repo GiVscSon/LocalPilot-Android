@@ -66,7 +66,9 @@ def build_rom(directory):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=("smoke", "train"))
+    parser.add_argument("action", choices=("smoke", "train", "record"))
+    parser.add_argument("--rom", help="Own iNES .nes cartridge for reward-free recording (record only)")
+    parser.add_argument("--steps", type=int, default=32, help="Bounded recorded NES actions, 1..400")
     parser.add_argument("--output", default="build/nes-agent-lab")
     parser.add_argument("--episodes", type=int, default=160)
     args = parser.parse_args()
@@ -78,13 +80,30 @@ def main():
     base = base.resolve()
     base.mkdir(parents=True, exist_ok=True)
     core = core_from_npm(base)
-    rom = build_rom(base)
+    if args.rom and args.action != "record":
+        parser.error("--rom is valid only with record; other games cannot use homebrew reward")
+    if not (1 <= args.steps <= 400):
+        parser.error("--steps must be 1..400")
+    rom = Path(args.rom).expanduser().resolve() if args.rom else build_rom(base)
+    if not rom.is_file():
+        raise RuntimeError("NES ROM file not found")
     node = shutil.which("node")
     if not node:
         raise RuntimeError("Node.js 22+ required")
     run([node, ROOT / "tests/jsnes_nes_smoke.cjs", core, rom])
     if args.action == "smoke":
         print("NES_CPU_PPU_SMOKE_PASS")
+        return
+    if args.action == "record":
+        dataset = base / "nes-ppu-dataset.jsonl"
+        run([node, ROOT / "tools/nes-agent/record.cjs",
+             "--core", core, "--rom", rom, "--output", dataset,
+             "--steps", args.steps])
+        print("NES_GENERIC_RECORD_PASS", json.dumps({
+            "file": str(dataset), "labelled_rewards": 0,
+            "market_acceptance": False,
+            "rom_sha256": hashlib.sha256(rom.read_bytes()).hexdigest(),
+        }, ensure_ascii=False))
         return
     run([node, ROOT / "tests/nes_training_contract.cjs", core, rom])
     checkpoint_dir = base / "learned"
