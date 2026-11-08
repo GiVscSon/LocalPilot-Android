@@ -38,6 +38,20 @@ class OperatorTests(unittest.TestCase):
                 with self.assertRaisesRegex(RuntimeError, "requires 17 model assets"):
                     op.inspect_apk(apk, 17)
 
+    def test_script_map_lists_all_policies_and_distinguishes_training_sources(self):
+        import io
+        import contextlib
+        import json
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            op.cmd_script_map(None)
+        state = json.loads(output.getvalue())
+        self.assertEqual(state["schema"], "LPS1")
+        self.assertEqual(len(state["native_controller_routes"]), 11)
+        self.assertEqual(len(state["simulation_models"]), 16)
+        self.assertTrue(all(item["experience"] == "SIM_ONLY"
+                            for item in state["simulation_models"]))
+
     def test_no_implicit_unsafe_device_serial(self):
         for bad in ("", "abc;rm -rf", "foo bar", "$(cat secret)", "\n"):
             with self.assertRaisesRegex(RuntimeError, "serial"):
