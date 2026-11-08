@@ -296,6 +296,8 @@ def main() -> int:
                 ROOT / opts.apk if not Path(opts.apk).is_absolute()
                 else Path(opts.apk), opts.require_sdk)
             report["stages"]["apk"] = {"status": "PASS", **report["apk"]}
+        if source_revision() != (github_sha, source_sha256):
+            raise RuntimeError("Source changed during pipeline; evidence rejected")
         report["result"] = "PASS"
         return_code = 0
     except (RuntimeError, OSError, ValueError, zipfile.BadZipFile,
