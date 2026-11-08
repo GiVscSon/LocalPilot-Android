@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - feature/unified-16-simulators-build-20261107
+      - fix/training-touch-controls-20261108
   workflow_dispatch:
 
 permissions:
@@ -25,6 +26,9 @@ jobs:
         run: |
           python3 -m unittest discover -s scripts -p 'test_*.py' -v
           python3 scripts/localpilot.py --help
+      - name: Test real manual simulator inputs
+        run: |
+          java tests/ArcadeManualVerify.java
       - name: Test script router and STOP recovery invariants
         run: |
           java tests/GameScriptVerify.java
@@ -115,6 +119,8 @@ jobs:
         run: python3 ci/repair_unified_081_integration.py
       - name: Verify genuine unified API contracts
         run: python3 ci/compat_unified081_test.py
+      - name: Retest manual controls after merged simulator overlay
+        run: java tests/ArcadeManualVerify.java
       - name: Integrate and run real JVM test suite
         run: python3 tools/integrate_adaptive_engine_into_081.py
       - name: Assemble both APK modules
