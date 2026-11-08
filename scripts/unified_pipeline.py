@@ -204,8 +204,24 @@ def main() -> int:
     if not out.is_absolute():
         out = ROOT / out
     out.mkdir(parents=True, exist_ok=True)
+    state_file = out / "unified-pipeline.json"
+    github_sha = os.environ.get("GITHUB_SHA", "")
+    prior_stages = {}
+    if state_file.exists():
+        try:
+            prior = json.loads(state_file.read_text(encoding="utf-8"))
+            if (prior.get("schema") != "localpilot-script-orchestrator-v1"
+                    or prior.get("github_sha") != github_sha):
+                raise RuntimeError("Old report belongs to a different source revision")
+            prior_stages = prior.get("stages", {})
+            if not isinstance(prior_stages, dict):
+                raise RuntimeError("Bad previous pipeline report")
+        except (OSError, ValueError, TypeError) as exc:
+            raise RuntimeError(f"Previous integration report invalid: {exc}") from exc
     report = {
         "schema": "localpilot-script-orchestrator-v1",
+        "github_sha": github_sha,
+        "stages": prior_stages,
         "origin": "GITHUB_OR_LOCAL_SCRIPT",
         "stage": opts.stage,
         "branch_agnostic": True,
@@ -214,24 +230,40 @@ def main() -> int:
         "automatic_release": False,
         "time_utc": dt.datetime.now(dt.timezone.utc).isoformat(),
     }
+    current_stage = opts.stage
     try:
         if opts.stage in ("verify", "all"):
+            current_stage = "verify"
             report["contracts"] = verify_contracts()
+            report["stages"]["verify"] = {"status": "PASS", **report["contracts"]}
         if opts.stage in ("selfplay", "all"):
+            current_stage = "selfplay"
             report["selfplay"] = play_train(out / "selfplay")
+            report["stages"]["selfplay"] = {"status": "PASS", **report["selfplay"]}
         if opts.stage in ("apk", "all"):
+            current_stage = "apk"
             report["apk"] = verify_apk(
                 ROOT / opts.apk if not Path(opts.apk).is_absolute()
                 else Path(opts.apk), opts.require_sdk)
+            report["stages"]["apk"] = {"status": "PASS", **report["apk"]}
         report["result"] = "PASS"
         return_code = 0
     except (RuntimeError, OSError, ValueError, zipfile.BadZipFile,
             subprocess.TimeoutExpired, KeyError) as exc:
         report["result"] = "FAIL"
+        report["stages"][current_stage] = {"status": "FAIL", "reason": str(exc)[:400]}
         report["reason"] = str(exc)[:400]
         print(f"UNIFIED_SCRIPT_ENGINE_FAIL: {exc}", file=sys.stderr)
         return_code = 1
-    (out / "unified-pipeline.json").write_text(
+    report["complete"] = all(
+        report["stages"].get(name, {}).get("status") == "PASS"
+        for name in ("verify", "selfplay", "apk")
+    )
+    state_file.write_text(
+        json.dumps(report, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    (out / f"unified-{opts.stage}.json").write_text(
         json.dumps(report, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
     )
