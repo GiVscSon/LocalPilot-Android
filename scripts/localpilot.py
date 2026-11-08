@@ -208,13 +208,13 @@ def summarize_stop_events(log: str) -> dict:
     for line in log.splitlines():
         if "LocalPilotStop" not in line:
             continue
-        match = re.search(r"\\b(STOP|PAUSE|RECOVER)\\b", line)
+        match = re.search(r"\b(STOP|PAUSE|RECOVER)\b", line)
         if not match:
             continue
         status = match.group(1)
         events[status] += 1
         if status == "STOP":
-            code = re.search(r"\\bcode=(\\d+)\\b", line)
+            code = re.search(r"\bcode=(\d+)\b", line)
             if code:
                 codes.append(int(code.group(1)))
         recent.append(status)
