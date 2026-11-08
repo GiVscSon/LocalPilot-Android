@@ -25,6 +25,10 @@ jobs:
         run: |
           python3 -m unittest discover -s scripts -p 'test_*.py' -v
           python3 scripts/localpilot.py --help
+      - name: Test script router and STOP recovery invariants
+        run: |
+          java tests/GameScriptVerify.java
+          java tests/StopRecoveryVerify.java
       - name: Install Android 35 build tools
         shell: bash
         run: |
