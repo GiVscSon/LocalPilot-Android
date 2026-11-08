@@ -7,6 +7,8 @@ on:
   push:
     paths:
       - 'tools/SimAutoplay.java'
+      - 'tools/GameLabCoach.java'
+      - 'tests/GameLabCoachTest.java'
       - 'tools/run_sim_autoplay.sh'
       - 'tools/verify_sim_autoplay_report.py'
       - 'tools/gate_sim_autoplay_candidates.py'
@@ -17,6 +19,8 @@ on:
   pull_request:
     paths:
       - 'tools/SimAutoplay.java'
+      - 'tools/GameLabCoach.java'
+      - 'tests/GameLabCoachTest.java'
       - 'tools/run_sim_autoplay.sh'
       - 'tools/verify_sim_autoplay_report.py'
       - 'tools/gate_sim_autoplay_candidates.py'
