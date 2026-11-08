@@ -13,6 +13,7 @@ javac --release 17 -d "$CLASSES" \
   game-lab/src/main/java/org/localpilot/gamelab/GameLabEngine.java \
   shared/src/main/java/org/localpilot/shared/SimExperience.java \
   shared/src/main/java/org/localpilot/shared/SimLabPolicy.java \
+  tools/GameLabCoach.java \
   tools/SimAutoplay.java
 java -ea -cp "$CLASSES" SimAutoplay --out "$OUT" "$@"
 python3 tools/verify_sim_autoplay_report.py "$OUT"
