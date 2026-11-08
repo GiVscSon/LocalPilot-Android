@@ -43,7 +43,7 @@ public final class GameLabEngine {
  public void reset(){
   score=actions=simulatedChanges=rejected=ticks=launches=0;
   playerX=.5f;playerY=.55f;ballX=.5f;ballY=.43f;
-  vx=.01f;vy=.017f;paddleX=.5f;lane=1;
+  vx=.01f;vy=game==Game.PADDLE?-.017f:.017f;paddleX=.5f;lane=1;
   Arrays.fill(slots,0);Arrays.fill(paddleBricks,true);paddleHits=0;
 
   n=switch(game){case MATCH->7;case PROTECTED_SWAP->6;
@@ -194,7 +194,6 @@ public final class GameLabEngine {
   if(!step.changed())return false;
   cells=step.tiles();score+=step.mergeScore();
   GameLab2048Rules.spawn(cells,random);
-  simulatedChanges++;
   return true;
  }
  /** Baseline auto demonstration, NOT neural learning or Market reward. */
@@ -202,7 +201,9 @@ public final class GameLabEngine {
   if(game!=Game.BOARD2048||fault!=Fault.NONE)return false;
   int direction=GameLab2048Rules.baselineDirection(cells);
   if(direction<0){completed2048Episodes++;reset();return false;}
-  actions++;return move2048(direction);
+  actions++;boolean changed=move2048(direction);
+  if(changed)simulatedChanges++;
+  return changed;
  }
  private static boolean finite(float... v){for(float x:v)if(!Float.isFinite(x))return false;return true;}
  private static float clamp(float x,float lo,float hi){return Math.max(lo,Math.min(hi,x));}
