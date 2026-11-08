@@ -31,7 +31,8 @@ public final class TrainingActivity extends Activity {
   manualPlay.setEnabled(idle);
   evaluate.setEnabled(idle&&runtime.hasTrainedCheckpoint(selectedGenre()));
   play.setEnabled(idle&&runtime.hasTrainedCheckpoint(selectedGenre()));
-  export.setEnabled(idle&&runtime.checkpoint!=null&&runtime.checkpoint.isFile());
+  export.setEnabled(idle&&runtime.current==selectedGenre()&&runtime.trainer!=null
+    &&runtime.trainer.updates>0&&runtime.checkpoint!=null&&runtime.checkpoint.isFile());
   stopButton.setEnabled(runtime.busy);
   manualReset.setEnabled(manual);
   manualControls.setVisibility(manual?View.VISIBLE:View.GONE);
@@ -52,9 +53,9 @@ public final class TrainingActivity extends Activity {
  }};
  @Override public void onCreate(Bundle b){super.onCreate(b);if(runtime==null)runtime=new Runtime(getFilesDir());
   LinearLayout box=new LinearLayout(this);box.setOrientation(LinearLayout.VERTICAL);box.setPadding(12,8,12,8);ScrollView page=new ScrollView(this);page.setFillViewport(true);page.addView(box);setContentView(page);
-  TextView title=new TextView(this);title.setText("Аркады · обучение на Android");title.setTextSize(20);box.addView(title);
+  TextView title=new TextView(this);title.setText("Учебные игры · ручное управление и ИИ");title.setTextSize(20);box.addView(title);
   genre=new Spinner(this);genre.setAdapter(new ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,new String[]{"Вертикальный джампер","Вертикальный платформер","Раннер по полосам","Jetpack"}));genre.setSelection(Math.max(0,Math.min(3,getSharedPreferences(MainActivity.PREF,MODE_PRIVATE).getInt("training_genre",0))));box.addView(genre);
-  TextView help=new TextView(this);help.setText("Четыре исходные DQN-модели остаются учебными и не переносятся напрямую: их схемы действий отличаются от настоящих игр. Ниже отдельный Карканоид: его маленькая сеть обучается на восьми физических сценариях и может быть вручную перенесена в реальную зрительную модель после проверки.");box.addView(help);
+  TextView help=new TextView(this);help.setText("Это оригинальные учебные механики, а не игры Маркета или NES. В режиме «Играть самому» кнопки и поле управляют симуляцией. В режиме «Смотреть ИИ» действует только сохранённая обученная модель. Карканоид и перенос весов находятся в экспериментальном разделе.");box.addView(help);
   scene=new View(this){private final Paint p=new Paint(3);@Override public void onDraw(Canvas c){super.onDraw(c);c.drawColor(0xff101d2d);
  PaddleWeightLab.Scene physics=runtime.paddleScene;
  if(physics!=null){
@@ -84,17 +85,22 @@ public final class TrainingActivity extends Activity {
    int action=event.getActionMasked();
    float x=event.getX()/Math.max(1f,v.getWidth()),y=event.getY()/Math.max(1f,v.getHeight());
    if(action==MotionEvent.ACTION_DOWN){
+    if(v.getParent()!=null)v.getParent().requestDisallowInterceptTouchEvent(true);
     downX=x;downY=y;
     if(control.env.genre==ArcadeEnv.Genre.JETPACK)heldAction=1;
     return true;
    }
    if(action==MotionEvent.ACTION_UP){
+    if(v.getParent()!=null)v.getParent().requestDisallowInterceptTouchEvent(false);
     heldAction=-1;
     int selected=control.actionForGesture(downX,downY,x,y);
     if(selected>=0)runtime.manualAction(selected);
     v.performClick();v.invalidate();return true;
    }
-   if(action==MotionEvent.ACTION_CANCEL){heldAction=-1;return true;}
+   if(action==MotionEvent.ACTION_CANCEL){
+    if(v.getParent()!=null)v.getParent().requestDisallowInterceptTouchEvent(false);
+    heldAction=-1;return true;
+   }
    return true;
   });
 status=new TextView(this);status.setTextSize(12);ScrollView stats=new ScrollView(this);stats.addView(status);box.addView(stats,new LinearLayout.LayoutParams(-1,dp(120)));
@@ -179,11 +185,18 @@ status=new TextView(this);status.setTextSize(12);ScrollView stats=new ScrollView
    });
    input.setOnTouchListener((v,event)->{
     int phase=event.getActionMasked();
-    if(phase==MotionEvent.ACTION_DOWN){heldAction=actionIndex;return true;}
+    if(phase==MotionEvent.ACTION_DOWN){
+     if(v.getParent()!=null)v.getParent().requestDisallowInterceptTouchEvent(true);
+     heldAction=actionIndex;return true;
+    }
     if(phase==MotionEvent.ACTION_UP){
+     if(v.getParent()!=null)v.getParent().requestDisallowInterceptTouchEvent(false);
      heldAction=-1;v.performClick();return true;
     }
-    if(phase==MotionEvent.ACTION_CANCEL){heldAction=-1;return true;}
+    if(phase==MotionEvent.ACTION_CANCEL){
+     if(v.getParent()!=null)v.getParent().requestDisallowInterceptTouchEvent(false);
+     heldAction=-1;return true;
+    }
     return true;
    });
   }
