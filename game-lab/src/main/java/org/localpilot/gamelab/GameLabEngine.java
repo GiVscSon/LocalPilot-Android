@@ -27,6 +27,9 @@ public final class GameLabEngine {
  public float vx=.010f,vy=.017f,paddleX=.5f;
  public int lane=1,ticks,launches;
  public int[] cells,slots=new int[3];
+ public final boolean[] paddleBricks=new boolean[24];
+ public int paddleHits,completed2048Episodes;
+
  public int n;
  /** Same coordinates as GameSurface.drawSquareBoard, shared in the engine. */
  public static final float GRID_LEFT=22f/360f,GRID_TOP=140f/640f;
@@ -40,12 +43,13 @@ public final class GameLabEngine {
  public void reset(){
   score=actions=simulatedChanges=rejected=ticks=launches=0;
   playerX=.5f;playerY=.55f;ballX=.5f;ballY=.43f;
-  vx=.01f;vy=.017f;paddleX=.5f;lane=1;
-  Arrays.fill(slots,0);
+  vx=.01f;vy=game==Game.PADDLE?-.017f:.017f;paddleX=.5f;lane=1;
+  Arrays.fill(slots,0);Arrays.fill(paddleBricks,true);paddleHits=0;
+
   n=switch(game){case MATCH->7;case PROTECTED_SWAP->6;
    case BUBBLE->8;case BOARD2048->4;case HEXON->3;default->0;};
   cells=new int[n*n];
-  if(game==Game.BOARD2048){cells[0]=2;cells[1]=2;}
+  if(game==Game.BOARD2048){GameLab2048Rules.spawn(cells,random);GameLab2048Rules.spawn(cells,random);}
   else if(game==Game.HEXON){for(int i=0;i<cells.length;i++)cells[i]=(i%3)+1;}
   else if(game==Game.BUBBLE){
    for(int i=0;i<2*n;i++)cells[i]=1+random.nextInt(4);
@@ -61,6 +65,7 @@ public final class GameLabEngine {
  public int fingerprint(){
   int hash=Arrays.hashCode(cells);
   hash=31*hash+Arrays.hashCode(slots);
+  hash=31*hash+Arrays.hashCode(paddleBricks);
   hash=31*hash+Float.floatToIntBits(playerX);
   hash=31*hash+Float.floatToIntBits(playerY);
   hash=31*hash+Float.floatToIntBits(paddleX);
@@ -81,10 +86,7 @@ public final class GameLabEngine {
   int old=fingerprint();
   float dx=toX-x,dy=toY-y;
   switch(game){
-   case PADDLE -> {
-    paddleX=clamp(toX,.10f,.90f);
-    if(Math.abs(dx)<.02f)launches++;
-   }
+   case PADDLE -> {paddleX=clamp(toX,.14f,.86f);}
    case TRAFFIC -> {if(Math.abs(dx)>.045f)
     lane=Math.max(0,Math.min(2,lane+(dx<0?-1:1)));}
    case FLAPPY -> {vy=-.035f;playerY=clamp(playerY-.030f,.16f,.79f);}
@@ -92,9 +94,10 @@ public final class GameLabEngine {
       x<.5f?-.09f:.09f));playerY=clamp(playerY-.025f,.26f,.76f);}
    case CAT_TOWER -> {playerX=wrap(playerX+clamp(dx*1.3f,-.20f,.20f));
     playerY=clamp(playerY-.055f,.20f,.78f);score+=2;}
-   case BUBBLE -> {int col=(int)(clamp(toX,0,.999f)*n);
-    int row=0;while(row<n&&cells[row*n+col]!=0)row++;
-    if(row<n){cells[row*n+col]=1+launches%4;launches++;score+=3;}
+   case BUBBLE -> {
+    int launchedColor=1+launches%4;
+    GameLabBubbleRules.Shot shot=GameLabBubbleRules.fire(cells,n,launchedColor,toX*360f,toY*640f);
+    if(shot.placed()){launches++;score+=(shot.cleared()+shot.dropped())*10;}
     else rejected++;
    }
    case HEXON -> {int slot=Math.min(2,(int)(clamp(toX,0,.999f)*3));
@@ -118,13 +121,39 @@ public final class GameLabEngine {
   ticks++;
   switch(game){
    case PADDLE -> {
+    // Use the SAME 3x8 brick rectangles that Android draws, not a decorative
+    // row that the ball can pass through. These are simplified physics, not
+    // claimed to reproduce Market paddle ball speeds or level progression.
+    float oldX=ballX,oldY=ballY;
     ballX+=vx;ballY+=vy;
-    if(ballX<.055f||ballX>.945f){vx=-vx;ballX=clamp(ballX,.055f,.945f);}
-    if(ballY<.20f){vy=Math.abs(vy);score++;}
-    if(ballY>.80f){
-     if(Math.abs(ballX-paddleX)<.125f)vy=-Math.abs(vy);
-     else {ballX=.5f;ballY=.35f;vy=.017f;}
+    float radiusX=11f/360f,radiusY=11f/640f;
+    if(ballX<radiusX||ballX>1-radiusX){
+     vx=-vx;ballX=clamp(ballX,radiusX,1-radiusX);
     }
+    if(ballY<radiusY){vy=Math.abs(vy);ballY=radiusY;}
+    for(int i=0;i<paddleBricks.length;i++){
+     if(!paddleBricks[i])continue;
+     float left=(14+(i%8)*42)/360f,top=(130+(i/8)*28)/640f;
+     float right=(14+(i%8)*42+39)/360f,bottom=(130+(i/8)*28+20)/640f;
+     if(ballX+radiusX<left||ballX-radiusX>right||
+        ballY+radiusY<top||ballY-radiusY>bottom)continue;
+     paddleBricks[i]=false;score+=10;paddleHits++;
+     // Resolve by prior face, avoiding a ball trapped inside a brick.
+     if(oldY+radiusY<=top){ballY=top-radiusY;vy=-Math.abs(vy);}
+     else if(oldY-radiusY>=bottom){ballY=bottom+radiusY;vy=Math.abs(vy);}
+     else if(oldX<left){ballX=left-radiusX;vx=-Math.abs(vx);}
+     else if(oldX>right){ballX=right+radiusX;vx=Math.abs(vx);}
+     else {vy=-vy;}
+     break;
+    }
+    final float paddleY=530f/640f;
+    if(vy>0&&oldY+radiusY<=paddleY&&ballY+radiusY>=paddleY
+       &&Math.abs(ballX-paddleX)<=(47f/360f+radiusX)){
+     ballY=paddleY-radiusY;vy=-Math.abs(vy);
+     vx=clamp(vx+(ballX-paddleX)*.01f,-.018f,.018f);
+    }
+    if(ballY>1){ballX=.5f;ballY=.43f;vx=.01f;vy=-.017f;}
+    if(paddleHits==24){Arrays.fill(paddleBricks,true);paddleHits=0;}
    }
    case FLAPPY -> {vy=clamp(vy+.0028f,-.05f,.03f);playerY=clamp(playerY+vy,.15f,.80f);}
    case ARI -> {if(ticks%6==0)playerY=clamp(playerY+.014f,.27f,.70f);}
@@ -156,31 +185,26 @@ public final class GameLabEngine {
  }
  private void swipe2048(float dx,float dy){
   if(Math.max(Math.abs(dx),Math.abs(dy))<.045f)return;
-  int[] before=cells.clone();
-  for(int line=0;line<4;line++){
-   int[] values=new int[4],packed=new int[4];int size=0;
-   boolean horizontal=Math.abs(dx)>=Math.abs(dy);
-   boolean forward=horizontal?dx>0:dy>0;
-   for(int i=0;i<4;i++){
-    int row=horizontal?line:(forward?3-i:i);
-    int col=horizontal?(forward?3-i:i):line;
-    values[i]=cells[row*4+col];
-    if(values[i]!=0)packed[size++]=values[i];
-   }
-   int[] merged=new int[4];int count=0;
-   for(int i=0;i<size;i++){
-    if(i+1<size&&packed[i]==packed[i+1]){merged[count++]=packed[i]*2;score+=packed[i]*2;i++;}
-    else merged[count++]=packed[i];
-   }
-   for(int i=0;i<4;i++){
-    int row=horizontal?line:(forward?3-i:i);
-    int col=horizontal?(forward?3-i:i):line;
-    cells[row*4+col]=merged[i];
-   }
-  }
-  if(!Arrays.equals(before,cells)){
-   for(int i=0;i<16;i++)if(cells[i]==0){cells[i]=2;break;}
-  }
+  final boolean horizontal=Math.abs(dx)>=Math.abs(dy);
+  int direction=horizontal?(dx<0?0:1):(dy<0?2:3);
+  move2048(direction);
+ }
+ public boolean move2048(int direction){
+  if(game!=Game.BOARD2048||fault!=Fault.NONE)return false;
+  GameLab2048Rules.Move step=GameLab2048Rules.move(cells,direction);
+  if(!step.changed())return false;
+  cells=step.tiles();score+=step.mergeScore();
+  GameLab2048Rules.spawn(cells,random);
+  return true;
+ }
+ /** Baseline auto demonstration, NOT neural learning or Market reward. */
+ public boolean demo2048Step(){
+  if(game!=Game.BOARD2048||fault!=Fault.NONE)return false;
+  int direction=GameLab2048Rules.baselineDirection(cells);
+  if(direction<0){completed2048Episodes++;reset();return false;}
+  actions++;boolean changed=move2048(direction);
+  if(changed)simulatedChanges++;
+  return changed;
  }
  private static boolean finite(float... v){for(float x:v)if(!Float.isFinite(x))return false;return true;}
  private static float clamp(float x,float lo,float hi){return Math.max(lo,Math.min(hi,x));}

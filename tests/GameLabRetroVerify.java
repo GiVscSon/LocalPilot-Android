@@ -9,6 +9,8 @@ class GameLabRetroVerify {
   if(ToolProvider.getSystemJavaCompiler()==null
     ||ToolProvider.getSystemJavaCompiler().run(null,System.out,System.err,
       "--release","17","-d",out.toString(),
+      "game-lab/src/main/java/org/localpilot/gamelab/GameLab2048Rules.java",
+      "game-lab/src/main/java/org/localpilot/gamelab/GameLabBubbleRules.java",
       "game-lab/src/main/java/org/localpilot/gamelab/GameLabEngine.java",
       "game-lab/src/main/java/org/localpilot/gamelab/RetroEmulatorCatalog.java",
       "game-lab/src/main/java/org/localpilot/gamelab/HomebrewNes.java",
