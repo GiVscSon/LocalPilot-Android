@@ -78,7 +78,7 @@ public final class ArcadeSystemTest {
    perceivedLo=detected.gapTop;perceivedHi=detected.gapBottom;
    ArcadePolicy.Decision decision=detected.usable()?(predictive?controller.decide(detected,now):ArcadePolicy.next(detected)):null;
    if(!recovery.observe(detected.usable(),timestamp))continue;
-   if(ackAt>=0&&now>=ackAt){feedback.acknowledge(token);ackAt=-1;}
+   if(ackAt>=0&&now>=ackAt){feedback.acknowledge(token,ackAt);ackAt=-1;}
    long verified=feedback.verified();ArcadeFeedback.State response=feedback.observe(detected,now);
    if(feedback.verified()>verified){result.confirmed++;if(predictive)controller.observeGesture(pending,before,detected);before=null;pending=null;}
    if(response==ArcadeFeedback.State.PAUSED){result.paused++;break;}

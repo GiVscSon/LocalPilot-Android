@@ -3,28 +3,33 @@ package org.localpilot.android;
 /** Own gesture ACK plus fresh directional motion; never rewards a pre-dispatch frame. */
 public final class JumperFeedback {
  public enum State { READY, WAITING, VERIFIED, SCENE_PROGRESS, RETRY, PAUSED }
- private long serial,token,dispatchedAt,verified;
+ private long serial,token,dispatchedAt,verified,acknowledgedAt=-1;
  private float startX;
  private JumperState before;private long progressFrame=-1,sceneProgress;private float progressShift;
  private JumperPolicy.Action action;
  private boolean acknowledged,paused,failedWithAck,observedResponse;
  private int failures;
- public void reset(){serial++;token=0;action=null;acknowledged=paused=failedWithAck=observedResponse=false;failures=0;verified=sceneProgress=0;before=null;progressFrame=-1;}
+ public void reset(){serial++;token=0;action=null;acknowledged=paused=failedWithAck=observedResponse=false;failures=0;verified=sceneProgress=0;before=null;progressFrame=-1;acknowledgedAt=-1;}
  public long dispatched(JumperPolicy.Action next,float x,long now){
   if(next==null||next==JumperPolicy.Action.WAIT||!Float.isFinite(x)||now<0)throw new IllegalArgumentException("jumper dispatch");
   if(action!=null||paused)throw new IllegalStateException("jumper feedback pending or paused");
-  before=null;progressFrame=-1;action=next;startX=x;dispatchedAt=now;acknowledged=false;failedWithAck=false;observedResponse=false;token=++serial;return token;
+  before=null;progressFrame=-1;action=next;startX=x;dispatchedAt=now;acknowledged=false;acknowledgedAt=-1;failedWithAck=false;observedResponse=false;token=++serial;return token;
  }
  public long dispatched(JumperPolicy.Action next,JumperState observation,long now){
   if(observation==null||!observation.usable()||observation.timestampMs>now||now-observation.timestampMs>300)throw new IllegalArgumentException("fresh jumper baseline required");
   long id=dispatched(next,observation.player.centerX(),now);before=observation;return id;
  }
  public void started(long id,long now){if(id==token&&action!=null&&now>=dispatchedAt)dispatchedAt=now;}
- public boolean acknowledge(long id){if(id!=token||action==null)return false;acknowledged=true;return true;}
+ /** A callback without a monotonic completion timestamp cannot open evidence. */
+ @Deprecated public boolean acknowledge(long id){return false;}
+ public boolean acknowledge(long id,long now){
+  if(id!=token||action==null||acknowledged||now<dispatchedAt)return false;
+  acknowledged=true;acknowledgedAt=now;return true;
+ }
  public State observe(JumperState after,long now){
   if(paused)return State.PAUSED;
   if(action==null)return State.READY;
-  boolean fresh=acknowledged&&after!=null&&after.usable()&&after.timestampMs>dispatchedAt
+  boolean fresh=acknowledged&&after!=null&&after.usable()&&after.timestampMs>acknowledgedAt&&after.timestampMs>dispatchedAt
     &&after.timestampMs-dispatchedAt<=650&&after.timestampMs<=now&&now-after.timestampMs<=300;
   if(fresh){
    observedResponse=true;
@@ -43,8 +48,9 @@ public final class JumperFeedback {
    }else progressFrame=-1;
   }
   if(now<dispatchedAt||now-dispatchedAt<650)return State.WAITING;
+  boolean missingAck=!acknowledged;
   failedWithAck=acknowledged&&observedResponse;clear();failures++;
-  if(failures>=3){paused=true;return State.PAUSED;}
+  if(missingAck||failures>=3){paused=true;return State.PAUSED;}
   return State.RETRY;
  }
  private float worldShift(JumperState after){
@@ -75,10 +81,11 @@ public final class JumperFeedback {
   if(agreeing<3||agreeing<Math.max(before.platforms.size(),after.platforms.size())*.8f||after.player.centerY()-before.player.centerY()-median>=-Math.max(3,5*scale))return Float.NaN;
   return median;
  }
- private void clear(){token=0;action=null;acknowledged=false;before=null;progressFrame=-1;}
+ private void clear(){token=0;action=null;acknowledged=false;before=null;progressFrame=-1;acknowledgedAt=-1;}
  public void cancel(long id){if(id==token){clear();failedWithAck=false;}}
  public boolean paused(){return paused;}
+ public long verified(){return verified;}
  /** True only if own ACK and a usable post-dispatch observation actually existed. */
  public boolean failedWithAck(){return failedWithAck;}
- public String report(){return "JUMPER FEEDBACK: pending="+(action==null?"none":action)+" ack="+acknowledged+" failures="+failures+" verified="+verified+" scene_progress="+sceneProgress+" paused="+paused;}
+ public String report(){return "JUMPER FEEDBACK: pending="+(action==null?"none":action)+" ack="+acknowledged+" ack_at_ms="+acknowledgedAt+" failures="+failures+" verified="+verified+" scene_progress="+sceneProgress+" paused="+paused;}
 }

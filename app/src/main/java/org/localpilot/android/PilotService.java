@@ -1815,7 +1815,7 @@ public class PilotService extends AccessibilityService {
   final long feedbackToken=temporal?arcadeFeedback.dispatched(action,observation,now):0;
   long sentBefore=captureSent;
   sendObserved(fromX,fromY,x,y,ticket,()->{
-   if(temporal&&!arcadeFeedback.acknowledge(feedbackToken))return;
+   if(temporal&&!arcadeFeedback.acknowledge(feedbackToken,SystemClock.elapsedRealtime()))return;
    arcadeAck=true;note="Android завершил касание · проверяю игру";update();
   },timestampMs,gesture.durationMs());
   if(captureSent==sentBefore&&playingJumper){if(temporal)arcadeFeedback.cancel(feedbackToken);arcadePending=null;arcadeBefore=null;arcadeAck=false;}
@@ -1953,7 +1953,7 @@ public class PilotService extends AccessibilityService {
   note="Касание "+action+" · проверю движение Ари";update();
   long sentBefore=captureSent;
   long feedbackToken=jumperFeedback.dispatched(action,state,now);
-  sendObserved(fromX,y,x,y,ticket,()->{if(!jumperFeedback.acknowledge(feedbackToken))return;note="Android завершил касание · ожидаю новый кадр";update();},timestampMs,gesture.durationMs());
+  sendObserved(fromX,y,x,y,ticket,()->{if(!jumperFeedback.acknowledge(feedbackToken,SystemClock.elapsedRealtime()))return;note="Android завершил касание · ожидаю новый кадр";update();},timestampMs,gesture.durationMs());
   if(captureSent==sentBefore){jumperFeedback.cancel(feedbackToken);jumperAwaitingVerification=false;}
   else{jumperPendingActionMs=SystemClock.elapsedRealtime();jumperFeedback.started(feedbackToken,jumperPendingActionMs);}
  }

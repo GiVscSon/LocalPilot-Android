@@ -206,16 +206,22 @@ public final class TenGamesTest {
   }
 
   HexaVision.Read r1 = HexaVision.read((x, y) -> px[y * w + x], w, h, 0, 0, w, h, 0, 0, 0, 0, 5, 5);
-  check(r1.usable() && r1.board.occupiedCellCount() == 1 && r1.board.availableTrayCount() == 2,
-    "HexaVision reads hex cells and tray slots: " + r1.reason);
-  HexaPolicy.Move move = HexaPolicy.choose(r1.board);
+  check(!r1.usable()&&!r1.board.known(),"alpha-encoded synthetic counts never become visual evidence");
+  HexaVision.Read opaque=HexaVision.read((x,y)->px[y*w+x]|0xff000000,w,h,0,0,w,h,0,0,0,0,5,5);
+  check(!opaque.usable(),"opaque Android screenshot pixels cannot fabricate fallback heights");
+  HexaBoard.Stack[] manualCells=new HexaBoard.Stack[25];java.util.Arrays.fill(manualCells,HexaBoard.Stack.empty());
+  manualCells[1]=HexaBoard.Stack.single(1,6);
+  // Separately test the planner/session with explicitly known board data.
+  HexaBoard manualBoard=new HexaBoard(5,5,manualCells,new HexaBoard.Stack[]{
+    HexaBoard.Stack.single(1,4),HexaBoard.Stack.single(4,3),HexaBoard.Stack.empty()});
+  HexaPolicy.Move move = HexaPolicy.choose(manualBoard);
   check(move != null && move.traySlot == 0 && move.clearedStacks == 1 && move.clearedTiles == 10,
     "HexaPolicy places red stack adjacent to red(6) to reach threshold 10 and clear");
 
   HexaSession session = new HexaSession();
-  check(session.observe(r1.board, 1000L, 1000L) == HexaSession.Status.WAIT_STABLE, "1st frame waits");
-  check(session.observe(r1.board, 1100L, 1100L) == HexaSession.Status.READY, "2nd stable frame ready");
-  session.sent(r1.board, move, 1120L);
+  check(session.observe(manualBoard, 1000L, 1000L) == HexaSession.Status.WAIT_STABLE, "1st frame waits");
+  check(session.observe(manualBoard, 1100L, 1100L) == HexaSession.Status.READY, "2nd stable frame ready");
+  session.sent(manualBoard, move, 1120L);
   check(session.observe(move.expectedBoard, 1350L, 1350L) == HexaSession.Status.WAIT_RESPONSE, "pre-ACK change not verified");
   session.acknowledge(1360L);
   check(session.verifiedMoves() == 0, "ACK alone is not a verified Hexon move");
@@ -227,15 +233,15 @@ public final class TenGamesTest {
   HexaBoard.Stack[] wrongCells=move.expectedBoard.cells();
   wrongCells[wrongCells.length-1]=HexaBoard.Stack.single(4,2);
   HexaBoard wrongBoard=new HexaBoard(5,5,wrongCells,move.expectedBoard.tray());
-  HexaSession unrelated=primedHexa(r1.board,move);
+  HexaSession unrelated=primedHexa(manualBoard,move);
   unrelated.observe(wrongBoard,1350,1350);
   check(unrelated.observe(wrongBoard,1450,1450)==HexaSession.Status.WAIT_RESPONSE
     &&unrelated.verifiedMoves()==0,"unrelated target/tray changes never satisfy a predicted clear");
 
   HexaBoard.Stack[] wrongTray=move.expectedBoard.tray();
-  wrongTray[1]=HexaBoard.Stack.single(r1.board.traySlot(1).topColor==4?3:4,3);
+  wrongTray[1]=HexaBoard.Stack.single(manualBoard.traySlot(1).topColor==4?3:4,3);
   HexaBoard otherSlotChanged=new HexaBoard(5,5,move.expectedBoard.cells(),wrongTray);
-  HexaSession wrongHand=primedHexa(r1.board,move);
+  HexaSession wrongHand=primedHexa(manualBoard,move);
   wrongHand.observe(otherSlotChanged,1350,1350);
   check(wrongHand.observe(otherSlotChanged,1450,1450)==HexaSession.Status.WAIT_RESPONSE,
     "unexpected changes in untouched tray slots are not a placement witness");
@@ -243,14 +249,14 @@ public final class TenGamesTest {
   HexaBoard.Stack[] refill=move.expectedBoard.tray();
   refill[move.traySlot]=HexaBoard.Stack.single(2,3);
   HexaBoard refilled=new HexaBoard(5,5,move.expectedBoard.cells(),refill);
-  HexaSession expectedRefill=primedHexa(r1.board,move);
+  HexaSession expectedRefill=primedHexa(manualBoard,move);
   expectedRefill.observe(refilled,1350,1350);
   check(expectedRefill.observe(refilled,1450,1450)==HexaSession.Status.VERIFIED,
     "expected exact board plus refill of only the consumed slot is verified");
 
-  HexaSession forged=new HexaSession();forged.observe(r1.board,1000,1000);forged.observe(r1.board,1100,1100);
+  HexaSession forged=new HexaSession();forged.observe(manualBoard,1000,1000);forged.observe(manualBoard,1100,1100);
   boolean rejected=false;
-  try{forged.sent(r1.board,new HexaPolicy.Move(move.traySlot,move.targetIndex,5,
+  try{forged.sent(manualBoard,new HexaPolicy.Move(move.traySlot,move.targetIndex,5,
       0,1,10,25,999,wrongBoard),1120);}
   catch(IllegalArgumentException expected){rejected=true;}
   check(rejected,"forged expected-board and predicted-clear metadata cannot enter a pending action");

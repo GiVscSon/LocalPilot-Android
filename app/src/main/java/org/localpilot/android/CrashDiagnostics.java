@@ -12,7 +12,7 @@ public final class CrashDiagnostics {
  private static volatile String installedBuild="unknown";
  private static volatile ActivityManager processManager;
  public static String buildLabel(Context context){
-  try{android.content.pm.PackageInfo info=context.getPackageManager().getPackageInfo(context.getPackageName(),0);return info.versionName+"/code"+info.getLongVersionCode()+" @"+InstalledBuild.shortRevision(context);}
+  try{android.content.pm.PackageInfo info=context.getPackageManager().getPackageInfo(context.getPackageName(),0);return info.versionName+"/code"+info.getLongVersionCode()+"@"+InstalledBuild.shortRevision(context);}
   catch(android.content.pm.PackageManager.NameNotFoundException|RuntimeException ignored){return "unknown";}
  }
  /** Android stores only our bounded version/phase marker, never a screenshot or arbitrary text. */

@@ -3,7 +3,7 @@ package org.localpilot.android;
 /**
  * Pixel-level vision reader for "Гексон" (Hexa Sort): reads the hexagonal cell lattice
  * in the upper 76% of the ROI and the 3 stack tray slots in the lower 24% of the ROI.
- * Never fabricates colors for occluded or mid-animation cells.
+ * Colours alone do not determine stack height; occupied stacks remain UNKNOWN.
  */
 public final class HexaVision {
  public interface Pixels { int get(int x, int y); }
@@ -109,19 +109,10 @@ public final class HexaVision {
   }
   int primary = topColor > 0 ? topColor : midColor;
   if (primary <= 0) return HexaBoard.Stack.unknown();
-  // Estimate visible tile count from brightness/stripe encoding or default conservative stack height 4.
-  int topCount = extractEncodedCount(topRgb, 4);
-  if (lowColor > 0 && lowColor != primary) {
-   int bottomCount = extractEncodedCount(lowRgb, 3);
-   return new HexaBoard.Stack(primary, topCount, lowColor, bottomCount);
-  }
-  return HexaBoard.Stack.single(primary, topCount);
- }
-
- private static int extractEncodedCount(int rgb, int fallback) {
-  int alphaCount = (rgb >>> 24) & 0x7f;
-  if (alphaCount >= 1 && alphaCount <= 9) return alphaCount;
-  return fallback;
+  // RGB/alpha is not a tile-count channel. A normal screenshot provides
+  // colour here, but no independently measured stack height. Keep UNKNOWN
+  // until a real visible-height/number reader is integrated and validated.
+  return HexaBoard.Stack.unknown();
  }
 
  private static int colorDiff(int a, int b) {

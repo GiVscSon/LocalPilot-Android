@@ -71,7 +71,7 @@ public final class UniversalVisionTest {
     var decision=new ArcadeController().decide(first,1000);var gesture=ArcadeControls.map(decision,first,p==ArcadeProfile.TRAFFIC?1:0);
     float shift=gesture.toX()<gesture.fromX()?-.04f:.04f;
     var response=CustomArcadeVision.detect(p,(x,y)->scene(p,(x-l)/(float)w,(y-t)/(float)h,colors,shift),l,t,l+w,t+h,0,0,0,0,1100,first,conf);
-    var feedback=new ArcadeFeedback();long id=feedback.dispatched(decision,first,1000);feedback.acknowledge(id);
+    var feedback=new ArcadeFeedback();long id=feedback.dispatched(decision,first,1000);feedback.acknowledge(id,1050);
     check(feedback.observe(response,1100)==ArcadeFeedback.State.READY&&feedback.verified()==1,"pixels → controller → gesture → changed pixels → visual ACK "+p);
    }
    var missing=CustomArcadeVision.detect(p,(x,y)->0xff202020,l,t,l+w,t+h,0,0,0,0,1200,second,conf);
