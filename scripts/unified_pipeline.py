@@ -12,9 +12,11 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import shlex
 import shutil
 import subprocess
 import sys
+import time
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -23,6 +25,7 @@ SEEDS = (20261108, 20261201, 177777)
 GAMES = 10
 MODELS = 16
 LAB = "build/reports/sim-autoplay"
+BUILT_APK = Path("app/build/outputs/apk/debug/app-debug.apk")
 
 
 def execute(*args: str, timeout: int = 900) -> str:
@@ -166,6 +169,106 @@ def browser_shadow(out: Path) -> dict:
             "android_verified": False, "model_transfer": False}
 
 
+def jvm_regression_commands() -> list[list[str]]:
+    """Reuse the checked-in Android regression list, rather than invent a second suite."""
+    workflow = strict_file_bytes(ROOT / ".github/workflows/android.yml", 80_000).decode("utf-8")
+    start = workflow.index("   - name: JVM regressions")
+    end = workflow.index("   - name: Explicit unit tests and Android lint", start)
+    commands = [shlex.split(line.strip()) for line in workflow[start:end].splitlines()
+                if line.strip().startswith("java ")]
+    if not commands:
+        raise RuntimeError("Android workflow declares no JVM regression commands")
+    # These are the existing unified-model integration suites, not generated tests.
+    commands.extend(["java", f"tests/{name}Verify.java"] for name in (
+        "TenGames", "RetroConsole", "AdaptiveEngine", "Unified081Integration"))
+    return [list(command) for command in dict.fromkeys(tuple(c) for c in commands)]
+
+
+def evidenced_command(command: list[str], log: Path, timeout: int = 900) -> dict:
+    """Retain full build/test output and the exit status, including failures."""
+    started = time.monotonic()
+    result = {"command": command, "status": "FAIL", "exit_code": None,
+              "log": str(log)}
+    try:
+        process = subprocess.run(command, cwd=ROOT, stdin=subprocess.DEVNULL,
+                                 capture_output=True, text=True, encoding="utf-8",
+                                 errors="replace", timeout=timeout, check=False)
+        output = (process.stdout or "") + (process.stderr or "")
+        result["exit_code"] = process.returncode
+        result["status"] = "PASS" if process.returncode == 0 else "FAIL"
+    except (OSError, subprocess.TimeoutExpired) as error:
+        def decoded(value: str | bytes | None) -> str:
+            return value.decode("utf-8", errors="replace") if isinstance(value, bytes) else value or ""
+        output = (decoded(getattr(error, "stdout", None)) +
+                  decoded(getattr(error, "stderr", None)) + "\n" + str(error))
+    log.parent.mkdir(parents=True, exist_ok=True)
+    log.write_text(output, encoding="utf-8")
+    result["log_sha256"] = hashlib.sha256(log.read_bytes()).hexdigest()
+    result["seconds"] = round(time.monotonic() - started, 3)
+    print(f"{result['status']} {' '.join(command)} log={log}")
+    return result
+
+
+def build_test(out: Path) -> dict:
+    """Actually build and test one checkout. Device/physical acceptance is separate."""
+    out.mkdir(parents=True, exist_ok=True)
+    revision = source_revision()
+    evidence = {"github_sha": revision[0], "source_sha256": revision[1],
+                "status": "FAIL", "commands": [], "real_game_verified": False,
+                "device_acceptance": "NOT_RUN", "gradle_unit_tests": "UNDETERMINED"}
+    manifest = out / "build-test.json"
+    try:
+        commands = [[sys.executable, "-m", "unittest", "discover", "-s", "tests", "-p", "test_*.py", "-v"]]
+        commands.extend(jvm_regression_commands())
+        commands.append(["bash", "./gradlew", "--no-daemon", ":app:testDebugUnitTest",
+                         ":app:lintDebug", ":app:assembleDebug",
+                         ":app:assembleDebugAndroidTest", ":game-lab:assembleDebug"])
+        classes = out / "nes-classes"
+        classes.mkdir(exist_ok=True)
+        rom = out / "homebrew.nes"
+        core = ROOT / "game-lab/build/generated/jsnes/assets/nes/jsnes.min.js"
+        commands.extend([
+            ["node", "tests/nes_controller_framehold.cjs"],
+            ["javac", "--release", "17", "-d", str(classes),
+             "game-lab/src/main/java/org/localpilot/gamelab/HomebrewNes.java",
+             "tests/ExportHomebrewNes.java"],
+            ["java", "-cp", str(classes), "ExportHomebrewNes", str(rom)],
+            ["node", "tests/jsnes_nes_smoke.cjs", str(core), str(rom)],
+            ["node", "tests/nes_observation_smoke.cjs", str(core), str(rom)],
+        ])
+        for index, command in enumerate(commands, 1):
+            entry = evidenced_command(command, out / f"{index:03d}.log", timeout=1800)
+            evidence["commands"].append(entry)
+            if entry["status"] != "PASS":
+                raise RuntimeError(f"Build/test failed: {' '.join(command)}; see {entry['log']}")
+            if "./gradlew" in command:
+                log = Path(entry["log"]).read_text(encoding="utf-8")
+                receipt = next((line for line in log.splitlines()
+                                if ":app:testDebugUnitTest" in line), "")
+                if not receipt:
+                    raise RuntimeError("Gradle did not report the requested unit-test task")
+                evidence["gradle_unit_tests"] = next(
+                    (label.replace("-", "_") for label in
+                     ("NO-SOURCE", "UP-TO-DATE", "FROM-CACHE", "SKIPPED") if label in receipt),
+                    "EXECUTED")
+            if source_revision() != revision:
+                raise RuntimeError("Build/test modified source; evidence rejected")
+        apk = ROOT / BUILT_APK
+        raw = strict_file_bytes(apk, 64 * 1024 * 1024)
+        evidence["built_apk"] = {"path": str(apk), "sha256": hashlib.sha256(raw).hexdigest(),
+                                 "size_bytes": len(raw)}
+        evidence["status"] = "PASS"
+        return {"build_test_manifest": str(manifest), "commands_passed": len(commands),
+                "built_apk": evidence["built_apk"],
+                "gradle_unit_tests": evidence["gradle_unit_tests"],
+                "device_acceptance": "NOT_RUN", "real_game_verified": False}
+    except (RuntimeError, OSError, ValueError, KeyError) as error:
+        evidence["reason"] = str(error)
+        raise
+    finally:
+        manifest.write_text(json.dumps(evidence, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
 def sdk_tool(name: str) -> Path | None:
     found = shutil.which(name)
     if found:
@@ -194,6 +297,7 @@ def verify_apk(apk: Path, require_sdk: bool) -> dict:
             "assets/nes/jsnes.min.js", "assets/nes/index.html",
             "assets/nes/latched-buttons.js", "assets/nes/nes-observation.js",
             "assets/localpilot-game-script.lps",
+            "assets/localpilot-build.json",
         }
         missing = sorted(wanted - names)
         if missing or len(models) != MODELS:
@@ -207,11 +311,22 @@ def verify_apk(apk: Path, require_sdk: bool) -> dict:
             raise RuntimeError("Wrong number of scripted game models")
         if not archive.read("assets/nes/jsnes.min.js"):
             raise RuntimeError("NES emulator runtime empty")
+        if archive.getinfo("assets/localpilot-build.json").file_size > 4096:
+            raise RuntimeError("APK provenance asset is oversized")
+        metadata = json.loads(archive.read("assets/localpilot-build.json"))
+        head, fingerprint = source_revision()
+        if (not isinstance(metadata, dict)
+                or metadata.get("schema") != "localpilot-build-provenance-v1"
+                or metadata.get("git_sha") != head
+                or metadata.get("source_sha256") != fingerprint):
+            raise RuntimeError("APK embedded provenance differs from the checked-out source")
     result = {"apk": str(apk), "size_bytes": apk.stat().st_size,
               "sha256": hashlib.sha256(apk.read_bytes()).hexdigest(),
               "simulation_model_assets": len(models),
               "embedded_nes": True, "embedded_gamelab_manifest": False,
-              "signature_verified": False, "real_game_verified": False}
+              "signature_verified": False, "real_game_verified": False,
+              "embedded_source_sha": metadata["git_sha"],
+              "embedded_source_sha256": metadata["source_sha256"]}
     aapt = sdk_tool("aapt")
     signer = sdk_tool("apksigner")
     if require_sdk and (aapt is None or signer is None):
@@ -239,7 +354,7 @@ def verify_apk(apk: Path, require_sdk: bool) -> dict:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("stage",
-        choices=("verify", "selfplay", "shadow", "apk", "all"))
+        choices=("verify", "selfplay", "shadow", "build-test", "apk", "all"))
     parser.add_argument("--out", default=str(DEFAULT_OUT))
     parser.add_argument("--apk", default="app/build/outputs/apk/debug/app-debug.apk")
     parser.add_argument("--require-sdk", action="store_true")
@@ -290,11 +405,22 @@ def main() -> int:
             current_stage = "shadow"
             report["shadow"] = browser_shadow(out / "browser-shadow")
             report["stages"]["shadow"] = {"status": "PASS", **report["shadow"]}
+        if opts.stage in ("build-test", "all"):
+            current_stage = "build-test"
+            # A fresh build invalidates an older APK receipt, even when the
+            # source revision is unchanged (signing/configuration may differ).
+            report["stages"].pop("apk", None)
+            report["build_test"] = build_test(out / "build-test")
+            report["stages"]["build-test"] = {"status": "PASS", **report["build_test"]}
         if opts.stage in ("apk", "all"):
             current_stage = "apk"
             report["apk"] = verify_apk(
                 ROOT / opts.apk if not Path(opts.apk).is_absolute()
                 else Path(opts.apk), opts.require_sdk)
+            built = report["stages"].get("build-test", {})
+            if (built.get("status") == "PASS" and
+                    report["apk"]["sha256"] != built["built_apk"]["sha256"]):
+                raise RuntimeError("APK differs from the artifact produced by build-test")
             report["stages"]["apk"] = {"status": "PASS", **report["apk"]}
         if source_revision() != (github_sha, source_sha256):
             raise RuntimeError("Source changed during pipeline; evidence rejected")
@@ -310,7 +436,7 @@ def main() -> int:
     report["release_ready"] = False  # Device acceptance is a separate mandatory gate.
     report["complete"] = all(
         report["stages"].get(name, {}).get("status") == "PASS"
-        for name in ("verify", "selfplay", "apk")
+        for name in ("verify", "selfplay", "build-test", "apk")
     )
     state_file.write_text(
         json.dumps(report, ensure_ascii=False, indent=2) + "\n",

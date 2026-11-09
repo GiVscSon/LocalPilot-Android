@@ -314,7 +314,7 @@ def cmd_unified_pipeline(args: argparse.Namespace) -> None:
         command.append("--require-sdk")
     # The local operator can trigger this whole pipeline, but cannot invent
     # a completed APK or claim that a simulator won a physical Market game.
-    print(str(run(command, timeout=1800)))
+    print(str(run(command, timeout=7200)))
 
 
 def parser() -> argparse.ArgumentParser:
@@ -339,8 +339,8 @@ def parser() -> argparse.ArgumentParser:
     stops = sub.add_parser("stop-report", help="Classify STOP/PAUSE/RECOVER from saved script log")
     stops.add_argument("--log", required=True)
     stops.set_defaults(func=cmd_stop_report)
-    unified = sub.add_parser("unified", help="Run scripted contract tests, self-play, model gating and single-APK verification")
-    unified.add_argument("stage", choices=("verify", "selfplay", "shadow", "apk", "all"), nargs="?", default="selfplay")
+    unified = sub.add_parser("unified", help="Run contracts, self-play, build/test, model gating and single-APK verification")
+    unified.add_argument("stage", choices=("verify", "selfplay", "shadow", "build-test", "apk", "all"), nargs="?", default="selfplay")
     unified.add_argument("--output", default="build/reports/unified-script-engine")
     unified.add_argument("--apk")
     unified.add_argument("--require-sdk", action="store_true")

@@ -12,7 +12,7 @@ public final class CrashDiagnostics {
  private static volatile String installedBuild="unknown";
  private static volatile ActivityManager processManager;
  public static String buildLabel(Context context){
-  try{android.content.pm.PackageInfo info=context.getPackageManager().getPackageInfo(context.getPackageName(),0);return info.versionName+"/code"+info.getLongVersionCode();}
+  try{android.content.pm.PackageInfo info=context.getPackageManager().getPackageInfo(context.getPackageName(),0);return info.versionName+"/code"+info.getLongVersionCode()+" @"+InstalledBuild.shortRevision(context);}
   catch(android.content.pm.PackageManager.NameNotFoundException|RuntimeException ignored){return "unknown";}
  }
  /** Android stores only our bounded version/phase marker, never a screenshot or arbitrary text. */
@@ -46,6 +46,7 @@ public final class CrashDiagnostics {
  public static String report(Context context){
   StringBuilder s=new StringBuilder("LocalPilot crash diagnostics\n");
   s.append("Build=").append(buildLabel(context)).append('\n');
+  s.append("Source revision=").append(InstalledBuild.revision(context)).append(" source_sha256=").append(InstalledBuild.fingerprint(context)).append('\n');
   s.append("Current phase=").append(phase).append('\n');
   s.append("Own accessibility setting=").append(ownServiceState(context)).append(" connected=").append(PilotService.instance!=null).append('\n');
   File f=new File(context.getFilesDir(),"last-java-crash.txt");

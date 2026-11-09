@@ -10,6 +10,7 @@ permissions:
  contents: read
 jobs:
  device:
+  name: API${{ matrix.api }}-${{ matrix.form_factor }}
   runs-on: ubuntu-24.04
   timeout-minutes: 20
   strategy:
@@ -18,10 +19,32 @@ jobs:
     include:
      - api: 30
        target: default
+       form_factor: phone
+       profile: pixel_2
+     - api: 30
+       target: default
+       form_factor: tablet
+       profile: pixel_c
      - api: 35
        target: default
+       form_factor: phone
+       profile: pixel_2
+     - api: 35
+       target: default
+       form_factor: tablet
+       profile: pixel_c
      - api: 36
        target: google_apis
+       form_factor: phone
+       profile: pixel_2
+     - api: 36
+       target: google_apis
+       form_factor: tablet
+       profile: pixel_c
+  env:
+   LOCALPILOT_EXPECTED_API: ${{ matrix.api }}
+   LOCALPILOT_FORM_FACTOR: ${{ matrix.form_factor }}
+   LOCALPILOT_EMULATOR_PROFILE: ${{ matrix.profile }}
   steps:
    - uses: actions/checkout@v4
    - uses: actions/setup-java@v4
@@ -45,7 +68,7 @@ jobs:
          grep -Eq 'Could not find (org\.codehaus\.groovy:groovy:3\.0\.21|org\.apache\.httpcomponents:httpclient:4\.5\.6)' device-evidence/gradle-build.log; then
         echo "::warning title=Gradle dependency resolution::Retrying lint dependency retrieval after Maven resolution failure"
         sleep 8
-        gradle --no-daemon --refresh-dependencies :app:assembleDebug :app:assembleDebugAndroidTest 2>&1 | tee -a device-evidence/gradle-build.log
+        gradle --no-daemon --refresh-dependencies :app:assembleDebug :app:assembleDebugAndroidTest :game-lab:assembleDebug 2>&1 | tee -a device-evidence/gradle-build.log
       else
         exit 1
       fi
@@ -59,7 +82,7 @@ jobs:
       api-level: ${{ matrix.api }}
       arch: x86_64
       target: ${{ matrix.target }}
-      profile: pixel_2
+      profile: ${{ matrix.profile }}
       disable-animations: true
       emulator-boot-timeout: 300
       emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
@@ -72,6 +95,6 @@ jobs:
    - uses: actions/upload-artifact@v4
      if: always()
      with:
-      name: Android-API${{ matrix.api }}-acceptance-${{ github.sha }}-attempt${{ github.run_attempt }}
+      name: Android-API${{ matrix.api }}-${{ matrix.form_factor }}-acceptance-${{ github.sha }}-attempt${{ github.run_attempt }}
       if-no-files-found: error
       path: device-evidence/

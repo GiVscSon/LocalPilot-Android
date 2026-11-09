@@ -45,19 +45,10 @@ jobs:
           SDKMGR="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | head -n 1)"
           if [ -z "$SDKMGR" ]; then echo "No Android SDK command-line tools" >&2; exit 1; fi
           "$SDKMGR" --install 'platforms;android-35' 'build-tools;35.0.0'
-      - name: Verify checked-in models and integrated JVM APIs
-        run: |
-          python3 training/sync_rl_lab_to_android.py
-          java tests/WeightSpaceSkillsVerify.java
-          java tests/TenGamesVerify.java
-          java tests/RetroConsoleVerify.java
-          java tests/AdaptiveEngineVerify.java
-          java tests/Unified081IntegrationVerify.java
-          git diff --exit-code
-      - name: Assemble ONE user APK and optional external-only GameLab test target
-        run: |
-          chmod +x ./gradlew
-          ./gradlew --no-daemon :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :game-lab:assembleDebug
+      - name: Verify checked-in model integrity
+        run: python3 training/sync_rl_lab_to_android.py
+      - name: Build and test the exact unified source revision
+        run: python3 scripts/unified_pipeline.py build-test
       - name: Validate APK contents and signing
         run: |
           python3 tools/verify_adaptive_apk.py app/build/outputs/apk/debug/app-debug.apk
