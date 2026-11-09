@@ -222,6 +222,44 @@ public final class TenGamesTest {
   session.observe(move.expectedBoard, 1450L, 1450L);
   check(session.observe(move.expectedBoard, 1550L, 1550L) == HexaSession.Status.VERIFIED && session.verifiedMoves() == 1,
     "two post-ACK stable frames verify Hexon move");
+
+  // A clear predicted by the planner cannot validate unrelated post-ACK pixels.
+  HexaBoard.Stack[] wrongCells=move.expectedBoard.cells();
+  wrongCells[wrongCells.length-1]=HexaBoard.Stack.single(4,2);
+  HexaBoard wrongBoard=new HexaBoard(5,5,wrongCells,move.expectedBoard.tray());
+  HexaSession unrelated=primedHexa(r1.board,move);
+  unrelated.observe(wrongBoard,1350,1350);
+  check(unrelated.observe(wrongBoard,1450,1450)==HexaSession.Status.WAIT_RESPONSE
+    &&unrelated.verifiedMoves()==0,"unrelated target/tray changes never satisfy a predicted clear");
+
+  HexaBoard.Stack[] wrongTray=move.expectedBoard.tray();
+  wrongTray[1]=HexaBoard.Stack.single(r1.board.traySlot(1).topColor==4?3:4,3);
+  HexaBoard otherSlotChanged=new HexaBoard(5,5,move.expectedBoard.cells(),wrongTray);
+  HexaSession wrongHand=primedHexa(r1.board,move);
+  wrongHand.observe(otherSlotChanged,1350,1350);
+  check(wrongHand.observe(otherSlotChanged,1450,1450)==HexaSession.Status.WAIT_RESPONSE,
+    "unexpected changes in untouched tray slots are not a placement witness");
+
+  HexaBoard.Stack[] refill=move.expectedBoard.tray();
+  refill[move.traySlot]=HexaBoard.Stack.single(2,3);
+  HexaBoard refilled=new HexaBoard(5,5,move.expectedBoard.cells(),refill);
+  HexaSession expectedRefill=primedHexa(r1.board,move);
+  expectedRefill.observe(refilled,1350,1350);
+  check(expectedRefill.observe(refilled,1450,1450)==HexaSession.Status.VERIFIED,
+    "expected exact board plus refill of only the consumed slot is verified");
+
+  HexaSession forged=new HexaSession();forged.observe(r1.board,1000,1000);forged.observe(r1.board,1100,1100);
+  boolean rejected=false;
+  try{forged.sent(r1.board,new HexaPolicy.Move(move.traySlot,move.targetIndex,5,
+      0,1,10,25,999,wrongBoard),1120);}
+  catch(IllegalArgumentException expected){rejected=true;}
+  check(rejected,"forged expected-board and predicted-clear metadata cannot enter a pending action");
+
+ }
+
+ private static HexaSession primedHexa(HexaBoard board,HexaPolicy.Move move){
+  HexaSession session=new HexaSession();session.observe(board,1000,1000);session.observe(board,1100,1100);
+  session.sent(board,move,1120);session.acknowledge(1200);return session;
  }
 
  private static void testKotobashnyaAdapterEndToEnd() {
@@ -263,7 +301,7 @@ public final class TenGamesTest {
   // Feedback verification
   KotobashnyaFeedback fb = new KotobashnyaFeedback();
   long tok = fb.dispatched(stomp, s2, 1100L);
-  fb.acknowledge(tok);
+  fb.acknowledge(tok,1150L);
   check(fb.verified() == 0, "ACK alone never verifies Kotobashnya action");
   KotobashnyaState afterStomp = new KotobashnyaState(
     KotobashnyaState.SubMode.TOWER_CLIMB_STOMP, 1250L,
@@ -271,5 +309,37 @@ public final class TenGamesTest {
     s2.platforms, List.of(), null, null, 0f, -0.4f, 0f, 0f, 0.9f, true, false);
   check(fb.observe(afterStomp, 1250L) == KotobashnyaFeedback.State.VERIFIED && fb.verified() == 1,
     "enemy removal + upward rebound verifies stomp");
+
+  KotobashnyaFeedback delayedAck=new KotobashnyaFeedback();
+  long lateToken=delayedAck.dispatched(stomp,s2,1100);delayedAck.acknowledge(lateToken,1250);
+  check(delayedAck.observe(afterStomp,1260)==KotobashnyaFeedback.State.WAITING,
+    "frame captured at/before ACK never becomes post-ACK evidence");
+  KotobashnyaFeedback missingAck=new KotobashnyaFeedback();missingAck.dispatched(stomp,s2,1100);
+  check(missingAck.observe(afterStomp,1700)==KotobashnyaFeedback.State.PAUSED,
+    "missing Android ACK pauses instead of authorizing another attempt");
+  KotobashnyaState reboundOnly=new KotobashnyaState(s2.subMode,1250,afterStomp.player,s2.platforms,
+    s2.enemies,null,null,0,-.4f,0,0,.9f,true,false);
+  check(!KotobashnyaFeedback.verifiedResponse(stomp,s2,reboundOnly),
+    "upward rebound with the target enemy still present is not a verified stomp");
+  KotobashnyaState disappearanceOnly=new KotobashnyaState(s2.subMode,1250,s2.player,s2.platforms,
+    List.of(),null,null,0,.3f,0,0,.9f,true,false);
+  check(!KotobashnyaFeedback.verifiedResponse(stomp,s2,disappearanceOnly),
+    "enemy disappearance alone is not a verified stomp");
+
+  ArcadeObservation.Box slab=new ArcadeObservation.Box(.32f,.55f,.68f,.59f);
+  ArcadeObservation.Box top=new ArcadeObservation.Box(.3f,.7f,.7f,.74f);
+  KotobashnyaState slabBefore=new KotobashnyaState(KotobashnyaState.SubMode.TOWER_STACK_SLAB,
+    1000,null,List.of(),List.of(),slab,top,0,0,0,0,.9f,true,false);
+  KotobashnyaState passiveSlab=new KotobashnyaState(slabBefore.subMode,1200,null,List.of(),List.of(),
+    new ArcadeObservation.Box(.32f,.50f,.68f,.54f),top,0,0,0,0,.9f,true,false);
+  KotobashnyaPolicy.Decision lock=new KotobashnyaPolicy.Decision(KotobashnyaPolicy.Action.LOCK_SLAB,.5f,.55f,50,"test");
+  check(!KotobashnyaFeedback.verifiedResponse(lock,slabBefore,passiveSlab),
+    "passive moving-slab animation without a new tower level is not lock success");
+  KotobashnyaState cameraOnly=new KotobashnyaState(slabBefore.subMode,1200,null,List.of(),List.of(),
+    new ArcadeObservation.Box(.32f,.50f,.68f,.54f),new ArcadeObservation.Box(.3f,.65f,.7f,.69f),
+    0,0,0,-.1f,.9f,true,false);
+  check(!KotobashnyaFeedback.verifiedResponse(lock,slabBefore,cameraOnly),
+    "common camera translation is not a locked slab");
+
  }
 }

@@ -69,13 +69,10 @@ public final class HexaSession {
     status = Status.WAIT_RESPONSE;
     return status;
    }
-   // Verify that either the exact expected board appeared (or with new tray refill)
-   // and the target hex cell changed from empty.
-   boolean targetChanged = !board.cell(pendingMove.targetIndex).equals(before.cell(pendingMove.targetIndex))
-     || pendingMove.clearedStacks > 0;
-   boolean trayChanged = !board.traySlot(pendingMove.traySlot).equals(before.traySlot(pendingMove.traySlot))
-     || board.occupiedCellCount() != before.occupiedCellCount();
-   if (!targetChanged || !trayChanged) {
+   // A predicted clear is not a visual witness. Require the complete expected
+   // cell transition, consumption of the dispatched tray slot and no unrelated
+   // tray changes. Only that consumed slot may refill with a newly observed stack.
+   if (!matchesPlacement(before, pendingMove, board)) {
     status = Status.WAIT_RESPONSE;
     return status;
    }
@@ -96,6 +93,10 @@ public final class HexaSession {
   if (paused() || pending() || (status != Status.READY && status != Status.VERIFIED)
     || stable == null || !stable.same(board) || move == null || now < lastFrameAt || now - lastFrameAt > FRESH_MS)
    throw new IllegalStateException("fresh stable hexa board required before dispatch");
+  HexaBoard.PlacementOutcome expected = board.simulatePlace(move.traySlot, move.targetIndex);
+  if(expected==null||move.expectedBoard==null||!expected.boardAfter.same(move.expectedBoard)
+    ||move.targetRow!=move.targetIndex/board.cols||move.targetCol!=move.targetIndex%board.cols)
+   throw new IllegalArgumentException("move does not match deterministic placement");
   before = board;
   pendingMove = move;
   dispatchedAt = now;
@@ -103,6 +104,16 @@ public final class HexaSession {
   candidate = null;
   candidateAt = -1;
   status = Status.WAIT_RESPONSE;
+ }
+
+ private static boolean matchesPlacement(HexaBoard before, HexaPolicy.Move move, HexaBoard after) {
+  if(after.rows!=before.rows||after.cols!=before.cols||move.expectedBoard==null
+    ||!java.util.Arrays.equals(after.cells(),move.expectedBoard.cells())
+    ||java.util.Arrays.equals(before.cells(),after.cells())
+    ||before.traySlot(move.traySlot).equals(after.traySlot(move.traySlot)))return false;
+  for(int slot=0;slot<HexaBoard.TRAY_SLOTS;slot++)
+   if(slot!=move.traySlot&&!before.traySlot(slot).equals(after.traySlot(slot)))return false;
+  return true;
  }
 
  public void cancelUnsent() {
