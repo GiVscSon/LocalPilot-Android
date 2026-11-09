@@ -163,8 +163,11 @@ public final class GameLabCoach {
  }
  private static double jumperUtility(GameLabEngine env,float[] m){
   float dx=m[2]-m[0];
-  float shift=dx<-.018f?-.14f:dx>.018f?.14f:(m[0]<.5f?-.09f:.09f);
-  float next=(env.playerX+shift+1)%1;
+  // Cat Tower moves in proportion to the drag; its TAP has no lateral shift.
+  // Ari has discrete left/right moves and a side-dependent tap impulse.
+  float shift=env.game==GameLabEngine.Game.CAT_TOWER?clamp(dx*1.3f,-.20f,.20f):
+    dx<-.018f?-.14f:dx>.018f?.14f:(m[0]<.5f?-.09f:.09f);
+  float next=env.playerX+shift;if(next<0)next+=1;else if(next>1)next-=1;
   return -Math.abs(.5f-next);
  }
 }

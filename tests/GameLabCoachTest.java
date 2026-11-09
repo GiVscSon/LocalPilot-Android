@@ -32,6 +32,22 @@ public final class GameLabCoachTest {
   check(GameLabCoach.choose(paddle,candidates)==1,
     "paddle coach predicts ball interception");
 
+  List<float[]> horizontal=List.of(swipe(.5f,.55f,.29f,.55f),
+    swipe(.5f,.55f,.71f,.55f),swipe(.5f,.55f,.5f,.55f));
+  GameLabEngine cat=new GameLabEngine(GameLabEngine.Game.CAT_TOWER,42);
+  cat.playerX=.39f;int catBefore=cat.fingerprint();
+  int catMove=GameLabCoach.choose(cat,horizontal);
+  check(catMove==1,"Cat Tower must drag right rather than invent a lateral tap impulse");
+  check(cat.fingerprint()==catBefore,"Cat Tower planning is read-only");
+  float[] catInput=horizontal.get(catMove);
+  cat.gesture(catInput[0],catInput[1],catInput[2],catInput[3],140);
+  check(Math.abs(.5f-cat.playerX)<Math.abs(.5f-.39f),
+    "chosen Cat Tower drag moves closer to centre under actual engine dynamics");
+  GameLabEngine ari=new GameLabEngine(GameLabEngine.Game.ARI,42);
+  ari.playerX=.39f;
+  check(GameLabCoach.choose(ari,horizontal)==2,
+    "Ari keeps its distinct tap impulse; Cat Tower correction must not alter Ari semantics");
+
   GameLabEngine protectedSwap=new GameLabEngine(GameLabEngine.Game.PROTECTED_SWAP,17);
   check(protectedSwap.protectedCell(0)&&protectedSwap.protectedCell(1),
     "protected skull and dynamite recognized");

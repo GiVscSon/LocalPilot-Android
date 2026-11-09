@@ -17,12 +17,22 @@ public final class BubbleFixtureActivity extends Activity {
  @Override public void onCreate(Bundle state){
   super.onCreate(state);
   ricochet=getIntent().getBooleanExtra("ricochet",false);
-  FrameLayout root=new FrameLayout(this);root.setBackgroundColor(0xff183747);
+  Surface arena=new Surface();
+  FrameLayout root=new FrameLayout(this){
+   @Override protected void onMeasure(int widthSpec,int heightSpec){
+    BubbleFixtureGeometry.Area area=BubbleFixtureGeometry.fit(View.MeasureSpec.getSize(widthSpec),
+      View.MeasureSpec.getSize(heightSpec),dp(8),dp(160),dp(8));
+    FrameLayout.LayoutParams bounds=(FrameLayout.LayoutParams)arena.getLayoutParams();
+    if(bounds!=null){bounds.width=area.width();bounds.height=area.height();
+     bounds.leftMargin=area.left();bounds.topMargin=area.top();bounds.rightMargin=bounds.bottomMargin=0;}
+    super.onMeasure(widthSpec,heightSpec);
+   }
+  };root.setBackgroundColor(0xff183747);
   status=new TextView(this);status.setTextColor(Color.WHITE);status.setTextSize(16);
   status.setPadding(dp(12),dp(100),dp(12),0);status.setText("Bubble acceptance · accepted=0");
   status.setContentDescription("LOCALPILOT_BUBBLE_SHOTS_0");
   root.addView(status,new FrameLayout.LayoutParams(-1,dp(160)));
-  Surface arena=new Surface();FrameLayout.LayoutParams bounds=new FrameLayout.LayoutParams(-1,-1);
+  FrameLayout.LayoutParams bounds=new FrameLayout.LayoutParams(-1,-1);
   bounds.setMargins(dp(8),dp(160),dp(8),dp(8));root.addView(arena,bounds);
   setContentView(root);
  }

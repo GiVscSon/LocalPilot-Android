@@ -528,6 +528,9 @@ public final class PilotUiInstrumentation extends Instrumentation {
         // searches enabled controls, so use the visible area and cancel button.
         await(()->markerBounds("Выделение области игры 1 на 1")!=null&&present("STOP · отмена"),4_000,"Bubble arena picker is unavailable");
         Rect arena=markerBounds("LOCALPILOT_BUBBLE_ARENA");require(arena!=null&&!arena.isEmpty(),"Bubble arena geometry disappeared");
+        require(arena.width()*4<=arena.height()*3+4,
+                "Bubble fixture stretched its portrait game mechanics into a landscape viewport: "+arena);
+
         // Android 16 treats the exact right/bottom window boundary as outside
         // the touch region. Fractional insets keep physical contacts inside
         // the arena while integer rounding preserves the intended ROI bounds.

@@ -229,10 +229,24 @@ public final class SimAutoplay {
     "# GameLab automated self-play · simulator only\n\n"+
     "This is offline GameLab, not a Market acceptance test or production neural transfer.\n"+
     "No Android ACK, AccessibilityService or real-game gesture is produced.\n\n"+
+    "Measurement: immediate gesture changes only; delayed physics rewards are not attributed to their earlier actions.\n"+
+    "Learned context: start-position zone and coarse direction, without board/object state.\n"+
+    "CHANGED is not a goal/win metric. Several scenes omit hazards, goals or action choices.\n"+
+    "Independent seeds do not guarantee unseen initial states in deterministic scenes.\n"+
+    "See source documentation: `docs/SIMULATOR_MEASUREMENT_LIMITS.ru.md`.\n\n"+
     "| Game | Random change % | Learned change % | Scripted change % | Learned delta pp | Random score | Learned score | Scripted score |\n"+
     "|---|---:|---:|---:|---:|---:|---:|---:|\n");
   json.append("{\n  \"schema\": \"localpilot-gamelab-autoplay-v1\",\n")
     .append("  \"source\": \"SIMULATED_GAME\",\n")
+    .append("  \"environment_kind\": \"SIMPLIFIED_UI_TEST_SCENES\",\n")
+    .append("  \"score_attribution\": \"IMMEDIATE_GESTURE_ONLY\",\n")
+    .append("  \"learned_context\": \"START_ZONE_AND_COARSE_DIRECTION\",\n")
+    .append("  \"measurement_limits\": [")
+    .append("\"CHANGED is not goal completion or verified real-game progress\",")
+    .append("\"Delayed tick rewards are not attributed to earlier actions\",")
+    .append("\"The learned table does not observe board cells or object state\",")
+    .append("\"FLAPPY has one candidate; several scenes omit hazards or terminal goals\",")
+    .append("\"Different seeds can retain identical initial states\"],\n")
     .append("  \"real_game_accepted\": false,\n")
     .append("  \"weights_promoted_to_real_games\": false,\n")
     .append("  \"seed\": ").append(seed).append(",\n")
