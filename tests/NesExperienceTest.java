@@ -1,5 +1,6 @@
 package org.localpilot.shared;
 import java.util.*;
+import java.nio.charset.StandardCharsets;
 public final class NesExperienceTest {
  private static int checks;
  private static void check(boolean yes){checks++;if(!yes)throw new AssertionError("NES experience contract");}
@@ -9,6 +10,16 @@ public final class NesExperienceTest {
   NesExperience.Frame first=new NesExperience.Frame(15,42,128,pixels);pixels[0]=0;check(first.luma()[0]==100);
   NesExperience.Episode episode=new NesExperience.Episode(rom,List.of(first,new NesExperience.Frame(30,43,128,first.luma())));
   String text=NesExperience.encode(episode);var restored=NesExperience.decode(text);check(restored.frames().size()==2);
+  byte[] snapshot=text.getBytes(StandardCharsets.UTF_8);String digest=NesExperience.sha256(snapshot);
+  check(NesExperience.decodeSnapshot(digest,snapshot).frames().size()==2);
+  rejects(()->NesExperience.decodeSnapshot("../"+digest,snapshot));
+  rejects(()->NesExperience.decodeSnapshot("0".repeat(64),snapshot));
+  rejects(()->NesExperience.decodeSnapshot(digest,null));
+  byte[] corrupt=snapshot.clone();corrupt[0]^=1;
+  rejects(()->NesExperience.decodeSnapshot(digest,corrupt));
+  rejects(()->NesExperience.decodeSnapshot(NesExperience.sha256(corrupt),corrupt));
+  byte[] oversized=new byte[NesExperience.MAX_BYTES+1];
+  rejects(()->NesExperience.decodeSnapshot(NesExperience.sha256(oversized),oversized));
   check(new NesExperience.Policy(restored).suggest(rom,first).orElse(-1)==128);
   rejects(()->new NesExperience.Policy(restored).suggest("b".repeat(64),first));
   rejects(()->NesExperience.decode(text.replace("15|42|","15|41|")));

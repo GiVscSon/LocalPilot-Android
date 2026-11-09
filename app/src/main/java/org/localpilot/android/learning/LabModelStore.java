@@ -31,7 +31,9 @@ public final class LabModelStore {
  public synchronized String selected(TaskSchema.GameId game)throws IOException{
   Path pointer=folder(game).resolve("selected");if(!Files.exists(pointer))return "";
   if(Files.size(pointer)!=64)throw new IOException("invalid selected version");
-  String hash=new String(Files.readAllBytes(pointer),java.nio.charset.StandardCharsets.UTF_8);checkHash(hash);return hash;
+  String hash=new String(Files.readAllBytes(pointer),java.nio.charset.StandardCharsets.UTF_8);
+  try{checkHash(hash);}catch(IllegalArgumentException invalid){throw new IOException("invalid selected version",invalid);}
+  return hash;
  }
  private Path checked(TaskSchema.GameId game,String hash)throws IOException{
   checkHash(hash);Path path=folder(game).resolve(hash+".zip");
@@ -40,7 +42,9 @@ public final class LabModelStore {
   ModelCheckpoint.load(path.toFile(),TaskSchema.forGame(game));return path;
  }
  public synchronized List<Version> versions(TaskSchema.GameId game)throws IOException{
-  String active=selected(game);List<Version> out=new ArrayList<>();
+  // A damaged pointer must not hide intact versions or prevent explicit rollback.
+  String active;try{active=selected(game);}catch(IOException invalid){active="";}
+  List<Version> out=new ArrayList<>();
   try(var paths=Files.list(folder(game))){
    for(Path p:paths.filter(p->p.getFileName().toString().matches("[a-f0-9]{64}\\.zip")).sorted().collect(java.util.stream.Collectors.toList())){
     String hash=p.getFileName().toString().substring(0,64);
@@ -49,6 +53,10 @@ public final class LabModelStore {
    }
   }
   return List.copyOf(out);
+ }
+ public synchronized String selectionProblem(TaskSchema.GameId game){
+  try{String hash=selected(game);if(hash.isEmpty())return "LAB-версия не выбрана";checked(game,hash);return "";}
+  catch(IOException invalid){return "Выбор LAB-версии повреждён. Выберите исправную версию для отката или импортируйте ZIP.";}
  }
  public synchronized String importVersion(TaskSchema.GameId game,InputStream input)throws IOException{
   Objects.requireNonNull(input);Path dir=folder(game),stage=Files.createTempFile(dir,"import-",".pending");
@@ -62,7 +70,16 @@ public final class LabModelStore {
    if(!Files.exists(target)){
     if(versions(game).size()>=MAX_VERSIONS)throw new IOException("version limit reached; export existing history first");
     Files.move(stage,target,StandardCopyOption.ATOMIC_MOVE);
-   }else checked(game,hash);
+   }else{
+    try{checked(game,hash);}
+    catch(IOException corrupted){
+     // Only the independently validated incoming bytes may repair this hash.
+     // Preserve the damaged object for diagnosis; never overwrite user history.
+     Path backup=dir.resolve(hash+".corrupt-"+Long.toHexString(System.nanoTime()));
+     Files.move(target,backup,StandardCopyOption.ATOMIC_MOVE);
+     Files.move(stage,target,StandardCopyOption.ATOMIC_MOVE);
+    }
+   }
    select(game,hash);return hash;
   }finally{Files.deleteIfExists(stage);}
  }

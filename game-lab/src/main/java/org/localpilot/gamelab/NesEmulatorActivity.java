@@ -70,14 +70,18 @@ public final class NesEmulatorActivity extends Activity {
   root.addView(state);
   Button exportEpisode=new Button(this);exportEpisode.setText("Экспорт опыта NES (.lpn)");root.addView(exportEpisode);
   exportEpisode.setOnClickListener(v->{
+   if(pendingEpisodeExport!=null){state.setText("Завершите открытый экспорт NES");return;}
    if(episodeFrames.isEmpty()){state.setText("Сначала запустите ROM и выполните несколько действий");return;}
    String text=NesExperience.encode(new NesExperience.Episode(episodeRom,new ArrayList<>(episodeFrames)));
    try{
-    pendingEpisodeExport=NesExperience.sha256(text.getBytes(StandardCharsets.UTF_8))+".pending-export";
-    Files.write(new java.io.File(getFilesDir(),pendingEpisodeExport).toPath(),text.getBytes(StandardCharsets.UTF_8));
-   }catch(IOException error){pendingEpisodeExport=null;state.setText("Не удалось подготовить экспорт NES");return;}
-   startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT).setType("text/plain").addCategory(Intent.CATEGORY_OPENABLE)
-     .putExtra(Intent.EXTRA_TITLE,"localpilot-nes-"+episodeRom.substring(0,12)+".lpn"),EXPORT_EPISODE);
+    byte[] bytes=text.getBytes(StandardCharsets.UTF_8);
+    java.nio.file.Path snapshot=Files.createTempFile(getFilesDir().toPath(),NesExperience.sha256(bytes)+"-",".pending-export");
+    pendingEpisodeExport=snapshot.getFileName().toString();
+    Files.write(snapshot,bytes);
+   }catch(IOException error){discardPendingExport();state.setText("Не удалось подготовить экспорт NES");return;}
+   try{startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT).setType("text/plain").addCategory(Intent.CATEGORY_OPENABLE)
+     .putExtra(Intent.EXTRA_TITLE,"localpilot-nes-"+episodeRom.substring(0,12)+".lpn"),EXPORT_EPISODE);}
+   catch(android.content.ActivityNotFoundException unavailable){discardPendingExport();state.setText("На устройстве нет приложения для экспорта документов");}
   });
   Button open=new Button(this);open.setText("Выбрать картридж (.nes)");
   root.addView(open);
@@ -120,9 +124,9 @@ public final class NesEmulatorActivity extends Activity {
    }
   });
   web.addJavascriptInterface(new Object(){
-   @JavascriptInterface public void onFrame(int count,int pixelsHash){
+   @JavascriptInterface public void onFrame(String session,int count,int pixelsHash){
     runOnUiThread(()->{
-     if(!resumed)return;
+     if(!resumed||!episodeSession.equals(session)||count<=frames)return;
      frames=count;hash=pixelsHash;
      publishEvidence();
      if(count%60==0)
@@ -140,8 +144,8 @@ public final class NesEmulatorActivity extends Activity {
      catch(IllegalArgumentException invalid){state.setText("Наблюдение NES отклонено: неверная схема");}
     });
    }
-   @JavascriptInterface public void onStatus(String message){
-    runOnUiThread(()->state.setText(message));
+   @JavascriptInterface public void onStatus(String session,String message){
+    runOnUiThread(()->{if(resumed&&episodeSession.equals(session))state.setText(message);});
    }
   },"GameLabBridge");
   root.addView(web,new LinearLayout.LayoutParams(-1,0,1));
@@ -195,7 +199,7 @@ public final class NesEmulatorActivity extends Activity {
   });
  }
  private void gamepad(String key,boolean down){
-  if(web==null||!pageLoaded)return;
+  if(!resumed||web==null||!pageLoaded)return;
   web.evaluateJavascript("window.retroButton("+org.json.JSONObject.quote(key)+","
    +(down?"true":"false")+")",null);
  }
@@ -211,15 +215,21 @@ public final class NesEmulatorActivity extends Activity {
    if(result==RESULT_OK&&data!=null&&data.getData()!=null&&pendingEpisodeExport!=null){
     final String id=pendingEpisodeExport;final Uri uri=data.getData();
     EPISODES.execute(()->{
-     if(!id.matches("[a-f0-9]{64}\\.pending-export"))return;
+     if(!validPendingExport(id))return;
      java.nio.file.Path snapshot=new java.io.File(getFilesDir(),id).toPath();
-     try(java.io.OutputStream out=getContentResolver().openOutputStream(uri)){
-      if(out==null||Files.size(snapshot)>NesExperience.MAX_BYTES)throw new IOException("invalid export destination/snapshot");
-      byte[] bytes=Files.readAllBytes(snapshot);NesExperience.decode(new String(bytes,StandardCharsets.UTF_8));out.write(bytes);
+     try{
+      if(Files.size(snapshot)>NesExperience.MAX_BYTES)throw new IOException("invalid export snapshot");
+      byte[] bytes=Files.readAllBytes(snapshot);NesExperience.decodeSnapshot(id.substring(0,64),bytes);
+      try(java.io.OutputStream out=getContentResolver().openOutputStream(uri,"wt")){
+       if(out==null)throw new IOException("invalid export destination");
+       out.write(bytes);
+      }
+      // Only discard the private copy after the destination has closed successfully.
       Files.deleteIfExists(snapshot);
-     }catch(IOException|IllegalArgumentException error){runOnUiThread(()->state.setText("Не удалось экспортировать эпизод NES; приватная копия сохранена"));}
+      episodeNotice("Эпизод NES экспортирован · только эмуляция, награда UNKNOWN");
+     }catch(IOException|RuntimeException error){episodeNotice("Не удалось экспортировать эпизод NES; приватная копия сохранена");}
     });
-   }
+   }else discardPendingExport();
    pendingEpisodeExport=null;return;
   }
   if(req!=CHOOSE_ROM||result!=RESULT_OK||data==null||data.getData()==null)return;
@@ -245,6 +255,14 @@ public final class NesEmulatorActivity extends Activity {
    Toast.makeText(this,"Неподдерживаемый или слишком большой файл игры",Toast.LENGTH_LONG).show();
   }
  }
+ private static boolean validPendingExport(String name){
+  return name!=null&&name.matches("[a-f0-9]{64}(-[a-zA-Z0-9]+)?\\.pending-export");
+ }
+ private void discardPendingExport(){
+  final String id=pendingEpisodeExport;pendingEpisodeExport=null;
+  if(validPendingExport(id))EPISODES.execute(()->{try{Files.deleteIfExists(new java.io.File(getFilesDir(),id).toPath());}catch(IOException ignored){}});
+ }
+ private void episodeNotice(String text){runOnUiThread(()->{if(!isFinishing()&&!isDestroyed())state.setText(text);});}
  private void saveEpisode(){
   if(episodeFrames.isEmpty()||episodeRom.isEmpty())return;
   final String text=NesExperience.encode(new NesExperience.Episode(episodeRom,new ArrayList<>(episodeFrames)));
@@ -252,11 +270,11 @@ public final class NesEmulatorActivity extends Activity {
   EPISODES.execute(()->{try{
    java.nio.file.Path folder=new java.io.File(root,"nes-lab-episodes-v1").toPath();Files.createDirectories(folder);
    java.nio.file.Path target=folder.resolve(id+".lpn");if(Files.exists(target))return;
-   try(var files=Files.list(folder)){if(files.filter(p->p.toString().endsWith(".lpn")).count()>=8)return;}
+   try(var files=Files.list(folder)){if(files.filter(p->p.toString().endsWith(".lpn")).count()>=8){episodeNotice("Хранилище NES заполнено (8 эпизодов); экспортируйте текущий опыт вручную");return;}}
    java.nio.file.Path temporary=Files.createTempFile(folder,"nes-",".pending");
    try{Files.write(temporary,text.getBytes(StandardCharsets.UTF_8));Files.move(temporary,target,java.nio.file.StandardCopyOption.ATOMIC_MOVE);}
    finally{Files.deleteIfExists(temporary);}
-  }catch(IOException ignored){/* Manual export remains available; no game reward is minted. */}});
+  }catch(IOException error){episodeNotice("Не удалось сохранить опыт NES; доступен ручной экспорт");}});
  }
  @Override protected void onPause(){
   saveEpisode();resumed=false;GameLabEvidenceProvider.clear("nes");

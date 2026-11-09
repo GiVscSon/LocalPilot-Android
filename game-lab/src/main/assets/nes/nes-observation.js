@@ -18,9 +18,11 @@
   constructor(){this.lastFrame=-1;this.seenFrame=-1;this.buttons=-1;}
   sample(rgb,frame,buttons){
    if(!Number.isSafeInteger(frame)||frame<0||frame<=this.seenFrame)return null;
-   this.seenFrame=frame;
-   if(buttons===this.buttons&&frame-this.lastFrame<15)return null;
-   const result=nesObservation(rgb,frame,buttons);this.lastFrame=frame;this.buttons=buttons;return result;
+   // Invalid input must not consume a frame or hide a later valid button transition.
+   if(!rgb||rgb.length!==256*240||!Number.isInteger(buttons)||buttons<0||buttons>255)
+    throw Error('Invalid NES observation');
+   if(buttons===this.buttons&&frame-this.lastFrame<15){this.seenFrame=frame;return null;}
+   const result=nesObservation(rgb,frame,buttons);this.seenFrame=frame;this.lastFrame=frame;this.buttons=buttons;return result;
   }
  }
  root.nesObservation=nesObservation;root.NesFrameSampler=NesFrameSampler;

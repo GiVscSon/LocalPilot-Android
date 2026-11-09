@@ -52,6 +52,12 @@ public final class NesExperience {
   }
   return new Episode(header[2],frames);
  }
+ /** Verify the private snapshot before opening (and possibly truncating) an export destination. */
+ public static Episode decodeSnapshot(String digest,byte[] bytes){
+  if(digest==null||!digest.matches("[a-f0-9]{64}")||bytes==null||bytes.length>MAX_BYTES||!digest.equals(sha256(bytes)))
+   throw new IllegalArgumentException("NES snapshot integrity");
+  return decode(new String(bytes,StandardCharsets.UTF_8));
+ }
  /** Nearest observed-state imitation, explicitly no reward or gesture permission. */
  public static final class Policy {
   private final Episode episode;

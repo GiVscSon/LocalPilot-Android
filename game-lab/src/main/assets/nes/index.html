@@ -25,7 +25,7 @@ let audioContext=null,audioNode=null;
 const SIZE=32768,ringL=new Float32Array(SIZE),ringR=new Float32Array(SIZE);
 let writeAt=0,readAt=0;
 function status(s){stat.textContent=s;try{
- if(window.GameLabBridge)window.GameLabBridge.onStatus(s);
+ if(window.GameLabBridge)window.GameLabBridge.onStatus(window.retroEpisodeId||'',s);
 }catch(error){}}
 function audioStop(){
  if(audioNode){audioNode.disconnect();audioNode.onaudioprocess=null;audioNode=null;}
@@ -70,7 +70,7 @@ function sendFrame(rgb){
   for(let i=0;i<256*240;i+=241)hash=Math.imul(hash^rgb[i],16777619)>>>0;
   validFrame=hash;
   try{if(window.GameLabBridge){
-   window.GameLabBridge.onFrame(frames,hash|0);
+   window.GameLabBridge.onFrame(window.retroEpisodeId||'',frames,hash|0);
   }}catch(error){}
  }
  try{if(episodeSampler&&window.GameLabBridge&&window.GameLabBridge.onObservation){

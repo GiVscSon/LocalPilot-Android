@@ -51,6 +51,37 @@ public final class ModelLibraryTest {
   check(!Files.exists(root.resolve("adaptive-engine-v1")),"LAB store never overwrites real models");
   byte[] old=Files.readAllBytes(root.resolve("lab-model-versions-v1").resolve(game.id).resolve(initial+".zip"));
   store.train(game,20261108);check(Arrays.equals(old,Files.readAllBytes(root.resolve("lab-model-versions-v1").resolve(game.id).resolve(initial+".zip"))),"training preserves old version");
+  Path versionsRoot=root.resolve("lab-model-versions-v1").resolve(game.id);
+  Path selectedFile=versionsRoot.resolve("selected");
+  int retained=store.versions(game).size();
+  Files.writeString(selectedFile,"damaged pointer");
+  rejects(()->store.loadSelected(game));
+  check(store.versions(game).size()==retained,"damaged pointer must not hide rollback history");
+  check(!store.selectionProblem(game).isEmpty(),"damaged selection is reported explicitly");
+  store.select(game,initial);check(store.selected(game).equals(initial),"explicit rollback repairs damaged pointer");
+  Files.writeString(selectedFile,"z".repeat(64));
+  check(store.versions(game).size()==retained,"malformed 64-byte pointer still permits history inspection");
+  check(store.importVersion(game,new ByteArrayInputStream(exported.toByteArray())).equals(initial),"verified import repairs selection");
+  Path originalFile=versionsRoot.resolve(initial+".zip");Files.write(originalFile,new byte[]{9,8,7});
+  check(store.versions(game).stream().anyMatch(v->v.sha256().equals(initial)&&!v.valid()),"damaged version remains visible");
+  ByteArrayOutputStream untouched=new ByteArrayOutputStream();untouched.write(new byte[]{3,2,1});
+  rejects(()->store.exportVersion(game,initial,untouched));
+  check(Arrays.equals(untouched.toByteArray(),new byte[]{3,2,1}),"failed export must not write destination bytes");
+  rejects(()->store.select(game,initial));
+  store.importVersion(game,new ByteArrayInputStream(exported.toByteArray()));
+  check(store.loadSelected(game).gameId==game,"verified original repairs damaged immutable object");
+  try(var entries=Files.list(versionsRoot)){check(entries.anyMatch(f->f.getFileName().toString().startsWith(initial+".corrupt-")),"corrupted original retained for diagnosis");}
+  int sequence=0;
+  while(store.versions(game).size()<LabModelStore.MAX_VERSIONS){
+   ModelCheckpoint.save(other.toFile(),TaskSchema.forGame(game),new StudentPolicy(game,200+sequence++,true));
+   try(InputStream in=Files.newInputStream(other)){store.importVersion(game,in);}
+  }
+  String beforeLimit=store.selected(game);
+  ModelCheckpoint.save(other.toFile(),TaskSchema.forGame(game),new StudentPolicy(game,999989,true));
+  rejects(()->{try(InputStream in=Files.newInputStream(other)){store.importVersion(game,in);}});
+  check(store.selected(game).equals(beforeLimit)&&store.versions(game).size()==LabModelStore.MAX_VERSIONS,"quota rejection preserves selected version/history");
+  check(store.importVersion(game,new ByteArrayInputStream(exported.toByteArray())).equals(initial),"duplicate import and rollback allowed at quota");
+  try(var entries=Files.list(versionsRoot)){check(entries.noneMatch(f->f.getFileName().toString().endsWith(".pending")),"failed imports clean staging files");}
   Board2048 board=new Board2048(new int[]{2,2,0,0,4,0,0,0,8,0,0,0,16,0,0,0});
   TaskSchema schema=TaskSchema.forGame(game);
   ShadowEvaluation.Observation observation=new ShadowEvaluation.Observation(schema,ShadowEvaluation.Source.SAVED_REAL_FRAME,
@@ -62,6 +93,9 @@ public final class ModelLibraryTest {
   rejects(()->PixelBoardReader.read(dark,400,400,0,0,400,400));
   check(PixelBoardReader.read(dark,400,400,0,0,400,400,PixelBoardReader.Skin.CLASSIC_DARK_EMPTY).cells[0]==2,"explicit observed skin");
   rejects(()->PixelBoardReader.read((x,y)->x<100&&y<100?0xeee4da:0x998877,400,400,0,0,400,400,PixelBoardReader.Skin.CLASSIC_DARK_EMPTY));
+  check(org.localpilot.android.GameSupport.externalProfile(TaskSchema.GameId.HEXON)==-1,"Hexon lab model must not claim a connected real controller");
+  check(org.localpilot.android.GameSupport.externalProfile(TaskSchema.GameId.KOTOBASHNYA)==-1,"Cat Tower lab model must not claim a connected real controller");
+  check(org.localpilot.android.GameSupport.externalProfile(TaskSchema.GameId.GAME_2048)==4,"connected 2048 route retained");
   System.out.println("MODEL_LIBRARY_PASS checks="+checks+" versions/import/export/rollback/training/shadow");
  }
 }

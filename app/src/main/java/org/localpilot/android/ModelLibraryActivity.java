@@ -19,11 +19,21 @@ public final class ModelLibraryActivity extends Activity {
  private final List<View> controls=new ArrayList<>();
  private Spinner profiles,versions;private TextView status;
  private List<LabModelStore.Version> history=List.of();private LabModelStore store;
- private boolean busy,destroyed;private String requestedGame,requestedHash;
+ private boolean busy,destroyed;private String requestedGame,requestedHash;private int requestedOperation;
+ private record Document(int operation,TaskSchema.GameId game,android.net.Uri uri,String hash){}
+ private Document pendingDocument;
  private interface Work {String run(TaskSchema.GameId game)throws Exception;}
  @Override public void onCreate(Bundle state){
   super.onCreate(state);
-  if(state!=null){requestedGame=state.getString("game");requestedHash=state.getString("hash");}
+  if(state!=null){
+   requestedGame=state.getString("game");requestedHash=state.getString("hash");requestedOperation=state.getInt("requested_operation",0);
+   String documentUri=state.getString("document_uri"),documentGame=state.getString("document_game");
+   int documentOperation=state.getInt("document_operation",0);
+   if(documentUri!=null&&documentGame!=null&&(documentOperation==IMPORT||documentOperation==EXPORT||documentOperation==NES_IMPORT)){
+    try{pendingDocument=new Document(documentOperation,TaskSchema.GameId.valueOf(documentGame),android.net.Uri.parse(documentUri),state.getString("document_hash"));}
+    catch(IllegalArgumentException invalid){pendingDocument=null;}
+   }
+  }
   LinearLayout box=new LinearLayout(this);box.setOrientation(LinearLayout.VERTICAL);box.setPadding(16,12,16,12);
   ScrollView page=new ScrollView(this);page.addView(box);setContentView(page);
   page.setOnApplyWindowInsetsListener((v,insets)->{
@@ -37,17 +47,17 @@ public final class ModelLibraryActivity extends Activity {
   if(state!=null)profiles.setSelection(Math.max(0,Math.min(15,state.getInt("profile",0))));
   versions=new Spinner(this);box.addView(versions);controls.add(versions);
   button(box,"Импортировать совместимую версию (.zip)",()->{
-   requestedGame=game().name();requestedHash=null;
+   requestedGame=game().name();requestedHash=null;requestedOperation=IMPORT;
    startActivityForResult(new Intent(Intent.ACTION_OPEN_DOCUMENT).setType("*/*").addCategory(Intent.CATEGORY_OPENABLE),IMPORT);
   });
   button(box,"Экспортировать выбранную версию",()->{
-   if(history.isEmpty()){toast("Версия недоступна");return;}
-   requestedGame=game().name();requestedHash=history.get(versions.getSelectedItemPosition()).sha256();
+   LabModelStore.Version version=chosenVersion();if(version==null)return;
+   requestedGame=game().name();requestedHash=version.sha256();requestedOperation=EXPORT;
    startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT).setType("application/zip").addCategory(Intent.CATEGORY_OPENABLE)
      .putExtra(Intent.EXTRA_TITLE,game().id+"-"+requestedHash.substring(0,12)+".zip"),EXPORT);
   });
   button(box,"Выбрать версию / откат LAB",()->{
-   if(history.isEmpty())return;String hash=history.get(versions.getSelectedItemPosition()).sha256();
+   LabModelStore.Version version=chosenVersion();if(version==null)return;String hash=version.sha256();
    runTask(g->{store.select(g,hash);return "Выбрана LAB-версия "+hash;});
   });
   button(box,"Оценить на отдельных seed",()->runTask(g->store.evaluate(g,987654321L)));
@@ -60,7 +70,7 @@ public final class ModelLibraryActivity extends Activity {
    }return report.toString();
   }));
   button(box,"Обучить NES по эпизоду (.lpn)",()->{
-   requestedGame=game().name();
+   requestedGame=game().name();requestedHash=null;requestedOperation=NES_IMPORT;
    startActivityForResult(new Intent(Intent.ACTION_OPEN_DOCUMENT).setType("*/*").addCategory(Intent.CATEGORY_OPENABLE),NES_IMPORT);
   });
   Button stop=new Button(this);stop.setText("Остановить очередь обучения");box.addView(stop);
@@ -72,9 +82,20 @@ public final class ModelLibraryActivity extends Activity {
   });
   runTask(g->{
    store=new LabModelStore(getFilesDir());
-   for(TaskSchema.GameId target:TaskSchema.GameId.values())store.ensureBundled(target,name->getAssets().open(name));
-   return "16 профилей загружены. Контрольные суммы и схемы проверены.";
+   int ready=0;StringBuilder errors=new StringBuilder();
+   for(TaskSchema.GameId target:TaskSchema.GameId.values()){
+    try{store.ensureBundled(target,name->getAssets().open(name));ready++;}
+    catch(IOException invalid){errors.append("\n").append(target.title).append(": требуется откат или импорт исправного ZIP");}
+   }
+   return ready==16?"16 профилей загружены. Контрольные суммы и схемы проверены.":"Исправных профилей: "+ready+"/16"+errors;
   });
+ }
+ private LabModelStore.Version chosenVersion(){
+  int index=versions.getSelectedItemPosition();
+  if(index<0||index>=history.size()){toast("Версия недоступна");return null;}
+  LabModelStore.Version version=history.get(index);
+  if(!version.valid()){toast("Версия повреждена. Выберите исправную версию или повторно импортируйте ZIP.");return null;}
+  return version;
  }
  private TaskSchema.GameId game(){return TaskSchema.GameId.values()[profiles.getSelectedItemPosition()];}
  private void button(LinearLayout box,String text,Runnable action){Button b=new Button(this);b.setText(text);b.setOnClickListener(v->action.run());box.addView(b);controls.add(b);}
@@ -85,27 +106,45 @@ public final class ModelLibraryActivity extends Activity {
   TaskSchema.GameId target=game();
   WORKER.execute(()->{
    String message;List<LabModelStore.Version> loaded=List.of();
-   try{message=work.run(target);loaded=store.versions(target);}
+   try{message=work.run(target);}
    catch(Exception error){message="Операция отклонена: "+error.getMessage();}
+   if(store!=null){
+    try{loaded=store.versions(target);String problem=store.selectionProblem(target);if(!problem.isEmpty())message+="\n"+problem;}
+    catch(IOException error){message+="\nНе удалось прочитать историю версий: "+error.getMessage();}
+   }
    final String result=message;final List<LabModelStore.Version> list=loaded;
    runOnUiThread(()->{
     if(destroyed)return;busy=false;history=list;controls.forEach(v->v.setEnabled(true));
     String[] labels=list.stream().map(v->(v.valid()?(v.selected()?"✓ ":""):"Повреждена · ")+v.sha256().substring(0,16)+" · "+v.bytes()+" байт").toArray(String[]::new);
     versions.setAdapter(new ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,labels));
     for(int i=0;i<list.size();i++)if(list.get(i).selected())versions.setSelection(i);
-    status.setText(result+"\n\n"+target.mechanicsVersion+"\n"+target.observationSchema+"\n"+target.actionSchema+"\nВерсии: "+list.size()+"/"+LabModelStore.MAX_VERSIONS+
+    status.setText(result+"\n\n"+GameSupport.describe(target)+"\n"+target.mechanicsVersion+"\n"+target.observationSchema+"\n"+target.actionSchema+"\nВерсии: "+list.size()+"/"+LabModelStore.MAX_VERSIONS+
       "\nSIMULATED_GAME · перенос в настоящую игру не разрешён");
+    startPendingDocument();
    });
   });
  }
  @Override protected void onActivityResult(int request,int result,Intent data){
   super.onActivityResult(request,result,data);
-  if((request!=IMPORT&&request!=EXPORT&&request!=NES_IMPORT)||result!=RESULT_OK||data==null||data.getData()==null)return;
-  if(requestedGame==null){toast("Контекст операции потерян; повторите выбор файла");return;}
+  if(request!=IMPORT&&request!=EXPORT&&request!=NES_IMPORT)return;
+  if(request!=requestedOperation){toast("Контекст операции потерян; повторите выбор файла");return;}
+  String name=requestedGame,hash=requestedHash;requestedGame=requestedHash=null;requestedOperation=0;
+  if(result!=RESULT_OK||data==null||data.getData()==null)return;
+  if(name==null){toast("Контекст операции потерян; повторите выбор файла");return;}
   final TaskSchema.GameId target;
-  try{target=TaskSchema.GameId.valueOf(requestedGame);}catch(IllegalArgumentException e){toast("Неверный профиль");return;}
-  final android.net.Uri uri=data.getData();final String hash=requestedHash;
-  runTask(ignored->{
+  try{target=TaskSchema.GameId.valueOf(name);}catch(IllegalArgumentException e){toast("Неверный профиль");return;}
+  pendingDocument=new Document(request,target,data.getData(),hash);
+  startPendingDocument();
+ }
+ /** File-picker results can arrive while initialization is still running after rotation. */
+ private void startPendingDocument(){
+  if(busy||destroyed||store==null||pendingDocument==null)return;
+  Document document=pendingDocument;pendingDocument=null;
+  runTask(ignored->processDocument(document));
+ }
+ private String processDocument(Document document)throws Exception{
+  int request=document.operation();TaskSchema.GameId target=document.game();
+  android.net.Uri uri=document.uri();String hash=document.hash();
    if(request==NES_IMPORT){
     try(InputStream in=getContentResolver().openInputStream(uri)){
      if(in==null)throw new IOException("Нет доступа к эпизоду");
@@ -132,13 +171,18 @@ public final class ModelLibraryActivity extends Activity {
    if(request==IMPORT){try(InputStream in=getContentResolver().openInputStream(uri)){
     if(in==null)throw new IOException("Нет доступа к файлу");return "Импорт LAB: "+store.importVersion(target,in);
    }}else{if(hash==null)throw new IOException("Версия не выбрана");
+    // Validate and snapshot before a document provider can truncate the destination.
+    ByteArrayOutputStream snapshot=new ByteArrayOutputStream();store.exportVersion(target,hash,snapshot);
     try(OutputStream out=getContentResolver().openOutputStream(uri)){
-     if(out==null)throw new IOException("Нет доступа к файлу");store.exportVersion(target,hash,out);return "Экспортирована версия "+hash;
+     if(out==null)throw new IOException("Нет доступа к файлу");snapshot.writeTo(out);return target.title+" · экспортирована версия "+hash;
     }
    }
-  });
  }
- @Override protected void onSaveInstanceState(Bundle out){out.putInt("profile",profiles.getSelectedItemPosition());out.putString("game",requestedGame);out.putString("hash",requestedHash);super.onSaveInstanceState(out);}
+ @Override protected void onSaveInstanceState(Bundle out){
+  out.putInt("profile",profiles.getSelectedItemPosition());out.putString("game",requestedGame);out.putString("hash",requestedHash);out.putInt("requested_operation",requestedOperation);
+  if(pendingDocument!=null){out.putInt("document_operation",pendingDocument.operation());out.putString("document_game",pendingDocument.game().name());out.putString("document_uri",pendingDocument.uri().toString());out.putString("document_hash",pendingDocument.hash());}
+  super.onSaveInstanceState(out);
+ }
  @Override protected void onStop(){cancel.set(true);super.onStop();}
  @Override protected void onDestroy(){destroyed=true;cancel.set(true);super.onDestroy();}
 }
