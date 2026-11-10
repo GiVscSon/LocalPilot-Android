@@ -41,3 +41,32 @@ tasks.register('writeSourceProvenance', Exec) {
    provenanceAssets.get().file('localpilot-build.json').asFile.absolutePath)
 }
 tasks.named('preBuild').configure { dependsOn tasks.named('writeSourceProvenance') }
+
+// Production signing is opt-in and secret-backed. It is intentionally
+// independent from the temporary Android debug signing configuration.
+// An unsigned assembleRelease is NOT a publishable artifact.
+def releaseStoreFile = System.getenv('LOCALPILOT_RELEASE_STORE_FILE')
+def releaseStorePassword = System.getenv('LOCALPILOT_RELEASE_STORE_PASSWORD')
+def releaseKeyAlias = System.getenv('LOCALPILOT_RELEASE_KEY_ALIAS')
+def releaseKeyPassword = System.getenv('LOCALPILOT_RELEASE_KEY_PASSWORD')
+def releaseInputs = [releaseStoreFile, releaseStorePassword, releaseKeyAlias, releaseKeyPassword]
+if (releaseInputs.any { it != null && !it.isEmpty() }) {
+ if (!releaseInputs.every { it != null && !it.isEmpty() }) {
+  throw new GradleException('Incomplete protected release signing environment')
+ }
+ if (!file(releaseStoreFile).isFile()) {
+  throw new GradleException('Protected release keystore file is unavailable')
+ }
+ android.signingConfigs {
+  create('localpilotProduction') {
+   storeFile file(releaseStoreFile)
+   storePassword releaseStorePassword
+   keyAlias releaseKeyAlias
+   keyPassword releaseKeyPassword
+   enableV1Signing true
+   enableV2Signing true
+   enableV3Signing true
+  }
+ }
+ android.buildTypes.release.signingConfig = android.signingConfigs.localpilotProduction
+}
