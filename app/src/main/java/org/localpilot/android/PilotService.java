@@ -2108,7 +2108,12 @@ public class PilotService extends AccessibilityService {
   try{if(root!=null&&unlocked()&&expected.equals(String.valueOf(root.getPackageName()))){window=root.getWindowId();bounds=windowBounds(root);}}
   finally{if(root!=null)root.recycle();}
   if(bounds!=null&&window==seenWindow&&bounds.equals(seenBounds)){
-   arm();if(gate.armed()){if(!gate.matches(expected,window,bounds.width(),bounds.height())||!bounds.equals(armedBounds)){stop("Окно изменилось во время выбора игры; привяжите нужное окно заново");return;}note="Игра выбрана: "+label;update();if(automatic())startPickedProfile();}return;
+   arm();if(gate.armed()){if(!gate.matches(expected,window,bounds.width(),bounds.height())||!bounds.equals(armedBounds)){stop("Окно изменилось во время выбора игры; привяжите нужное окно заново");return;}note="Игра выбрана: "+label;update();
+    // A deliberate external-game selection must offer the mechanic menu
+    // immediately. Waiting for automatic Start left stale 2048 profiles on
+    // Android 11 where the same package hosts more than one game.
+    if(requiresFreshMechanicSelection){chooseProfile();return;}
+    if(automatic())startPickedProfile();}return;
   }
   if(SystemClock.elapsedRealtime()>=until){stop("Не дождался окна игры. Откройте её и нажмите «Окно»");return;}
   note="Жду окно выбранной игры: "+label;update();final int nextWindow=window;final Rect nextBounds=bounds;
