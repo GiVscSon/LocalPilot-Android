@@ -1,0 +1,106 @@
+name: Signed LocalPilot QA candidate (protected; not public release)
+on:
+  workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: "Reviewed exact main SHA (40 lowercase hex digits)"
+        required: true
+        type: string
+permissions:
+  contents: read
+jobs:
+  signed-candidate:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    environment: android-release
+    env:
+      LOCALPILOT_RELEASE_KEYSTORE_B64: ${{ secrets.LOCALPILOT_RELEASE_KEYSTORE_B64 }}
+      LOCALPILOT_RELEASE_STORE_PASSWORD: ${{ secrets.LOCALPILOT_RELEASE_STORE_PASSWORD }}
+      LOCALPILOT_RELEASE_KEY_ALIAS: ${{ secrets.LOCALPILOT_RELEASE_KEY_ALIAS }}
+      LOCALPILOT_RELEASE_KEY_PASSWORD: ${{ secrets.LOCALPILOT_RELEASE_KEY_PASSWORD }}
+      LOCALPILOT_RELEASE_CERT_SHA256: ${{ vars.LOCALPILOT_RELEASE_CERT_SHA256 }}
+      LOCALPILOT_RELEASE_STORE_FILE: ${{ runner.temp }}/localpilot-release.jks
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Reject unreviewed SHA or absent signing credentials
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+        run: |
+          python3 - <<'PY'
+          import os,re,subprocess
+          sha=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip().lower()
+          expected=os.environ['EXPECTED_SHA'].lower()
+          if not re.fullmatch(r'[0-9a-f]{40}',expected) or sha!=expected:
+              raise SystemExit('RELEASE_QA_REJECTED: wrong reviewed main revision')
+          keys=('LOCALPILOT_RELEASE_KEYSTORE_B64','LOCALPILOT_RELEASE_STORE_PASSWORD',
+                'LOCALPILOT_RELEASE_KEY_ALIAS','LOCALPILOT_RELEASE_KEY_PASSWORD')
+          if any(not os.environ.get(key) for key in keys):
+              raise SystemExit('RELEASE_QA_REJECTED: missing protected signing secret')
+          if not re.fullmatch(r'[0-9a-fA-F]{64}',os.environ.get('LOCALPILOT_RELEASE_CERT_SHA256','')):
+              raise SystemExit('RELEASE_QA_REJECTED: pinned public signing certificate absent')
+          print('Reviewed main SHA and signing prerequisites PASS')
+          PY
+      - name: Install Android SDK 35
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDKMGR="$(find "$ANDROID_HOME/cmdline-tools" -name sdkmanager -type f | head -n1)"
+          test -n "$SDKMGR"
+          "$SDKMGR" --install 'platforms;android-35' 'build-tools;35.0.0'
+      - name: Check source contracts and checked-in models
+        run: |
+          python3 scripts/unified_pipeline.py verify
+          python3 training/sync_rl_lab_to_android.py
+      - name: Load protected keystore without logging bytes
+        run: |
+          python3 - <<'PY'
+          import os,base64
+          from pathlib import Path
+          raw=base64.b64decode(os.environ['LOCALPILOT_RELEASE_KEYSTORE_B64'],validate=True)
+          if not 64<=len(raw)<=1048576:
+              raise SystemExit('RELEASE_QA_REJECTED: bad protected keystore size')
+          path=Path(os.environ['LOCALPILOT_RELEASE_STORE_FILE'])
+          path.write_bytes(raw)
+          path.chmod(0o600)
+          PY
+      - name: Build signed release variant
+        run: ./gradlew --no-daemon :app:assembleRelease :app:lintRelease
+      - name: Audit source parity, package and pinned certificate
+        run: |
+          python3 tools/release_20point_audit.py app/build/outputs/apk/release/app-release.apk --output build/reports/unified-script-engine/signed-qa-20point.json
+          python3 - <<'PY'
+          import os,re,subprocess
+          from pathlib import Path
+          apk='app/build/outputs/apk/release/app-release.apk'
+          sdk=Path(os.environ['ANDROID_HOME'])/'build-tools/35.0.0'
+          info=subprocess.check_output([str(sdk/'aapt'),'dump','badging',apk],text=True)
+          if not re.search(r"^package: name='org\.localpilot\.android' versionCode='[0-9]+'",info,re.M):
+              raise SystemExit('RELEASE_QA_REJECTED: wrong stable package')
+          proof=subprocess.check_output([str(sdk/'apksigner'),'verify','--print-certs','--verbose',apk],text=True)
+          certs=re.findall(r'^Signer #[0-9]+ certificate SHA-256 digest: ([0-9a-fA-F]{64})$',proof,re.M)
+          if len(certs)!=1 or certs[0].lower()!=os.environ['LOCALPILOT_RELEASE_CERT_SHA256'].lower():
+              raise SystemExit('RELEASE_QA_REJECTED: certificate differs from pinned signer')
+          if not any('Verified using v'+str(v)+' scheme (APK Signature Scheme v'+str(v)+'): true' in proof for v in (2,3)):
+              raise SystemExit('RELEASE_QA_REJECTED: APK signing scheme unsupported')
+          print('SIGNED_QA_CERTIFICATE_MATCH; field release remains separate')
+          PY
+      - name: Delete private key material
+        if: always()
+        run: rm -f -- "$LOCALPILOT_RELEASE_STORE_FILE"
+      - name: Upload internal QA-only signed APK
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: localpilot-signed-QA-only-${{ github.sha }}
+          path: |
+            app/build/outputs/apk/release/app-release.apk
+            build/reports/unified-script-engine/signed-qa-20point.json
+          retention-days: 14
+          if-no-files-found: error
