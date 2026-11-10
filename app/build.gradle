@@ -48,8 +48,8 @@ android {
  }
  buildTypes {
   debug {
-   applicationIdSuffix '.dev.install1081'
-   versionNameSuffix '-dev-install1081'
+   applicationIdSuffix bundledGguf ? '.dev.mnnembedded' : '.dev.install1081'
+   versionNameSuffix bundledGguf ? '-embedded-mnn-candidate' : '-dev-install1081'
    debuggable false
   }
  }
