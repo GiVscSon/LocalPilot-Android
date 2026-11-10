@@ -15,7 +15,7 @@ public final class GameLabCoach {
  private static float clamp(float x,float lo,float hi){
   return Math.max(lo,Math.min(hi,x));
  }
- private static double reflected(float position){
+ private static double reflected(double position){
   // Ping-pong reflection between laboratory walls.
   final double lo=.055,hi=.945,len=hi-lo;
   double phase=((position-lo)%(2*len)+2*len)%(2*len);
