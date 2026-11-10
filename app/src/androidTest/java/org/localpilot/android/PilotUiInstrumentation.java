@@ -504,7 +504,14 @@ public final class PilotUiInstrumentation extends Instrumentation {
         // searches enabled controls, so use the visible area and cancel button.
         await(()->markerBounds("Выделение области игры 1 на 1")!=null&&present("STOP · отмена"),4_000,"Bubble arena picker is unavailable");
         Rect arena=markerBounds("LOCALPILOT_BUBBLE_ARENA");require(arena!=null&&!arena.isEmpty(),"Bubble arena geometry disappeared");
-        tapAt(arena.left,arena.top);tapAt(arena.right,arena.bottom);
+        // Android 16 treats the exact right/bottom window boundary as outside
+        // the touch region. Fractional insets keep physical contacts inside
+        // the arena while integer rounding preserves the intended ROI bounds.
+        require(tapAt(arena.left+.25f,arena.top+.25f),"First bubble ROI corner rejected by Android");
+        SystemClock.sleep(180);
+        require(tapAt(arena.right-.25f,arena.bottom-.25f),"Second bubble ROI corner rejected by Android");
+        await(()->onMain(()->ownControlBounds("Готово")!=null),4_000,
+            "Bubble ROI corners did not enable the visible Done button");
         require(touchOwnControl("Готово"),"Bubble area Done control could not receive a real tap");
         await(()->onMain(()->booleanField("manualVisualRoi")&&arena.equals(field("visualRoi"))),3_000,"Confirmed bubble ROI differs from the selected screen rectangle");
         require(!onMain(()->booleanField("playingGrid")),"Choosing the bubble area silently started input");

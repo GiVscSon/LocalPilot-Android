@@ -22,6 +22,7 @@ public final class AuditStopCode {
   if(reason.contains("PARSE_REJECTED"))return PARSE_REJECTED;
   if(reason.contains("NO_RESPONSE")||reason.contains("не подтвердила")||reason.contains("нет видимого ответа"))
    return RESPONSE_TIMEOUT;
+  if(reason.contains("WINDOW_STATE_UNAVAILABLE")||reason.contains("TARGET_WINDOW_UNAVAILABLE")||reason.contains("TARGET_APP_CHANGED")||reason.contains("SCRIPT_CONTROLLER_MISMATCH"))return WINDOW_UNAVAILABLE;
   if(reason.contains("Окно игры изменилось")||reason.contains("Окно изменилось")||reason.contains("Фокус потерян"))
    return WINDOW_UNAVAILABLE;
   if(reason.contains("Ошибка кадра")||reason.contains("Ошибка обработки кадра")||reason.contains("Не удалось включить поток экрана"))

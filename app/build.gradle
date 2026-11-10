@@ -1,6 +1,12 @@
 plugins { id 'com.android.application' }
 android {
- sourceSets { main { java.srcDirs += ['../shared/src/main/java'] } }
+ // The same GameLab and NES sources are embedded into the PRIMARY APK.
+ // :game-lab remains an optional standalone test target for external
+ // Accessibility acceptance, not a dependency for users of this APK.
+ sourceSets { main {
+  java.srcDirs += ['../shared/src/main/java', '../game-lab/src/main/java']
+  assets.srcDirs += ['../game-lab/src/main/assets', '../game-lab/build/generated/jsnes/assets']
+ } }
  namespace 'org.localpilot.android'
  compileSdk 35
  defaultConfig { applicationId 'org.localpilot.android'; minSdk 30; targetSdk 35; versionCode 53; versionName '0.8.1'; testInstrumentationRunner 'org.localpilot.android.PilotUiInstrumentation' }
@@ -14,3 +20,11 @@ android {
  lint { checkTestSources true }
  compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
 }
+
+// Share the already verified pinned JSNES assets; do not download a second core.
+tasks.named('preBuild').configure { dependsOn ':game-lab:bundleVerifiedNesEngine' }
+// Asset snapshot must wait for the pinned emulator bundle, not just preBuild.
+tasks.matching { it.name == 'mergeDebugAssets' }.configureEach {
+ dependsOn ':game-lab:bundleVerifiedNesEngine'
+}
+

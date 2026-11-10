@@ -1,0 +1,86 @@
+name: GameLab autonomous self-play and lab training
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 3 * * *'
+  push:
+    paths:
+      - 'tools/SimAutoplay.java'
+      - 'tools/GameLabCoach.java'
+      - 'tests/GameLabCoachTest.java'
+      - 'tools/run_sim_autoplay.sh'
+      - 'tools/verify_sim_autoplay_report.py'
+      - 'tools/gate_sim_autoplay_candidates.py'
+      - 'tests/test_sim_autoplay_gate.py'
+      - 'shared/src/main/java/org/localpilot/shared/SimExperience.java'
+      - 'shared/src/main/java/org/localpilot/shared/SimLabPolicy.java'
+      - 'game-lab/src/main/java/org/localpilot/gamelab/GameLabEngine.java'
+      - '.github/workflows/sim-autoplay.yml'
+  pull_request:
+    paths:
+      - 'tools/SimAutoplay.java'
+      - 'tools/GameLabCoach.java'
+      - 'tests/GameLabCoachTest.java'
+      - 'tools/run_sim_autoplay.sh'
+      - 'tools/verify_sim_autoplay_report.py'
+      - 'tools/gate_sim_autoplay_candidates.py'
+      - 'tests/test_sim_autoplay_gate.py'
+      - 'shared/src/main/java/org/localpilot/shared/SimExperience.java'
+      - 'shared/src/main/java/org/localpilot/shared/SimLabPolicy.java'
+      - 'game-lab/src/main/java/org/localpilot/gamelab/GameLabEngine.java'
+      - '.github/workflows/sim-autoplay.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  headless-game-lab:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Verify regression quarantine and scripted reference gate
+        run: python3 -m unittest discover -s tests -p 'test_sim_autoplay_gate.py' -v
+      - name: Verify all ten GameLab games with independent held-out seeds
+        shell: bash
+        run: |
+          set -euo pipefail
+          for seed in 20261108 20261201 177777; do
+            bash tools/run_sim_autoplay.sh \
+              --out "build/reports/sim-autoplay/seed-${seed}" \
+              --seed "${seed}" \
+              --train-episodes 8 \
+              --eval-episodes 4 \
+              --steps 10
+          done
+          printf 'All GameLab simulator-only training runs validated.\n'
+      - name: Verify deterministic replay output
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash tools/run_sim_autoplay.sh \
+            --out build/reports/sim-autoplay/determinism \
+            --seed 20261108 --train-episodes 8 --eval-episodes 4 --steps 10
+          cmp build/reports/sim-autoplay/seed-20261108/training-experience.lpx \
+              build/reports/sim-autoplay/determinism/training-experience.lpx
+          cmp build/reports/sim-autoplay/seed-20261108/report.json \
+              build/reports/sim-autoplay/determinism/report.json
+      - name: Quarantine GameLab policy regressions across seeds
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/gate_sim_autoplay_candidates.py build/reports/sim-autoplay
+          cat build/reports/sim-autoplay/model-gate.md
+      - name: Publish simulation-only artifacts and reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gamelab-selfplay-${{ github.sha }}-${{ github.run_attempt }}
+          path: build/reports/sim-autoplay/
+          if-no-files-found: warn
+          retention-days: 30

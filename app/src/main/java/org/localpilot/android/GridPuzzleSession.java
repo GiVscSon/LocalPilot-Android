@@ -33,6 +33,23 @@ public final class GridPuzzleSession {
   if(lateWaiting){lateWaiting=false;status=Status.PAUSED;}
   if(!paused())status=pending()?Status.WAIT_RESPONSE:Status.WAIT_STABLE;
  }
+ /** Read-only recovery from an ACKed but independently proven unchanged board.
+  * The caller MUST quarantine the failed move for this same symbolic board.
+  * No gesture ticket is created, no success/learning reward is recorded and
+  * two entirely new stable frames are mandatory before another proposal.
+  * Unknown, partial, unacknowledged or merely timed-out gestures stay paused.
+  */
+ public boolean restartObservationAfterUnchangedAck(boolean failedMoveQuarantined){
+  if(!failedMoveQuarantined||status!=Status.PAUSED||lateWaiting
+    ||!unchangedFailure||!pending()||!acknowledged()||partialPending
+    ||before==null||hasUnknown(before)||beforeSpecial==null)return false;
+  before=null;beforeSpecial=null;stable=null;stableSpecial=null;
+  completedAt=dispatchedAt=-1;lastFrameAt=-1;
+  partialPending=false;predictedImpact=null;swapFrom=swapTo=-1;
+  unchangedFailure=false;lateRecoveryRevoked=false;clearCandidate();
+  status=Status.WAIT_STABLE;
+  return true;
+ }
  public Status status(){return status;}
  public boolean pending(){return before!=null;}
  public boolean acknowledged(){return pending()&&completedAt>=0;}

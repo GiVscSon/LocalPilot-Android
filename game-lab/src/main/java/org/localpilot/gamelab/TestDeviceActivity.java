@@ -1,5 +1,6 @@
 package org.localpilot.gamelab;
 import org.localpilot.shared.HubContract;
+import org.localpilot.shared.SimExperience;
 
 import android.app.Activity;
 import android.app.AlertDialog;
@@ -34,8 +35,11 @@ import java.util.ArrayList;
 public final class TestDeviceActivity extends Activity {
  public static final String BUILD_ID="GameLab-1.0";
  private static final int EXPORT=61;
+ private static final int EXPORT_EXPERIENCE=62;
  private final Handler handler=new Handler(Looper.getMainLooper());
  private final ArrayList<String> records=new ArrayList<>();
+ private final ArrayList<SimExperience.Step> labSteps=new ArrayList<>();
+ private int savedLabStepIndex;
  private GameLabEngine engine;
  private GameSurface surface;
  private TextView status;
@@ -96,6 +100,15 @@ public final class TestDeviceActivity extends Activity {
       .putExtra(Intent.EXTRA_TITLE,"localpilot-gamelab-actions.csv"),EXPORT));
   LinearLayout retroRow=new LinearLayout(this);root.addView(retroRow);
   retroLauncher=addButton(retroRow,"Ретро · NES / Денди / DOS",()->startActivity(new Intent(this,RetroLibraryActivity.class)));
+  addButton(retroRow,"Опыт GameLab",()->{
+   if(labSteps.isEmpty()){
+    new AlertDialog.Builder(this).setMessage("Сначала сделайте несколько ходов в GameLab")
+      .setPositiveButton("OK",null).show();return;
+   }
+   startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT)
+     .setType("text/plain").addCategory(Intent.CATEGORY_OPENABLE)
+     .putExtra(Intent.EXTRA_TITLE,"localpilot-gamelab-experience.lpx"),EXPORT_EXPERIENCE);
+  });
   TextView retroStatus=label("NES и Денди: запуск реального ROM. DOS: пока подготовка ядра.",11);
   retroStatus.setTextColor(HubContract.SECONDARY);root.addView(retroStatus);
   String pilotPackage=getIntent().getStringExtra("pilot_package");
@@ -151,10 +164,62 @@ public final class TestDeviceActivity extends Activity {
   records.add(SystemClock.elapsedRealtime()+","+entry.replace(',',';'));
  }
  @Override protected void onResume(){super.onResume();handler.post(clock);}
- @Override protected void onPause(){handler.removeCallbacks(clock);GameLabEvidenceProvider.clear("gamelab");super.onPause();}
+ /** Save GameLab episodes to the SAME APK's private lab-only training store.
+  * The separately installed companion retains its normal SAF export mode.
+  * This never writes real-game verified experience or changes input permits.
+  */
+ private void saveEmbeddedExperience(){
+  if(!getPackageName().startsWith("org.localpilot.android")||savedLabStepIndex>=labSteps.size())return;
+  java.io.File file=new java.io.File(getFilesDir(),"gamelab-sim-experience-v1.lpx");
+  java.io.File temp=null;
+  try{
+   ArrayList<SimExperience.Step> all=new ArrayList<>();
+   if(file.isFile()){
+    if(file.length()>SimExperience.MAX_BYTES)throw new IOException("oversize existing lab replay");
+    byte[] prior=java.nio.file.Files.readAllBytes(file.toPath());
+    all.addAll(SimExperience.decode(new String(prior,StandardCharsets.UTF_8)));
+   }
+   int available=Math.min(SimExperience.MAX_ROWS-all.size(),labSteps.size()-savedLabStepIndex);
+   if(available<=0){addLog("SIM_REPLAY_FULL");return;}
+   for(int i=0;i<available;i++){
+    SimExperience.Step observed=labSteps.get(savedLabStepIndex+i);
+    all.add(new SimExperience.Step(all.size()+1,
+      observed.game,observed.fault,observed.fromX,observed.fromY,
+      observed.toX,observed.toY,observed.durationMs,
+      observed.beforeHash,observed.afterHash,observed.scoreBefore,
+      observed.scoreAfter,observed.result));
+   }
+   byte[] data=SimExperience.encode(all).getBytes(StandardCharsets.UTF_8);
+   temp=java.io.File.createTempFile("gamelab-lab-only-",".tmp",getFilesDir());
+   try(java.io.FileOutputStream out=new java.io.FileOutputStream(temp)){
+    out.write(data);out.getFD().sync();
+   }
+   java.nio.file.Files.move(temp.toPath(),file.toPath(),
+      java.nio.file.StandardCopyOption.ATOMIC_MOVE,
+      java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+   savedLabStepIndex+=available;
+  }catch(IOException|IllegalArgumentException failure){
+   addLog("SIM_REPLAY_SAVE_FAILED");
+  }finally{if(temp!=null)temp.delete();}
+ }
+ @Override protected void onPause(){
+  saveEmbeddedExperience();handler.removeCallbacks(clock);
+  GameLabEvidenceProvider.clear("gamelab");super.onPause();
+ }
  @Override protected void onDestroy(){if(surface!=null)surface.release();super.onDestroy();}
  @Override protected void onActivityResult(int req,int result,Intent data){
   super.onActivityResult(req,result,data);
+  if(req==EXPORT_EXPERIENCE){
+   if(result!=RESULT_OK||data==null||data.getData()==null)return;
+   try(OutputStream stream=getContentResolver().openOutputStream(data.getData())){
+    if(stream==null)throw new IOException("no simulator replay output");
+    stream.write(SimExperience.encode(labSteps).getBytes(StandardCharsets.UTF_8));
+   }catch(IOException|IllegalArgumentException failure){
+    new AlertDialog.Builder(this).setMessage("Экспорт опыта GameLab не выполнен")
+       .setPositiveButton("OK",null).show();
+   }
+   return;
+  }
   if(req!=EXPORT||result!=RESULT_OK||data==null||data.getData()==null)return;
   StringBuilder body=new StringBuilder("uptime_ms,event\n");
   for(String record:records)body.append(record).append('\n');
@@ -332,8 +397,19 @@ public final class TestDeviceActivity extends Activity {
    if(engine.fault==GameLabEngine.Fault.PANEL_OVERLAP&&y>.63f&&x<.84f){
     addLog("PANEL_BLOCKED,game="+engine.game);return true;
    }
-   int old=engine.fingerprint();
+   int old=engine.fingerprint(),scoreBefore=engine.score;
    GameLabEngine.Result response=engine.gesture(downX,downY,x,y,elapsed);
+   // Simulator-only replay: never a real-game ACK or a training permission.
+   if(labSteps.size()<SimExperience.MAX_ROWS){
+    try{
+     labSteps.add(new SimExperience.Step(labSteps.size()+1,
+      engine.game.name(),engine.fault.name(),
+      SimExperience.quantize(downX),SimExperience.quantize(downY),
+      SimExperience.quantize(x),SimExperience.quantize(y),
+      (int)Math.max(0,Math.min(20000,elapsed)),old,engine.fingerprint(),
+      scoreBefore,engine.score,response.name()));
+    }catch(IllegalArgumentException invalid){addLog("SIM_REPLAY_REJECTED");}
+   }
    addLog("TOUCH_RECEIVED,game="+engine.game+",result="+response+
     ",changed_state="+(old!=engine.fingerprint())+",fault="+engine.fault);
    invalidate();update();

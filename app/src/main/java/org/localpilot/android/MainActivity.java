@@ -29,9 +29,9 @@ public class MainActivity extends Activity {
   TextView autoHelp=new TextView(this);autoHelp.setText("Для сетки фишек: Игра → Мэтч Ворлд · обмен соседей или Фишки · удалить группу → выберите 6×6, 7×7 либо другой размер → обведите клетки → Старт. Настройки и типы фишек сохраняются. Поддерживаются различимые цветные фишки без специальных эффектов; цели уровня и усилители пока не распознаются. Для аркад другого оформления: Ещё → Настроить распознавание. Для разных игр одного браузера: Игра → Имя игры. STOP всегда останавливает ввод.");box.addView(autoHelp);
   section(box,"03 · Игровая лаборатория");
   TextView labCaption=new TextView(this);
-  labCaption.setText("10 тестовых игр в отдельном Android-приложении. NES / Денди: встроенное JSNES-ядро проходит проверку; DOS: пока проверка файлов, без исполнения. Тесты GameLab не считаются успешными ходами в Маркете.");
+  labCaption.setText("Единый APK: 10 интерактивных симуляторов и офлайн NES/Денди. Скрипты обучают отдельные лабораторные модели. DOS: только проверка файлов, без исполнения. Симуляция не является приёмкой Маркета.");
   labCaption.setTextColor(HubContract.SECONDARY);box.addView(labCaption);
-  button(box,"Открыть GameLab · 10 игр / ретро",this::openGameLab);
+  button(box,"Открыть встроенный GameLab · 10 игр / NES",this::openGameLab);
   section(box,"04 · Диагностика и контроль");
   button(box,"Отчёт с кадром игры",this::beginDiagnosticReport);
   button(box,"Экспорт задержек",()->{if(PilotService.instance==null){toast("Сначала включите службу");return;}PilotService.instance.exportMetrics();startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT).setType("text/plain").addCategory(Intent.CATEGORY_OPENABLE).putExtra(Intent.EXTRA_TITLE,"localpilot-latency.txt"),10);});
@@ -40,6 +40,7 @@ public class MainActivity extends Activity {
   button(box,"Дополнительные инструменты ▾",()->advanced.setVisibility(
     advanced.getVisibility()==android.view.View.VISIBLE?android.view.View.GONE:android.view.View.VISIBLE));
   box.addView(advanced);
+  button(advanced,"Внешний GameLab · только тест Accessibility",this::openExternalGameLab);
   button(advanced,"Включить сбор примеров",()->{if(PilotService.instance==null){toast("Сначала включите службу");return;}new AlertDialog.Builder(this).setTitle("Сохранять игровые примеры?").setMessage("В памяти приложения останутся только распознанные поля до/после и проверенное действие, без снимков. До 256 примеров / 256 КиБ. Это не обучение. При заполнении сбор выключается, игра продолжается. При ошибке записи управление остановится.").setPositiveButton("Включить",(d,w)->{if(PilotService.instance!=null)PilotService.instance.enableExamples();else toast("Служба отключена");}).setNegativeButton("Отмена",null).show();});
   button(advanced,"Выключить сбор примеров",()->{if(PilotService.instance!=null)PilotService.instance.disableExamples();});
   button(advanced,"Экспорт примеров",()->{if(PilotService.instance==null){toast("Сначала включите службу");return;}try{PilotService.instance.exportExamples();startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT).setType("text/plain").addCategory(Intent.CATEGORY_OPENABLE).putExtra(Intent.EXTRA_TITLE,"localpilot-experience-v1.log"),11);}catch(java.io.IOException e){toast("Хранилище недоступно; исходник сохранён");}});
@@ -51,6 +52,12 @@ public class MainActivity extends Activity {
   status=new TextView(this);box.addView(status);
  }
  private void openGameLab(){
+  // Local GameLab is intentionally NOT a real Accessibility target.
+  // All simulator inputs stay inside the app and have SIM_ONLY provenance.
+  startActivity(new Intent(this,org.localpilot.gamelab.TestDeviceActivity.class));
+ }
+ private void openExternalGameLab(){
+  // Optional isolated Android target for testing real Accessibility delivery.
   final String pkg=HubContract.LAB_PACKAGE;
   Intent game=getPackageManager().getLaunchIntentForPackage(pkg);
   if(game==null){
