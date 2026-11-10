@@ -20,6 +20,10 @@ public final class ModelLibraryActivity extends Activity {
  private Spinner profiles,versions;private TextView status;
  private List<LabModelStore.Version> history=List.of();private LabModelStore store;
  private boolean busy,destroyed;private String requestedGame,requestedHash;private int requestedOperation;
+ // The integrity result must survive subsequent profile selection and lab actions.
+ // A transient status line can be overwritten by Spinner.onItemSelected.
+ private volatile String bundledIntegrityReport="Проверка 16 встроенных моделей ещё выполняется.";
+
  private record Document(int operation,TaskSchema.GameId game,android.net.Uri uri,String hash){}
  private Document pendingDocument;
  private interface Work {String run(TaskSchema.GameId game)throws Exception;}
@@ -87,7 +91,10 @@ public final class ModelLibraryActivity extends Activity {
     try{store.ensureBundled(target,name->getAssets().open(name));ready++;}
     catch(IOException invalid){errors.append("\n").append(target.title).append(": требуется откат или импорт исправного ZIP");}
    }
-   return ready==16?"16 профилей загружены. Контрольные суммы и схемы проверены.":"Исправных профилей: "+ready+"/16"+errors;
+   bundledIntegrityReport=ready==16
+     ?"16 профилей загружены. Контрольные суммы и схемы проверены."
+     :"Исправных профилей: "+ready+"/16"+errors;
+   return bundledIntegrityReport;
   });
  }
  private LabModelStore.Version chosenVersion(){
@@ -118,7 +125,7 @@ public final class ModelLibraryActivity extends Activity {
     String[] labels=list.stream().map(v->(v.valid()?(v.selected()?"✓ ":""):"Повреждена · ")+v.sha256().substring(0,16)+" · "+v.bytes()+" байт").toArray(String[]::new);
     versions.setAdapter(new ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,labels));
     for(int i=0;i<list.size();i++)if(list.get(i).selected())versions.setSelection(i);
-    status.setText(result+"\n\n"+GameSupport.describe(target)+"\n"+target.mechanicsVersion+"\n"+target.observationSchema+"\n"+target.actionSchema+"\nВерсии: "+list.size()+"/"+LabModelStore.MAX_VERSIONS+
+    status.setText(bundledIntegrityReport+"\n\n"+result+"\n\n"+GameSupport.describe(target)+"\n"+target.mechanicsVersion+"\n"+target.observationSchema+"\n"+target.actionSchema+"\nВерсии: "+list.size()+"/"+LabModelStore.MAX_VERSIONS+
       "\nSIMULATED_GAME · перенос в настоящую игру не разрешён");
     startPendingDocument();
    });
