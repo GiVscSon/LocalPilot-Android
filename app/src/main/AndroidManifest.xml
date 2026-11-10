@@ -7,13 +7,14 @@
   <intent><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent>
   <intent><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.HOME"/></intent>
  </queries>
- <application android:name=".PilotApplication" android:theme="@android:style/Theme.Material.NoActionBar" android:label="LocalPilot Standalone" android:allowBackup="false" android:usesCleartextTraffic="false" android:supportsRtl="true">
+ <application android:name=".PilotApplication" android:theme="@android:style/Theme.Material.NoActionBar" android:label="LocalPilot Standalone" android:allowBackup="false" android:usesCleartextTraffic="false" android:networkSecurityConfig="@xml/local_core_network_security" android:supportsRtl="true">
   <activity android:name=".MainActivity" android:exported="true"><intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter></activity>
   <activity android:name=".Game2048Activity" android:exported="false"/>
   <activity android:name=".MiniGamesActivity" android:exported="false"/>
   <activity android:name=".DemoActivity" android:exported="false"/>
   <activity android:name=".GamePickerActivity" android:exported="false"/>
   <activity android:name=".OnlineDiagnosticsActivity" android:exported="false"/>
+  <activity android:name=".LocalCoreActivity" android:exported="false"/>
   <activity android:name=".WebLearningActivity" android:exported="false"/>
   <activity android:name=".TrainingActivity" android:exported="false"/>
   <!-- Embedded GameLab shares the LocalPilot APK, permissions and storage.
