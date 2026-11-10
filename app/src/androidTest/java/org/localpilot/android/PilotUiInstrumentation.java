@@ -147,6 +147,7 @@ public final class PilotUiInstrumentation extends Instrumentation {
 
             checkLauncherAndPicker();
             checkOpenRouterAdvisorPicker();
+            checkLocalEnglishCore();
             checkCollapseAndReopen();
             checkFullDemo();
             checkStopDuringDemo();
@@ -253,6 +254,29 @@ public final class PilotUiInstrumentation extends Instrumentation {
              "Image-only models must not be offered for text diagnostic chat");
         addCheck("openrouter_native_model_picker_and_price_contract",
           new JSONObject().put("free_and_paid",true).put("dispatched_actions",0));
+        sendKeyDownUpSync(KeyEvent.KEYCODE_BACK);
+        waitForIdleSync();
+    }
+
+    private void checkLocalEnglishCore() throws Exception {
+        // A native on-device assertion: HTTP loopback works, but remote plaintext is blocked.
+        var networkPolicy=android.security.NetworkSecurityPolicy.getInstance();
+        require(networkPolicy.isCleartextTrafficPermitted("127.0.0.1"),
+          "Local model loopback must be permitted by network security config");
+        require(!networkPolicy.isCleartextTrafficPermitted("example.com"),
+          "Remote plain HTTP must stay blocked");
+        onMain(()->{service.hidePanel();return null;});
+        launch(MainActivity.class);
+        click("Локальное ИИ-ядро · MNN-Pocket (English)");
+        await(()->present("Проверить подключение")
+               &&present("Самопроверка английского · BLUE / 27")
+               &&present("Спросить локальную модель"),3000,
+          "Local model screen or English smoke test controls missing");
+        require(!armed(),"Opening local AI must never arm game input");
+        addCheck("local_english_core_loopback_security_and_no_input",
+          new JSONObject().put("localhost_http",true)
+            .put("remote_http",false)
+            .put("dispatched_actions",0));
         sendKeyDownUpSync(KeyEvent.KEYCODE_BACK);
         waitForIdleSync();
     }
