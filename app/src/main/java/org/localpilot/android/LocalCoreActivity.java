@@ -43,6 +43,13 @@ public final class LocalCoreActivity extends Activity {
     connection.setText("Проверяем локальный сервер...");
    }catch(IllegalStateException e){connection.setText("Локальный сервер занят");}
   });
+  button(layout,"Самопроверка английского · BLUE / 27",()->{
+   if(core.busy()){connection.setText("Ядро уже занято");return;}
+   try{
+    core.selfTest(value->connection.setText(value));
+    connection.setText("Тестирую два независимых английских запроса...");
+   }catch(IllegalStateException failure){connection.setText("Ядро занято или закрыто");}
+  });
   title(layout,"Вопрос ядру · English",18);
   question=new EditText(this);
   question.setSingleLine(false);
