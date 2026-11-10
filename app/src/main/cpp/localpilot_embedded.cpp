@@ -114,7 +114,7 @@ std::string infer(const std::string &sys,const std::string &usr,int limit,float 
  if(sampler)llama_sampler_free(sampler);
  llama_batch_ext_free(batch);
  if(!ok||cancelled.load())return "";
- if(!ended)return "__LOCALPILOT_TRUNCATED__";
+ if(!ended)return ""; // No EOS: fail closed instead of accepting a sentinel as text
  return output;
 }
 }
