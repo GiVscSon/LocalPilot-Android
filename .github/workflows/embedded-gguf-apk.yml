@@ -47,6 +47,19 @@ jobs:
           set -euo pipefail
           python3 tools/bundle_embedded_gguf.py prepare
           cp third_party/llama.cpp/LICENSE build/embedded-model-assets/licenses/llama.cpp-LICENSE.txt
+      - name: Run real English inference using production JNI on Linux host
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake -S app/src/main/cpp -B build/embedded-host-cmake -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/embedded-host-cmake --target localpilot_embedded -j 4
+          mkdir -p build/embedded-jvm build/reports
+          javac --release 17 -d build/embedded-jvm \
+            tests/native/org/localpilot/android/EmbeddedGgufRuntime.java
+          java -Djava.library.path="$PWD/build/embedded-host-cmake" \
+            -cp build/embedded-jvm org.localpilot.android.EmbeddedGgufRuntime \
+            "$PWD/build/embedded-model-assets/models/MNN-Pocket-0.3B-Instruct-Q4_1.gguf" \
+            2>&1 | tee build/reports/embedded-host-smoke.txt
       - name: Build arm64 APK with native inference and bundled weights
         shell: bash
         run: |
@@ -62,6 +75,13 @@ jobs:
             | grep "^package: name='org.localpilot.android.dev.mnnembedded' "
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$APK"
           sha256sum "$APK" | tee build/reports/embedded-apk.sha256
+      - name: Publish native inference smoke-test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: LocalPilot-Embedded-JNI-Smoke-${{ github.sha }}
+          if-no-files-found: ignore
+          path: build/reports/embedded-host-smoke.txt
       - name: Publish self-contained APK and verified source provenance
         uses: actions/upload-artifact@v4
         with:
