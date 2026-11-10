@@ -186,6 +186,29 @@ def cmd_inspect(args: argparse.Namespace) -> None:
     inspect_apk(Path(args.apk).expanduser().resolve(), require_models=args.models)
 
 
+def cmd_upgrade_preflight(args: argparse.Namespace) -> None:
+    """Read-only APK update compatibility check, no ADB or uninstall."""
+    command = [
+        sys.executable, str(ROOT / "tools" / "apk_upgrade_preflight.py"),
+        "--previous", str(Path(args.previous).expanduser()),
+        "--candidate", str(Path(args.candidate).expanduser()),
+    ]
+    if args.sdk:
+        command.extend(["--sdk", args.sdk])
+    if args.output:
+        command.extend(["--output", args.output])
+    completed = subprocess.run(
+        command, stdin=subprocess.DEVNULL, capture_output=True,
+        text=True, encoding="utf-8", errors="replace", timeout=120,
+    )
+    if completed.stdout:
+        print(completed.stdout, end="")
+    if completed.stderr:
+        print(completed.stderr, file=sys.stderr, end="")
+    if completed.returncode != 0:
+        raise RuntimeError("APK update preflight rejected candidate. No installation attempted.")
+
+
 def adb(serial: str, *arguments: str, timeout: int = 40, raw: bool = False) -> str | bytes:
     if not serial or re.fullmatch(r"[A-Za-z0-9.:-]{3,128}", serial) is None:
         raise RuntimeError("Supply exact, safe ADB serial using --serial")
@@ -355,6 +378,12 @@ def parser() -> argparse.ArgumentParser:
     insp.add_argument("--apk", required=True)
     insp.add_argument("--models", type=int, default=16)
     insp.set_defaults(func=cmd_inspect)
+    upgrade = sub.add_parser("upgrade-preflight", help="Read-only old/new APK package, signer and version check")
+    upgrade.add_argument("--previous", required=True)
+    upgrade.add_argument("--candidate", required=True)
+    upgrade.add_argument("--sdk", help="Android SDK root")
+    upgrade.add_argument("--output", help="Optional JSON report")
+    upgrade.set_defaults(func=cmd_upgrade_preflight)
     report = sub.add_parser("device-report", help="Read-only Android diagnostics; no controls are touched")
     report.add_argument("--serial", required=True)
     report.add_argument("--output", default="device-reports")
