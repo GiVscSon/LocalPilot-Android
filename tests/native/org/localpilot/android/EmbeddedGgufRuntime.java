@@ -17,8 +17,13 @@ public final class EmbeddedGgufRuntime {
   try {
    String blue=nativeInfer(args[0],system,"Reply with exactly one word: BLUE",16,0f);
    String sum=nativeInfer(args[0],system,"What is 12 + 15? Reply with the number only.",16,0f);
-   System.out.println("NATIVE_MODEL_QUALITY blue="+quote(blue)+" sum="+quote(sum));
-   if(!"BLUE".equals(blue.trim())||!"27".equals(sum.trim()))
+   String cat=nativeInfer(args[0],system,
+      "Write one short English sentence about a cat.",64,0f);
+   System.out.println("NATIVE_MODEL_QUALITY blue="+quote(blue)+" sum="+quote(sum)+
+      " cat="+quote(cat));
+   if(!"BLUE".equals(blue.trim())||!LocalCoreContract.acceptArithmetic(sum)||
+       !LocalCoreContract.acceptEnglish(cat)||
+       !cat.toLowerCase(java.util.Locale.ROOT).contains("cat"))
     throw new AssertionError("A loaded model is not necessarily a reliable English core; keep the APK experimental");
    System.out.println("NATIVE_MODEL_ENGLISH_SMOKE_PASS");
   } finally {

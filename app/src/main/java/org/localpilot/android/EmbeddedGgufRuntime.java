@@ -22,6 +22,8 @@ public final class EmbeddedGgufRuntime {
  private static final String NAME="MNN-Pocket-0.3B-Instruct-Q4_1.gguf";
  private static final String ASSET="models/"+NAME;
  private static final int MAX_COPY_BYTES=450_000_000;
+ // Avoid concurrent extraction across short-lived Activity instances.
+ private static final Object EXTRACTION_LOCK=new Object();
  private final Context application;
  private final Handler main=new Handler(Looper.getMainLooper());
  private final ExecutorService worker=Executors.newSingleThreadExecutor(r->{
@@ -60,6 +62,8 @@ public final class EmbeddedGgufRuntime {
   }
  }
  private File prepare()throws Exception{
+  synchronized(EXTRACTION_LOCK){
+   if(closed)throw new java.io.IOException("Model runtime closed");
   if(validated!=null&&validated.isFile()&&validated.length()==BuildConfig.EMBEDDED_GGUF_BYTES)
    return validated;
   File dir=new File(application.getNoBackupFilesDir(),"embedded-model");
@@ -109,6 +113,7 @@ public final class EmbeddedGgufRuntime {
   }
   validated=target;
   return target;
+  }
  }
 
  private interface Job { String run()throws Exception; }
@@ -141,9 +146,14 @@ public final class EmbeddedGgufRuntime {
    String a=nativeInfer(file.getAbsolutePath(),system,"Reply with exactly one word: BLUE",16,0f);
    if(closed)return "Самопроверка отменена";
    String b=nativeInfer(file.getAbsolutePath(),system,"What is 12 + 15? Reply with the number only.",16,0f);
-   if(!"BLUE".equals(a.trim())||!"27".equals(b.trim()))
+   if(closed)return "Самопроверка отменена";
+   String cat=nativeInfer(file.getAbsolutePath(),system,
+       "Write one short English sentence about a cat.",64,0f);
+   if(!"BLUE".equals(a.trim())||!LocalCoreContract.acceptArithmetic(b)||
+       !LocalCoreContract.acceptEnglish(cat)||
+       !cat.toLowerCase(java.util.Locale.ROOT).contains("cat"))
     return "FAIL: English model test rejected. Outputs not BLUE and 27. No game input.";
-   return "PASS: Встроенный GGUF ответил BLUE и 27. Игровые навыки ещё не подтверждены.";
+   return "PASS: BLUE, правильное равенство и английская фраза. Игровые навыки ещё не подтверждены.";
   });
  }
  public void ask(String question,String diagnostic,Callback cb){

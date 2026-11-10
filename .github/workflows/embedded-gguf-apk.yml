@@ -55,7 +55,9 @@ jobs:
           cmake --build build/embedded-host-cmake --target localpilot_embedded -j 4
           mkdir -p build/embedded-jvm build/reports
           javac --release 17 -d build/embedded-jvm \
-            tests/native/org/localpilot/android/EmbeddedGgufRuntime.java
+            tests/native/org/localpilot/android/EmbeddedGgufRuntime.java \
+            app/src/main/java/org/localpilot/android/LocalCoreContract.java \
+            app/src/main/java/org/localpilot/android/TextRepetitionGuard.java
           java -Djava.library.path="$PWD/build/embedded-host-cmake" \
             -cp build/embedded-jvm org.localpilot.android.EmbeddedGgufRuntime \
             "$PWD/build/embedded-model-assets/models/MNN-Pocket-0.3B-Instruct-Q4_1.gguf" \

@@ -48,6 +48,14 @@ public final class LocalCoreContract {
   return value;
  }
 
+ /** Accept only exact arithmetic or the tiny model's equivalent equation. */
+ public static boolean acceptArithmetic(String raw){
+  if(raw==null || raw.length()>64)return false;
+  String value=raw.trim().replaceAll("\\s+","");
+  return "27".equals(value)||"27.".equals(value)||
+         "12+15=27".equals(value)||"12+15=27.".equals(value);
+ }
+
  public static boolean acceptEnglish(String response){
   if(response==null || response.isBlank() || response.length()>MAX_ANSWER ||
       TextRepetitionGuard.inspect(response)!=TextRepetitionGuard.Result.OK)

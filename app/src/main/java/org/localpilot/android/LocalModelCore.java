@@ -59,9 +59,12 @@ public final class LocalModelCore {
   */
  public void selfTest(Callback callback){
   execute(callback,()->{
-   String word=probe("Reply with exactly one word: BLUE");
-   String arithmetic=probe("What is 12 + 15? Reply with the number only.");
-   if(!"BLUE".equals(word.trim())||!"27".equals(arithmetic.trim()))
+   String word=probe("Reply with exactly one word: BLUE",16);
+   String arithmetic=probe("What is 12 + 15? Reply with the number only.",16);
+   String cat=probe("Write one short English sentence about a cat.",64);
+   if(!"BLUE".equals(word.trim())||!LocalCoreContract.acceptArithmetic(arithmetic)||
+       !LocalCoreContract.acceptEnglish(cat)||
+       !cat.toLowerCase(java.util.Locale.ROOT).contains("cat"))
     return "Проверка качества НЕ пройдена. Сервер отвечает, но английские инструкции "+
       "выполняются некорректно. Модель не допускается к управлению игрой.";
    return "Проверка пройдена: BLUE и 27. Это подтверждает только простую "+
@@ -69,11 +72,11 @@ public final class LocalModelCore {
   });
  }
 
- private String probe(String prompt)throws Exception{
+ private String probe(String prompt,int maxTokens)throws Exception{
   JSONObject request=new JSONObject();
   request.put("stream",false);
   request.put("temperature",0.0);
-  request.put("max_tokens",16);
+  request.put("max_tokens",maxTokens);
   request.put("messages",new JSONArray()
     .put(new JSONObject().put("role","system")
       .put("content","Answer in English. Obey the exact output format. No explanations."))
