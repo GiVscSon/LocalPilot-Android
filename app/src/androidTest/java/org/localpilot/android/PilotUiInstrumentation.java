@@ -338,7 +338,7 @@ public final class PilotUiInstrumentation extends Instrumentation {
         ManualTouch held=beginManualButtonTouch();
         try{
             await(()->onMain(released::holding),2_000,"Android DOWN did not hold the manual control");
-        }finally{endManualButtonTouch(held);}
+        }finally{endManualButtonTouch(held,true);}
         await(()->onMain(()->!released.holding()),2_000,"Android UP did not release the manual control");
         // Check the actual View's UP handler without a 70ms clock tick between
         // snapshots. The OS hold/release path above is separate evidence.
@@ -369,7 +369,7 @@ public final class PilotUiInstrumentation extends Instrumentation {
             click("STOP");
             await(()->onMain(()->trainingPlayer()==null),2_000,
                 "STOP failed to detach manual input controller");
-        }finally{endManualButtonTouch(held);}
+        }finally{endManualButtonTouch(held,false);}
         int stoppedSteps=onMain(stopped::steps);
         SystemClock.sleep(180);
         require(onMain(()->trainingPlayer()==null&&!stopped.active()&&!stopped.holding()
@@ -389,7 +389,7 @@ public final class PilotUiInstrumentation extends Instrumentation {
                 KeyEvent.KEYCODE_HOME,0),true),"Android rejected HOME UP");
             await(()->onMain(()->!training.hasWindowFocus()&&trainingPlayer()==null),3_000,
                 "Leaving TrainingActivity failed to pause and detach manual input");
-        }finally{endManualButtonTouch(held);}
+        }finally{endManualButtonTouch(held,false);}
         int pausedSteps=onMain(paused::steps);
         launch(TrainingActivity.class);
         await(()->present("Играть самому"),3_000,"TrainingActivity did not return from the background");
@@ -425,8 +425,25 @@ public final class PilotUiInstrumentation extends Instrumentation {
         ManualTouch touch=new ManualTouch(SystemClock.uptimeMillis(),target.full.centerX(),target.full.centerY());
         manualButtonMotion(touch,android.view.MotionEvent.ACTION_DOWN);return touch;
     }
-    private void endManualButtonTouch(ManualTouch touch)throws Exception{
-        manualButtonMotion(touch,android.view.MotionEvent.ACTION_UP);
+    private void endManualButtonTouch(ManualTouch touch,boolean expectFocusedDelivery)throws Exception{
+        if(expectFocusedDelivery){
+            // In a live, focused gamepad we must prove real OS DOWN and UP.
+            manualButtonMotion(touch,android.view.MotionEvent.ACTION_UP);
+            return;
+        }
+        // STOP and HOME deliberately detach the target while a touch is held.
+        // Android is allowed to reject an UP after the window loses focus.
+        // This is NOT a successful UP: prove that no controller can keep
+        // stepping even when Android refuses to deliver the stale input.
+        android.view.MotionEvent event=android.view.MotionEvent.obtain(touch.down,
+            SystemClock.uptimeMillis(),android.view.MotionEvent.ACTION_UP,
+            touch.x,touch.y,0);
+        event.setSource(android.view.InputDevice.SOURCE_TOUCHSCREEN);
+        boolean delivered;
+        try{delivered=automation.injectInputEvent(event,true);}
+        finally{event.recycle();}
+        if(!delivered)require(onMain(()->trainingPlayer()==null),
+            "Undeliverable UP while the simulator still owns an active input");
     }
     private void manualButtonMotion(ManualTouch touch,int action)throws Exception{
         android.view.MotionEvent event=android.view.MotionEvent.obtain(touch.down,SystemClock.uptimeMillis(),
