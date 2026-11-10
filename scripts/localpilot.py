@@ -19,7 +19,7 @@ import sys
 import zipfile
 
 REPO = "GiVscSon/LocalPilot-Android"
-BRANCH = "integration/unified-one-apk-script-engine-20261108"
+BRANCH = "fix/unified-engine-validation-20261108"
 WORKFLOW = "unified-16-simulators.yml"
 ARTIFACT = "localpilot-unified-script-one-apk-debug"
 PACKAGE = "org.localpilot.android.dev.install1081"
@@ -54,10 +54,13 @@ def gh(*args: str) -> str:
 
 
 def latest_success(runs: list[dict]) -> dict | None:
-    for item in runs:
-        if item.get("conclusion") == "success" and item.get("status") == "completed":
-            return item
-    return None
+    """Fail closed: never return an older passing APK after a new failed run."""
+    if not runs:
+        return None
+    newest = runs[0]  # list_runs() sorts by createdAt descending.
+    if newest.get("status") != "completed" or newest.get("conclusion") != "success":
+        return None
+    return newest
 
 
 def list_runs() -> list[dict]:
@@ -124,7 +127,7 @@ def cmd_sim_train(args: argparse.Namespace) -> None:
 def ci_download(args: argparse.Namespace) -> None:
     latest = latest_success(list_runs())
     if latest is None:
-        raise RuntimeError("No successful unified workflow run; refusing a base-only APK")
+        raise RuntimeError("Latest unified workflow is not completed/successful; refusing an older APK")
     target = Path(args.output).expanduser().resolve()
     target.mkdir(parents=True, exist_ok=True)
     run_id = str(latest["databaseId"])
