@@ -122,7 +122,7 @@ public final class LocalModelCore {
     if(out.size()+read>MAX_HTTP_RESPONSE)throw new java.io.IOException("response too large");
     out.write(buffer,0,read);
    }
-   return out.toString(StandardCharsets.UTF_8);
+   return new String(out.toByteArray(),StandardCharsets.UTF_8);
   }
  }
 
