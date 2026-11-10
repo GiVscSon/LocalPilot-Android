@@ -1,6 +1,6 @@
-plugins { id 'com.android.application' }
-
 import groovy.json.JsonSlurper
+
+plugins { id 'com.android.application' }
 
 def bundledGguf = providers.gradleProperty('bundleLocalModel').orElse('false').get().toBoolean()
 def bundledMetadataFile = rootProject.file('build/reports/embedded-gguf.json')
