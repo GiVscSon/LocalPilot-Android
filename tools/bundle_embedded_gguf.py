@@ -82,7 +82,8 @@ def verify(apk_path):
         actual_files = set(apk.namelist())
         assert ASSET in actual_files, "GGUF missing from APK"
         assert "lib/arm64-v8a/liblocalpilot_embedded.so" in actual_files, "native engine missing"
-        assert "assets/licenses/MNN-Pocket-LICENSE.txt" in actual_files, "license missing"
+        assert "assets/licenses/MNN-Pocket-LICENSE.txt" in actual_files, "model license missing"
+        assert "assets/licenses/llama.cpp-LICENSE.txt" in actual_files, "runtime license missing"
         assert apk.getinfo(ASSET).compress_type == zipfile.ZIP_STORED, "GGUF should be uncompressed"
         with apk.open(ASSET) as model:
             sha, size = sha_stream(model)
