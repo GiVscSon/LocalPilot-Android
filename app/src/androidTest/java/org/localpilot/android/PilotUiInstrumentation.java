@@ -872,6 +872,7 @@ public final class PilotUiInstrumentation extends Instrumentation {
         await(() -> markerBounds("LOCALPILOT_CAPTURE_FIXTURE") != null, 8_000, "Projection fixture marker did not become visible after its single launch");
         onMain(()->{service.selectInstalledTarget(fixturePackage,"Capture acceptance");return null;});
         await(()->present(ArcadeProfile.ARI.label),6_000,"New external app reused the previous 2048 profile instead of requesting its mechanic");
+        require(!armed(),"Selecting a new external game must disarm the previous game before mechanic confirmation");
         click(ArcadeProfile.ARI.label);
         awaitBrowserMechanic();
         require(onMain(()->booleanField("targetIsBrowser")),"Isolated VIEW/HTTPS fixture was not classified as a browser context");
