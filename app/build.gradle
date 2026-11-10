@@ -48,10 +48,16 @@ android {
  }
  buildTypes {
   debug {
-   applicationIdSuffix bundledGguf ? '.dev.mnnembedded' : '.dev.install1081'
-   versionNameSuffix bundledGguf ? '-embedded-mnn-candidate' : '-dev-install1081'
+   applicationIdSuffix '.dev.install1081'
+   versionNameSuffix '-dev-install1081'
    debuggable false
   }
+ }
+ // Keep legacy dev package literals intact for strict release tooling.
+ // Only the dedicated embedded APK uses its own install identity.
+ if (bundledGguf) {
+   buildTypes.debug.applicationIdSuffix = '.dev.mnnembedded'
+   buildTypes.debug.versionNameSuffix = '-embedded-mnn-candidate'
  }
  lint { checkTestSources true }
  compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
