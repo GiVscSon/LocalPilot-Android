@@ -9,8 +9,9 @@ The deterministic PilotService, STOP, ActionGate, InputPermit, TTL, strict ROI, 
 1. Start llama-server in Termux with the installed MNN-Pocket GGUF, bound to 127.0.0.1:8080. Keep Termux alive; this build does **not** bundle weights or the server.
 2. Open LocalPilot -> **Локальное ИИ-ядро · MNN-Pocket (English)**.
 3. Tap **Проверить подключение**. HTTP GET /health must report status=ok.
-4. Enter a short question in English and tap **Спросить локальную модель**.
-5. If the model is looping or returns non-English content, the response is rejected, without any game action.
+4. Tap **Самопроверка английского · BLUE / 27**. Two independent short completions must return exactly BLUE and 27; a healthy endpoint alone does not prove quality.
+5. Enter a short question in English and tap **Спросить локальную модель**.
+6. If the model loops, mixes languages or reaches the token limit, the response is rejected without any game action.
 
 ## Implementation
 - LocalCoreContract: English instructions; bounded, fail-closed response guard.
@@ -24,3 +25,8 @@ The deterministic PilotService, STOP, ActionGate, InputPermit, TTL, strict ROI, 
 - Validate locally with real Termux and complete model, including 200 healthy, unreachable, 503, malformed JSON, overlong and repetitive answers.
 - Test on phone/tablet; allow no model-derived real-world action without existing independent visual and motion verification.
 - This step is **not** a stable APK release, embedded GGUF inference, or an autonomous 10-game LLM policy.
+
+## Smoke-test evidence
+- Native Android acceptance checks the same app's loopback-only cleartext security policy and local screen controls on API 30/35/36.
+- Local model inference is not executed in GitHub's emulator jobs because Termux and GGUF weights are not installed there. This must be confirmed on the user's POCO and tablet separately.
+- Local language UI requires Termux to keep running. Android cannot silently start a cross-app Termux process; this APK deliberately does not claim bundled/offline-without-Termux native inference.
