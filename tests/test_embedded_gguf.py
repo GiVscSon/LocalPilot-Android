@@ -17,10 +17,18 @@ class EmbeddedModelPackagingTest(unittest.TestCase):
         self.report = root / "model.json"
         self.payload = b"GGUF" + b"\x00" * 256
         self.digest = hashlib.sha256(self.payload).hexdigest()
-        self.report.write_text(json.dumps({"sha256":self.digest, "bytes":len(self.payload)}))
-        self.patch = mock.patch.object(mod, "REPORT", self.report)
-        self.patch.start()
-        self.addCleanup(self.patch.stop)
+        self.report.write_text(json.dumps({
+            "sha256":self.digest, "bytes":len(self.payload), "revision":"test-pinned-revision"
+        }))
+        for attr, value in (
+            ("REPORT",self.report),
+            ("EXPECTED_SHA256",self.digest),
+            ("EXPECTED_BYTES",len(self.payload)),
+            ("REVISION","test-pinned-revision"),
+        ):
+            patch = mock.patch.object(mod,attr,value)
+            patch.start()
+            self.addCleanup(patch.stop)
 
     def pack(self, *, model=True, library=True, license=True, stored=True, contents=None):
         with zipfile.ZipFile(self.apk, "w") as out:
@@ -59,6 +67,26 @@ class EmbeddedModelPackagingTest(unittest.TestCase):
 
     def test_corrupt_model_rejected(self):
         self.pack(contents=b"GGUF" + b"X"*256)
+        with self.assertRaises(ValueError):
+            mod.verify(self.apk)
+
+    def test_forged_metadata_rejected(self):
+        self.pack()
+        self.report.write_text(json.dumps({
+            "sha256":hashlib.sha256(b"other").hexdigest(),
+            "bytes":len(self.payload),
+            "revision":"test-pinned-revision"
+        }))
+        with self.assertRaises(ValueError):
+            mod.verify(self.apk)
+
+    def test_wrong_revision_rejected(self):
+        self.pack()
+        self.report.write_text(json.dumps({
+            "sha256":self.digest,
+            "bytes":len(self.payload),
+            "revision":"wrong-revision"
+        }))
         with self.assertRaises(ValueError):
             mod.verify(self.apk)
 

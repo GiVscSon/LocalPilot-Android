@@ -87,6 +87,10 @@ def prepare():
 
 def verify(apk_path):
     info = json.loads(REPORT.read_text())
+    if (info.get("sha256") != EXPECTED_SHA256 or
+            info.get("bytes") != EXPECTED_BYTES or
+            info.get("revision") != REVISION):
+        raise ValueError("APK metadata differs from pinned model provenance")
     with zipfile.ZipFile(apk_path) as apk:
         actual_files = set(apk.namelist())
         if ASSET not in actual_files:
