@@ -77,8 +77,10 @@ public final class LocalModelCore {
     int status=connection.getResponseCode();
     if(status!=200)return "Local inference unavailable: HTTP "+status;
     JSONObject body=new JSONObject(readBounded(connection.getInputStream()));
-    String response=body.getJSONArray("choices").getJSONObject(0)
-      .getJSONObject("message").optString("content","");
+    JSONObject choice=body.getJSONArray("choices").getJSONObject(0);
+    if("length".equals(choice.optString("finish_reason","")))
+     return "Local response cut off at the token limit. No game action taken.";
+    String response=choice.getJSONObject("message").optString("content","");
     if(!LocalCoreContract.acceptEnglish(response))
      return "Local response rejected: looping, non-English, missing or too long. No game action taken.";
     return "MNN-Pocket local · English\n"+response;
