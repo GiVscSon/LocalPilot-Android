@@ -23,6 +23,10 @@ android {
 
 // Share the already verified pinned JSNES assets; do not download a second core.
 tasks.named('preBuild').configure { dependsOn ':game-lab:bundleVerifiedNesEngine' }
+// Ensure merging the actual APK assets cannot race the pinned JSNES generation.
+tasks.matching { it.name == 'mergeDebugAssets' }.configureEach {
+ dependsOn ':game-lab:bundleVerifiedNesEngine'
+}
 
 // The installed binary must identify the exact source tested by CI.
 def provenanceAssets = layout.buildDirectory.dir('generated/source-provenance/assets')
