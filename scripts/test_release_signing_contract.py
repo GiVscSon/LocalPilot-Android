@@ -37,7 +37,9 @@ class ProtectedSigningContract(unittest.TestCase):
     def test_private_key_only_decoded_in_temporary_file(self):
         self.assertIn("base64.b64decode(", self.workflow)
         self.assertIn("path.chmod(0o600)", self.workflow)
-        self.assertIn("runner.temp", self.workflow)
+        self.assertIn("RUNNER_TEMP", self.workflow)
+        self.assertIn("LOCALPILOT_RELEASE_STORE_FILE=", self.workflow)
+        self.assertIn("GITHUB_ENV", self.workflow)
         self.assertIn("Delete private key material", self.workflow)
 
     def test_public_certificate_is_explicitly_pinned(self):
