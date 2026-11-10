@@ -58,6 +58,12 @@ jobs:
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs app/build/outputs/apk/debug/app-debug.apk
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging app/build/outputs/apk/debug/app-debug.apk | head -12
           sha256sum app/build/outputs/apk/debug/app-debug.apk
+      - name: 20-point source-to-APK release candidate audit
+        run: |
+          python3 tools/release_20point_audit.py \
+            app/build/outputs/apk/debug/app-debug.apk \
+            --output build/reports/unified-script-engine/release-20point.json
+          test "$(python3 -c 'import json; r=json.load(open("build/reports/unified-script-engine/release-20point.json")); print(r["passed"])')" = 20
       - name: Verify shipped LPS1 game controller scripts
         run: |
           python3 - <<'PY'
