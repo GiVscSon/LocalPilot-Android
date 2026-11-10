@@ -75,6 +75,14 @@ def restore() -> None:
         start=reviewed.index(method)
         end=reviewed.index(" private void installRealGameNeural(",start)
         restored=reviewed[start:end]
+        # The legacy service has no 'visionTraining' state at all. The current
+        # service still checks it, but the older one cannot refer to a field
+        # that does not exist. Preserve the pre-existing gate/active-game/busy
+        # guards and omit only this inapplicable legacy flag.
+        if "visionTraining" not in installed:
+            if restored.count("||visionTraining")!=1:
+                raise RuntimeError("Unexpected transfer safety guard layout")
+            restored=restored.replace("||visionTraining","",1)
         required=(
             "candidate.eligible()", "gate.armed()", "busy",
             "VisualGameTarget.allowed(", "arcadeLearning.savePaddleTransfer(",
