@@ -58,6 +58,8 @@ jobs:
           set -euo pipefail
           APK=app/build/outputs/apk/debug/app-debug.apk
           python3 tools/bundle_embedded_gguf.py verify "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" \
+            | grep "^package: name='org.localpilot.android.dev.mnnembedded' "
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$APK"
           sha256sum "$APK" | tee build/reports/embedded-apk.sha256
       - name: Publish self-contained APK and verified source provenance
