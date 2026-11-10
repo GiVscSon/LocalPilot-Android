@@ -127,6 +127,11 @@ Java_org_localpilot_android_EmbeddedGgufRuntime_nativeInfer(
  cancelled.store(false);
  std::string result;
  if(init(f.str()))result=infer(s.str(),q.str(),maxTokens,temperature);
+ // JNI NewStringUTF expects Modified UTF-8, not 4-byte emoji sequences.
+ // Reject unsupported supplementary characters rather than risking a VM abort.
+ for(unsigned char byte:result){
+  if((byte&0xF8)==0xF0){result.clear();break;}
+ }
  return e->NewStringUTF(result.c_str());
 }
 
