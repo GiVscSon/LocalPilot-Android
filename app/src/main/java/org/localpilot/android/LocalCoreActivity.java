@@ -29,7 +29,7 @@ public final class LocalCoreActivity extends Activity {
    view.setPadding(bars.left,bars.top,bars.right,bars.bottom);
    return insets;
   });
-  scroll.requestApplyWindowInsets();
+  scroll.requestApplyInsets();
   title(layout,"Локальное ядро · MNN-Pocket",24);
   label(layout,"Главный локальный языковой backend: Termux / llama-server / 127.0.0.1:8080. "+
    "Запросы модели формируются на английском. Интернет, API-ключ и облако не нужны.");
