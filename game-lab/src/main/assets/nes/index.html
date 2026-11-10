@@ -10,6 +10,7 @@
 </style>
 <script src="jsnes.min.js"></script>
 <script src="latched-buttons.js"></script>
+<script src="nes-observation.js"></script>
 </head><body><main><canvas id="screen" width="256" height="240"></canvas>
 <div id="status" role="status">Откройте NES-картридж в Android-приложении.</div></main>
 <script>
@@ -24,7 +25,7 @@ let audioContext=null,audioNode=null;
 const SIZE=32768,ringL=new Float32Array(SIZE),ringR=new Float32Array(SIZE);
 let writeAt=0,readAt=0;
 function status(s){stat.textContent=s;try{
- if(window.GameLabBridge)window.GameLabBridge.onStatus(s);
+ if(window.GameLabBridge)window.GameLabBridge.onStatus(window.retroEpisodeId||'',s);
 }catch(error){}}
 function audioStop(){
  if(audioNode){audioNode.disconnect();audioNode.onaudioprocess=null;audioNode=null;}
@@ -55,6 +56,7 @@ function audioWrite(l,r){
  if(writeAt-readAt>=SIZE)readAt=writeAt-SIZE+1;
  const at=writeAt%SIZE;ringL[at]=l;ringR[at]=r;writeAt++;
 }
+let episodeSampler=null;
 function sendFrame(rgb){
  const data=image.data;
  for(let i=0;i<256*240;i++){
@@ -67,8 +69,17 @@ function sendFrame(rgb){
   let hash=2166136261>>>0;
   for(let i=0;i<256*240;i+=241)hash=Math.imul(hash^rgb[i],16777619)>>>0;
   validFrame=hash;
-  try{if(window.GameLabBridge)window.GameLabBridge.onFrame(frames,hash|0);}catch(error){}
+  try{if(window.GameLabBridge){
+   window.GameLabBridge.onFrame(window.retroEpisodeId||'',frames,hash|0);
+  }}catch(error){}
  }
+ try{if(episodeSampler&&window.GameLabBridge&&window.GameLabBridge.onObservation){
+  let buttons=0;
+  for(const [i,key] of ['UP','LEFT','DOWN','RIGHT','SELECT','START','B','A'].entries())
+   if(gamepadLatch&&gamepadLatch.down.has(key))buttons|=1<<i;
+  const seen=episodeSampler.sample(rgb,frames,buttons);
+  if(seen)window.GameLabBridge.onObservation(window.retroEpisodeId||'',seen.frame,seen.pixelHash,buttons,seen.features.join(','));
+ }}catch(error){}
 }
 function tick(){
  if(!nes||paused)return;
@@ -77,7 +88,7 @@ function tick(){
 function stop(){
  if(timer!==null){clearInterval(timer);timer=null;}
  if(gamepadLatch){gamepadLatch.clear();gamepadLatch=null;}
- nes=null;paused=true;audioStop();
+ nes=null;episodeSampler=null;paused=true;audioStop();
 }
 window.retroStop=function(){stop();status("Игра остановлена");};
 window.retroPause=function(){
@@ -93,7 +104,8 @@ window.retroResume=function(){
  timer=setInterval(tick,window.retroDendy?20:1000/60);
  return true;
 };
-window.retroLoadRom=function(encoded,dendy){
+window.retroLoadRom=function(encoded,dendy,episodeId){
+ window.retroEpisodeId=String(episodeId||'');
  try{
   stop();
   if(!window.jsnes||typeof jsnes.NES!=="function"||!jsnes.Controller)
@@ -109,7 +121,7 @@ window.retroLoadRom=function(encoded,dendy){
   machine.loadROM(binary);nes=machine;
   gamepadLatch=new FrameHeldButtons(machine,4);
   window.retroDendy=Boolean(dendy);
-  frames=0;validFrame=0;
+  frames=0;validFrame=0;episodeSampler=typeof NesFrameSampler==='function'?new NesFrameSampler():null;
   audioStart();paused=false;
   timer=setInterval(tick,dendy?20:1000/60);
   status(dendy?"Денди: NES-совместимый режим 50 Гц (не точные тайминги)":"NES: игра выполняется локально");

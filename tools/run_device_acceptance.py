@@ -1,6 +1,9 @@
 """Run the isolated Android test APK and expose bounded failures in CI annotations."""
 import json
+import hashlib
+import os
 from pathlib import Path
+import re
 import subprocess
 import sys
 import time
@@ -25,6 +28,95 @@ def annotation(level, message):
     print('::' + level + ' title=Android device acceptance::' + safe, flush=True)
 
 
+def record_accessibility_setup(phase, isolated_emulator):
+    """Diagnostic readback only; never enables input or changes acceptance.
+
+    Keep the immediate post-write state as well as the later failure state, so
+    a missing service can be distinguished from settings that did not persist.
+    Do not collect settings from a user's physical device.
+    """
+    if not isolated_emulator:
+        return
+    snapshot = {'phase': phase, 'elapsed_monotonic_ms': int(time.monotonic() * 1000)}
+    component = PACKAGE + '/org.localpilot.android.PilotService'
+    for setting in ('enabled_accessibility_services', 'accessibility_enabled'):
+        try:
+            value = command(['adb', 'shell', 'settings', 'get', 'secure', setting], 2).strip()
+            snapshot[setting] = value[:2048]
+            if setting == 'enabled_accessibility_services':
+                snapshot['pilot_component_enabled'] = component in value.split(':')
+                snapshot['service_list_truncated'] = len(value) > 2048
+        except (OSError, RuntimeError, subprocess.TimeoutExpired) as error:
+            snapshot[setting + '_read_error'] = str(error)[:500]
+    try:
+        (OUT / ('accessibility-settings-' + phase + '.json')).write_text(
+            json.dumps(snapshot, indent=2), encoding='utf-8')
+    except OSError as error:
+        annotation('notice', 'Accessibility setup diagnostic could not be saved: ' + str(error)[:300])
+
+
+def record_pilot_service_failure(isolated_emulator):
+    """Preserve bounded OS service state without replacing the primary failure."""
+    if not isolated_emulator:
+        return
+    try:
+        state = command(['adb', 'shell', 'dumpsys', 'activity', 'services',
+                         PACKAGE + '/org.localpilot.android.PilotService'], 10)
+    except (OSError, RuntimeError, subprocess.TimeoutExpired) as error:
+        state = 'Service-state diagnostic failed: ' + str(error)[:500]
+    try:
+        (OUT / 'pilot-service-state.txt').write_text(state[:8000], encoding='utf-8')
+    except OSError as error:
+        annotation('notice', 'Pilot service diagnostic could not be saved: ' + str(error)[:300])
+
+
+def device_metadata():
+    """Describe and verify the selected emulator; never label it physical."""
+    sdk = command(['adb', 'shell', 'getprop', 'ro.build.version.sdk']).strip()
+    if not sdk.isdecimal() or not 1 <= int(sdk) <= 100:
+        raise RuntimeError('Invalid observed Android API level')
+    expected = os.environ.get('LOCALPILOT_EXPECTED_API', sdk)
+    if expected != sdk:
+        raise RuntimeError('Requested API ' + expected + ' differs from observed API ' + sdk)
+    form_factor = os.environ.get('LOCALPILOT_FORM_FACTOR', 'unspecified')
+    profile = os.environ.get('LOCALPILOT_EMULATOR_PROFILE', 'unspecified')
+    if form_factor not in ('phone', 'tablet', 'unspecified'):
+        raise RuntimeError('Unsupported acceptance form factor')
+    if profile not in ('pixel_2', 'pixel_c', 'unspecified'):
+        raise RuntimeError('Unsupported acceptance hardware profile')
+    if (profile == 'pixel_2' and form_factor != 'phone'
+            or profile == 'pixel_c' and form_factor != 'tablet'):
+        raise RuntimeError('Acceptance profile/form-factor mismatch')
+    # Prefer the last (override) size/density if Android reports both.
+    sizes = re.findall(r'(?:Physical|Override) size:\s*(\d+)x(\d+)',
+                       command(['adb', 'shell', 'wm', 'size']))
+    densities = re.findall(r'(?:Physical|Override) density:\s*(\d+)',
+                           command(['adb', 'shell', 'wm', 'density']))
+    if not sizes or not densities:
+        raise RuntimeError('Android did not expose display size/density')
+    width, height = map(int, sizes[-1])
+    density = int(densities[-1])
+    if not 160 <= min(width, height) <= max(width, height) <= 16384 or not 72 <= density <= 1280:
+        raise RuntimeError('Observed emulator display bounds invalid')
+    smallest_width_dp = min(width, height) * 160 // density
+    if (form_factor == 'tablet' and smallest_width_dp < 600
+            or form_factor == 'phone' and smallest_width_dp >= 600):
+        raise RuntimeError('Observed display does not match requested ' + form_factor + ' geometry')
+    source_sha = command(['git', 'rev-parse', 'HEAD']).strip()
+    if not re.fullmatch(r'[0-9a-f]{40}', source_sha):
+        raise RuntimeError('Acceptance checkout SHA unavailable')
+    if os.environ.get('GITHUB_SHA', source_sha) != source_sha:
+        raise RuntimeError('Acceptance checkout differs from GITHUB_SHA')
+    apk = Path('app/build/outputs/apk/debug/app-debug.apk')
+    return {
+        'source': 'ISOLATED_ANDROID_EMULATOR', 'physical_device': False,
+        'source_sha': source_sha, 'api': int(sdk), 'form_factor': form_factor,
+        'hardware_profile': profile, 'width_px': width, 'height_px': height,
+        'density_dpi': density, 'smallest_width_dp': smallest_width_dp,
+        'apk_sha256': hashlib.sha256(apk.read_bytes()).hexdigest(),
+    }
+
+
 def main():
     OUT.mkdir(exist_ok=True)
     isolated_emulator=False
@@ -34,6 +126,8 @@ def main():
         if qemu!='1' and boot_qemu!='1':
             raise RuntimeError('Isolated emulator required; refusing to change Accessibility settings on a physical device')
         isolated_emulator=True
+        metadata = device_metadata()
+        (OUT / 'device-metadata.json').write_text(json.dumps(metadata, indent=2), encoding='utf-8')
         command(['adb', 'install', '-r', 'app/build/outputs/apk/debug/app-debug.apk'])
         command(['adb', 'install', '-r', 'app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk'])
         command(['adb','shell','settings','put','system','screen_off_timeout','600000'])
@@ -57,6 +151,7 @@ def main():
                     command(['adb', 'shell', 'settings', 'put', 'secure', 'enabled_accessibility_services',
                              PACKAGE + '/org.localpilot.android.PilotService'])
                     command(['adb', 'shell', 'settings', 'put', 'secure', 'accessibility_enabled', '1'])
+                    record_accessibility_setup('after-enable', isolated_emulator)
                     process.wait(timeout=300)
                     if process.returncode:raise RuntimeError('Instrumentation process failed\n'+(OUT/'instrumentation.txt').read_text()[-2500:])
                 finally:
@@ -66,6 +161,7 @@ def main():
         payload=next((line[len(prefix):] for line in output.splitlines() if line.startswith(prefix)),None)
         if payload is None:raise RuntimeError('No final instrumentation report\n'+output[-3500:])
         report=json.loads(payload)
+        report['runner_device'] = metadata
         (OUT/'pilot-ui-evidence.json').write_text(json.dumps(report,indent=2),encoding='utf-8')
         print(json.dumps(report, indent=2), flush=True)
         if report.get('result') != 'PASS':
@@ -119,6 +215,8 @@ def main():
         (OUT / 'runner-error.txt').write_text(text[:8000], encoding='utf-8')
         annotation('error', text)
         if not isolated_emulator:return 1
+        record_accessibility_setup('failure', isolated_emulator)
+        record_pilot_service_failure(isolated_emulator)
         try:
             crash=command(['adb','logcat','-d','-b','crash'],10)
             (OUT/'crash-logcat.txt').write_text(crash[-16000:],encoding='utf-8')

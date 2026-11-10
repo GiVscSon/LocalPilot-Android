@@ -7,7 +7,10 @@ import java.util.List;
 /** Bounded reader for the four ordinary candy colors and staggered rows in Shipuchka. */
 public final class BubbleVision {
  public interface Pixels {int get(int x,int y);}
- public record Read(BubbleBoard board,String reason){public boolean usable(){return board!=null;}}
+ public record Read(BubbleBoard board,String reason,int reserveColor,boolean reacquired){
+  public Read(BubbleBoard board,String reason){this(board,reason,0,false);}
+  public boolean usable(){return board!=null;}
+ }
  private static final class Scratch {
   final int[] rgb=new int[240*480],queue=new int[240*480],stamp=new int[240*480];
   final byte[] strong=new byte[240*480],color=new byte[240*480];
@@ -35,6 +38,21 @@ public final class BubbleVision {
   boolean round(){return width()>=7&&height()>=7&&width()/(float)height()>.80f&&width()/(float)height()<1.23f&&count/(float)(width()*height())>.52f;}
  }
  private BubbleVision(){}
+ /**
+  * Object-first read with bounded single-pass geometric reacquisition if cached
+  * geometry fails due to camera/scale shift (never on overlay occlusion or special ball).
+  */
+ public static Read readRecovering(Pixels pixels,int width,int height,int left,int top,int right,int bottom,
+   int excludedLeft,int excludedTop,int excludedRight,int excludedBottom,BubbleBoard previous){
+  Read initial=read(pixels,width,height,left,top,right,bottom,excludedLeft,excludedTop,excludedRight,excludedBottom,previous);
+  if(initial.usable()||previous==null)return initial;
+  String r=initial.reason();
+  if(r!=null&&(r.startsWith("Панель перекрывает")||r.startsWith("STOP перекрывает")||r.startsWith("Бонус/неизвестный")))return initial;
+  Read reacquired=read(pixels,width,height,left,top,right,bottom,excludedLeft,excludedTop,excludedRight,excludedBottom,null);
+  if(!reacquired.usable())return initial;
+  return new Read(reacquired.board(),reacquired.reason()+" (геометрия перезахвачена)",reacquired.reserveColor(),true);
+ }
+
  public static Read read(Pixels pixels,int width,int height,int left,int top,int right,int bottom,
    int excludedLeft,int excludedTop,int excludedRight,int excludedBottom,BubbleBoard previous){
   return read(pixels,width,height,left,top,right,bottom,excludedLeft,excludedTop,excludedRight,excludedBottom,previous,true);
@@ -60,7 +78,7 @@ public final class BubbleVision {
   // Initial acquisition needs components; a tracked board samples only the
   // bounded circle probes. Never copy/parse an entire screen for cached geometry.
   if(previous==null)for(int i=0;i<n;i++)work.sample(i);
-  float x0,y0,step,lx,ly;int cols,rows,loaded,shortParity;
+  float x0,y0,step,lx,ly;int cols,rows,loaded,shortParity,reserveColor=0;
   if(previous!=null){
    if(previous.width!=rw||previous.height!=rh)return new Read(null,"Геометрия области изменилась");
    x0=previous.x0/scale;y0=previous.y0/scale;step=previous.step/scale;
@@ -86,6 +104,9 @@ public final class BubbleVision {
    lx=launcher.x();ly=launcher.y();float diameter=(launcher.width()+launcher.height())*.5f;
    loaded=circle(work,w,h,lx,ly,diameter*.47f);
    if(loaded<=0)return new Read(null,"Бонус/неизвестный шар в пушке");
+   for(Blob b:blobs)if(b!=launcher&&b.color<=4&&b.round()&&b.x()>w*.18f&&b.x()<lx-diameter*.8f&&Math.abs(b.y()-ly)<diameter*1.4f){
+    reserveColor=b.color;break;
+   }
    List<Blob> anchors=new ArrayList<>();
    for(Blob b:blobs)if(b.color<=4&&b.round()&&b.y()<ly-diameter*3&&b.width()>diameter*.80f&&b.width()<diameter*1.18f
      &&b.height()>diameter*.80f&&b.height()<diameter*1.18f)anchors.add(b);
@@ -137,7 +158,7 @@ public final class BubbleVision {
   try{board=new BubbleBoard(rw,rh,cols,rows,x0*scale,y0*scale,step*scale,lx*scale,ly*scale,loaded,cells,shortParity);}
   catch(IllegalArgumentException invalid){return new Read(null,"Геометрия шаров выходит за область");}
   if(!board.ceilingConnected())return new Read(null,"Ожидаю завершения падения шаров");
-  return new Read(board,"Обычные шары: "+count+" · цвет пушки "+loaded);
+  return new Read(board,"Обычные шары: "+count+" · цвет пушки "+loaded,reserveColor,false);
   }finally{work.pixels=null;}
  }
  private static int color(int c,boolean strong){

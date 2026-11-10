@@ -22,7 +22,9 @@ jobs:
       test -x "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
       "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-35' 'build-tools;35.0.0'
    - name: Release tooling regression checks
-     run: python3 -m unittest discover -s tests -p 'test_release_tools.py' -v
+     run: |
+      python3 -m unittest discover -s tests -p 'test_release_tools.py' -v
+      python3 -m unittest discover -s tests -p 'test_apk_upgrade_preflight.py' -v
    - name: Verify optional HTTPS telemetry receiver
      run: python3 -m unittest discover -s tests -p 'test_telemetry_receiver.py' -v
    - name: Verify Android GameLab evidence schema offline
@@ -67,8 +69,12 @@ jobs:
       java tests/RealGameNeuralVerify.java
       java tests/GameLabRetroVerify.java
       java tests/GameLabContractVerify.java
+      java tests/ArcadeManualVerify.java
+      java tests/GameLabPhysicsVerify.java
       java tests/SimExperienceVerify.java
       java tests/GameLabCoachVerify.java
+      java -Djava.awt.headless=true tests/BubbleFixtureGeometryVerify.java
+      java tests/ModelLibraryVerify.java
    - name: Explicit unit tests and Android lint
      shell: bash
      run: |

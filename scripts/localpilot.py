@@ -19,7 +19,7 @@ import sys
 import zipfile
 
 REPO = "GiVscSon/LocalPilot-Android"
-BRANCH = "main"
+BRANCH = "fix/unified-engine-validation-20261108"
 WORKFLOW = "unified-16-simulators.yml"
 ARTIFACT = "localpilot-unified-script-one-apk-debug"
 PACKAGE = "org.localpilot.android.dev.install1081"
@@ -54,10 +54,13 @@ def gh(*args: str) -> str:
 
 
 def latest_success(runs: list[dict]) -> dict | None:
-    for item in runs:
-        if item.get("conclusion") == "success" and item.get("status") == "completed":
-            return item
-    return None
+    """Fail closed: never return an older passing APK after a new failed run."""
+    if not runs:
+        return None
+    newest = runs[0]  # list_runs() sorts by createdAt descending.
+    if newest.get("status") != "completed" or newest.get("conclusion") != "success":
+        return None
+    return newest
 
 
 def list_runs() -> list[dict]:
@@ -124,7 +127,7 @@ def cmd_sim_train(args: argparse.Namespace) -> None:
 def ci_download(args: argparse.Namespace) -> None:
     latest = latest_success(list_runs())
     if latest is None:
-        raise RuntimeError("No successful unified workflow run; refusing a base-only APK")
+        raise RuntimeError("Latest unified workflow is not completed/successful; refusing an older APK")
     target = Path(args.output).expanduser().resolve()
     target.mkdir(parents=True, exist_ok=True)
     run_id = str(latest["databaseId"])
@@ -181,6 +184,29 @@ def inspect_apk(apk: Path, require_models: int | None = None) -> dict:
 
 def cmd_inspect(args: argparse.Namespace) -> None:
     inspect_apk(Path(args.apk).expanduser().resolve(), require_models=args.models)
+
+
+def cmd_upgrade_preflight(args: argparse.Namespace) -> None:
+    """Read-only APK update compatibility check, no ADB or uninstall."""
+    command = [
+        sys.executable, str(ROOT / "tools" / "apk_upgrade_preflight.py"),
+        "--previous", str(Path(args.previous).expanduser()),
+        "--candidate", str(Path(args.candidate).expanduser()),
+    ]
+    if args.sdk:
+        command.extend(["--sdk", args.sdk])
+    if args.output:
+        command.extend(["--output", args.output])
+    completed = subprocess.run(
+        command, stdin=subprocess.DEVNULL, capture_output=True,
+        text=True, encoding="utf-8", errors="replace", timeout=120,
+    )
+    if completed.stdout:
+        print(completed.stdout, end="")
+    if completed.stderr:
+        print(completed.stderr, file=sys.stderr, end="")
+    if completed.returncode != 0:
+        raise RuntimeError("APK update preflight rejected candidate. No installation attempted.")
 
 
 def adb(serial: str, *arguments: str, timeout: int = 40, raw: bool = False) -> str | bytes:
@@ -314,7 +340,28 @@ def cmd_unified_pipeline(args: argparse.Namespace) -> None:
         command.append("--require-sdk")
     # The local operator can trigger this whole pipeline, but cannot invent
     # a completed APK or claim that a simulator won a physical Market game.
-    print(str(run(command, timeout=1800)))
+    print(str(run(command, timeout=7200)))
+
+
+def cmd_field_audit(args: argparse.Namespace) -> None:
+    """Read an explicitly exported local audit ZIP, never live device state."""
+    from field_audit_gate import inspect
+    report = inspect(Path(args.zip).expanduser())
+    serialized = json.dumps(report, ensure_ascii=False, sort_keys=True, indent=2) + "\n"
+    if args.output:
+        destination = Path(args.output).expanduser()
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_text(serialized, encoding="utf-8")
+        print("Local field audit summary saved:", destination)
+    else:
+        print(serialized, end="")
+
+
+def cmd_nes_lab(args: argparse.Namespace) -> None:
+    """Use the reviewed NES runner; ROM data cannot authorize Android input."""
+    command = [sys.executable, str(ROOT / "scripts" / "nes_lab.py"),
+               args.nes_action, *args.nes_arguments]
+    print(str(run(command, timeout=7200)))
 
 
 def parser() -> argparse.ArgumentParser:
@@ -331,20 +378,35 @@ def parser() -> argparse.ArgumentParser:
     insp.add_argument("--apk", required=True)
     insp.add_argument("--models", type=int, default=16)
     insp.set_defaults(func=cmd_inspect)
+    upgrade = sub.add_parser("upgrade-preflight", help="Read-only old/new APK package, signer and version check")
+    upgrade.add_argument("--previous", required=True)
+    upgrade.add_argument("--candidate", required=True)
+    upgrade.add_argument("--sdk", help="Android SDK root")
+    upgrade.add_argument("--output", help="Optional JSON report")
+    upgrade.set_defaults(func=cmd_upgrade_preflight)
     report = sub.add_parser("device-report", help="Read-only Android diagnostics; no controls are touched")
     report.add_argument("--serial", required=True)
     report.add_argument("--output", default="device-reports")
     report.add_argument("--screenshot", action="store_true", help="Opt in to capturing visible private screen")
     report.set_defaults(func=cmd_device_report)
+    audit = sub.add_parser("field-audit", help="Validate an exported audit ZIP; no Market acceptance or device changes")
+    audit.add_argument("--zip", required=True, help="Path to explicit AuditExport.snapshot ZIP")
+    audit.add_argument("--output", help="Optional JSON report (LOCAL_AUDIT_ONLY)")
+    audit.set_defaults(func=cmd_field_audit)
     stops = sub.add_parser("stop-report", help="Classify STOP/PAUSE/RECOVER from saved script log")
     stops.add_argument("--log", required=True)
     stops.set_defaults(func=cmd_stop_report)
-    unified = sub.add_parser("unified", help="Run scripted contract tests, self-play, model gating and single-APK verification")
-    unified.add_argument("stage", choices=("verify", "selfplay", "apk", "all"), nargs="?", default="selfplay")
+    unified = sub.add_parser("unified", help="Run contracts, self-play, build/test, model gating and single-APK verification")
+    unified.add_argument("stage", choices=("verify", "selfplay", "shadow", "build-test", "apk", "all"), nargs="?", default="selfplay")
     unified.add_argument("--output", default="build/reports/unified-script-engine")
     unified.add_argument("--apk")
     unified.add_argument("--require-sdk", action="store_true")
     unified.set_defaults(func=cmd_unified_pipeline)
+    nes = sub.add_parser("nes", help="Run the ROM-bound NES laboratory without Android gestures")
+    nes.add_argument("nes_action", choices=("smoke", "train", "record"))
+    nes.add_argument("nes_arguments", nargs=argparse.REMAINDER,
+                     help="Arguments forwarded to scripts/nes_lab.py")
+    nes.set_defaults(func=cmd_nes_lab)
     install = sub.add_parser("install", help="Explicit ADB APK install without uninstall/pm clear")
     install.add_argument("--serial", required=True)
     install.add_argument("--apk", required=True)

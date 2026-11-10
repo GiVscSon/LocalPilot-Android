@@ -8,7 +8,7 @@ import java.util.regex.Pattern;
 public final class ProcessExitMetadata {
  public static final int MAX_SUMMARY_BYTES=128;
  private static final String MAGIC="LP_EXIT_V1";
- private static final Pattern BUILD=Pattern.compile("[0-9]{1,3}(?:\\.[0-9]{1,3}){1,3}(?:-[A-Za-z][A-Za-z0-9.-]{0,15})?/code[1-9][0-9]{0,9}");
+ private static final Pattern BUILD=Pattern.compile("[0-9]{1,3}(?:\\.[0-9]{1,3}){1,3}(?:-[A-Za-z][A-Za-z0-9.-]{0,15})?/code([1-9][0-9]{0,9})(?:@(?:[a-f0-9]{12}|unverified))?");
  private static final Pattern SURFACE=Pattern.compile("CAPTURE_SURFACE_([1-9][0-9]{0,4})x([1-9][0-9]{0,4})");
  private static final Set<String> PHASES=Set.of("STARTUP","SERVICE_CONNECTED","SERVICE_INTERRUPTED",
   "SERVICE_DESTROYED","CAPTURE_CONSENT","CAPTURE_READY","CAPTURE_STOPPED");
@@ -54,8 +54,9 @@ public final class ProcessExitMetadata {
   return "FRAME_UI_"+(FAILURES.contains(type)?type:"RuntimeException");
  }
  private static boolean allowedBuild(String build){
-  if(build==null||build.length()>64||!BUILD.matcher(build).matches())return false;
-  try{return Long.parseLong(build.substring(build.lastIndexOf("/code")+5))<=Integer.MAX_VALUE;}
+  if(build==null||build.length()>64)return false;
+  var match=BUILD.matcher(build);if(!match.matches())return false;
+  try{return Long.parseLong(match.group(1))<=Integer.MAX_VALUE;}
   catch(NumberFormatException invalid){return false;}
  }
  public static byte[] encode(String build,String phase){

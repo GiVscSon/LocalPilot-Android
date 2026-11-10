@@ -15,14 +15,15 @@ spec.loader.exec_module(op)
 
 
 class OperatorTests(unittest.TestCase):
-    def test_selects_only_completed_unified_success(self):
+    def test_never_uses_older_success_after_latest_workflow_failure(self):
         sample = [
             {"status": "completed", "conclusion": "failure", "databaseId": 3},
             {"status": "in_progress", "conclusion": None, "databaseId": 2},
             {"status": "completed", "conclusion": "success", "databaseId": 1},
         ]
-        self.assertEqual(op.latest_success(sample)["databaseId"], 1)
+        self.assertIsNone(op.latest_success(sample))
         self.assertIsNone(op.latest_success(sample[:2]))
+        self.assertEqual(op.latest_success(sample[2:])["databaseId"], 1)
 
     def test_validate_16_model_assets_without_sdk(self):
         with tempfile.TemporaryDirectory() as d:

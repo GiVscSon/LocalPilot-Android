@@ -11,6 +11,8 @@ import math
 from pathlib import Path
 import sys
 
+from verify_sim_autoplay_report import validate as validate_report
+
 GAMES = (
     "BUBBLE", "ARI", "MATCH", "PADDLE", "TRAFFIC", "FLAPPY",
     "BOARD2048", "HEXON", "PROTECTED_SWAP", "CAT_TOWER",
@@ -42,7 +44,10 @@ def produce(base: Path) -> dict:
     sources = []
     for seed in SEEDS:
         path = base / f"seed-{seed}" / "report.json"
-        report = json.loads(path.read_text(encoding="utf-8"))
+        # Reconstruct every metric from the current-version episode CSVs before
+        # comparing seeds. JSON-only results from the old fixture physics are
+        # not interchangeable with measured physical-scene evaluations.
+        report = validate_report(path.parent)
         if (report.get("source") != "SIMULATED_GAME"
             or report.get("real_game_accepted") is not False
             or report.get("weights_promoted_to_real_games") is not False
@@ -79,6 +84,8 @@ def produce(base: Path) -> dict:
     return {
         "schema":"gamelab-multiseed-policy-gate-v1",
         "source":"SIMULATED_GAME",
+        "physics_rules":"2048-random-spawn_bubble-ray_paddle-bricks-v1",
+        "evaluation_score_attribution":"EPISODE_TOTAL_SPLIT_PHYSICS_GESTURE",
         "evaluated_seeds":list(SEEDS),
         "may_dispatch_real_gestures":False,
         "may_transfer_to_market":False,

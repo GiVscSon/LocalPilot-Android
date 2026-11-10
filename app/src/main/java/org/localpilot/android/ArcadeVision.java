@@ -52,7 +52,22 @@ public final class ArcadeVision {
    // Real woven baskets can fragment into many brown strands instead of one
    // connected wooden blob. Require a long coherent multi-row lower band.
    if(paddle==null)paddle=f.paddleBand();
-  return observation(ArcadeProfile.PADDLE,time,ball,paddle,List.of(),0,.07f,1,.96f,0,0,
+  // Detect upper destructible blocks/targets descending toward the paddle defeat line.
+  List<ArcadeObservation.Box> blocks=new ArrayList<>();
+  if(ball!=null&&paddle!=null){
+   float maxBlockBottom=Math.min(.74f,paddle.top-.03f);
+   for(int channel:new int[]{WOOD,SATURATED,BLUE,GREEN})for(Blob b:f.blobs(channel)){
+    if(b.box.top>=.07f&&b.box.bottom<=maxBlockBottom
+      &&b.box.width()>=.028f&&b.box.width()<=.32f
+      &&b.box.height()>=.012f&&b.box.height()<=.12f
+      &&b.aspect()>=.85f&&b.aspect()<=6.5f&&b.density()>.35f
+      &&overlap(b.box,ball)<.15f&&overlap(b.box,paddle)<.05f){
+     addVehicle(blocks,b.box);
+    }
+   }
+   blocks.sort(Comparator.comparingDouble((ArcadeObservation.Box b)->-b.bottom).thenComparingDouble(ArcadeObservation.Box::x));
+  }
+  return observation(ArcadeProfile.PADDLE,time,ball,paddle,blocks,0,.07f,1,.96f,0,0,
     ball!=null&&paddle!=null?.88f:0,false,previous);
  }
 

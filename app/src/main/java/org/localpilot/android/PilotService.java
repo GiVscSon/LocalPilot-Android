@@ -297,6 +297,10 @@ public class PilotService extends AccessibilityService {
  private Rect visualRoi;private boolean manualVisualRoi;private int visualWindow=-1;private String visualOwner="";private Rect visualWindowBounds=new Rect();
  private int selectedProfile; //0..3 arcade,4/5 2048,6 swap,7 group,10 straight-chain grid,11 protected-skull swap.
  private boolean browserProfileConfirmed,unsupportedGame,targetIsBrowser;
+ // A user-selected external game must explicitly confirm its mechanic again.
+ // PackageManager browser-intent resolution is not reliable on Android 11,
+ // and an app can contain multiple unrelated games with one package name.
+ private boolean requiresFreshMechanicSelection;
  private String confirmedProfileScope="";
  private String profileChoiceKey(String pkg){String slot=getSharedPreferences("panel",MODE_PRIVATE).getString("game_slot."+pkg,"default");return VisualGameTarget.selectionKey(pkg,slot);}
  private String color2048PaletteKey(){if(target==null||target.isEmpty())throw new IllegalStateException("2048 game scope unavailable");return profileChoiceKey(target)+".learned_colors";}
@@ -368,7 +372,8 @@ public class PilotService extends AccessibilityService {
   if(SystemClock.elapsedRealtime()>=until){note="Окно не стало активным. Коснитесь игры и выберите окно снова";update();return;}
   note="Коснитесь выбранного окна игры · ожидаю фокус";update();handler.postDelayed(()->awaitChosenWindow(pkg,id,expected,epoch,until),250);
  }
- private void chooseProfile(){stop("Выберите механику игры");overlayMenu("Механика · выбирайте по управлению, не по оформлению",new String[]{ArcadeProfile.ARI.label,ArcadeProfile.PADDLE.label,ArcadeProfile.TRAFFIC.label,ArcadeProfile.FLAPPY.label,"2048","Цветной2048","Мэтч Ворлд · обмен соседей","Фишки · удалить группу","Имя игры · отдельное обучение","Шипучка · обычные шары (эксперимент)","Фишки · провести прямую цепочку","Нащупай ход · обмен соседей, защита черепов"},i->{if(i==8){nameLearningGame();return;}unsupportedGame=false;if(selectedProfile!=i){visualRoi=null;manualVisualRoi=false;boardRoi=null;}selectedProfile=i;if(i<4)captureProfile=ArcadeProfile.values()[i];getSharedPreferences("panel",MODE_PRIVATE).edit().putInt("profile",i).apply();AccessibilityNodeInfo root=appRoot();try{if(root!=null){String pkg=String.valueOf(root.getPackageName());getSharedPreferences("game-profiles",MODE_PRIVATE).edit().putInt(profileChoiceKey(pkg),i).apply();browserProfileConfirmed=true;confirmedProfileScope=profileChoiceKey(pkg);}}finally{if(root!=null)root.recycle();}note="Выбрано: "+profileLabel()+". Другая графика: Ещё → Настроить распознавание. Затем Старт";update();if(i==9){if(bindSelectedWindow())selectVisualRegion();}else if(i>=6)configureGrid();});}
+ private void chooseProfile(){stop("Выберите механику игры");overlayMenu("Механика · выбирайте по управлению, не по оформлению",new String[]{ArcadeProfile.ARI.label,ArcadeProfile.PADDLE.label,ArcadeProfile.TRAFFIC.label,ArcadeProfile.FLAPPY.label,"2048","Цветной2048","Мэтч Ворлд · обмен соседей","Фишки · удалить группу","Имя игры · отдельное обучение","Шипучка · обычные шары (эксперимент)","Фишки · провести прямую цепочку","Нащупай ход · обмен соседей, защита черепов"},i->{if(i==8){nameLearningGame();return;}unsupportedGame=false;
+  requiresFreshMechanicSelection=false;if(selectedProfile!=i){visualRoi=null;manualVisualRoi=false;boardRoi=null;}selectedProfile=i;if(i<4)captureProfile=ArcadeProfile.values()[i];getSharedPreferences("panel",MODE_PRIVATE).edit().putInt("profile",i).apply();AccessibilityNodeInfo root=appRoot();try{if(root!=null){String pkg=String.valueOf(root.getPackageName());getSharedPreferences("game-profiles",MODE_PRIVATE).edit().putInt(profileChoiceKey(pkg),i).apply();browserProfileConfirmed=true;confirmedProfileScope=profileChoiceKey(pkg);}}finally{if(root!=null)root.recycle();}note="Выбрано: "+profileLabel()+". Другая графика: Ещё → Настроить распознавание. Затем Старт";update();if(i==9){if(bindSelectedWindow())selectVisualRegion();}else if(i>=6)configureGrid();});}
  private void nameLearningGame(){
   AccessibilityNodeInfo root=appRoot();if(root==null){note="Сначала откройте приложение с игрой";update();return;}
   final String pkg;try{pkg=String.valueOf(root.getPackageName());}finally{root.recycle();}
@@ -396,7 +401,7 @@ public class PilotService extends AccessibilityService {
   if(!bindSelectedWindow())return;
   if(!playingJumper&&!playingGrid&&!playing2048&&!playingMini){
    int saved=getSharedPreferences("game-profiles",MODE_PRIVATE).getInt(profileChoiceKey(target),-1);
-   if(unsupportedGame||VisualGameTarget.requiresProfileChoice(saved,targetIsBrowser,browserProfileConfirmed&&profileChoiceKey(target).equals(confirmedProfileScope))){chooseProfile();return;}
+   if(requiresFreshMechanicSelection||unsupportedGame||VisualGameTarget.requiresProfileChoice(saved,targetIsBrowser,browserProfileConfirmed&&profileChoiceKey(target).equals(confirmedProfileScope))){chooseProfile();return;}
    if(selectedProfile!=saved){selectedProfile=saved;visualRoi=null;manualVisualRoi=false;boardRoi=null;}
   }
   GameScriptCatalog.Route script=scriptedRoute(selectedProfile);
@@ -1815,7 +1820,7 @@ public class PilotService extends AccessibilityService {
   final long feedbackToken=temporal?arcadeFeedback.dispatched(action,observation,now):0;
   long sentBefore=captureSent;
   sendObserved(fromX,fromY,x,y,ticket,()->{
-   if(temporal&&!arcadeFeedback.acknowledge(feedbackToken))return;
+   if(temporal&&!arcadeFeedback.acknowledge(feedbackToken,SystemClock.elapsedRealtime()))return;
    arcadeAck=true;note="Android завершил касание · проверяю игру";update();
   },timestampMs,gesture.durationMs());
   if(captureSent==sentBefore&&playingJumper){if(temporal)arcadeFeedback.cancel(feedbackToken);arcadePending=null;arcadeBefore=null;arcadeAck=false;}
@@ -1953,7 +1958,7 @@ public class PilotService extends AccessibilityService {
   note="Касание "+action+" · проверю движение Ари";update();
   long sentBefore=captureSent;
   long feedbackToken=jumperFeedback.dispatched(action,state,now);
-  sendObserved(fromX,y,x,y,ticket,()->{if(!jumperFeedback.acknowledge(feedbackToken))return;note="Android завершил касание · ожидаю новый кадр";update();},timestampMs,gesture.durationMs());
+  sendObserved(fromX,y,x,y,ticket,()->{if(!jumperFeedback.acknowledge(feedbackToken,SystemClock.elapsedRealtime()))return;note="Android завершил касание · ожидаю новый кадр";update();},timestampMs,gesture.durationMs());
   if(captureSent==sentBefore){jumperFeedback.cancel(feedbackToken);jumperAwaitingVerification=false;}
   else{jumperPendingActionMs=SystemClock.elapsedRealtime();jumperFeedback.started(feedbackToken,jumperPendingActionMs);}
  }
@@ -2092,6 +2097,7 @@ public class PilotService extends AccessibilityService {
  public void selectInstalledTarget(String packageName,String label){
   stop("Открываю выбранную игру; ввод выключен");showPanel();
   browserProfileConfirmed=false;confirmedProfileScope="";
+  requiresFreshMechanicSelection=true;
   if(packageName==null||packageName.isEmpty()){note="Выберите стороннюю игру";update();return;}
   targetLabel=label==null?applicationLabel(packageName):label;
   long epoch=gate.epoch();awaitInstalledTarget(packageName,label,epoch,SystemClock.elapsedRealtime()+10000,-1,null);
@@ -2102,7 +2108,12 @@ public class PilotService extends AccessibilityService {
   try{if(root!=null&&unlocked()&&expected.equals(String.valueOf(root.getPackageName()))){window=root.getWindowId();bounds=windowBounds(root);}}
   finally{if(root!=null)root.recycle();}
   if(bounds!=null&&window==seenWindow&&bounds.equals(seenBounds)){
-   arm();if(gate.armed()){if(!gate.matches(expected,window,bounds.width(),bounds.height())||!bounds.equals(armedBounds)){stop("Окно изменилось во время выбора игры; привяжите нужное окно заново");return;}note="Игра выбрана: "+label;update();if(automatic())startPickedProfile();}return;
+   arm();if(gate.armed()){if(!gate.matches(expected,window,bounds.width(),bounds.height())||!bounds.equals(armedBounds)){stop("Окно изменилось во время выбора игры; привяжите нужное окно заново");return;}note="Игра выбрана: "+label;update();
+    // A deliberate external-game selection must offer the mechanic menu
+    // immediately. Waiting for automatic Start left stale 2048 profiles on
+    // Android 11 where the same package hosts more than one game.
+    if(requiresFreshMechanicSelection){chooseProfile();return;}
+    if(automatic())startPickedProfile();}return;
   }
   if(SystemClock.elapsedRealtime()>=until){stop("Не дождался окна игры. Откройте её и нажмите «Окно»");return;}
   note="Жду окно выбранной игры: "+label;update();final int nextWindow=window;final Rect nextBounds=bounds;

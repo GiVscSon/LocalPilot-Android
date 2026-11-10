@@ -1,7 +1,7 @@
-import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import org.localpilot.gamelab.GameLabEngine;
+import org.localpilot.gamelab.GameLab2048Rules;
+import org.localpilot.gamelab.GameLabBubbleRules;
 
 /**
  * Deterministic, non-neural SCRIPTED coach for the simplified GameLab engine.
@@ -14,12 +14,6 @@ public final class GameLabCoach {
  private GameLabCoach(){}
  private static float clamp(float x,float lo,float hi){
   return Math.max(lo,Math.min(hi,x));
- }
- private static double reflected(double position){
-  // Ping-pong reflection between laboratory walls.
-  final double lo=.055,hi=.945,len=hi-lo;
-  double phase=((position-lo)%(2*len)+2*len)%(2*len);
-  return lo+(phase<=len?phase:2*len-phase);
  }
  private static int cell(GameLabEngine env,float x,float y){
   return env.cellFrom(x,y);
@@ -50,63 +44,30 @@ public final class GameLabCoach {
   }
   return best;
  }
- /** A pure 2048 move simulator, using GameLabEngine's line/merge rules. */
+ /** Pure merge/compression only. Spawn belongs to the seeded environment,
+  * not to planning; looking ahead must not consume its RNG or invent a tile. */
  public static int[] swipe2048(int[] cells,int direction){
-  if(cells==null||cells.length!=16||direction<0||direction>3)
-   throw new IllegalArgumentException("invalid 2048 snapshot");
-  int[] copy=cells.clone();
-  boolean horizontal=direction<2;
-  boolean forward=direction==1||direction==3;
-  for(int line=0;line<4;line++){
-   int[] packed=new int[4];int size=0;
-   for(int i=0;i<4;i++){
-    int row=horizontal?line:(forward?3-i:i);
-    int col=horizontal?(forward?3-i:i):line;
-    int value=cells[row*4+col];
-    if(value<0||value>2048)throw new IllegalArgumentException("invalid tile");
-    if(value!=0)packed[size++]=value;
-   }
-   int[] merged=new int[4];int write=0;
-   for(int i=0;i<size;i++){
-    if(i+1<size&&packed[i]==packed[i+1]){
-     merged[write++]=packed[i]*2;i++;
-    }else merged[write++]=packed[i];
-   }
-   for(int i=0;i<4;i++){
-    int row=horizontal?line:(forward?3-i:i);
-    int col=horizontal?(forward?3-i:i):line;
-    copy[row*4+col]=merged[i];
-   }
-  }
-  // Exactly one deterministic tile is spawned by the simplified GameLab.
-  if(!Arrays.equals(cells,copy)){
-   for(int i=0;i<16;i++)if(copy[i]==0){copy[i]=2;break;}
-  }
-  return copy;
+  return GameLab2048Rules.move(cells,direction).tiles();
+ }
+ private static double boardValue(int[] board){
+  int empty=0,highest=0;for(int v:board){if(v==0)empty++;highest=Math.max(highest,v);}
+  int corner=Math.max(Math.max(board[0],board[3]),Math.max(board[12],board[15]));
+  return empty*3.5+corner*.03+(board[0]==highest?2:0);
  }
  private static double boardUtility(int[] cells,float[] m){
   float dx=m[2]-m[0],dy=m[3]-m[1];
+  if(Math.max(Math.abs(dx),Math.abs(dy))<.045f)return -1_000_000;
   int dir=Math.abs(dx)>=Math.abs(dy)?(dx<0?0:1):(dy<0?2:3);
-  int[] next=swipe2048(cells,dir);
-  if(Arrays.equals(cells,next))return -1_000_000;
-  // Need to reward merges without pretending that every changed frame wins.
-  int oldSum=0,newSum=0,empties=0,highest=0;
-  for(int i=0;i<16;i++){
-   oldSum+=cells[i];newSum+=next[i];if(next[i]==0)empties++;
-   highest=Math.max(highest,next[i]);
+  GameLab2048Rules.Move move=GameLab2048Rules.move(cells,dir);
+  if(!move.changed())return -1_000_000;
+  int[] next=move.tiles();int free=GameLab2048Rules.empty(next);
+  if(free==0)return move.mergeScore()*8d+boardValue(next);
+  double expected=0;
+  for(int i=0;i<next.length;i++)if(next[i]==0){
+   next[i]=2;double two=boardValue(next);next[i]=4;double four=boardValue(next);next[i]=0;
+   expected+=(.9*two+.1*four)/free;
   }
-  // GameLab spawns one tile on a legal move. A net +2 alone is not a merge.
-  int mergePoints=0;
-  for(int v:new int[]{4,8,16,32,64,128,256,512,1024,2048,4096}){
-   int beforeCount=0,afterCount=0;
-   for(int a:cells)if(a==v)beforeCount++;
-   for(int a:next)if(a==v)afterCount++;
-   if(afterCount>beforeCount)mergePoints+=(afterCount-beforeCount)*v;
-  }
-  // The pure metric favors merges, space and stability of the max tile.
-  int corner=Math.max(Math.max(next[0],next[3]),Math.max(next[12],next[15]));
-  return mergePoints*8d+empties*3.5+corner*.03+
-    (next[0]==highest?2:0)+Math.min(2,newSum-oldSum);
+  return move.mergeScore()*8d+expected;
  }
  private static int matchingCells(int[] data,int n){
   boolean[] hit=new boolean[n*n];
@@ -134,23 +95,28 @@ public final class GameLabCoach {
   return count>0?count*100:0;
  }
  private static double paddleUtility(GameLabEngine env,float[] m){
-  double futureX=env.ballX;
-  if(env.vy>0.0001f){
-   double time=clamp((float)((.80-env.ballY)/env.vy),0,200);
-   futureX=reflected(env.ballX+env.vx*time);
+  // Use the actual fixture's walls, brick collisions and paddle plane, rather
+  // than a second trajectory implementation with old .80/.055 constants.
+  GameLabEngine future=new GameLabEngine(GameLabEngine.Game.PADDLE,0);
+  future.ballX=env.ballX;future.ballY=env.ballY;future.vx=env.vx;future.vy=env.vy;
+  future.paddleX=env.paddleX;future.score=env.score;future.paddleHits=env.paddleHits;
+  System.arraycopy(env.paddleBricks,0,future.paddleBricks,0,env.paddleBricks.length);
+  future.gesture(m[0],m[1],m[2],m[3],140);
+  final float plane=(530f-11f)/640f;
+  for(int i=0;i<200;i++){
+   float y=future.ballY,vy=future.vy;future.tick();
+   if(vy>0&&y<=plane&&(future.ballY>=plane||future.vy<0&&y+vy>=plane))
+    return -Math.abs(future.ballX-future.paddleX)*100;
   }
-  return -Math.abs(m[2]-futureX)*100;
+  return -Math.abs(future.ballX-future.paddleX)*100;
  }
  private static double bubbleUtility(GameLabEngine env,float[] m){
-  int column=Math.max(0,Math.min(env.n-1,(int)(m[2]*env.n)));
-  int row=0;while(row<env.n&&env.cells[row*env.n+column]!=0)row++;
-  if(row==env.n)return -1_000_000;
-  int nextBall=1+env.launches%4;
-  int neighbors=0;
-  if(row>0&&env.cells[(row-1)*env.n+column]==nextBall)neighbors++;
-  if(column>0&&env.cells[row*env.n+column-1]==nextBall)neighbors++;
-  if(column+1<env.n&&env.cells[row*env.n+column+1]==nextBall)neighbors++;
-  return neighbors*15-row*.2-Math.abs(column-env.n/2.0)*.01;
+  int[] preview=env.cells.clone();
+  GameLabBubbleRules.Shot shot=GameLabBubbleRules.fire(preview,env.n,1+env.launches%4,m[2]*360f,m[3]*640f);
+  if(!shot.placed())return -1_000_000;
+  // Actual collision/snap/connected-match/drop outcomes; zero for an ordinary
+  // attachment, not a made-up column score. A pure preview never mutates env.
+  return (shot.cleared()+shot.dropped())*100d;
  }
  private static double hexonUtility(GameLabEngine env,float[] m){
   int slot=Math.min(2,(int)(m[2]*3));
@@ -163,8 +129,11 @@ public final class GameLabCoach {
  }
  private static double jumperUtility(GameLabEngine env,float[] m){
   float dx=m[2]-m[0];
-  float shift=dx<-.018f?-.14f:dx>.018f?.14f:(m[0]<.5f?-.09f:.09f);
-  float next=(env.playerX+shift+1)%1;
+  // Cat Tower moves in proportion to the drag; its TAP has no lateral shift.
+  // Ari has discrete left/right moves and a side-dependent tap impulse.
+  float shift=env.game==GameLabEngine.Game.CAT_TOWER?clamp(dx*1.3f,-.20f,.20f):
+    dx<-.018f?-.14f:dx>.018f?.14f:(m[0]<.5f?-.09f:.09f);
+  float next=env.playerX+shift;if(next<0)next+=1;else if(next>1)next-=1;
   return -Math.abs(.5f-next);
  }
 }

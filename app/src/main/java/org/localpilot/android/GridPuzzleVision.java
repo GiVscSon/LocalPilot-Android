@@ -12,7 +12,7 @@ public final class GridPuzzleVision {
  /** Trace-only reasons; these labels do not authorize a game gesture. */
  public enum CellReason {
   KNOWN, KNOWN_SPECIAL, PROTECTED_SKULL, EMPTY_HOLE, BLOCKER_CRATE, EXCLUDED_OVERLAY,
-  RING_NO_MATCH, RING_AMBIGUOUS, COLOR_NO_MATCH, COLOR_AMBIGUOUS, NO_SAMPLE
+  RING_NO_MATCH, RING_AMBIGUOUS, COLOR_NO_MATCH, COLOR_AMBIGUOUS, NO_SAMPLE, HINT_HAND_OCCLUSION
  }
  private static final int FEATURES=42,MAX_TYPES=24;
  private static final float MATCH=.14f,AMBIGUITY=.025f;
@@ -140,6 +140,7 @@ public final class GridPuzzleVision {
    if(matchWorld&&matchWorldWoodCrate(pixels,l,t,r,b)){
     cells[index]=0;special.set(index);reasons[index]=CellReason.BLOCKER_CRATE;continue;
    }
+   if(whiteHintHand(pixels,l,t,r,b)){reasons[index]=CellReason.HINT_HAND_OCCLUSION;continue;}
    if(protectSkulls&&protectedSkull(pixels,l,t,r,b)){
     cells[index]=0;special.set(index);reasons[index]=CellReason.PROTECTED_SKULL;continue;
    }
@@ -273,6 +274,20 @@ public final class GridPuzzleVision {
   float side=Math.min(r-l,b-t);
   return pixels.get((int)((l+r)*.5f+(x-.5f)*side),(int)((t+b)*.5f+(y-.5f)*side));
  }
+ private static boolean whiteHintHand(Pixels pixels,float l,float t,float r,float b){
+  int brightWhite=0,darkOutline=0;
+  for(int yy=0;yy<9;yy++)for(int xx=0;xx<9;xx++){
+   float nx=.14f+.72f*xx/8f,ny=.14f+.72f*yy/8f;
+   int rgb=sample(pixels,l,t,r,b,nx,ny);
+   int red=rgb>>16&255,green=rgb>>8&255,blue=rgb&255;
+   int hi=Math.max(red,Math.max(green,blue)),lo=Math.min(red,Math.min(green,blue));
+   if(hi>=235&&lo>=220&&hi-lo<=16)brightWhite++;
+   else if(hi<=48)darkOutline++;
+  }
+  // A cartoon white glove/hand has a large bright white interior surrounded by a dark outline ring.
+  return brightWhite>=24&&brightWhite<=68&&darkOutline>=6;
+ }
+
  private static int sample(Pixels pixels,float l,float t,float r,float b,float x,float y){return pixels.get((int)(l+x*(r-l)),(int)(t+y*(b-t)));}
  private static int brightness(int rgb){return Math.max(rgb>>16&255,Math.max(rgb>>8&255,rgb&255));}
  private static boolean bone(int rgb){int high=brightness(rgb),low=Math.min(rgb>>16&255,Math.min(rgb>>8&255,rgb&255));return high>=75&&high-low<high*.32f;}

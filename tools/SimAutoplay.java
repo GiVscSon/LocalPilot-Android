@@ -25,11 +25,12 @@ public final class SimAutoplay {
  private record Move(float x,float y,float toX,float toY,int durationMs){}
  private static final class Results {
   int moves,changed,blocked,noChange,episodes;
-  long totalScore;
+  long totalScore,physicsScore,gestureScore;
   final StringBuilder events=new StringBuilder(
-   "game,episode,step,result,score_before,score_after,from_x,from_y,to_x,to_y\n");
+   "game,episode,step,result,score_before,score_after,from_x,from_y,to_x,to_y,tick_score_before,tick_score_after\n");
   void add(GameLabEngine.Game game,int episode,int step,Move move,
-           GameLabEngine.Result result,int beforeScore,int afterScore){
+           GameLabEngine.Result result,int beforeScore,int afterScore,int tickBefore,int tickAfter){
+   physicsScore+=tickAfter-tickBefore;gestureScore+=afterScore-beforeScore;
    moves++;
    switch(result){
     case CHANGED -> changed++;
@@ -42,11 +43,14 @@ public final class SimAutoplay {
      .append(SimExperience.quantize(move.x())).append(',')
      .append(SimExperience.quantize(move.y())).append(',')
      .append(SimExperience.quantize(move.toX())).append(',')
-     .append(SimExperience.quantize(move.toY())).append('\n');
+     .append(SimExperience.quantize(move.toY())).append(',')
+     .append(tickBefore).append(',').append(tickAfter).append('\n');
   }
   void episodeCompleted(int score){episodes++;totalScore+=score;}
   double changedPct(){return moves==0?0:100.0*changed/moves;}
   double meanScore(){return episodes==0?0:(double)totalScore/episodes;}
+  double meanPhysicsScore(){return episodes==0?0:(double)physicsScore/episodes;}
+  double meanGestureScore(){return episodes==0?0:(double)gestureScore/episodes;}
  }
  private static float cx(GameLabEngine engine,int col){
   return GameLabEngine.GRID_LEFT+(col+.5f)*(GameLabEngine.GRID_RIGHT-GameLabEngine.GRID_LEFT)/engine.n;
@@ -86,7 +90,10 @@ public final class SimAutoplay {
    }
    case BUBBLE -> {
     for(int c=0;c<engine.n;c++)
-     result.add(move(.5f,.75f,(c+.5f)/engine.n,.75f));
+     result.add(move(.5f,495f/640f,(c+.5f)/engine.n,96f/640f));
+    // Additional aimed rays can hit a side wall before the contact field.
+    result.add(move(.5f,495f/640f,.03f,.35f));
+    result.add(move(.5f,495f/640f,.97f,.35f));
    }
    case PADDLE -> {
     for(float x:new float[]{.18f,.34f,.5f,.66f,.82f})
@@ -141,6 +148,20 @@ public final class SimAutoplay {
  private static long episodeSeed(long seed,GameLabEngine.Game game,int episode){
   return seed+game.ordinal()*1000003L+episode*9127L;
  }
+ private static String seedSchedule(long seed,int episodes){
+  StringBuilder json=new StringBuilder("{");
+  int gameIndex=0;
+  for(GameLabEngine.Game game:GameLabEngine.Game.values()){
+   if(gameIndex++>0)json.append(',');
+   json.append('"').append(game.name()).append("\":[");
+   for(int episode=0;episode<episodes;episode++){
+    if(episode>0)json.append(',');
+    json.append(episodeSeed(seed,game,episode));
+   }
+   json.append(']');
+  }
+  return json.append('}').toString();
+ }
  private static Results simulate(GameLabEngine.Game game,int episodes,int steps,
                                  long seed,SimLabPolicy lab,double exploreProbability,
                                  List<SimExperience.Step> replay,boolean scripted){
@@ -151,7 +172,9 @@ public final class SimAutoplay {
    for(int step=0;step<steps;step++){
     // Physics advances independently. Only gesture-induced state change is
     // used for a transition label, never a passive game tick.
+    int tickScoreBefore=engine.score;
     for(int tick=0;tick<3;tick++)engine.tick();
+    int tickScoreAfter=engine.score;
     Move candidate=decide(engine,rng,lab,exploreProbability,scripted);
     if(candidate==null)throw new IllegalStateException(
       "no safe GameLab simulator action for "+game);
@@ -162,7 +185,7 @@ public final class SimAutoplay {
     int after=engine.fingerprint(),scoreAfter=engine.score;
     if(("CHANGED".equals(result.name()))!=(before!=after))
      throw new AssertionError("inconsistent simulator change witness");
-    results.add(game,episode,step,candidate,result,scoreBefore,scoreAfter);
+    results.add(game,episode,step,candidate,result,scoreBefore,scoreAfter,tickScoreBefore,tickScoreAfter);
     if(replay!=null)replay.add(new SimExperience.Step(replay.size()+1,
       engine.game.name(),engine.fault.name(),
       SimExperience.quantize(candidate.x()),SimExperience.quantize(candidate.y()),
@@ -215,10 +238,28 @@ public final class SimAutoplay {
     "# GameLab automated self-play · simulator only\n\n"+
     "This is offline GameLab, not a Market acceptance test or production neural transfer.\n"+
     "No Android ACK, AccessibilityService or real-game gesture is produced.\n\n"+
+    "Measurement: immediate gesture changes only; delayed physics rewards are reported separately, never relabelled as successful input or attributed to earlier actions.\n"+
+    "Physics budget: three ticks per action; short episodes can finish before paddle interception or a complete round.\n"+
+    "Learned context: start-position zone and coarse direction, without board/object state.\n"+
+    "CHANGED is not a goal/win metric. Several scenes omit hazards, goals or action choices.\n"+
+    "Independent seeds do not guarantee unseen initial states in deterministic scenes.\n"+
+    "See source documentation: `docs/SIMULATOR_MEASUREMENT_LIMITS.ru.md`.\n\n"+
     "| Game | Random change % | Learned change % | Scripted change % | Learned delta pp | Random score | Learned score | Scripted score |\n"+
     "|---|---:|---:|---:|---:|---:|---:|---:|\n");
   json.append("{\n  \"schema\": \"localpilot-gamelab-autoplay-v1\",\n")
     .append("  \"source\": \"SIMULATED_GAME\",\n")
+    .append("  \"physics_rules\": \"2048-random-spawn_bubble-ray_paddle-bricks-v1\",\n")
+    .append("  \"physics_ticks_per_action\": 3,\n")
+    .append("  \"evaluation_score_attribution\": \"EPISODE_TOTAL_SPLIT_PHYSICS_GESTURE\",\n")
+    .append("  \"environment_kind\": \"SIMPLIFIED_UI_TEST_SCENES\",\n")
+    .append("  \"score_attribution\": \"IMMEDIATE_GESTURE_ONLY\",\n")
+    .append("  \"learned_context\": \"START_ZONE_AND_COARSE_DIRECTION\",\n")
+    .append("  \"measurement_limits\": [")
+    .append("\"CHANGED is not goal completion or verified real-game progress\",")
+    .append("\"Delayed tick rewards are not attributed to earlier actions\",")
+    .append("\"The learned table does not observe board cells or object state\",")
+    .append("\"FLAPPY has one candidate; several scenes omit hazards or terminal goals\",")
+    .append("\"Different seeds can retain identical initial states\"],\n")
     .append("  \"real_game_accepted\": false,\n")
     .append("  \"weights_promoted_to_real_games\": false,\n")
     .append("  \"seed\": ").append(seed).append(",\n")
@@ -226,6 +267,8 @@ public final class SimAutoplay {
     .append("  \"evaluation_episodes_per_game\": ").append(evalEpisodes).append(",\n")
     .append("  \"steps_per_episode\": ").append(steps).append(",\n")
     .append("  \"training_events\": ").append(decoded.size()).append(",\n")
+    .append("  \"training_seeds\": ").append(seedSchedule(seed,trainEpisodes)).append(",\n")
+    .append("  \"evaluation_seeds\": ").append(seedSchedule(seed+987654321L,evalEpisodes)).append(",\n")
     .append("  \"training_exploration_probability\": 0.5,\n")
     .append("  \"games\": [\n");
   int index=0;
@@ -254,6 +297,12 @@ public final class SimAutoplay {
      .append(", \"random_mean_score\": ").append(fmt(random.meanScore()))
      .append(", \"lab_mean_score\": ").append(fmt(policy.meanScore()))
      .append(", \"scripted_mean_score\": ").append(fmt(coach.meanScore()))
+     .append(", \"random_physics_score\": ").append(fmt(random.meanPhysicsScore()))
+     .append(", \"lab_physics_score\": ").append(fmt(policy.meanPhysicsScore()))
+     .append(", \"scripted_physics_score\": ").append(fmt(coach.meanPhysicsScore()))
+     .append(", \"random_gesture_score\": ").append(fmt(random.meanGestureScore()))
+     .append(", \"lab_gesture_score\": ").append(fmt(policy.meanGestureScore()))
+     .append(", \"scripted_gesture_score\": ").append(fmt(coach.meanGestureScore()))
      .append("}");
    markdown.append("| ").append(game.name()).append(" | ")
      .append(fmt(random.changedPct())).append(" | ")

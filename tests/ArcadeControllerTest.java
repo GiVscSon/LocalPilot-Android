@@ -93,7 +93,7 @@ public class ArcadeControllerTest {
    var s=bird(clock-frameAge,ys[observed],vs[observed],observedCenter-.115f,observedCenter+.115f,obstacles);
    if(predictive&&before!=null&&pending!=null&&clock-lastAction>=latency+80){controller.observeGesture(pending,before,s);pending=null;}
    var decision=predictive?controller.decide(s,clock):ArcadePolicy.next(s);
-   if(integrated){if(ackAt>=0&&clock>=ackAt){feedback.acknowledge(feedbackToken);ackAt=-1;}var state=feedback.observe(s,clock);if(state==ArcadeFeedback.State.WAITING||state==ArcadeFeedback.State.PAUSED)continue;}
+   if(integrated){if(ackAt>=0&&clock>=ackAt){feedback.acknowledge(feedbackToken,ackAt);ackAt=-1;}var state=feedback.observe(s,clock);if(state==ArcadeFeedback.State.WAITING||state==ArcadeFeedback.State.PAUSED)continue;}
    if(decision.action==ArcadePolicy.Action.FLAP&&pendingAt<0&&clock-lastAction>=140){pendingAt=clock+latency;lastAction=clock;before=s;pending=decision;if(predictive)controller.actionDispatched(decision,clock);if(integrated){feedbackToken=feedback.dispatched(decision,s,clock);ackAt=clock+decision.durationMs+20;}}
    last=s;
   }
@@ -112,7 +112,7 @@ public class ArcadeControllerTest {
    if(cars.isEmpty()){passed++;safe=random.nextInt(3);for(int lane=0;lane<3;lane++)if(lane!=safe)cars.add(box(.3f+lane*.2f,.15f,.105f,.14f));}
    if(clock<nextObserve)continue;nextObserve=clock+80;
    var s=road(clock,x,cars);var action=predictive?controller.decide(s,clock):ArcadePolicy.next(s);
-   if(ackAt>=0&&clock>=ackAt){feedback.acknowledge(token);ackAt=-1;}
+   if(ackAt>=0&&clock>=ackAt){feedback.acknowledge(token,ackAt);ackAt=-1;}
    long wasVerified=feedback.verified();var state=feedback.observe(s,clock);
    if(predictive&&feedback.verified()>wasVerified&&pending!=null)controller.observeGesture(pending,before,s);
    if(state==ArcadeFeedback.State.WAITING||state==ArcadeFeedback.State.PAUSED)continue;
@@ -135,7 +135,7 @@ public class ArcadeControllerTest {
    if(cars.isEmpty()){passed++;safe=random.nextInt(3);for(int lane=0;lane<3;lane++)if(lane!=safe)cars.add(box(.3f+lane*.2f,.15f,.105f,.14f));}
    if(clock<nextObserve)continue;nextObserve=clock+80;
    var s=road(clock,x,cars);var d=predictive?controller.decide(s,clock):ArcadePolicy.next(s);
-   if(integrated){if(ackAt>=0&&clock>=ackAt){feedback.acknowledge(feedbackToken);ackAt=-1;}var state=feedback.observe(s,clock);if(state==ArcadeFeedback.State.WAITING||state==ArcadeFeedback.State.PAUSED)continue;}
+   if(integrated){if(ackAt>=0&&clock>=ackAt){feedback.acknowledge(feedbackToken,ackAt);ackAt=-1;}var state=feedback.observe(s,clock);if(state==ArcadeFeedback.State.WAITING||state==ArcadeFeedback.State.PAUSED)continue;}
    if((d.action==ArcadePolicy.Action.LEFT||d.action==ArcadePolicy.Action.RIGHT)&&clock-lastAction>350){from=x;int current=Math.max(0,Math.min(2,Math.round((x-.3f)/.2f)));int target=Math.max(0,Math.min(2,current+(d.action==ArcadePolicy.Action.LEFT?-1:1)));dest=.3f+target*.2f;changeStart=clock+latency;lastAction=clock;if(predictive)controller.actionDispatched(d,clock);if(integrated){feedbackToken=feedback.dispatched(d,s,clock);ackAt=clock+d.durationMs+20;}}
   }
   return passed;

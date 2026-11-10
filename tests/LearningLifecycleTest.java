@@ -52,7 +52,7 @@ public final class LearningLifecycleTest {
   check(!ArcadePolicy.response(action,before,bird(1000,.3f,-.8f,true)),"same timestamp rejected");
   check(!ArcadePolicy.response(action,before,bird(1800,.1f,-.8f,true)),"late unrelated motion rejected");
   check(!ArcadePolicy.response(action,bird(1000,.4f,0,false),bird(1200,.3f,-.4f,true)),"untracked baseline cannot establish flap response");
-  ArcadeFeedback f=new ArcadeFeedback();long token=f.dispatched(action,before,1000);f.acknowledge(token);
+  ArcadeFeedback f=new ArcadeFeedback();long token=f.dispatched(action,before,1000);f.acknowledge(token,1100);
   check(f.observe(bird(1200,.35f,-.1f,true),1200)==ArcadeFeedback.State.WAITING&&f.verified()==0,"ACK plus passive ascent still unverified");
   check(f.observe(bird(1300,.34f,.05f,true),1300)==ArcadeFeedback.State.RETRY&&f.verified()==0,"ignored flap receives no success count");
  }

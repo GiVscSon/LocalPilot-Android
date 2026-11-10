@@ -15,6 +15,7 @@
   <activity android:name=".GamePickerActivity" android:exported="false"/>
   <activity android:name=".OnlineDiagnosticsActivity" android:exported="false"/>
   <activity android:name=".WebLearningActivity" android:exported="false"/>
+  <activity android:name=".ModelLibraryActivity" android:exported="false"/>
   <activity android:name=".TrainingActivity" android:exported="false"/>
   <!-- Embedded GameLab shares the LocalPilot APK, permissions and storage.
        No launcher/exported lab activity: external accessibility tests still

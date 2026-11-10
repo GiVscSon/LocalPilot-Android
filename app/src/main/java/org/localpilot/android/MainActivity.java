@@ -1,5 +1,7 @@
 package org.localpilot.android;
 import org.localpilot.shared.HubContract;
+import org.localpilot.android.learning.BundledModelInstaller;
+import org.localpilot.android.learning.AdaptiveLearningEngine;
 import android.app.*;import android.os.*;import android.content.*;import android.provider.Settings;import android.widget.*;
 public class MainActivity extends Activity {
  public static final String PREF="pilot";
@@ -22,16 +24,19 @@ public class MainActivity extends Activity {
   button(box,"Показать панель",()->{PilotService pilot=PilotService.instance;if(pilot==null){toast(CrashDiagnostics.connectionHint(this));return;}pilot.recoverPanel();status.setText(CrashDiagnostics.connectionHint(this));});
   TextView panelHelp=new TextView(this);panelHelp.setText("Панель можно свернуть. STOP всегда остаётся доступным.");box.addView(panelHelp);
   section(box,"02 · Модели и обучение");
-  button(box,"Игровые модели · обучение и экспорт",()->startActivity(new Intent(this,TrainingActivity.class)));
-  button(box,"Внешние учителя · дополнительный API",()->startActivity(new Intent(this,WebLearningActivity.class)));
+  button(box,"Библиотека · 16 моделей и версии",()->startActivity(new Intent(this,ModelLibraryActivity.class)));
+  button(box,"Учебные игры · играть самому / обучать ИИ",()->startActivity(new Intent(this,TrainingActivity.class)));
   automatic=new Switch(this);automatic.setText("Автоуправление выбранной игрой");automatic.setChecked(getSharedPreferences(PREF,MODE_PRIVATE).getBoolean("auto_control",true));automatic.setOnCheckedChangeListener((v,on)->{getSharedPreferences(PREF,MODE_PRIVATE).edit().putBoolean("auto_control",on).apply();if(PilotService.instance!=null)PilotService.instance.setAutomatic(on);});box.addView(automatic);
   button(box,"Выбрать игру или браузер",()->startActivity(new Intent(this,GamePickerActivity.class)));
   TextView autoHelp=new TextView(this);autoHelp.setText("Для сетки фишек: Игра → Мэтч Ворлд · обмен соседей или Фишки · удалить группу → выберите 6×6, 7×7 либо другой размер → обведите клетки → Старт. Настройки и типы фишек сохраняются. Поддерживаются различимые цветные фишки без специальных эффектов; цели уровня и усилители пока не распознаются. Для аркад другого оформления: Ещё → Настроить распознавание. Для разных игр одного браузера: Игра → Имя игры. STOP всегда останавливает ввод.");box.addView(autoHelp);
+  try{BundledModelInstaller.install(getFilesDir(),name->getAssets().open(name));}
+  catch(java.io.IOException failure){toast("Не удалось загрузить лабораторные модели: "+failure.getMessage());}
+  AdaptiveLearningEngine.initGlobal(getFilesDir());
   section(box,"03 · Игровая лаборатория");
   TextView labCaption=new TextView(this);
-  labCaption.setText("Единый APK: 10 интерактивных симуляторов и офлайн NES/Денди. Скрипты обучают отдельные лабораторные модели. DOS: только проверка файлов, без исполнения. Симуляция не является приёмкой Маркета.");
+  labCaption.setText("NES / Денди: настоящий эмулятор и ROM. Ниже 10 диагностических стендов, а не копий игр Маркета: только 2048 приближен к реальным правилам, часть физики упрощена. Обучение DQN четырёх собственных аркад находится выше; GameLab сам не обучает все 10 игр. Симуляция не является приёмкой Маркета.");
   labCaption.setTextColor(HubContract.SECONDARY);box.addView(labCaption);
-  button(box,"Открыть встроенный GameLab · 10 игр / NES",this::openGameLab);
+  button(box,"GameLab · NES и 10 тестовых стендов",this::openGameLab);
   section(box,"04 · Диагностика и контроль");
   button(box,"Отчёт с кадром игры",this::beginDiagnosticReport);
   button(box,"Экспорт задержек",()->{if(PilotService.instance==null){toast("Сначала включите службу");return;}PilotService.instance.exportMetrics();startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT).setType("text/plain").addCategory(Intent.CATEGORY_OPENABLE).putExtra(Intent.EXTRA_TITLE,"localpilot-latency.txt"),10);});
@@ -45,7 +50,9 @@ public class MainActivity extends Activity {
   button(advanced,"Выключить сбор примеров",()->{if(PilotService.instance!=null)PilotService.instance.disableExamples();});
   button(advanced,"Экспорт примеров",()->{if(PilotService.instance==null){toast("Сначала включите службу");return;}try{PilotService.instance.exportExamples();startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT).setType("text/plain").addCategory(Intent.CATEGORY_OPENABLE).putExtra(Intent.EXTRA_TITLE,"localpilot-experience-v1.log"),11);}catch(java.io.IOException e){toast("Хранилище недоступно; исходник сохранён");}});
   button(advanced,"Восстановить в пустое хранилище",()->{if(PilotService.instance==null){toast("Сначала включите службу");return;}PilotService.instance.disableExamples();new AlertDialog.Builder(this).setTitle("Восстановление примеров").setMessage("Файл будет проверен полностью. Восстановление разрешено только в пустое исправное хранилище. Имеющиеся примеры не заменяются. Импорт не включает обучение или управление.").setPositiveButton("Выбрать файл",(d,w)->startActivityForResult(new Intent(Intent.ACTION_OPEN_DOCUMENT).setType("text/*").addCategory(Intent.CATEGORY_OPENABLE),12)).setNegativeButton("Отмена",null).show();});
-  button(box,"Онлайн-диагностика и модели",()->startActivity(new Intent(this,OnlineDiagnosticsActivity.class)));
+
+  button(advanced,"Внешние учителя · дополнительный API",()->startActivity(new Intent(this,WebLearningActivity.class)));
+  button(advanced,"Онлайн-диагностика и модели",()->startActivity(new Intent(this,OnlineDiagnosticsActivity.class)));
   button(advanced,"Экспорт диагностики сбоя",()->startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT).setType("text/plain").addCategory(Intent.CATEGORY_OPENABLE).putExtra(Intent.EXTRA_TITLE,"localpilot-crash.txt"),13));
   button(advanced,"Экспорт журнала",this::beginAuditExport);
   button(box,"STOP и убрать панель",()->{if(PilotService.instance!=null)PilotService.instance.hidePanel();});

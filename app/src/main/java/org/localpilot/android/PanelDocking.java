@@ -63,4 +63,26 @@ public final class PanelDocking {
   return (long)panel.left<((long)roi.right+gap)&&((long)roi.left-gap)<panel.right
     &&(long)panel.top<((long)roi.bottom+gap)&&((long)roi.top-gap)<panel.bottom;
  }
+
+ public static final class DockPlan {
+  public final Area placement;
+  public final boolean microStopMode;
+  public final String reason;
+  public DockPlan(Area placement, boolean microStopMode, String reason) {
+   this.placement = placement;
+   this.microStopMode = microStopMode;
+   this.reason = reason;
+  }
+  public boolean usable() { return placement != null; }
+ }
+
+ public static DockPlan chooseAdaptive(Area screen, Area compactPanel, Area microStopPanel, Area roi, int marginPx) {
+  Area full = choose(screen, compactPanel, roi, marginPx);
+  if (full != null) return new DockPlan(full, false, "COMPACT_OUTSIDE_ROI");
+  if (microStopPanel != null) {
+   Area micro = choose(screen, microStopPanel, roi, Math.max(2, marginPx / 2));
+   if (micro != null) return new DockPlan(micro, true, "MICRO_STOP_OUTSIDE_ROI");
+  }
+  return new DockPlan(null, false, "PANEL_COVERS_ROI");
+ }
 }

@@ -71,18 +71,18 @@ public final class Upgrade726Test {
  }
  private static void scroll(){
   var f=new JumperFeedback();long id=f.dispatched(JumperPolicy.Action.TAP_LEFT,scene(1000,20,0,false),1000);
-  check(f.observe(scene(1100,20,20,false),1100)==JumperFeedback.State.WAITING,"scroll without ACK never releases");f.acknowledge(id);
+  check(f.observe(scene(1100,20,20,false),1100)==JumperFeedback.State.WAITING,"scroll without ACK never releases");f.acknowledge(id,1150);
   check(f.observe(scene(1200,20,30,false),1200)==JumperFeedback.State.WAITING,"one scroll frame insufficient");
   check(f.observe(scene(1300,20,45,false),1300)==JumperFeedback.State.SCENE_PROGRESS,"coherent edge scroll releases wait");
   check(f.report().contains("verified=0")&&f.report().contains("scene_progress=1")&&!f.failedWithAck(),"world movement never rewards steering");
-  check(!f.acknowledge(id),"scroll completion invalidates old token");
+  check(!f.acknowledge(id,1400),"scroll completion invalidates old token");
   for(boolean noise:new boolean[]{true,false}){
-   f.reset();float x=noise?20:400;id=f.dispatched(JumperPolicy.Action.TAP_LEFT,scene(2000,x,0,false),2000);f.acknowledge(id);
+   f.reset();float x=noise?20:400;id=f.dispatched(JumperPolicy.Action.TAP_LEFT,scene(2000,x,0,false),2000);f.acknowledge(id,2050);
    check(f.observe(scene(2100,x,20,noise),2100)==JumperFeedback.State.WAITING,"false scroll/away from edge waits");
    check(f.observe(scene(2200,x,40,noise),2200)==JumperFeedback.State.WAITING,"false scroll cannot release on second frame");
    check(f.observe(null,2650)==JumperFeedback.State.RETRY,"false scroll still times out");
   }
-  f.reset();id=f.dispatched(JumperPolicy.Action.TAP_LEFT,scene(3000,20,0,false),3000);f.acknowledge(id);
+  f.reset();id=f.dispatched(JumperPolicy.Action.TAP_LEFT,scene(3000,20,0,false),3000);f.acknowledge(id,3050);
   check(f.observe(scene(3100,20,20,false),3500)==JumperFeedback.State.WAITING,"stale scroll excluded");
   check(f.observe(scene(3500,20,40,false),3400)==JumperFeedback.State.WAITING,"future scroll excluded");
   check(f.observe(null,3650)==JumperFeedback.State.RETRY,"missing valid scroll cannot hang wait");
@@ -90,7 +90,7 @@ public final class Upgrade726Test {
   var player=new ArcadeObservation.Box(.45f,.7f,.55f,.8f);
   var before=new ArcadeObservation(ArcadeProfile.TRAFFIC,4000,player,player,List.of(),0,0,1,1,0,1,0,0,.9f,true,false);
   var after=new ArcadeObservation(ArcadeProfile.TRAFFIC,4100,player,player,List.of(new ArcadeObservation.Box(.1f,.2f,.2f,.3f)),0,0,1,1,0,1,0,.4f,.9f,true,false);
-  var feedback=new ArcadeFeedback();long token=feedback.dispatched(new ArcadePolicy.Decision(ArcadePolicy.Action.LEFT,.2f,.7f,"test"),before,4000);feedback.acknowledge(token);
+  var feedback=new ArcadeFeedback();long token=feedback.dispatched(new ArcadePolicy.Decision(ArcadePolicy.Action.LEFT,.2f,.7f,"test"),before,4000);feedback.acknowledge(token,4050);
   check(feedback.observe(after,4100)==ArcadeFeedback.State.WAITING&&feedback.verified()==0,"traffic scroll is not left response");
  }
  private static GridPuzzleVision.Pixels gridImage(int size,int[] types,boolean special,boolean bad){

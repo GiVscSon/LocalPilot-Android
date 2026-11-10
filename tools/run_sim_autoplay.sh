@@ -11,6 +11,8 @@ CLASSES="$(mktemp -d)"
 trap 'rm -rf "$CLASSES"' EXIT
 javac --release 17 -d "$CLASSES" \
   game-lab/src/main/java/org/localpilot/gamelab/GameLabEngine.java \
+  game-lab/src/main/java/org/localpilot/gamelab/GameLab2048Rules.java \
+  game-lab/src/main/java/org/localpilot/gamelab/GameLabBubbleRules.java \
   shared/src/main/java/org/localpilot/shared/SimExperience.java \
   shared/src/main/java/org/localpilot/shared/SimLabPolicy.java \
   tools/GameLabCoach.java \

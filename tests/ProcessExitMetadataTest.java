@@ -21,6 +21,9 @@ public final class ProcessExitMetadataTest {
   check("cached_or_background".equals(ProcessExitMetadata.importanceName(400)),"cached/background share Android value");
   check("unknown".equals(ProcessExitMetadata.importanceName(999)),"unknown importance is not guessed");
   String build="0.7.23-dev/code39";
+  String sourced="0.8.1-dev-install1081/code53@abcdef123456";
+  check(ProcessExitMetadata.decode(ProcessExitMetadata.encode(sourced,"STARTUP")).build.equals(sourced),"source SHA survives bounded process summary");
+  rejects("0.8.1/code53@private-token","STARTUP");
   for(String phase:new String[]{"STARTUP","SERVICE_CONNECTED","SERVICE_INTERRUPTED","SERVICE_DESTROYED",
       "CAPTURE_CONSENT","CAPTURE_READY","CAPTURE_STOPPED","CAPTURE_SURFACE_480x720",
       "FRAME_UI_NullPointerException","FRAME_UI_OutOfMemoryError"}){

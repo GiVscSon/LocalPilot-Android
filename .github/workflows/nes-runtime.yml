@@ -54,6 +54,7 @@ jobs:
             game-lab/src/main/java/org/localpilot/gamelab/HomebrewNes.java \
             tests/ExportHomebrewNes.java
           java -cp build/nes-runtime ExportHomebrewNes build/nes-runtime/demo.nes
+          node tests/nes_observation_smoke.cjs build/test-core/package/dist/jsnes.min.js build/nes-runtime/demo.nes
           node tests/jsnes_nes_smoke.cjs \
             build/test-core/package/dist/jsnes.min.js \
             build/nes-runtime/demo.nes

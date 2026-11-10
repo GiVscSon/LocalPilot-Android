@@ -100,4 +100,25 @@ public final class ArcadePolicy {
  public static long interval(ArcadeProfile profile){return profile==ArcadeProfile.TRAFFIC?260:140;}
  public static long responseTimeout(ArcadeProfile profile){return profile==ArcadeProfile.FLAPPY?700:1100;}
  private static float clamp(float x,float min,float max){return Math.max(min,Math.min(max,x));}
+
+ public static float paddleDefeatMargin(ArcadeObservation s) {
+  if (s == null || s.profile != ArcadeProfile.PADDLE || s.control == null) return 1f;
+  float defeatY = s.control.top - 0.03f;
+  if (s.obstacles.isEmpty()) return Math.max(0f, defeatY - 0.07f);
+  float lowestBottom = 0f;
+  for (ArcadeObservation.Box b : s.obstacles) lowestBottom = Math.max(lowestBottom, b.bottom);
+  return Math.max(0f, defeatY - lowestBottom);
+ }
+
+ public static float urgentBlockTargetX(ArcadeObservation s) {
+  if (s == null || s.profile != ArcadeProfile.PADDLE || s.obstacles.isEmpty()) return 0.5f;
+  ArcadeObservation.Box best = null;
+  for (ArcadeObservation.Box b : s.obstacles) {
+   if (best == null || b.bottom > best.bottom + 1e-4f
+     || (Math.abs(b.bottom - best.bottom) <= 1e-4f && Math.abs(b.x() - 0.5f) < Math.abs(best.x() - 0.5f))) {
+    best = b;
+   }
+  }
+  return best == null ? 0.5f : best.x();
+ }
 }
