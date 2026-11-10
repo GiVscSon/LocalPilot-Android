@@ -32,7 +32,7 @@ bool init(const std::string &name){
  if(name.empty())return false;
  llama_backend_init();
  auto mp=llama_model_default_params();
- mp.n_gpu_layers=0; mp.use_mmap=true;
+ mp.n_gpu_layers=0;
  model=llama_model_load_from_file(name.c_str(),mp);
  if(!model)return false;
  auto cp=llama_context_default_params();
