@@ -11,6 +11,7 @@ import java.security.MessageDigest;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Fully in-APK offline GGUF runtime. No Termux, HTTP, API key or file-picker.
@@ -33,6 +34,8 @@ public final class EmbeddedGgufRuntime {
  private volatile boolean closed;
  private File validated;
  private static volatile boolean libraryLoaded;
+ // A previous Activity must not unload a model used by a newly created screen.
+ private static final AtomicInteger LIVE_CLIENTS=new AtomicInteger();
 
  private static native String nativeInfer(String model,String system,String question,int maxTokens,float temp);
  private static native void nativeInterrupt();
@@ -41,6 +44,7 @@ public final class EmbeddedGgufRuntime {
  public EmbeddedGgufRuntime(Context context){
   if(!BuildConfig.EMBEDDED_GGUF)throw new IllegalStateException("This APK has no embedded model");
   application=context.getApplicationContext();
+  LIVE_CLIENTS.incrementAndGet();
  }
  public boolean busy(){return busy.get();}
  private static synchronized void loadLibrary(){
@@ -124,8 +128,13 @@ public final class EmbeddedGgufRuntime {
    String answer;
    try{answer=job.run();}
    catch(Exception|LinkageError failed){
-    answer="Встроенная модель недоступна: "+failed.getClass().getSimpleName()+
-       ". Проверьте место в памяти и совместимость ARM64.";
+    // User-visible diagnostics must not silently hide the actual failure stage.
+    String reason=failed.getMessage();
+    if(reason==null||reason.isBlank())reason="unknown reason";
+    reason=reason.replaceAll("[\\r\\n]+"," ").trim();
+    if(reason.length()>160)reason=reason.substring(0,160)+"…";
+    answer="Встроенная модель недоступна ["+failed.getClass().getSimpleName()+
+      "]: "+reason+". Проверьте свободное место, ARM64 и целостность APK.";
    }finally{busy.set(false);}
    final String result=answer;
    if(!closed)main.post(()->{if(!closed)callback.complete(result);});
@@ -149,10 +158,15 @@ public final class EmbeddedGgufRuntime {
    if(closed)return "Самопроверка отменена";
    String cat=nativeInfer(file.getAbsolutePath(),system,
        "Write one short English sentence about a cat.",64,0f);
-   if(!"BLUE".equals(a.trim())||!LocalCoreContract.acceptArithmetic(b)||
-       !LocalCoreContract.acceptEnglish(cat)||
-       !cat.toLowerCase(java.util.Locale.ROOT).contains("cat"))
-    return "FAIL: English model test rejected. Outputs not BLUE and 27. No game input.";
+   boolean blueOk="BLUE".equals(a.trim());
+   boolean mathOk=LocalCoreContract.acceptArithmetic(b);
+   boolean catOk=LocalCoreContract.acceptEnglish(cat)&&
+       cat.toLowerCase(java.util.Locale.ROOT).contains("cat");
+   if(!blueOk||!mathOk||!catOk)
+    return "FAIL: локальный ИИ отвечает некорректно. "+
+      "BLUE="+(blueOk?"PASS":"FAIL")+"; 12+15="+(mathOk?"PASS":"FAIL")+
+      "; English sentence="+(catOk?"PASS":"FAIL")+
+      ". Ни одно игровое действие не выполняется.";
    return "PASS: BLUE, правильное равенство и английская фраза. Игровые навыки ещё не подтверждены.";
   });
  }
@@ -168,10 +182,15 @@ public final class EmbeddedGgufRuntime {
    return "MNN-Pocket · embedded GGUF · English\n"+response;
   });
  }
- public void close(){
+ public synchronized void close(){
+  if(closed)return;
   closed=true;
-  if(libraryLoaded)nativeInterrupt();
-  worker.execute(()->{if(libraryLoaded)nativeRelease();});
+  boolean last=LIVE_CLIENTS.decrementAndGet()==0;
+  if(last&&libraryLoaded)nativeInterrupt();
+  worker.execute(()->{
+   // A replacement Activity may already be using the same native engine.
+   if(libraryLoaded&&LIVE_CLIENTS.get()==0)nativeRelease();
+  });
   worker.shutdown();
  }
 }
