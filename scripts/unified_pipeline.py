@@ -74,7 +74,7 @@ def verify_contracts() -> dict:
             "-s", "scripts", "-p", "test_*.py", "-v")
     for test in (
         "test_soft_capture_recovery.py", "test_sim_autoplay_gate.py",
-        "test_sim_seed_split.py",
+        "test_sim_seed_split.py", "test_apk_upgrade_preflight.py",
     ):
         execute(sys.executable, "-m", "unittest", "discover",
                 "-s", "tests", "-p", test, "-v")
