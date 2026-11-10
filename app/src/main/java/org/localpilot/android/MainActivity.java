@@ -34,7 +34,7 @@ public class MainActivity extends Activity {
   AdaptiveLearningEngine.initGlobal(getFilesDir());
   section(box,"03 · Игровая лаборатория");
   TextView labCaption=new TextView(this);
-  labCaption.setText("NES / Денди: настоящий эмулятор и ROM. Ниже 10 диагностических стендов, а не копий игр Маркета: только 2048 приближен к реальным правилам, часть физики упрощена. Обучение DQN четырёх собственных аркад находится выше; GameLab сам не обучает все 10 игр. Результаты симуляции не считаются ходами в Маркете.");
+  labCaption.setText("NES / Денди: настоящий эмулятор и ROM. Ниже 10 диагностических стендов, а не копий игр Маркета: только 2048 приближен к реальным правилам, часть физики упрощена. Обучение DQN четырёх собственных аркад находится выше; GameLab сам не обучает все 10 игр. Симуляция не является приёмкой Маркета.");
   labCaption.setTextColor(HubContract.SECONDARY);box.addView(labCaption);
   button(box,"GameLab · NES и 10 тестовых стендов",this::openGameLab);
   section(box,"04 · Диагностика и контроль");
