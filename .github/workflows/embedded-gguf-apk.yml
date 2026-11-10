@@ -46,6 +46,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 tools/bundle_embedded_gguf.py prepare
+          cp third_party/llama.cpp/LICENSE build/embedded-model-assets/licenses/llama.cpp-LICENSE.txt
       - name: Build arm64 APK with native inference and bundled weights
         shell: bash
         run: |
