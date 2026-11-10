@@ -22,6 +22,7 @@ public class MainActivity extends Activity {
   button(box,"Показать панель",()->{PilotService pilot=PilotService.instance;if(pilot==null){toast(CrashDiagnostics.connectionHint(this));return;}pilot.recoverPanel();status.setText(CrashDiagnostics.connectionHint(this));});
   TextView panelHelp=new TextView(this);panelHelp.setText("Панель можно свернуть. STOP всегда остаётся доступным.");box.addView(panelHelp);
   section(box,"02 · Модели и обучение");
+  button(box,"Локальное ИИ-ядро · MNN-Pocket (English)",()->startActivity(new Intent(this,LocalCoreActivity.class)));
   button(box,"Игровые модели · обучение и экспорт",()->startActivity(new Intent(this,TrainingActivity.class)));
   button(box,"Внешние учителя · дополнительный API",()->startActivity(new Intent(this,WebLearningActivity.class)));
   automatic=new Switch(this);automatic.setText("Автоуправление выбранной игрой");automatic.setChecked(getSharedPreferences(PREF,MODE_PRIVATE).getBoolean("auto_control",true));automatic.setOnCheckedChangeListener((v,on)->{getSharedPreferences(PREF,MODE_PRIVATE).edit().putBoolean("auto_control",on).apply();if(PilotService.instance!=null)PilotService.instance.setAutomatic(on);});box.addView(automatic);
