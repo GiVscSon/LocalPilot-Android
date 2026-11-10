@@ -235,6 +235,15 @@ def build_test(out: Path) -> dict:
             ["java", "-cp", str(classes), "ExportHomebrewNes", str(rom)],
             ["node", "tests/jsnes_nes_smoke.cjs", str(core), str(rom)],
             ["node", "tests/nes_observation_smoke.cjs", str(core), str(rom)],
+            ["node", "tests/nes_record_contract.cjs", str(core), str(rom)],
+            ["node", "tests/nes_training_contract.cjs", str(core), str(rom)],
+            ["node", "tests/nes_lab_cli_contract.cjs", str(core), str(rom)],
+            ["node", "tools/nes-agent/train.cjs", "--core", str(core),
+             "--rom", str(rom), "--output", str(out / "nes-trained"),
+             "--episodes", "160"],
+            ["node", "tools/nes-agent/record.cjs", "--core", str(core),
+             "--rom", str(rom), "--output", str(out / "nes-ppu-dataset.jsonl"),
+             "--steps", "24"],
         ])
         for index, command in enumerate(commands, 1):
             entry = evidenced_command(command, out / f"{index:03d}.log", timeout=1800)

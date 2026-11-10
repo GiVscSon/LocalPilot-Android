@@ -28,6 +28,48 @@ def annotation(level, message):
     print('::' + level + ' title=Android device acceptance::' + safe, flush=True)
 
 
+def record_accessibility_setup(phase, isolated_emulator):
+    """Diagnostic readback only; never enables input or changes acceptance.
+
+    Keep the immediate post-write state as well as the later failure state, so
+    a missing service can be distinguished from settings that did not persist.
+    Do not collect settings from a user's physical device.
+    """
+    if not isolated_emulator:
+        return
+    snapshot = {'phase': phase, 'elapsed_monotonic_ms': int(time.monotonic() * 1000)}
+    component = PACKAGE + '/org.localpilot.android.PilotService'
+    for setting in ('enabled_accessibility_services', 'accessibility_enabled'):
+        try:
+            value = command(['adb', 'shell', 'settings', 'get', 'secure', setting], 2).strip()
+            snapshot[setting] = value[:2048]
+            if setting == 'enabled_accessibility_services':
+                snapshot['pilot_component_enabled'] = component in value.split(':')
+                snapshot['service_list_truncated'] = len(value) > 2048
+        except (OSError, RuntimeError, subprocess.TimeoutExpired) as error:
+            snapshot[setting + '_read_error'] = str(error)[:500]
+    try:
+        (OUT / ('accessibility-settings-' + phase + '.json')).write_text(
+            json.dumps(snapshot, indent=2), encoding='utf-8')
+    except OSError as error:
+        annotation('notice', 'Accessibility setup diagnostic could not be saved: ' + str(error)[:300])
+
+
+def record_pilot_service_failure(isolated_emulator):
+    """Preserve bounded OS service state without replacing the primary failure."""
+    if not isolated_emulator:
+        return
+    try:
+        state = command(['adb', 'shell', 'dumpsys', 'activity', 'services',
+                         PACKAGE + '/org.localpilot.android.PilotService'], 10)
+    except (OSError, RuntimeError, subprocess.TimeoutExpired) as error:
+        state = 'Service-state diagnostic failed: ' + str(error)[:500]
+    try:
+        (OUT / 'pilot-service-state.txt').write_text(state[:8000], encoding='utf-8')
+    except OSError as error:
+        annotation('notice', 'Pilot service diagnostic could not be saved: ' + str(error)[:300])
+
+
 def device_metadata():
     """Describe and verify the selected emulator; never label it physical."""
     sdk = command(['adb', 'shell', 'getprop', 'ro.build.version.sdk']).strip()
@@ -109,6 +151,7 @@ def main():
                     command(['adb', 'shell', 'settings', 'put', 'secure', 'enabled_accessibility_services',
                              PACKAGE + '/org.localpilot.android.PilotService'])
                     command(['adb', 'shell', 'settings', 'put', 'secure', 'accessibility_enabled', '1'])
+                    record_accessibility_setup('after-enable', isolated_emulator)
                     process.wait(timeout=300)
                     if process.returncode:raise RuntimeError('Instrumentation process failed\n'+(OUT/'instrumentation.txt').read_text()[-2500:])
                 finally:
@@ -172,6 +215,8 @@ def main():
         (OUT / 'runner-error.txt').write_text(text[:8000], encoding='utf-8')
         annotation('error', text)
         if not isolated_emulator:return 1
+        record_accessibility_setup('failure', isolated_emulator)
+        record_pilot_service_failure(isolated_emulator)
         try:
             crash=command(['adb','logcat','-d','-b','crash'],10)
             (OUT/'crash-logcat.txt').write_text(crash[-16000:],encoding='utf-8')

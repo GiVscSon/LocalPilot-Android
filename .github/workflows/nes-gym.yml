@@ -1,0 +1,117 @@
+name: NES Gym visual reinforcement learning
+
+on:
+  push:
+    paths:
+      - 'tools/nes-agent/**'
+      - 'tests/nes_*contract.cjs'
+      - 'tests/nes_generic_smoke.cjs'
+      - 'tests/jsnes_nes_smoke.cjs'
+      - 'tests/ExportHomebrewNes.java'
+      - 'scripts/nes_lab.py'
+      - 'game-lab/src/main/java/org/localpilot/gamelab/HomebrewNes.java'
+      - '.github/workflows/nes-gym.yml'
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'tools/nes-agent/**'
+      - 'tests/nes_*contract.cjs'
+      - 'tests/nes_generic_smoke.cjs'
+      - 'tests/jsnes_nes_smoke.cjs'
+      - 'tests/ExportHomebrewNes.java'
+      - 'game-lab/src/main/java/org/localpilot/gamelab/HomebrewNes.java'
+      - 'scripts/nes_lab.py'
+      - '.github/workflows/nes-gym.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  train:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Install pinned real JSNES 2.1.0 CPU/PPU
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build/nes-gym
+          npm pack jsnes@2.1.0 --ignore-scripts --silent --pack-destination build/nes-gym
+          python3 - <<'PY'
+          import hashlib,base64,pathlib
+          data=pathlib.Path("build/nes-gym/jsnes-2.1.0.tgz").read_bytes()
+          expected="LUa++E5Dfs1A6ZYB5HiSOR4JrUzrZEXGLZ5Imczhu9lkg7f+94SqnLZ/MXwGa7oc02+j/xYyHR0azGQ6LCU68g=="
+          assert base64.b64encode(hashlib.sha512(data).digest()).decode()==expected,"Pinned NES emulator core mismatch"
+          PY
+          mkdir -p build/nes-gym/core
+          tar -xzf build/nes-gym/jsnes-2.1.0.tgz -C build/nes-gym/core package/dist/jsnes.min.js
+      - name: Compile original homebrew NES training cartridge
+        run: |
+          mkdir -p build/nes-gym/classes
+          javac --release 17 -d build/nes-gym/classes game-lab/src/main/java/org/localpilot/gamelab/HomebrewNes.java tests/ExportHomebrewNes.java
+          java -cp build/nes-gym/classes ExportHomebrewNes build/nes-gym/training.nes
+      - name: Prove NES CPU PPU and visual RL gain
+        run: |
+          node tests/jsnes_nes_smoke.cjs build/nes-gym/core/package/dist/jsnes.min.js build/nes-gym/training.nes
+          node tests/nes_training_contract.cjs build/nes-gym/core/package/dist/jsnes.min.js build/nes-gym/training.nes
+      - name: Capture reusable reward-free NES PPU dataset
+        run: |
+          node tests/nes_record_contract.cjs build/nes-gym/core/package/dist/jsnes.min.js build/nes-gym/training.nes
+          node tests/nes_lab_cli_contract.cjs build/nes-gym/core/package/dist/jsnes.min.js build/nes-gym/training.nes
+          mkdir -p build/nes-gym/learned
+          node tools/nes-agent/record.cjs --core build/nes-gym/core/package/dist/jsnes.min.js --rom build/nes-gym/training.nes --output build/nes-gym/learned/nes-ppu-dataset.jsonl --steps 24
+          python3 - <<'PY'
+          import json,pathlib
+          lines=pathlib.Path("build/nes-gym/learned/nes-ppu-dataset.jsonl").read_text().splitlines()
+          assert len(lines)==24
+          for raw in lines:
+            row=json.loads(raw)
+            assert row["reward"] is None and row["terminal"] is None
+            assert row["origin"]=="NES_EMULATED_PPU_ONLY" and row["market_verified"] is False
+            assert len(row["observation"])==960
+          print("NES_GENERIC_DATASET_NO_REWARD_PASS")
+          PY
+      - name: Train, evaluate and export episode-level NES policy
+        run: |
+          node tools/nes-agent/train.cjs --core build/nes-gym/core/package/dist/jsnes.min.js --rom build/nes-gym/training.nes --output build/nes-gym/learned --episodes 160
+          python3 - <<'PY'
+          import json,pathlib,hashlib
+          root=pathlib.Path("build/nes-gym/learned")
+          p=json.loads((root/"nes-policy.json").read_text())
+            assert p["schema"]=="nes-visual-q-v2"
+          assert p["source"]=="NES_EMULATED"
+          assert p["eligible_for_market_reward"] is False
+          assert p["android_input_authorized"] is False
+          assert p["rom_sha256"]==hashlib.sha256(pathlib.Path("build/nes-gym/training.nes").read_bytes()).hexdigest()
+            assert p["core_sha256"]==hashlib.sha256(pathlib.Path("build/nes-gym/core/package/dist/jsnes.min.js").read_bytes()).hexdigest()
+            import subprocess
+            assert p["git_sha"]==subprocess.check_output(["git","rev-parse","HEAD"],text=True).strip()
+            assert p["git_dirty"] is False
+          assert p["evaluation"]["learned"]["successes"]>=10
+            assert p["evaluation"]["learned"]["mean_reward"]>p["evaluation"]["random"]["mean_reward"]
+            assert p["evaluation"]["no_leakage"]["passed"] is True
+            assert p["acceptance"]["passed"] is True
+          assert len((root/"nes-episodes.jsonl").read_text().splitlines())==160
+          print("NES_REAL_VISUAL_TRAINING_CHECKPOINT_PASS")
+          PY
+      - name: Upload NES model and episode proofs (SIM only)
+        uses: actions/upload-artifact@v4
+        with:
+          name: nes-visual-rl-simulated-checkpoint
+          path: |
+            build/nes-gym/learned/nes-policy.json
+            build/nes-gym/learned/nes-episodes.jsonl
+            build/nes-gym/learned/nes-ppu-dataset.jsonl
+            build/nes-gym/learned/nes-report.json
+            build/nes-gym/learned/nes-report.md
+            build/nes-gym/learned/nes-strategies.csv
+          if-no-files-found: error
+          retention-days: 14

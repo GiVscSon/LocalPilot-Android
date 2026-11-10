@@ -148,6 +148,8 @@ public final class PilotUiInstrumentation extends Instrumentation {
             checkLauncherAndPicker();
             checkModelLibrary();
             checkOpenRouterAdvisorPicker();
+            checkTrainingManualControls();
+            checkGameLabPaddleRendering();
             checkCollapseAndReopen();
             checkFullDemo();
             checkStopDuringDemo();
@@ -241,6 +243,7 @@ public final class PilotUiInstrumentation extends Instrumentation {
     private void checkOpenRouterAdvisorPicker() throws Exception {
         onMain(()->{service.hidePanel();return null;});
         launch(MainActivity.class);
+        click("Дополнительные инструменты ▾");
         click("Онлайн-диагностика и модели");
         // Each button must be independently reachable on narrow-phone screens,
         // where the keyboard and long content require scrolling.
@@ -309,6 +312,192 @@ public final class PilotUiInstrumentation extends Instrumentation {
         launchedActivity=activity;
         waitForIdleSync();
         return activity;
+    }
+
+    /** Proves that the built-in native simulator receives a real OS touchscreen
+     * event and changes its original physics state, not merely UI click metadata.
+     * No learning reward or Market gesture is claimed here. */
+    private void checkTrainingManualControls() throws Exception {
+        onMain(()->{service.hidePanel();return null;});
+        launch(TrainingActivity.class);
+        await(()->present("Играть самому"),3_000,"Manual-training entry not visible");
+        require(!present("Смотреть ИИ"),
+            "An untrained model should not be shown as a functional autoplayer");
+        click("Играть самому");
+        // First accessibility action scrolls the new control into a safe
+        // viewport. The NEXT input must be a genuine injected OS touch.
+        click("← Влево");
+        await(()->present("← Влево"),4_000,"Manual controls did not appear");
+        float before=onMain(this::trainingPlayerX);
+        require(touchOwnControl("← Влево"),
+            "Actual Android touchscreen could not reach enabled LEFT simulator control");
+        await(()->onMain(this::trainingPlayerX)<before-.2f,3_000,
+            "A real LEFT button touch did not move the simulator player");
+
+        ArcadeManualController released=onMain(this::trainingPlayer);
+        ManualTouch held=beginManualButtonTouch();
+        try{
+            await(()->onMain(released::holding),2_000,"Android DOWN did not hold the manual control");
+        }finally{endManualButtonTouch(held);}
+        await(()->onMain(()->!released.holding()),2_000,"Android UP did not release the manual control");
+        // Check the actual View's UP handler without a 70ms clock tick between
+        // snapshots. The OS hold/release path above is separate evidence.
+        onMain(()->{
+            ControlTarget target=ownControlTarget("← Влево");
+            require(target!=null&&target.canTap(),"Manual control left the safe viewport");
+            long down=SystemClock.uptimeMillis();
+            android.view.MotionEvent press=android.view.MotionEvent.obtain(down,down,
+                android.view.MotionEvent.ACTION_DOWN,target.view.getWidth()/2f,target.view.getHeight()/2f,0);
+            android.view.MotionEvent release=android.view.MotionEvent.obtain(down,down,
+                android.view.MotionEvent.ACTION_UP,target.view.getWidth()/2f,target.view.getHeight()/2f,0);
+            press.setSource(android.view.InputDevice.SOURCE_TOUCHSCREEN);
+            release.setSource(android.view.InputDevice.SOURCE_TOUCHSCREEN);
+            try{
+                require(target.view.dispatchTouchEvent(press)&&released.holding(),"View DOWN did not establish its hold");
+                int steps=released.steps();float x=released.env.x;
+                require(target.view.dispatchTouchEvent(release),"View rejected manual release");
+                require(!released.holding()&&released.steps()==steps&&released.env.x==x,
+                    "Button UP submitted an extra manual action");
+            }finally{press.recycle();release.recycle();}
+            return null;
+        });
+
+        ArcadeManualController stopped=onMain(this::trainingPlayer);
+        held=beginManualButtonTouch();
+        try{
+            await(()->onMain(stopped::holding),2_000,"STOP regression did not begin with a held Android touch");
+            click("STOP");
+            await(()->onMain(()->trainingPlayer()==null),2_000,
+                "STOP failed to detach manual input controller");
+        }finally{endManualButtonTouch(held);}
+        int stoppedSteps=onMain(stopped::steps);
+        SystemClock.sleep(180);
+        require(onMain(()->trainingPlayer()==null&&!stopped.active()&&!stopped.holding()
+                &&stopped.steps()==stoppedSteps),"UP or a queued clock resumed manual input after STOP");
+
+        click("Играть самому");
+        await(()->present("← Влево"),4_000,"Manual controls did not return after STOP");
+        Activity training=launchedActivity;
+        ArcadeManualController paused=onMain(this::trainingPlayer);
+        held=beginManualButtonTouch();
+        try{
+            await(()->onMain(paused::holding),2_000,"Background regression did not begin with a held Android touch");
+            long keyAt=SystemClock.uptimeMillis();
+            require(automation.injectInputEvent(new KeyEvent(keyAt,keyAt,KeyEvent.ACTION_DOWN,
+                KeyEvent.KEYCODE_HOME,0),true),"Android rejected HOME DOWN");
+            require(automation.injectInputEvent(new KeyEvent(keyAt,SystemClock.uptimeMillis(),KeyEvent.ACTION_UP,
+                KeyEvent.KEYCODE_HOME,0),true),"Android rejected HOME UP");
+            await(()->onMain(()->!training.hasWindowFocus()&&trainingPlayer()==null),3_000,
+                "Leaving TrainingActivity failed to pause and detach manual input");
+        }finally{endManualButtonTouch(held);}
+        int pausedSteps=onMain(paused::steps);
+        launch(TrainingActivity.class);
+        await(()->present("Играть самому"),3_000,"TrainingActivity did not return from the background");
+        SystemClock.sleep(180);
+        await(()->onMain(()->trainingPlayer()==null),2_000,
+            "Returning from the background silently rearmed manual input");
+        require(onMain(()->!paused.active()&&!paused.holding()&&paused.steps()==pausedSteps),
+            "Backgrounded controller advanced after onPause or return");
+        require(!armed(),"Training simulator must not arm Market game input");
+        addCheck("native_manual_training_real_touch_changes_scene_and_stop",
+            new JSONObject().put("initial_x",before)
+              .put("origin","SIM_ONLY").put("android_touch",true)
+              .put("os_hold_release",true).put("stop_while_touch_down",true)
+              .put("release_no_extra_step_method","same-main-thread View.dispatchTouchEvent; no clock interleaving")
+              .put("background_method","Android HOME key; return via startActivitySync")
+              .put("manual_detached_after_background",true)
+              .put("market_acceptance",false));
+    }
+
+    private static final class ManualTouch {
+        final long down;final int x,y;
+        ManualTouch(long down,int x,int y){this.down=down;this.x=x;this.y=y;}
+    }
+    private ManualTouch beginManualButtonTouch()throws Exception{
+        ControlTarget target=onMain(()->ownControlTarget("← Влево"));
+        require(target!=null&&target.canTap(),"Manual LEFT control has no safe visible touch center");
+        boolean fresh=onMain(()->{
+            ControlTarget current=ownControlTarget("← Влево");
+            return current!=null&&current.view==target.view&&current.canTap()
+                &&current.full.equals(target.full)&&current.safe.equals(target.safe);
+        });
+        require(fresh,"Manual LEFT geometry changed before DOWN");
+        ManualTouch touch=new ManualTouch(SystemClock.uptimeMillis(),target.full.centerX(),target.full.centerY());
+        manualButtonMotion(touch,android.view.MotionEvent.ACTION_DOWN);return touch;
+    }
+    private void endManualButtonTouch(ManualTouch touch)throws Exception{
+        manualButtonMotion(touch,android.view.MotionEvent.ACTION_UP);
+    }
+    private void manualButtonMotion(ManualTouch touch,int action)throws Exception{
+        android.view.MotionEvent event=android.view.MotionEvent.obtain(touch.down,SystemClock.uptimeMillis(),
+            action,touch.x,touch.y,0);
+        event.setSource(android.view.InputDevice.SOURCE_TOUCHSCREEN);
+        try{require(automation.injectInputEvent(event,true),"Android rejected manual button touch phase "+action);}
+        finally{event.recycle();}
+    }
+
+    /** Android renderer regression with an injected, deterministic simulator
+     * collision. This is Canvas evidence, not OS gameplay or Market acceptance. */
+    private void checkGameLabPaddleRendering()throws Exception{
+        Activity activity=launch(org.localpilot.gamelab.TestDeviceActivity.class);
+        Field engineField=activity.getClass().getDeclaredField("engine");engineField.setAccessible(true);
+        Field surfaceField=activity.getClass().getDeclaredField("surface");surfaceField.setAccessible(true);
+        await(()->onMain(()->{
+            View surface=(View)surfaceField.get(activity);
+            return surface!=null&&surface.getWidth()>0&&surface.getHeight()>0;
+        }),3_000,"GameLab surface did not lay out for Android Canvas regression");
+        JSONObject rendered=onMain(()->{
+            Object original=engineField.get(activity);
+            org.localpilot.gamelab.GameLabEngine fixture=new org.localpilot.gamelab.GameLabEngine(
+                org.localpilot.gamelab.GameLabEngine.Game.PADDLE,20261104L);
+            View surface=(View)surfaceField.get(activity);
+            Bitmap bitmap=Bitmap.createBitmap(360,640,Bitmap.Config.ARGB_8888);
+            try{
+                engineField.set(activity,fixture);
+                int[] before=renderPaddleCenters(surface,bitmap);
+                for(int color:before)require(color!=0xff1c3349,"A live paddle brick was invisible at score zero");
+                // One genuine collision from above removes the first brick.
+                // All rendering and snapshots share this main-looper turn.
+                fixture.ballX=33.5f/360f;fixture.ballY=105f/640f;
+                fixture.vx=0;fixture.vy=.035f;fixture.tick();
+                require(!fixture.paddleBricks[0]&&fixture.score==10&&fixture.paddleHits==1,
+                    "Paddle collision fixture did not remove exactly its first brick");
+                int[] after=renderPaddleCenters(surface,bitmap);
+                require(after[0]==0xff1c3349,"A destroyed paddle brick remained visible");
+                for(int i=1;i<after.length;i++)require(fixture.paddleBricks[i]&&after[i]==before[i],
+                    "Score decoratively hid or changed an unhit paddle brick "+i);
+                return new JSONObject().put("origin","SIM_ONLY")
+                    .put("method","actual GameSurface.draw on Android Canvas; deterministic collision injection")
+                    .put("bitmap_width",360).put("bitmap_height",640)
+                    .put("visible_bricks_before",24).put("visible_bricks_after",23)
+                    .put("score_after_collision",fixture.score).put("market_acceptance",false);
+            }finally{engineField.set(activity,original);bitmap.recycle();surface.invalidate();}
+        });
+        require(!armed(),"GameLab renderer regression must not arm Market input");
+        addCheck("gamelab_android_paddle_renderer_matches_collidable_bricks",rendered);
+    }
+    private int[] renderPaddleCenters(View surface,Bitmap bitmap){
+        android.graphics.Canvas canvas=new android.graphics.Canvas(bitmap);
+        canvas.scale(360f/surface.getWidth(),640f/surface.getHeight());
+        surface.draw(canvas);
+        int[] colors=new int[24];
+        for(int i=0;i<colors.length;i++)colors[i]=bitmap.getPixel(33+(i%8)*42,140+(i/8)*28);
+        return colors;
+    }
+
+    private ArcadeManualController trainingPlayer() throws Exception {
+        Field root=TrainingActivity.class.getDeclaredField("runtime");
+        root.setAccessible(true);
+        Object state=root.get(null);
+        if(state==null)return null;
+        Field manual=state.getClass().getDeclaredField("manual");
+        manual.setAccessible(true);
+        return (ArcadeManualController)manual.get(state);
+    }
+    private float trainingPlayerX()throws Exception {
+        ArcadeManualController player=trainingPlayer();
+        if(player==null)throw new AssertionError("Manual training session is unavailable");
+        return player.env.x;
     }
 
     private void checkCollapseAndReopen() throws Exception {

@@ -67,6 +67,8 @@ jobs:
       java tests/RealGameNeuralVerify.java
       java tests/GameLabRetroVerify.java
       java tests/GameLabContractVerify.java
+      java tests/ArcadeManualVerify.java
+      java tests/GameLabPhysicsVerify.java
       java tests/SimExperienceVerify.java
       java tests/GameLabCoachVerify.java
       java -Djava.awt.headless=true tests/BubbleFixtureGeometryVerify.java

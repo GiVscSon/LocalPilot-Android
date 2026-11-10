@@ -1,6 +1,7 @@
-import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import org.localpilot.gamelab.GameLabEngine;
+import org.localpilot.gamelab.GameLabBubbleRules;
 
 /** Pure-JVM regression for the scripted laboratory controller. */
 public final class GameLabCoachTest {
@@ -16,6 +17,10 @@ public final class GameLabCoachTest {
   List<float[]> moves=List.of(swipe(.5f,.45f,.3f,.45f),
     swipe(.5f,.45f,.7f,.45f),swipe(.5f,.45f,.5f,.25f),
     swipe(.5f,.45f,.5f,.65f));
+  int occupied=0;for(int tile:g.cells){if(tile!=0){occupied++;check(tile==2||tile==4,"initial tiles are actual 2/4 spawns");}}
+  check(occupied==2,"fresh 2048 has exactly two random tiles");
+  // A merge oracle needs an explicit mergeable board, not a lucky random seed.
+  g.cells=new int[]{2,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
   int selected=GameLabCoach.choose(g,moves);
   check(selected>=0&&selected<4,"2048 legal direction");
   float[] move=moves.get(selected);
@@ -23,7 +28,18 @@ public final class GameLabCoachTest {
   var outcome=g.gesture(move[0],move[1],move[2],move[3],120);
   check(outcome==GameLabEngine.Result.CHANGED&&before!=g.fingerprint(),
     "2048 coach makes legal visible move");
-  check(g.score>=4,"coach must merge the initial pair of tiles");
+  check(g.score==4,"coach must merge the explicit pair and count only merge reward");
+  int[] compressed=GameLabCoach.swipe2048(new int[]{0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0},0);
+  check(Arrays.stream(compressed).sum()==2&&compressed[0]==2,"coach preview never invents a deterministic spawn");
+  GameLabEngine pairedA=new GameLabEngine(GameLabEngine.Game.BOARD2048,123);
+  GameLabEngine pairedB=new GameLabEngine(GameLabEngine.Game.BOARD2048,123);
+  for(int step=0;step<30;step++){
+   int chosen=GameLabCoach.choose(pairedA,moves);float[] input=moves.get(chosen);
+   pairedA.gesture(input[0],input[1],input[2],input[3],140);
+   pairedB.gesture(input[0],input[1],input[2],input[3],140);
+   check(Arrays.equals(pairedA.cells,pairedB.cells)&&pairedA.score==pairedB.score,
+     "planning cannot consume the environment's random spawn stream");
+  }
 
   GameLabEngine paddle=new GameLabEngine(GameLabEngine.Game.PADDLE,42);
   paddle.ballX=.75f;paddle.ballY=.6f;paddle.vx=0;paddle.vy=.02f;
@@ -47,6 +63,28 @@ public final class GameLabCoachTest {
   ari.playerX=.39f;
   check(GameLabCoach.choose(ari,horizontal)==2,
     "Ari keeps its distinct tap impulse; Cat Tower correction must not alter Ari semantics");
+
+  paddle.ballX=.94f;paddle.ballY=.40f;paddle.vx=.018f;paddle.vy=.02f;
+  List<float[]> wallInterceptions=List.of(swipe(.5f,.76f,.58f,.76f),
+    swipe(.5f,.76f,.63f,.76f),swipe(.5f,.76f,.68f,.76f));
+  int paddleBefore=paddle.fingerprint();float vx=paddle.vx,vy=paddle.vy;
+  check(GameLabCoach.choose(paddle,wallInterceptions)==1,
+    "paddle coach follows actual radius-aware wall bounce and visible paddle plane");
+  check(paddle.fingerprint()==paddleBefore&&paddle.vx==vx&&paddle.vy==vy,
+    "paddle trajectory planning never mutates the current game");
+  GameLabEngine bubble=new GameLabEngine(GameLabEngine.Game.BUBBLE,17);
+  Arrays.fill(bubble.cells,0);bubble.cells[3]=bubble.cells[4]=1;
+  List<float[]> shots=List.of(swipe(.5f,495f/640f,.5f,115f/640f),
+    swipe(.5f,495f/640f,.1f,115f/640f),swipe(.5f,495f/640f,.9f,115f/640f));
+  int oldBubble=bubble.fingerprint();int shotIndex=GameLabCoach.choose(bubble,shots);
+  check(bubble.fingerprint()==oldBubble,"physical bubble previews are read-only");
+  float[] aimed=shots.get(shotIndex);
+  int[] predicted=bubble.cells.clone();
+  var shot=GameLabBubbleRules.fire(predicted,8,1,aimed[2]*360,aimed[3]*640);
+  check(shot.placed()&&shot.cleared()>=3,"coach aims at a physical connected color match");
+  check(bubble.gesture(aimed[0],aimed[1],aimed[2],aimed[3],140)==GameLabEngine.Result.CHANGED
+      &&Arrays.equals(predicted,bubble.cells)&&bubble.score==(shot.cleared()+shot.dropped())*10,
+    "selected bubble action produces the predicted actual collision/clear/drop outcome");
 
   GameLabEngine protectedSwap=new GameLabEngine(GameLabEngine.Game.PROTECTED_SWAP,17);
   check(protectedSwap.protectedCell(0)&&protectedSwap.protectedCell(1),

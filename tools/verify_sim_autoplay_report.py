@@ -18,7 +18,8 @@ GAMES = {
     "BOARD2048", "HEXON", "PROTECTED_SWAP", "CAT_TOWER",
 }
 COLUMNS = ("game", "episode", "step", "result", "score_before",
-           "score_after", "from_x", "from_y", "to_x", "to_y")
+           "score_after", "from_x", "from_y", "to_x", "to_y",
+           "tick_score_before", "tick_score_after")
 VALID_RESULTS = {"CHANGED", "NO_CHANGE", "BLOCKED"}
 MAX_BYTES = 512 * 1024
 
@@ -67,6 +68,10 @@ def validate(directory: pathlib.Path) -> dict:
     if not 1 <= steps <= 80:
         raise ValueError("invalid step bound")
     validate_seed_split(report)
+    if (report.get("physics_rules") != "2048-random-spawn_bubble-ray_paddle-bricks-v1"
+            or report.get("physics_ticks_per_action") != 3
+            or report.get("evaluation_score_attribution") != "EPISODE_TOTAL_SPLIT_PHYSICS_GESTURE"):
+        raise ValueError("missing or incompatible physics measurement version")
     expected_train = len(GAMES) * train_episodes * steps
     expected_eval = len(GAMES) * eval_episodes * steps
     if expected_train > 1024 or report["training_events"] != expected_train:
@@ -102,9 +107,11 @@ def validate(directory: pathlib.Path) -> dict:
         raise ValueError("training does not cover all ten games")
 
     evaluations = {}
+    evaluation_scores = {}
     for name in ("random", "lab-policy", "scripted"):
         filename = directory / f"evaluation-{name}.csv"
         counts = {game: [0, 0] for game in GAMES}
+        traces = {}
         with filename.open(encoding="utf-8", newline="") as handle:
             reader = csv.DictReader(handle)
             if reader.fieldnames != list(COLUMNS):
@@ -123,11 +130,44 @@ def validate(directory: pathlib.Path) -> dict:
                     raise ValueError("evaluation episode outside range")
                 if not 0 <= int(item["step"]) < steps:
                     raise ValueError("evaluation step outside range")
+                key = (game, int(item["episode"]), int(item["step"]))
+                if key in traces:
+                    raise ValueError("duplicate evaluation transition")
+                traces[key] = item
+
         if sum(x[0] for x in counts.values()) != expected_eval:
             raise ValueError("evaluation is incomplete")
         if any(x[0] != eval_episodes * steps for x in counts.values()):
             raise ValueError("uneven game evaluation")
         evaluations[name] = counts
+        score_metrics = {}
+        for game in GAMES:
+            total_score = total_physics = total_gesture = 0
+            for episode in range(eval_episodes):
+                previous = physics = gesture = 0
+                for step in range(steps):
+                    item = traces[(game, episode, step)]
+                    tick_before, tick_after, before, after = (
+                        int(item[field]) for field in
+                        ("tick_score_before", "tick_score_after", "score_before", "score_after"))
+                    if any(n < 0 or n > 10000000 for n in (tick_before, tick_after, before, after)):
+                        raise ValueError("invalid evaluation score")
+                    if tick_before != previous or tick_after != before:
+                        raise ValueError("physics/gesture score chronology mismatch")
+                    if item["result"] != "CHANGED" and before != after:
+                        raise ValueError("no-change input falsely earns score")
+                    physics += tick_after - tick_before
+                    gesture += after - before
+                    previous = after
+                if physics + gesture != previous:
+                    raise ValueError("episode score attribution mismatch")
+                total_score += previous
+                total_physics += physics
+                total_gesture += gesture
+            score_metrics[game] = (total_score / eval_episodes,
+                                  total_physics / eval_episodes,
+                                  total_gesture / eval_episodes)
+        evaluation_scores[name] = score_metrics
 
     found = set()
     for row in report["games"]:
@@ -152,6 +192,12 @@ def validate(directory: pathlib.Path) -> dict:
             raise ValueError("learned change rate not supported by CSV")
         if abs(row["scripted_change_rate"] - 100 * c[1] / c[0]) > 0.002:
             raise ValueError("scripted change rate not supported by CSV")
+        for name, prefix in (("random", "random"), ("lab-policy", "lab"), ("scripted", "scripted")):
+            values = evaluation_scores[name][game]
+            for suffix, observed in zip(("mean_score", "physics_score", "gesture_score"), values):
+                claimed = float(row[prefix + "_" + suffix])
+                if not math.isfinite(claimed) or abs(claimed - observed) > 0.002:
+                    raise ValueError("score not supported by evaluation CSV")
         delta = row["lab_change_rate"] - row["random_change_rate"]
         if abs(delta - row["delta_percentage_points"]) > 0.002:
             raise ValueError("evaluation delta mismatch")

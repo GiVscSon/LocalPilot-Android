@@ -317,6 +317,13 @@ def cmd_unified_pipeline(args: argparse.Namespace) -> None:
     print(str(run(command, timeout=7200)))
 
 
+def cmd_nes_lab(args: argparse.Namespace) -> None:
+    """Use the reviewed NES runner; ROM data cannot authorize Android input."""
+    command = [sys.executable, str(ROOT / "scripts" / "nes_lab.py"),
+               args.nes_action, *args.nes_arguments]
+    print(str(run(command, timeout=7200)))
+
+
 def parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description=__doc__)
     sub = p.add_subparsers(dest="action", required=True)
@@ -345,6 +352,11 @@ def parser() -> argparse.ArgumentParser:
     unified.add_argument("--apk")
     unified.add_argument("--require-sdk", action="store_true")
     unified.set_defaults(func=cmd_unified_pipeline)
+    nes = sub.add_parser("nes", help="Run the ROM-bound NES laboratory without Android gestures")
+    nes.add_argument("nes_action", choices=("smoke", "train", "record"))
+    nes.add_argument("nes_arguments", nargs=argparse.REMAINDER,
+                     help="Arguments forwarded to scripts/nes_lab.py")
+    nes.set_defaults(func=cmd_nes_lab)
     install = sub.add_parser("install", help="Explicit ADB APK install without uninstall/pm clear")
     install.add_argument("--serial", required=True)
     install.add_argument("--apk", required=True)

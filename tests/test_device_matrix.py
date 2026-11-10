@@ -1,7 +1,9 @@
 """Acceptance metadata must distinguish an actual tablet profile from a phone."""
 from pathlib import Path
 import importlib.util
+import json
 import os
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -45,3 +47,37 @@ class DeviceMatrix(unittest.TestCase):
                              ((35,'tablet','pixel_c'), {'phone_geometry':True})):
             with self.subTest(args=args, kwargs=kwargs), self.assertRaises(RuntimeError):
                 self.metadata(*args, **kwargs)
+
+    def test_accessibility_settings_preserve_write_and_failure_states(self):
+        component = runner.PACKAGE + '/org.localpilot.android.PilotService'
+        with tempfile.TemporaryDirectory() as folder, patch.object(runner, 'OUT', Path(folder)), \
+                patch.object(runner, 'command', side_effect=[component + '\n', '1\n', 'null\n', '0\n']):
+            runner.record_accessibility_setup('after-enable', True)
+            runner.record_accessibility_setup('failure', True)
+            enabled = json.loads((Path(folder) / 'accessibility-settings-after-enable.json').read_text())
+            failed = json.loads((Path(folder) / 'accessibility-settings-failure.json').read_text())
+            self.assertEqual(component, enabled['enabled_accessibility_services'])
+            self.assertEqual('1', enabled['accessibility_enabled'])
+            self.assertTrue(enabled['pilot_component_enabled'])
+            self.assertEqual('0', failed['accessibility_enabled'])
+            self.assertFalse(failed['pilot_component_enabled'])
+
+    def test_diagnostics_are_bounded_and_read_failures_do_not_abort_collection(self):
+        with tempfile.TemporaryDirectory() as folder, patch.object(runner, 'OUT', Path(folder)), \
+                patch.object(runner, 'command', side_effect=[
+                    'x' * 5000, subprocess.TimeoutExpired('settings', 2), 'service\n' * 5000]):
+            runner.record_accessibility_setup('failure', True)
+            runner.record_pilot_service_failure(True)
+            report = json.loads((Path(folder) / 'accessibility-settings-failure.json').read_text())
+            self.assertEqual(2048, len(report['enabled_accessibility_services']))
+            self.assertTrue(report['service_list_truncated'])
+            self.assertIn('accessibility_enabled_read_error', report)
+            self.assertEqual(8000, len((Path(folder) / 'pilot-service-state.txt').read_text()))
+
+    def test_physical_device_diagnostics_never_query_or_write(self):
+        with tempfile.TemporaryDirectory() as folder, patch.object(runner, 'OUT', Path(folder)), \
+                patch.object(runner, 'command') as command:
+            runner.record_accessibility_setup('failure', False)
+            runner.record_pilot_service_failure(False)
+            command.assert_not_called()
+            self.assertEqual([], list(Path(folder).iterdir()))

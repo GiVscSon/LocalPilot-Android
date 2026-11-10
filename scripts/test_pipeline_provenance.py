@@ -91,6 +91,9 @@ class BuildTestEvidence(unittest.TestCase):
             self.assertTrue(any(':app:assembleDebug' in command and ':app:lintDebug' in command
                                 for command in commands))
             self.assertTrue(any('tests/nes_observation_smoke.cjs' in command for command in commands))
+            self.assertTrue(any('tests/nes_training_contract.cjs' in command for command in commands))
+            self.assertTrue(any('tools/nes-agent/train.cjs' in command for command in commands))
+            self.assertTrue(any('tools/nes-agent/record.cjs' in command for command in commands))
             manifest = json.loads((root / 'reports/build-test.json').read_text())
             self.assertEqual('PASS', manifest['status'])
             self.assertEqual('NOT_RUN', manifest['device_acceptance'])

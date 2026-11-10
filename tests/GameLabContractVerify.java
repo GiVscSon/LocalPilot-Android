@@ -11,6 +11,8 @@ class GameLabContractVerify {
     ToolProvider.getSystemJavaCompiler().run(null,System.out,System.err,
       "--release","17","-d",output.toString(),
       "shared/src/main/java/org/localpilot/shared/HubContract.java",
+      "game-lab/src/main/java/org/localpilot/gamelab/GameLab2048Rules.java",
+      "game-lab/src/main/java/org/localpilot/gamelab/GameLabBubbleRules.java",
       "game-lab/src/main/java/org/localpilot/gamelab/GameLabEngine.java",
       "tests/GameLabContractTest.java")!=0)
    throw new AssertionError("GameLab touch/evidence test compile");
