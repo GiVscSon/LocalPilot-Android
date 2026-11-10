@@ -16,7 +16,6 @@ jobs:
     environment: android-release
     env:
       LOCALPILOT_RELEASE_CERT_SHA256: ${{ vars.LOCALPILOT_RELEASE_CERT_SHA256 }}
-      LOCALPILOT_RELEASE_STORE_FILE: ${{ runner.temp }}/localpilot-release.jks
     steps:
       - uses: actions/checkout@v4
         with:
@@ -68,9 +67,11 @@ jobs:
           raw=base64.b64decode(os.environ['LOCALPILOT_RELEASE_KEYSTORE_B64'],validate=True)
           if not 64<=len(raw)<=1048576:
               raise SystemExit('RELEASE_QA_REJECTED: bad protected keystore size')
-          path=Path(os.environ['LOCALPILOT_RELEASE_STORE_FILE'])
+          path=Path(os.environ['RUNNER_TEMP'])/'localpilot-release.jks'
           path.write_bytes(raw)
           path.chmod(0o600)
+          with open(os.environ['GITHUB_ENV'],'a',encoding='utf-8') as env:
+              env.write('LOCALPILOT_RELEASE_STORE_FILE='+str(path)+'\n')
           PY
       - name: Build signed release variant
         env:
@@ -99,7 +100,7 @@ jobs:
           PY
       - name: Delete private key material
         if: always()
-        run: rm -f -- "$LOCALPILOT_RELEASE_STORE_FILE"
+        run: rm -f -- "$RUNNER_TEMP/localpilot-release.jks"
       - name: Upload internal QA-only signed APK
         if: success()
         uses: actions/upload-artifact@v4
