@@ -39,27 +39,27 @@ class EmbeddedModelPackagingTest(unittest.TestCase):
 
     def test_missing_model_rejected(self):
         self.pack(model=False)
-        with self.assertRaises(AssertionError):
+        with self.assertRaises(ValueError):
             mod.verify(self.apk)
 
     def test_missing_native_library_rejected(self):
         self.pack(library=False)
-        with self.assertRaises(AssertionError):
+        with self.assertRaises(ValueError):
             mod.verify(self.apk)
 
     def test_missing_license_rejected(self):
         self.pack(license=False)
-        with self.assertRaises(AssertionError):
+        with self.assertRaises(ValueError):
             mod.verify(self.apk)
 
     def test_compressed_model_rejected(self):
         self.pack(stored=False)
-        with self.assertRaises(AssertionError):
+        with self.assertRaises(ValueError):
             mod.verify(self.apk)
 
     def test_corrupt_model_rejected(self):
         self.pack(contents=b"GGUF" + b"X"*256)
-        with self.assertRaises(AssertionError):
+        with self.assertRaises(ValueError):
             mod.verify(self.apk)
 
 if __name__ == "__main__":

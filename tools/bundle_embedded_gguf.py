@@ -42,13 +42,15 @@ def sha_stream(stream, output=None, limit=450_000_000):
 
 def prepare():
     revision = REVISION
-    assert len(revision) == 40 and all(c in "0123456789abcdef" for c in revision)
+    if len(revision) != 40 or any(c not in "0123456789abcdef" for c in revision):
+        raise ValueError("Invalid pinned revision")
     tree = json.load(request(f"{BASE}/api/models/{REPO}/tree/{revision}"))
     entry = next((x for x in tree if x["path"] == NAME), None)
     if not entry or not entry.get("lfs") or not entry["lfs"].get("oid"):
         raise ValueError("Pinned LFS sha256 unavailable: refuse unverified model")
     expected = entry["lfs"]["oid"]
-    assert len(expected) == 64 and all(c in "0123456789abcdef" for c in expected)
+    if len(expected) != 64 or any(c not in "0123456789abcdef" for c in expected):
+        raise ValueError("Invalid LFS digest")
     if expected != EXPECTED_SHA256 or entry["size"] != EXPECTED_BYTES:
         raise ValueError("Official GGUF differs from reviewed pinned digest/size")
     outpath = ROOT / "models" / NAME
@@ -71,7 +73,8 @@ def prepare():
             os.unlink(temp_path)
     # Include model license and attribution inside the installed APK.
     license_bytes = request(f"{BASE}/{REPO}/resolve/{revision}/LICENSE.txt").read(100_000)
-    assert b"Apache License" in license_bytes
+    if b"Apache License" not in license_bytes:
+        raise ValueError("Model license missing")
     licenses = ROOT / "licenses"
     licenses.mkdir(exist_ok=True)
     (licenses / "MNN-Pocket-LICENSE.txt").write_bytes(license_bytes)
@@ -86,14 +89,20 @@ def verify(apk_path):
     info = json.loads(REPORT.read_text())
     with zipfile.ZipFile(apk_path) as apk:
         actual_files = set(apk.namelist())
-        assert ASSET in actual_files, "GGUF missing from APK"
-        assert "lib/arm64-v8a/liblocalpilot_embedded.so" in actual_files, "native engine missing"
-        assert "assets/licenses/MNN-Pocket-LICENSE.txt" in actual_files, "model license missing"
-        assert "assets/licenses/llama.cpp-LICENSE.txt" in actual_files, "runtime license missing"
-        assert apk.getinfo(ASSET).compress_type == zipfile.ZIP_STORED, "GGUF should be uncompressed"
+        if ASSET not in actual_files:
+            raise ValueError("GGUF missing from APK")
+        if "lib/arm64-v8a/liblocalpilot_embedded.so" not in actual_files:
+            raise ValueError("Native engine missing")
+        if "assets/licenses/MNN-Pocket-LICENSE.txt" not in actual_files:
+            raise ValueError("Model license missing")
+        if "assets/licenses/llama.cpp-LICENSE.txt" not in actual_files:
+            raise ValueError("Runtime license missing")
+        if apk.getinfo(ASSET).compress_type != zipfile.ZIP_STORED:
+            raise ValueError("GGUF should be uncompressed")
         with apk.open(ASSET) as model:
             sha, size = sha_stream(model)
-        assert sha == info["sha256"] and size == info["bytes"], "APK model digest mismatch"
+        if sha != info["sha256"] or size != info["bytes"]:
+            raise ValueError("APK model digest mismatch")
     print("BUNDLED_APK_VERIFIED", str(apk_path), sha, size)
 
 if __name__ == "__main__":
