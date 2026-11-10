@@ -317,6 +317,20 @@ def cmd_unified_pipeline(args: argparse.Namespace) -> None:
     print(str(run(command, timeout=7200)))
 
 
+def cmd_field_audit(args: argparse.Namespace) -> None:
+    """Read an explicitly exported local audit ZIP, never live device state."""
+    from field_audit_gate import inspect
+    report = inspect(Path(args.zip).expanduser())
+    serialized = json.dumps(report, ensure_ascii=False, sort_keys=True, indent=2) + "\n"
+    if args.output:
+        destination = Path(args.output).expanduser()
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_text(serialized, encoding="utf-8")
+        print("Local field audit summary saved:", destination)
+    else:
+        print(serialized, end="")
+
+
 def cmd_nes_lab(args: argparse.Namespace) -> None:
     """Use the reviewed NES runner; ROM data cannot authorize Android input."""
     command = [sys.executable, str(ROOT / "scripts" / "nes_lab.py"),
@@ -343,6 +357,10 @@ def parser() -> argparse.ArgumentParser:
     report.add_argument("--output", default="device-reports")
     report.add_argument("--screenshot", action="store_true", help="Opt in to capturing visible private screen")
     report.set_defaults(func=cmd_device_report)
+    audit = sub.add_parser("field-audit", help="Validate an exported audit ZIP; no Market acceptance or device changes")
+    audit.add_argument("--zip", required=True, help="Path to explicit AuditExport.snapshot ZIP")
+    audit.add_argument("--output", help="Optional JSON report (LOCAL_AUDIT_ONLY)")
+    audit.set_defaults(func=cmd_field_audit)
     stops = sub.add_parser("stop-report", help="Classify STOP/PAUSE/RECOVER from saved script log")
     stops.add_argument("--log", required=True)
     stops.set_defaults(func=cmd_stop_report)
