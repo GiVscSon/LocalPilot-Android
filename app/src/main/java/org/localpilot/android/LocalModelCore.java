@@ -41,6 +41,7 @@ public final class LocalModelCore {
   execute(callback,()->{
    HttpURLConnection connection=connect(LocalCoreContract.HEALTH,"GET");
    try{
+    connection.setReadTimeout(4000);
     int status=connection.getResponseCode();
     if(status!=200)return "Local model not ready (HTTP "+status+"). Keep Termux running.";
     String response=readBounded(connection.getInputStream());
@@ -50,6 +51,48 @@ public final class LocalModelCore {
       :"Local model is not ready (status: "+(state.isBlank()?"unknown":state)+").";
    }finally{release(connection);}
   });
+ }
+
+ /**
+  * End-to-end smoke check. Connection OK is not proof of intelligible inference.
+  * Probes have no history, diagnostics, coordinates, or action permission.
+  */
+ public void selfTest(Callback callback){
+  execute(callback,()->{
+   String word=probe("Reply with exactly one word: BLUE");
+   String arithmetic=probe("What is 12 + 15? Reply with the number only.");
+   if(!"BLUE".equals(word.trim())||!"27".equals(arithmetic.trim()))
+    return "Проверка качества НЕ пройдена. Сервер отвечает, но английские инструкции "+
+      "выполняются некорректно. Модель не допускается к управлению игрой.";
+   return "Проверка пройдена: BLUE и 27. Это подтверждает только простую "+
+     "англоязычную генерацию, не игровую компетентность.";
+  });
+ }
+
+ private String probe(String prompt)throws Exception{
+  JSONObject request=new JSONObject();
+  request.put("stream",false);
+  request.put("temperature",0.0);
+  request.put("max_tokens",16);
+  request.put("messages",new JSONArray()
+    .put(new JSONObject().put("role","system")
+      .put("content","Answer in English. Obey the exact output format. No explanations."))
+    .put(new JSONObject().put("role","user").put("content",prompt)));
+  byte[] data=request.toString().getBytes(StandardCharsets.UTF_8);
+  HttpURLConnection connection=connect(LocalCoreContract.COMPLETIONS,"POST");
+  try{
+   connection.setDoOutput(true);
+   connection.setRequestProperty("Content-Type","application/json; charset=utf-8");
+   connection.setFixedLengthStreamingMode(data.length);
+   try(OutputStream out=connection.getOutputStream()){out.write(data);}
+   if(connection.getResponseCode()!=200)
+    throw new java.io.IOException("Probe HTTP error");
+   JSONObject choice=new JSONObject(readBounded(connection.getInputStream()))
+     .getJSONArray("choices").getJSONObject(0);
+   if("length".equals(choice.optString("finish_reason","")))
+    return "";
+   return choice.getJSONObject("message").optString("content","");
+  }finally{release(connection);}
  }
 
  public void ask(String question,String snapshot,Callback callback){
@@ -109,7 +152,7 @@ public final class LocalModelCore {
   HttpURLConnection connection=(HttpURLConnection)new URL(url).openConnection(Proxy.NO_PROXY);
   active=connection;
   connection.setConnectTimeout(2500);
-  connection.setReadTimeout(12000);
+  connection.setReadTimeout(30000);
   connection.setRequestMethod(method);
   connection.setInstanceFollowRedirects(false);
   connection.setUseCaches(false);
