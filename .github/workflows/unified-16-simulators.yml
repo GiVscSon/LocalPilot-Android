@@ -123,6 +123,12 @@ jobs:
         run: python3 ci/compat_unified081_test.py
       - name: Integrate and run real JVM test suite
         run: python3 tools/integrate_adaptive_engine_into_081.py
+      - name: Restore reviewed one-APK integration after legacy model overlay
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 ci/restore_unified_one_apk.py
+          ./gradlew --no-daemon :app:mergeDebugAssets
       - name: Assemble ONE user APK and optional external-only GameLab test target
         run: |
           chmod +x ./gradlew
