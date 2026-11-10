@@ -131,6 +131,10 @@ status=new TextView(this);status.setTextSize(12);ScrollView stats=new ScrollView
    clearManualTouch();
    if(runtime.startManual(selected())){
     buildManualControls();
+    // Android UI has a usable gamepad immediately, not one refresh tick later.
+    manualControls.setVisibility(View.VISIBLE);
+    manualHelp.setVisibility(View.VISIBLE);
+    manualReset.setEnabled(true);
     status.setText(runtime.message);
    }
   });
