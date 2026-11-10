@@ -7,7 +7,7 @@ public final class Board2048StallRecoveryTest {
   try{action.run();throw new AssertionError(reason);}catch(IllegalArgumentException expected){checks++;}
  }
  public static void main(String[] args){
-  Board2048 before=new Board2048(new int[]{2,0,0,0,4,2,0,0,8,4,0,0,16,8,2,0});
+  Board2048 before=new Board2048(new int[]{2,4,8,16,4,8,16,32,8,16,32,64,16,32,64,128});
   Board2048StallRecovery guard=new Board2048StallRecovery();
   int best=before.choose();
   check(best>=0,"board has legal best direction");
