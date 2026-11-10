@@ -23,3 +23,8 @@ android {
 
 // Share the already verified pinned JSNES assets; do not download a second core.
 tasks.named('preBuild').configure { dependsOn ':game-lab:bundleVerifiedNesEngine' }
+// Asset snapshot must wait for the pinned emulator bundle, not just preBuild.
+tasks.matching { it.name == 'mergeDebugAssets' }.configureEach {
+ dependsOn ':game-lab:bundleVerifiedNesEngine'
+}
+
