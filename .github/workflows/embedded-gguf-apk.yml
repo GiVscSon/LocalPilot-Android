@@ -1,0 +1,69 @@
+name: Self-contained Android APK · embedded GGUF
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'app/**'
+      - 'tools/bundle_embedded_gguf.py'
+      - '.github/workflows/embedded-gguf-apk.yml'
+      - 'docs/EMBEDDED_MNN_GGUF.ru.md'
+permissions:
+  contents: read
+jobs:
+  embedded:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 65
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Install Android SDK and native toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
+            'platforms;android-35' 'build-tools;35.0.0' 'cmake;3.22.1' 'ndk;27.2.12479018'
+      - name: Fetch pinned official llama.cpp source
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p third_party/llama.cpp
+          cd third_party/llama.cpp
+          git init
+          git remote add origin https://github.com/ggml-org/llama.cpp.git
+          git fetch --depth 1 origin 2b66bfbf7107e43f5cd2fe99802ff6e872e4c4d0
+          git checkout --detach FETCH_HEAD
+          test "$(git rev-parse HEAD)" = "2b66bfbf7107e43f5cd2fe99802ff6e872e4c4d0"
+      - name: Download official GGUF and validate original LFS SHA256
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/bundle_embedded_gguf.py prepare
+      - name: Build arm64 APK with native inference and bundled weights
+        shell: bash
+        run: |
+          set -euo pipefail
+          ./gradlew --no-daemon -PbundleLocalModel=true :app:assembleDebug
+      - name: Verify native library, APK model checksum, packaging and signature
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK=app/build/outputs/apk/debug/app-debug.apk
+          python3 tools/bundle_embedded_gguf.py verify "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$APK"
+          sha256sum "$APK" | tee build/reports/embedded-apk.sha256
+      - name: Publish self-contained APK and verified source provenance
+        uses: actions/upload-artifact@v4
+        with:
+          name: LocalPilot-Embedded-MNN-GGUF-${{ github.sha }}
+          if-no-files-found: error
+          retention-days: 21
+          path: |
+            app/build/outputs/apk/debug/app-debug.apk
+            build/reports/embedded-gguf.json
+            build/reports/embedded-apk.sha256
