@@ -62,6 +62,7 @@ jobs:
       java tests/PaddleTransferVerify.java
       java tests/WeightSpaceSkillsVerify.java
       java tests/TextRepetitionGuardVerify.java
+      java tests/LocalCoreContractVerify.java
       java tests/JumperWeightShadowVerify.java
       java tests/VisionV2Verify.java
       java tests/RealGameNeuralVerify.java
