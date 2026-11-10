@@ -28,10 +28,10 @@ jobs:
       - name: Reject unreviewed SHA or absent signing credentials
         env:
           EXPECTED_SHA: ${{ inputs.expected_sha }}
-      LOCALPILOT_RELEASE_KEYSTORE_B64: ${{ secrets.LOCALPILOT_RELEASE_KEYSTORE_B64 }}
-      LOCALPILOT_RELEASE_STORE_PASSWORD: ${{ secrets.LOCALPILOT_RELEASE_STORE_PASSWORD }}
-      LOCALPILOT_RELEASE_KEY_ALIAS: ${{ secrets.LOCALPILOT_RELEASE_KEY_ALIAS }}
-      LOCALPILOT_RELEASE_KEY_PASSWORD: ${{ secrets.LOCALPILOT_RELEASE_KEY_PASSWORD }}
+          LOCALPILOT_RELEASE_KEYSTORE_B64: ${{ secrets.LOCALPILOT_RELEASE_KEYSTORE_B64 }}
+          LOCALPILOT_RELEASE_STORE_PASSWORD: ${{ secrets.LOCALPILOT_RELEASE_STORE_PASSWORD }}
+          LOCALPILOT_RELEASE_KEY_ALIAS: ${{ secrets.LOCALPILOT_RELEASE_KEY_ALIAS }}
+          LOCALPILOT_RELEASE_KEY_PASSWORD: ${{ secrets.LOCALPILOT_RELEASE_KEY_PASSWORD }}
         run: |
           python3 - <<'PY'
           import os,re,subprocess
