@@ -5,6 +5,7 @@ on:
     branches:
       - feature/unified-16-simulators-build-20261107
       - integration/unified-one-apk-script-engine-20261108
+      - fix/unified-engine-validation-20261108
   pull_request:
   workflow_dispatch:
 
