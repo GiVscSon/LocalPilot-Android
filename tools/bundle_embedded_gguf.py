@@ -11,6 +11,11 @@ import zipfile
 
 REPO = "taobao-mnn/MNN-Pocket-0.3B-GGUF"
 NAME = "MNN-Pocket-0.3B-Instruct-Q4_1.gguf"
+# Both hashes are independently checked in the signed Android APK.
+# A model upgrade must change these pinned values in source review.
+REVISION = "791b7e92fa790a5ca5bbd7604feb1ce1d2429d14"
+EXPECTED_SHA256 = "a281c127e388b16537fd3f5d31ab32d3f87739e6dc514ac1093c80d9eac8d097"
+EXPECTED_BYTES = 191_896_672
 BASE = "https://huggingface.co"
 ROOT = pathlib.Path("build/embedded-model-assets")
 REPORT = pathlib.Path("build/reports/embedded-gguf.json")
@@ -36,8 +41,7 @@ def sha_stream(stream, output=None, limit=450_000_000):
     return digest.hexdigest(), size
 
 def prepare():
-    info = json.load(request(f"{BASE}/api/models/{REPO}"))
-    revision = info["sha"]
+    revision = REVISION
     assert len(revision) == 40 and all(c in "0123456789abcdef" for c in revision)
     tree = json.load(request(f"{BASE}/api/models/{REPO}/tree/{revision}"))
     entry = next((x for x in tree if x["path"] == NAME), None)
@@ -45,6 +49,8 @@ def prepare():
         raise ValueError("Pinned LFS sha256 unavailable: refuse unverified model")
     expected = entry["lfs"]["oid"]
     assert len(expected) == 64 and all(c in "0123456789abcdef" for c in expected)
+    if expected != EXPECTED_SHA256 or entry["size"] != EXPECTED_BYTES:
+        raise ValueError("Official GGUF differs from reviewed pinned digest/size")
     outpath = ROOT / "models" / NAME
     outpath.parent.mkdir(parents=True, exist_ok=True)
     url = f"{BASE}/{REPO}/resolve/{revision}/{NAME}"
