@@ -15,10 +15,6 @@ jobs:
     timeout-minutes: 75
     environment: android-release
     env:
-      LOCALPILOT_RELEASE_KEYSTORE_B64: ${{ secrets.LOCALPILOT_RELEASE_KEYSTORE_B64 }}
-      LOCALPILOT_RELEASE_STORE_PASSWORD: ${{ secrets.LOCALPILOT_RELEASE_STORE_PASSWORD }}
-      LOCALPILOT_RELEASE_KEY_ALIAS: ${{ secrets.LOCALPILOT_RELEASE_KEY_ALIAS }}
-      LOCALPILOT_RELEASE_KEY_PASSWORD: ${{ secrets.LOCALPILOT_RELEASE_KEY_PASSWORD }}
       LOCALPILOT_RELEASE_CERT_SHA256: ${{ vars.LOCALPILOT_RELEASE_CERT_SHA256 }}
       LOCALPILOT_RELEASE_STORE_FILE: ${{ runner.temp }}/localpilot-release.jks
     steps:
@@ -32,6 +28,10 @@ jobs:
       - name: Reject unreviewed SHA or absent signing credentials
         env:
           EXPECTED_SHA: ${{ inputs.expected_sha }}
+      LOCALPILOT_RELEASE_KEYSTORE_B64: ${{ secrets.LOCALPILOT_RELEASE_KEYSTORE_B64 }}
+      LOCALPILOT_RELEASE_STORE_PASSWORD: ${{ secrets.LOCALPILOT_RELEASE_STORE_PASSWORD }}
+      LOCALPILOT_RELEASE_KEY_ALIAS: ${{ secrets.LOCALPILOT_RELEASE_KEY_ALIAS }}
+      LOCALPILOT_RELEASE_KEY_PASSWORD: ${{ secrets.LOCALPILOT_RELEASE_KEY_PASSWORD }}
         run: |
           python3 - <<'PY'
           import os,re,subprocess
@@ -59,6 +59,8 @@ jobs:
           python3 scripts/unified_pipeline.py verify
           python3 training/sync_rl_lab_to_android.py
       - name: Load protected keystore without logging bytes
+        env:
+          LOCALPILOT_RELEASE_KEYSTORE_B64: ${{ secrets.LOCALPILOT_RELEASE_KEYSTORE_B64 }}
         run: |
           python3 - <<'PY'
           import os,base64
@@ -71,6 +73,10 @@ jobs:
           path.chmod(0o600)
           PY
       - name: Build signed release variant
+        env:
+          LOCALPILOT_RELEASE_STORE_PASSWORD: ${{ secrets.LOCALPILOT_RELEASE_STORE_PASSWORD }}
+          LOCALPILOT_RELEASE_KEY_ALIAS: ${{ secrets.LOCALPILOT_RELEASE_KEY_ALIAS }}
+          LOCALPILOT_RELEASE_KEY_PASSWORD: ${{ secrets.LOCALPILOT_RELEASE_KEY_PASSWORD }}
         run: ./gradlew --no-daemon :app:assembleRelease :app:lintRelease
       - name: Audit source parity, package and pinned certificate
         run: |
