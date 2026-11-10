@@ -73,6 +73,40 @@ jobs:
           set -euo pipefail
           APK=app/build/outputs/apk/debug/app-debug.apk
           python3 tools/bundle_embedded_gguf.py verify "$APK"
+          unzip -p "$APK" lib/arm64-v8a/liblocalpilot_embedded.so > build/reports/liblocalpilot_embedded.so
+          readelf -h build/reports/liblocalpilot_embedded.so | grep -q 'Machine:.*AArch64'
+          for symbol in nativeInfer nativeInterrupt nativeRelease; do
+            readelf -Ws build/reports/liblocalpilot_embedded.so \
+              | grep -q "Java_org_localpilot_android_EmbeddedGgufRuntime_${symbol}"
+          done
+          readelf -d build/reports/liblocalpilot_embedded.so \
+            | grep NEEDED | sed -E 's/.*\\[([^]]+)\\].*/\\1/' > build/reports/native-dependencies.txt
+          if grep -Ev '^(liblog|libm|libdl|libc)\\.so dump badging "$APK" \
+            | grep "^package: name='org.localpilot.android.dev.mnnembedded' "
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$APK"
+          sha256sum "$APK" | tee build/reports/embedded-apk.sha256
+      - name: Publish native inference smoke-test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: LocalPilot-Embedded-JNI-Smoke-${{ github.sha }}
+          if-no-files-found: ignore
+          path: build/reports/embedded-host-smoke.txt
+      - name: Publish self-contained APK and verified source provenance
+        uses: actions/upload-artifact@v4
+        with:
+          name: LocalPilot-Embedded-MNN-GGUF-${{ github.sha }}
+          if-no-files-found: error
+          retention-days: 21
+          path: |
+            app/build/outputs/apk/debug/app-debug.apk
+            build/reports/embedded-gguf.json
+            build/reports/embedded-apk.sha256
+ build/reports/native-dependencies.txt; then
+            echo 'Unsupported Android native dependency' >&2
+            exit 1
+          fi
+          rm build/reports/liblocalpilot_embedded.so
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" \
             | grep "^package: name='org.localpilot.android.dev.mnnembedded' "
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$APK"
