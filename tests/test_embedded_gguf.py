@@ -31,6 +31,7 @@ class EmbeddedModelPackagingTest(unittest.TestCase):
                 out.writestr("lib/arm64-v8a/liblocalpilot_embedded.so", b"ELF")
             if license:
                 out.writestr("assets/licenses/MNN-Pocket-LICENSE.txt",b"Apache License")
+                out.writestr("assets/licenses/llama.cpp-LICENSE.txt",b"MIT License")
 
     def test_correct_apk(self):
         self.pack()
