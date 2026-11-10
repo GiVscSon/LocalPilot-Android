@@ -19,7 +19,7 @@ import sys
 import zipfile
 
 REPO = "GiVscSon/LocalPilot-Android"
-BRANCH = "integration/unified-one-apk-script-engine-20261108"
+BRANCH = "main"
 WORKFLOW = "unified-16-simulators.yml"
 ARTIFACT = "localpilot-unified-script-one-apk-debug"
 PACKAGE = "org.localpilot.android.dev.install1081"
