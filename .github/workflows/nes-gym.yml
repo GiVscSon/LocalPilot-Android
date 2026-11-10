@@ -86,19 +86,19 @@ jobs:
           import json,pathlib,hashlib
           root=pathlib.Path("build/nes-gym/learned")
           p=json.loads((root/"nes-policy.json").read_text())
-            assert p["schema"]=="nes-visual-q-v2"
+          assert p["schema"]=="nes-visual-q-v2"
           assert p["source"]=="NES_EMULATED"
           assert p["eligible_for_market_reward"] is False
           assert p["android_input_authorized"] is False
           assert p["rom_sha256"]==hashlib.sha256(pathlib.Path("build/nes-gym/training.nes").read_bytes()).hexdigest()
-            assert p["core_sha256"]==hashlib.sha256(pathlib.Path("build/nes-gym/core/package/dist/jsnes.min.js").read_bytes()).hexdigest()
-            import subprocess
-            assert p["git_sha"]==subprocess.check_output(["git","rev-parse","HEAD"],text=True).strip()
-            assert p["git_dirty"] is False
+          assert p["core_sha256"]==hashlib.sha256(pathlib.Path("build/nes-gym/core/package/dist/jsnes.min.js").read_bytes()).hexdigest()
+          import subprocess
+          assert p["git_sha"]==subprocess.check_output(["git","rev-parse","HEAD"],text=True).strip()
+          assert p["git_dirty"] is False
           assert p["evaluation"]["learned"]["successes"]>=10
-            assert p["evaluation"]["learned"]["mean_reward"]>p["evaluation"]["random"]["mean_reward"]
-            assert p["evaluation"]["no_leakage"]["passed"] is True
-            assert p["acceptance"]["passed"] is True
+          assert p["evaluation"]["learned"]["mean_reward"]>p["evaluation"]["random"]["mean_reward"]
+          assert p["evaluation"]["no_leakage"]["passed"] is True
+          assert p["acceptance"]["passed"] is True
           assert len((root/"nes-episodes.jsonl").read_text().splitlines())==160
           print("NES_REAL_VISUAL_TRAINING_CHECKPOINT_PASS")
           PY
