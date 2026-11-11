@@ -49,13 +49,16 @@ public final class LocalCoreActivity extends Activity {
      "Переключение режима вызывает STOP и требует новой привязки окна.");
    TextView mode=label(layout,"Режим MNN 2048: выключен");
    PilotService connected=PilotService.instance;
-   if(connected!=null&&connected.mnn2048Enabled())
+   if(connected instanceof Neural2048Access enabled&&enabled.mnn2048Enabled())
     mode.setText("Режим MNN 2048: включён (до завершения службы)");
    button(layout,"Включить / выключить MNN 2048",()->{
     PilotService service=PilotService.instance;
     if(service==null){mode.setText("Сначала включите службу специальных возможностей LocalPilot");return;}
-    service.setMnn2048Enabled(!service.mnn2048Enabled());
-    mode.setText(service.mnn2048Enabled()
+    if(!(service instanceof Neural2048Access neural)){
+     mode.setText("Установленный игровой движок не поддерживает MNN 2048. Ввод отключён.");return;
+    }
+    neural.setMnn2048Enabled(!neural.mnn2048Enabled());
+    mode.setText(neural.mnn2048Enabled()
        ?"MNN 2048 включена. Вернитесь в игру и заново привяжите окно."
        :"MNN 2048 выключена. Используется проверенный CPU-контроллер.");
    });
