@@ -220,6 +220,8 @@ public final class ModelLabStore {
    while((n=in.read(buf))!=-1){
     copied+=n;
     if(expectedBytes>0&&copied>expectedBytes)throw new SecurityException("Размер модели не совпадает");
+    if(Thread.currentThread().isInterrupted())
+     throw new java.io.InterruptedIOException("Загрузка модели отменена");
     if(progress!=null&&(copied%(4L*1024*1024))<n)
      progress.onBytes("Скачивание GGUF",copied,expectedBytes);
     if(copied>MAX_IMPORT_BYTES)throw new IllegalArgumentException("GGUF превышает лимит 3,5 ГБ");
@@ -324,14 +326,18 @@ public final class ModelLabStore {
      "Файл mmproj можно привязать только к импортированной модели");
    Entry next=found.withProjector(file.filename,file.bytes,file.sha);
    int index=entries.indexOf(found);
-   entries.set(index,next);persist();return next;
+   entries.set(index,next);
+   try{persist();}catch(Exception failure){entries.set(index,found);throw failure;}
+   return next;
   }
   String id="import:"+file.sha.substring(0,16);
   Entry existing=find(id);
   if(existing!=null)return existing;
   Entry next=new Entry(id,display(label),file.filename,file.bytes,file.sha,
       null,0,null,false);
-  entries.add(next);persist();return next;
+  entries.add(next);
+  try{persist();}catch(Exception failure){entries.remove(next);throw failure;}
+  return next;
  }
  private File ensure(String name,long bytes,String sha,boolean bundled)throws Exception{
   if(!simpleName(name)||sha==null||!sha.matches("[0-9a-f]{64}")||
@@ -381,7 +387,7 @@ public final class ModelLabStore {
   Entry current=find(model.id);
   if(current==null||current.bundled)throw new IllegalArgumentException("Встроенную модель нельзя удалить");
   entries.remove(current);
-  persist();
+  try{persist();}catch(Exception failure){entries.add(current);throw failure;}
   // Imported files are addressed by SHA. Do not delete a blob used by another model.
   for(String filename:new String[]{current.modelName,current.projectorName}){
    if(filename==null)continue;
