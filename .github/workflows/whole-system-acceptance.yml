@@ -16,6 +16,10 @@ on:
       - 'game-lab/src/main/java/org/localpilot/gamelab/NesExperimentPolicy.java'
       - 'tests/nes_controller_framehold.cjs'
       - 'tests/ModelLabPolicyVerify.java'
+      - 'tests/ModelLabCatalogVerify.java'
+      - 'tests/NesRomDownloadVerify.java'
+      - 'tests/nes_real_rom_smoke.cjs'
+      - 'tools/verify_public_nes.py'
       - 'settings.gradle'
       - '.github/workflows/whole-system-acceptance.yml'
 permissions:
@@ -67,6 +71,11 @@ jobs:
           node tests/jsnes_nes_smoke.cjs \
             build/integration/core/package/dist/jsnes.min.js \
             build/integration/rom/homebrew.nes
+          # A REAL author-published ROM from a pinned MIT release, not the test cartridge.
+          python3 tools/verify_public_nes.py build/integration/rom/void-lancer.nes
+          node tests/nes_real_rom_smoke.cjs \
+            build/integration/core/package/dist/jsnes.min.js \
+            build/integration/rom/void-lancer.nes
           node tests/nes_bridge_e2e.cjs \
             build/integration/core/package/dist/jsnes.min.js \
             build/integration/rom/homebrew.nes \
@@ -75,6 +84,8 @@ jobs:
           java tests/NesExperimentPolicyVerify.java
           java tests/ModelLabPolicyVerify.java
           java tests/ModelLabComputePolicyVerify.java
+          java tests/ModelLabCatalogVerify.java
+          java tests/NesRomDownloadVerify.java
       - name: Verify script agents and ten-game CPU simulator training remain isolated
         run: |
           set -euo pipefail
