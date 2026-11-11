@@ -152,7 +152,8 @@ public final class ModelLabActivity extends Activity {
          boolean validGpu=validBenchmarkText(gpuAnswer)&&engine.lastGpuLayers()>0;
          compute.benchmark(choice.id,true,gpuMs,validGpu);
          computeStatus.setText(compute.summary(choice.id)+
-           (validGpu?" · GPU реально использован":" · GPU не задействован или ошибка")+
+           (validGpu?" · offload инициализирован, фактическую загрузку GPU проверь на устройстве":
+             " · GPU не задействован или ошибка")+
            ". Автоматический режим выберет только измеренно быстрый backend.");
         });
        }catch(RuntimeException error){

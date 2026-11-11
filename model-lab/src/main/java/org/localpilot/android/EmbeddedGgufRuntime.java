@@ -38,7 +38,7 @@ public final class EmbeddedGgufRuntime {
  private volatile int lastGpuLayers;
  public boolean busy(){return busy.get();}
  public int lastGpuLayers(){return lastGpuLayers;}
- /** Read-only GPU discovery, only on explicit user click. No offload yet. */
+ /** Read-only ggml GPU discovery, only on explicit user click. */
  public void probeGpu(Result callback){
   submit(callback,()->{
    if(!BuildConfig.VULKAN_COMPILED)
@@ -72,8 +72,9 @@ public final class EmbeddedGgufRuntime {
     "If the question is uncertain, say so; do not provide executable commands.",
     prompt,160,0.2f);
    lastGpuLayers=nativeLoadedGpuLayers();
-   return answer==null?"":answer+
-    "\n\n[Вычисления: "+(lastGpuLayers>0?"GPU "+lastGpuLayers+" слоёв":
+   if(answer==null||answer.isBlank())return "";
+   return answer+
+    "\n\n[Вычисления: "+(lastGpuLayers>0?"Vulkan offload запрошен · "+lastGpuLayers+" слоёв":
       requestedGpuLayers>0?"CPU, GPU не сработал":"CPU")+"]";
   });
  }
@@ -98,8 +99,9 @@ public final class EmbeddedGgufRuntime {
      "Describe only what is visible in the attached image. Mention uncertainty. "+prompt,
      copy,width,height);
    lastGpuLayers=nativeLoadedGpuLayers();
-   return answer==null?"":answer+
-     "\n\n[Вычисления: "+(lastGpuLayers>0?"GPU "+lastGpuLayers+" слоёв":
+   if(answer==null||answer.isBlank())return "";
+   return answer+
+     "\n\n[Вычисления: "+(lastGpuLayers>0?"Vulkan offload запрошен · "+lastGpuLayers+" слоёв":
        requestedGpuLayers>0?"CPU, GPU не сработал":"CPU")+"]";
   });
  }
