@@ -182,6 +182,24 @@ public final class EmbeddedGgufRuntime {
    return "MNN-Pocket · embedded GGUF · English\n"+response;
   });
  }
+ /**
+  * Propose a direction for a fully observed 4x4 turn-based board. No gestures,
+  * no coordinates, no OS permissions and no side effects on the real game.
+  * A different component must independently verify this response on a
+  * subsequently captured, stable board before any normal ActionGate dispatch.
+  */
+ public void propose2048(Board2048 board,int excludedMask,Callback callback){
+  final String question=Neural2048Verifier.prompt(board,excludedMask);
+  submit(callback,()->{
+   File file=prepare();loadLibrary();
+   String proposal=nativeInfer(file.getAbsolutePath(),
+     "You are a 2048 puzzle solver. Reply with one legal direction word only. "+
+     "No explanation, punctuation or extra tokens.",
+     question,24,0f);
+   return proposal==null?"":proposal.trim();
+  });
+ }
+
  public synchronized void close(){
   if(closed)return;
   closed=true;
