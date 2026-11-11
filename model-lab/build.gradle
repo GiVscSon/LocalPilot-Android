@@ -41,7 +41,8 @@ android {
     arguments '-DMODEL_LAB_VULKAN=ON',
       '-DVulkan_GLSLC_EXECUTABLE=' + System.getenv('ANDROID_HOME') + '/ndk/27.2.12479018/shader-tools/linux-x86_64/glslc',
       '-DSPIRV-Headers_DIR=' + rootProject.file('build/spirv-headers-install/share/cmake/SPIRV-Headers').absolutePath,
-      '-DMODEL_LAB_SPIRV_INCLUDE_DIR=' + rootProject.file('build/spirv-headers-install/include').absolutePath
+      '-DMODEL_LAB_SPIRV_INCLUDE_DIR=' + rootProject.file('build/spirv-headers-install/include').absolutePath,
+      '-DMODEL_LAB_VULKAN_HEADERS_DIR=' + rootProject.file('third_party/Vulkan-Headers/include').absolutePath
    } else {
     arguments '-DMODEL_LAB_VULKAN=OFF'
    }

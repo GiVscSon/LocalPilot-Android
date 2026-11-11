@@ -55,6 +55,22 @@ jobs:
           test -f build/spirv-headers-install/include/spirv/unified1/spirv.hpp
           test -f build/spirv-headers-install/share/cmake/SPIRV-Headers/SPIRV-HeadersConfig.cmake
           echo "SPIRV_HEAD_SRC=09913f088a1197aba4aefd300a876b2ebbaa3391"
+      - name: Install pinned Khronos Vulkan C and C++ headers
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p third_party/Vulkan-Headers
+          cd third_party/Vulkan-Headers
+          git init
+          git remote add origin https://github.com/KhronosGroup/Vulkan-Headers.git
+          git fetch --depth 1 origin 952f776f6573aafbb62ea717d871cd1d6816c387
+          git checkout --detach FETCH_HEAD
+          test "$(git rev-parse HEAD)" = 952f776f6573aafbb62ea717d871cd1d6816c387
+          cd ../..
+          test -f third_party/Vulkan-Headers/include/vulkan/vulkan.hpp
+          test -f third_party/Vulkan-Headers/include/vulkan/vulkan.h
+          test -f third_party/Vulkan-Headers/include/vulkan/vulkan_core.h
+          echo "VULKAN_HEADERS_PINNED_PASS"
       - name: Verify Auto safety gate never assumes GPU is faster
         run: |
           set -euo pipefail
