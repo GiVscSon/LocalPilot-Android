@@ -6,6 +6,8 @@ on:
       - 'model-lab/**'
       - 'app/src/main/cpp/**'
       - 'tests/ModelLabComputePolicy*.java'
+      - 'tools/bundle_optional_models.py'
+      - 'tools/bundle_embedded_gguf.py'
       - '.github/workflows/model-lab-vulkan.yml'
 permissions:
   contents: read
@@ -124,4 +126,49 @@ jobs:
           name: ModelLab-Vulkan-Experimental-ARM64-${{ github.sha }}
           retention-days: 14
           compression-level: 0
+          path: model-lab/build/outputs/apk/debug/model-lab-debug.apk
+      - name: Add all four signed and pinned models for the ONE complete Vulkan ModelLab APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/bundle_embedded_gguf.py prepare
+          python3 tools/bundle_optional_models.py prepare
+          cp third_party/llama.cpp/LICENSE build/embedded-model-assets/licenses/llama.cpp-LICENSE.txt
+          test -f build/embedded-model-assets/models/Qwen3.5-0.8B-Q4_0.gguf
+          test -f build/embedded-model-assets/models/LFM2.5-VL-450M-Q4_0.gguf
+          test -f build/embedded-model-assets/models/mmproj-LFM2.5-VL-450m-Q8_0.gguf
+      - name: Build complete preloaded Vulkan ModelLab APK on the same pinned native backend
+        shell: bash
+        run: |
+          set -euo pipefail
+          ./gradlew --no-daemon --max-workers=1 --no-parallel \
+            -Dorg.gradle.jvmargs="-Xmx5120m -XX:MaxMetaspaceSize=768m -Dfile.encoding=UTF-8" \
+            -PincludeModelLab=true -PmodelLabPreloaded=true -PmodelLabVulkan=true \
+            :model-lab:assembleDebug
+      - name: Confirm preloaded model hashes, Vulkan linkage, fixed package and APK signature
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK=model-lab/build/outputs/apk/debug/model-lab-debug.apk
+          python3 tools/bundle_embedded_gguf.py verify "$APK"
+          python3 tools/bundle_optional_models.py verify "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" \
+            | grep "^package: name='org.localpilot.modellab' "
+          unzip -p "$APK" lib/arm64-v8a/liblocalpilot_embedded.so > model-lab-preloaded-vulkan-native.so
+          readelf -h model-lab-preloaded-vulkan-native.so | grep -q 'Machine:.*AArch64'
+          readelf -d model-lab-preloaded-vulkan-native.so | grep -q 'NEEDED.*libvulkan.so'
+          if "$ANDROID_HOME/build-tools/35.0.0/aapt" dump permissions "$APK" \
+               | grep -E 'BIND_ACCESSIBILITY_SERVICE|SYSTEM_ALERT_WINDOW|MANAGE_EXTERNAL_STORAGE|FOREGROUND_SERVICE_MEDIA_PROJECTION'; then
+            echo 'ModelLab must never control real game inputs' >&2;exit 1
+          fi
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$APK"
+          sha256sum "$APK" | tee build/reports/modellab-vulkan-preloaded.sha256
+          echo 'MODELLAB_PRELOADED_VULKAN_INTEGRATED_PASS'
+      - uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: ModelLab-Vulkan-All-Models-Offline-${{ github.sha }}
+          retention-days: 14
+          compression-level: 0
+          if-no-files-found: error
           path: model-lab/build/outputs/apk/debug/model-lab-debug.apk
