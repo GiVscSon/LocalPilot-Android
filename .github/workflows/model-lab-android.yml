@@ -11,6 +11,8 @@ on:
       - 'tools/verify_on_demand_hf.py'
       - 'tests/ModelLabPolicyVerify.java'
       - 'tests/ModelLabCatalogVerify.java'
+      - 'tests/ModelLabRegistrySnapshotVerify.java'
+      - 'model-lab/src/main/java/org/localpilot/android/ModelLabRegistrySnapshot.java'
       - 'model-lab/src/main/java/org/localpilot/android/ModelLabPresetCatalog.java'
       - 'tests/ModelLabComputePolicy*.java'
       - '.github/workflows/model-lab-android.yml'
@@ -38,6 +40,7 @@ jobs:
           java tests/ModelLabPolicyVerify.java
           java tests/ModelLabComputePolicyVerify.java
           java tests/ModelLabCatalogVerify.java
+          java tests/ModelLabRegistrySnapshotVerify.java
       - name: Verify immutable Hugging Face links and approved CDN redirects (no weights)
         run: |
           python3 tools/verify_on_demand_hf.py
