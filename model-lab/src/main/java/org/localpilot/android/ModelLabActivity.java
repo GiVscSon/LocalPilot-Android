@@ -115,6 +115,11 @@ public final class ModelLabActivity extends Activity {
     return "Только текстовая стратегия, без доступа к игровым кнопкам";
    },false);
   });
+  button(col,"STOP · отменить локальную генерацию",()->{
+   if(engine.requestCancel())
+    status.setText("Отмена запрошена. Движок освободится после завершения нативного вызова.");
+   else status.setText("Сейчас нет активного анализа модели.");
+  });
   title(col,"Выбор модели");
   modelPicker=new Spinner(this);
   col.addView(modelPicker);

@@ -22,6 +22,7 @@ public final class EmbeddedGgufRuntime {
  private static native boolean nativeConfigureGpuLayers(int layers);
  private static native int nativeLoadedGpuLayers();
  private static native void nativeInterrupt();
+ private static native void nativeResetInterrupt();
  private static native void nativeRelease();
  private static volatile boolean loaded;
  private static synchronized void load(){
@@ -35,9 +36,19 @@ public final class EmbeddedGgufRuntime {
  });
  private final Handler ui=new Handler(Looper.getMainLooper());
  private final AtomicBoolean busy=new AtomicBoolean();
+ private final AtomicBoolean cancelRequested=new AtomicBoolean();
  private volatile int lastGpuLayers;
  public boolean busy(){return busy.get();}
  public int lastGpuLayers(){return lastGpuLayers;}
+ /** Ask the currently running on-device inference to stop.
+  * Native model load/driver calls may not be immediately interruptible.
+  * The worker remains busy until native execution actually ends. */
+ public boolean requestCancel(){
+  if(!busy.get())return false;
+  cancelRequested.set(true);
+  if(loaded)nativeInterrupt();
+  return true;
+ }
  /** Read-only ggml GPU discovery, only on explicit user click. */
  public void probeGpu(Result callback){
   submit(callback,()->{
@@ -115,13 +126,28 @@ public final class EmbeddedGgufRuntime {
     String result;
     try{
      load();
-     result=work.run();
-     if(result==null||result.isBlank())result="Нет ответа. Модель или формат не поддерживаются этим движком.";
-     else result=ModelLabAnswer.visible(result);
+     // Reset only once for this fresh worker. If STOP arrived during library
+     // loading, restore the native flag before any inference can start.
+     nativeResetInterrupt();
+     if(cancelRequested.get()){
+      nativeInterrupt();
+      result="Анализ отменён пользователем.";
+     }else{
+      result=work.run();
+      if(cancelRequested.get())result="Анализ отменён пользователем.";
+      else if(result==null||result.isBlank())
+       result="Нет ответа. Модель или формат не поддерживаются этим движком.";
+      else result=ModelLabAnswer.visible(result);
+     }
     }catch(Exception|LinkageError error){
-     result="Ошибка локальной модели: "+error.getClass().getSimpleName()+
+     result=cancelRequested.get()?"Анализ отменён пользователем.":
+       "Ошибка локальной модели: "+error.getClass().getSimpleName()+
        (error.getMessage()==null?"":": "+error.getMessage());
-    }finally{busy.set(false);}
+    }finally{
+     // Clear before making a new job eligible, never after busy=false.
+     cancelRequested.set(false);
+     busy.set(false);
+    }
     final String done=result;
     long elapsed=SystemClock.elapsedRealtime()-start;
     ui.post(()->callback.complete(done,elapsed));

@@ -204,14 +204,20 @@ Java_org_localpilot_android_EmbeddedGgufRuntime_nativeLoadedGpuLayers(JNIEnv *,j
  return static_cast<jint>(gpuLayersLoaded);
 }
 
+// Only the serialized Java inference worker resets cancellation at the start
+// of a NEW request. Individual JNI inference entrypoints must never reset it:
+// a user STOP may race with JNI dispatch and must remain effective.
+extern "C" JNIEXPORT void JNICALL
+Java_org_localpilot_android_EmbeddedGgufRuntime_nativeResetInterrupt(JNIEnv *,jclass){
+ cancelled.store(false);
+}
 extern "C" JNIEXPORT jstring JNICALL
 Java_org_localpilot_android_EmbeddedGgufRuntime_nativeInfer(
  JNIEnv *e,jclass,jstring filename,jstring system,jstring question,jint maxTokens,jfloat temperature){
  Utf f(e,filename),s(e,system),q(e,question);
  std::lock_guard<std::mutex> guard(lock);
- cancelled.store(false);
  std::string result;
- if(init(f.str()))result=infer(s.str(),q.str(),maxTokens,temperature);
+ if(!cancelled.load()&&init(f.str()))result=infer(s.str(),q.str(),maxTokens,temperature);
  // JNI NewStringUTF expects Modified UTF-8, not 4-byte emoji sequences.
  // Reject unsupported supplementary characters rather than risking a VM abort.
  for(unsigned char byte:result){
@@ -233,9 +239,8 @@ Java_org_localpilot_android_EmbeddedGgufRuntime_nativeAnalyzeImage(
                        reinterpret_cast<jbyte*>(pixels.data()));
  if(e->ExceptionCheck())return nullptr;
  std::lock_guard<std::mutex> guard(lock);
- cancelled.store(false);
  std::string reply;
- if(init(f.str())&&!cancelled.load()){
+ if(!cancelled.load()&&init(f.str())&&!cancelled.load()){
   auto params=mtmd_context_params_default();
   params.use_gpu=gpuLayersLoaded>0;
   params.n_threads=4;

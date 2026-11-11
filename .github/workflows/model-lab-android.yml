@@ -13,6 +13,7 @@ on:
       - 'tools/bundle_embedded_gguf.py'
       - 'tools/verify_on_demand_hf.py'
       - 'tests/ModelLabPolicyVerify.java'
+      - 'tools/verify_modellab_cancel.py'
       - 'tests/ModelLabCatalogVerify.java'
       - 'tests/ModelLabRegistrySnapshotVerify.java'
       - 'model-lab/src/main/java/org/localpilot/android/ModelLabRegistrySnapshot.java'
@@ -44,6 +45,7 @@ jobs:
           java tests/ModelLabComputePolicyVerify.java
           java tests/ModelLabCatalogVerify.java
           java tests/ModelLabRegistrySnapshotVerify.java
+          python3 tools/verify_modellab_cancel.py
       - name: Verify immutable Hugging Face links and approved CDN redirects (no weights)
         run: |
           python3 tools/verify_on_demand_hf.py
