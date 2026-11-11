@@ -62,6 +62,27 @@ public final class TestDeviceActivity extends Activity {
   TextView title=label("LocalPilot · GameLab",21);
   title.setTextColor(HubContract.ACCENT);
   root.addView(title);
+  LinearLayout realRow=new LinearLayout(this);
+  root.addView(realRow);
+  addButton(realRow,"🎮 Настоящая NES · свои ROM",()->{
+   startActivity(new Intent(this,NesEmulatorActivity.class).putExtra("dendy",false));
+  });
+  addButton(realRow,"🧠 Локальные нейросети",()->{
+   try{
+    Intent models=new Intent(Intent.ACTION_MAIN)
+      .setClassName("org.localpilot.modellab","org.localpilot.android.ModelLabActivity")
+      .addCategory(Intent.CATEGORY_LAUNCHER);
+    startActivity(models);
+   }catch(android.content.ActivityNotFoundException|SecurityException absent){
+    new AlertDialog.Builder(this)
+      .setTitle("Нужен ModelLab")
+      .setMessage("Установи отдельный компактный ModelLab APK. После установки выбор моделей будет доступен здесь.")
+      .setPositiveButton("ОК",null).show();
+   }
+  });
+  TextView realNote=label("Настоящие .nes запускаются в JSNES; модели загружаются отдельно. Ниже только синтетические тесты 10 игр.",11);
+  realNote.setTextColor(HubContract.SECONDARY);
+  root.addView(realNote);
   TextView warning=label(HubContract.Evidence.SIMULATED_GAME.label
     +" • отдельное приложение • не испытание игр Маркета",12);
   warning.setTextColor(HubContract.WARNING);root.addView(warning);
