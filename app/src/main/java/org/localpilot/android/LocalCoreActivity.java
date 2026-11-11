@@ -38,9 +38,28 @@ public final class LocalCoreActivity extends Activity {
   label(layout,bundled()
    ?"Веса GGUF и нативный движок входят в APK. Termux, интернет, API-ключ и загрузка модели не нужны. При первом запуске веса проверяются и распаковываются во внутреннюю память."
    :"Главный локальный языковой backend: Termux / llama-server / 127.0.0.1:8080. Запросы на английском; облако не нужно.");
-  label(layout,"Сейчас доступна ручная диагностика обезличенных счётчиков. "+
-   "Вывод модели не может отправлять игровые жесты. Для управления реальными играми "+
-   "по-прежнему действуют визуальная проверка, STOP, ActionGate, InputPermit и TTL.");
+  label(layout,"MNN-Pocket может анализировать диагностику и, после явного включения, "+
+   "предлагать ход 2048. Нейросеть сама не выполняет жесты: каждый ход отдельно "+
+   "проверяется на свежем поле и проходит STOP, ActionGate, InputPermit и TTL.");
+  if(bundled()){
+   title(layout,"Проверяемое управление 2048",18);
+   label(layout,"Экспериментальный режим: только 2048. Модель предлагает LEFT/UP/RIGHT/DOWN. "+
+     "Правила игры и новый стабильный кадр проверяются независимо. "+
+     "Неправильный ход заменяется проверенным CPU-планом. "+
+     "Переключение режима вызывает STOP и требует новой привязки окна.");
+   TextView mode=label(layout,"Режим MNN 2048: выключен");
+   PilotService connected=PilotService.instance;
+   if(connected!=null&&connected.mnn2048Enabled())
+    mode.setText("Режим MNN 2048: включён (до завершения службы)");
+   button(layout,"Включить / выключить MNN 2048",()->{
+    PilotService service=PilotService.instance;
+    if(service==null){mode.setText("Сначала включите службу специальных возможностей LocalPilot");return;}
+    service.setMnn2048Enabled(!service.mnn2048Enabled());
+    mode.setText(service.mnn2048Enabled()
+       ?"MNN 2048 включена. Вернитесь в игру и заново привяжите окно."
+       :"MNN 2048 выключена. Используется проверенный CPU-контроллер.");
+   });
+  }
   connection=label(layout,"Нажмите «Проверить подключение».");
   button(layout,bundled()?"Проверить встроенные веса":"Проверить подключение",()->{
    try{
