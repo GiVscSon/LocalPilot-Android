@@ -84,7 +84,9 @@ public final class ModelLabActivity extends Activity {
    try{
     Intent companion=new Intent(Intent.ACTION_MAIN)
       .setClassName("org.localpilot.gamelab","org.localpilot.gamelab.TestDeviceActivity")
-      .addCategory(Intent.CATEGORY_LAUNCHER);
+      .addCategory(Intent.CATEGORY_LAUNCHER)
+      .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|
+        Intent.FLAG_ACTIVITY_CLEAR_TOP|Intent.FLAG_ACTIVITY_SINGLE_TOP);
     startActivity(companion);
    }catch(android.content.ActivityNotFoundException|SecurityException missing){
     status.setText("GameLab не установлен или недоступен. Установи GameLab APK рядом с ModelLab.");
@@ -349,6 +351,13 @@ public final class ModelLabActivity extends Activity {
   try{
    String serialized=intent.getStringExtra(NesTrial.EXTRA);
    nesTrial=NesTrial.parse(serialized);
+   // Never leave a previous experiment's screenshot available as if it
+   // represented the newly received NES trial.
+   rgb=null;nesFrameLoaded=false;width=0;height=0;
+   if(preview!=null){preview.setImageDrawable(null);preview.setVisibility(View.GONE);}
+   if(previewBitmap!=null){previewBitmap.recycle();previewBitmap=null;}
+   if(imageStatus!=null)
+    imageStatus.setText("Новый NES-эпизод: ожидаю кадр или выбери фото вручную.");
    if(nesStatus!=null)nesStatus.setText("Принят эпизод: "+nesTrial.summary()+
      "\nМожно анализировать текстовый отчёт или полученный снимок через vision GGUF. "+
      "Происхождение данных не аутентифицировано.");
@@ -373,7 +382,7 @@ public final class ModelLabActivity extends Activity {
     }
    }
   }catch(RuntimeException error){
-   nesTrial=null;
+   nesTrial=null;rgb=null;nesFrameLoaded=false;
    if(nesStatus!=null)nesStatus.setText("Неправильный или повреждённый NES-эпизод");
   }
  }
