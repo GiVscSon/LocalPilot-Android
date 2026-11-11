@@ -17,6 +17,8 @@ on:
       - 'tests/nes_controller_framehold.cjs'
       - 'tests/ModelLabPolicyVerify.java'
       - 'tests/ModelLabCatalogVerify.java'
+      - 'tests/ModelLabRegistrySnapshotVerify.java'
+      - 'model-lab/src/main/java/org/localpilot/android/ModelLabRegistrySnapshot.java'
       - 'tests/NesRomDownloadVerify.java'
       - 'tests/nes_real_rom_smoke.cjs'
       - 'tools/verify_public_nes.py'
@@ -85,6 +87,7 @@ jobs:
           java tests/ModelLabPolicyVerify.java
           java tests/ModelLabComputePolicyVerify.java
           java tests/ModelLabCatalogVerify.java
+          java tests/ModelLabRegistrySnapshotVerify.java
           java tests/NesRomDownloadVerify.java
       - name: Verify script agents and ten-game CPU simulator training remain isolated
         run: |
