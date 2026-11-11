@@ -79,7 +79,7 @@ public final class NesEmulatorActivity extends Activity {
   label.setText(dendy?"LocalPilot · Денди (50 Гц)":"LocalPilot · NES");
   label.setTextColor(HubContract.TEXT);label.setTextSize(21);root.addView(label);
   state=new TextView(this);state.setTextColor(HubContract.WARNING);
-  state.setText("Выберите свой NES ROM. Операции исполняются внутри Android, без сети.");
+  state.setText("Загрузи свой .nes или скачай проверенный homebrew. Эмуляция работает офлайн, сеть нужна только для загрузки файла.");
   root.addView(state);
   Button open=new Button(this);open.setText("Выбрать картридж (.nes)");
   root.addView(open);
