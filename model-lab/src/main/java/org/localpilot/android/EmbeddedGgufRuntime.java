@@ -37,6 +37,8 @@ public final class EmbeddedGgufRuntime {
  private final Handler ui=new Handler(Looper.getMainLooper());
  private final AtomicBoolean busy=new AtomicBoolean();
  private final AtomicBoolean cancelRequested=new AtomicBoolean();
+ // STOP and worker completion must agree about which inference owns busy.
+ private final Object cancellationLock=new Object();
  private volatile int lastGpuLayers;
  public boolean busy(){return busy.get();}
  public int lastGpuLayers(){return lastGpuLayers;}
@@ -44,10 +46,12 @@ public final class EmbeddedGgufRuntime {
   * Native model load/driver calls may not be immediately interruptible.
   * The worker remains busy until native execution actually ends. */
  public boolean requestCancel(){
-  if(!busy.get())return false;
-  cancelRequested.set(true);
-  if(loaded)nativeInterrupt();
-  return true;
+  synchronized(cancellationLock){
+   if(!busy.get())return false;
+   cancelRequested.set(true);
+   if(loaded)nativeInterrupt();
+   return true;
+  }
  }
  /** Read-only ggml GPU discovery, only on explicit user click. */
  public void probeGpu(Result callback){
@@ -144,9 +148,12 @@ public final class EmbeddedGgufRuntime {
        "Ошибка локальной модели: "+error.getClass().getSimpleName()+
        (error.getMessage()==null?"":": "+error.getMessage());
     }finally{
-     // Clear before making a new job eligible, never after busy=false.
-     cancelRequested.set(false);
-     busy.set(false);
+     // Completion and STOP are linearized: a late STOP cannot leak into
+     // the next request while this worker releases its busy flag.
+     synchronized(cancellationLock){
+      cancelRequested.set(false);
+      busy.set(false);
+     }
     }
     final String done=result;
     long elapsed=SystemClock.elapsedRealtime()-start;
