@@ -16,7 +16,7 @@ public final class ModelLabNetworkPolicy {
    "huggingface.co","hf.co",
    "cdn-lfs.huggingface.co","cdn-lfs-us-1.hf.co",
    "cas-bridge.xethub.hf.co","transfer.xethub.hf.co",
-   "cas-server.xethub.hf.co");
+   "cas-server.xethub.hf.co","us.aws.cdn.hf.co");
  public static boolean allowed(String raw){
   if(raw==null||raw.length()>4096)return false;
   try{
@@ -31,6 +31,9 @@ public final class ModelLabNetworkPolicy {
  public static HttpURLConnection open(String raw)throws Exception{
   if(!allowed(raw))throw new SecurityException("Только HTTPS-ссылки Hugging Face");
   URI first=new URI(raw);
+  // Initial URLs come from the public model repository, never an arbitrary CDN object.
+  if(!Set.of("huggingface.co","hf.co").contains(first.getHost().toLowerCase(Locale.ROOT)))
+   throw new SecurityException("Исходная ссылка должна вести в Hugging Face");
   if(!first.getPath().toLowerCase(Locale.ROOT).endsWith(".gguf"))
    throw new IllegalArgumentException("Ссылка должна указывать на конкретный GGUF-файл");
   String location=raw;
