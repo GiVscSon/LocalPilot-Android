@@ -25,6 +25,11 @@ import android.widget.Toast;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.nio.file.Files;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.localpilot.shared.HubContract;
 import org.localpilot.shared.NesTrial;
@@ -36,6 +41,8 @@ import org.localpilot.shared.NesTrial;
  */
 public final class NesEmulatorActivity extends Activity {
  private static final int CHOOSE_ROM=101;
+ private final ExecutorService romDownloads=Executors.newSingleThreadExecutor();
+ private boolean closed;
  private static final int MAX_ROM=3*1024*1024;
  private static final String START_URL="file:///android_asset/nes/index.html";
  private static final String[] GAMEPAD={"UP","LEFT","DOWN","RIGHT","SELECT","START","B","A"};
@@ -80,6 +87,51 @@ public final class NesEmulatorActivity extends Activity {
    Intent pick=new Intent(Intent.ACTION_OPEN_DOCUMENT).setType("*/*")
      .addCategory(Intent.CATEGORY_OPENABLE);
    startActivityForResult(pick,CHOOSE_ROM);
+  });
+  Button curated=new Button(this);
+  curated.setText("Каталог бесплатных homebrew NES-ROM");
+  root.addView(curated);
+  curated.setOnClickListener(v->{
+   try{
+    Intent browser=new Intent(Intent.ACTION_VIEW,
+      Uri.parse("https://itch.io/games/free/tag-homebrew/tag-nes-rom"));
+    startActivity(browser);
+    state.setText("Скачай авторский .nes в браузере и выбери его кнопкой «Выбрать картридж».");
+   }catch(android.content.ActivityNotFoundException missing){
+    state.setText("Браузер недоступен. Импортируй NES ROM из файлов.");
+   }
+  });
+  Button download=new Button(this);
+  download.setText("Скачать и запустить VOID LANCER · MIT · 41 КБ");
+  root.addView(download);
+  download.setOnClickListener(v->{
+   if(closed)return;
+   download.setEnabled(false);
+   state.setText("Проверяю локальную копию или скачиваю подлинный VOID LANCER...");
+   romDownloads.execute(()->{
+    byte[] rom=null;
+    String error=null;
+    try{
+     rom=loadOrFetchVerifiedRom();
+     if(!RetroEmulatorCatalog.inspect(RetroEmulatorCatalog.System.NES,
+          VerifiedNesRomDownload.FILENAME,rom).recognized())
+      throw new SecurityException("Эмулятор не распознал этот проверенный ROM");
+    }catch(Exception failure){
+     error="Не удалось загрузить ROM: "+failure.getClass().getSimpleName()+
+       (failure.getMessage()==null?"":" · "+failure.getMessage());
+    }
+    final byte[] accepted=rom;final String problem=error;
+    runOnUiThread(()->{
+     if(closed)return;
+     download.setEnabled(true);
+     if(problem!=null){state.setText(problem+" · можно скачать ROM через браузер");return;}
+     if(!resumed||!pageLoaded){
+      state.setText("ROM сохранён. Вернись в NES и повторно нажми «Скачать и запустить».");return;
+     }
+     launchRom(accepted,false);
+     state.setText("VOID LANCER · реальный NES ROM · SHA-256 OK · ручное управление.");
+    });
+   });
   });
   demoButton=new Button(this);Button demo=demoButton;
   demo.setText("Запустить тестовую NES-игру");
@@ -324,6 +376,27 @@ public final class NesEmulatorActivity extends Activity {
    state.setText("ModelLab не разрешил приём: проверь установленную версию");
   }
  }
+ private byte[] loadOrFetchVerifiedRom()throws Exception{
+  File target=new File(getFilesDir(),VerifiedNesRomDownload.FILENAME);
+  if(target.isFile()){
+   try{
+    if(target.length()!=VerifiedNesRomDownload.BYTES)
+     throw new SecurityException("Повреждён локальный ROM");
+    byte[] saved=Files.readAllBytes(target.toPath());
+    VerifiedNesRomDownload.validate(saved);
+    return saved;
+   }catch(Exception damaged){target.delete();}
+  }
+  byte[] rom=VerifiedNesRomDownload.download();
+  File temp=File.createTempFile("verified-nes-",".partial",getFilesDir());
+  try{
+   try(FileOutputStream out=new FileOutputStream(temp)){
+    out.write(rom);out.getFD().sync();
+   }
+   if(!temp.renameTo(target))throw new java.io.IOException("Не удалось сохранить ROM");
+  }finally{temp.delete();}
+  return rom;
+ }
  private void launchRom(byte[] rom,boolean homebrew){
   if(!pageLoaded||web==null||rom==null||rom.length>MAX_ROM){
    state.setText("NES-ядро ещё не загружено или ROM недоступен");return;
@@ -396,6 +469,8 @@ public final class NesEmulatorActivity extends Activity {
   }
  }
  @Override protected void onDestroy(){
+  closed=true;
+  romDownloads.shutdownNow();
   ++experimentGeneration;experiment.stop();
   if(web!=null){web.evaluateJavascript("window.retroStop()",null);
    web.removeJavascriptInterface("GameLabBridge");
