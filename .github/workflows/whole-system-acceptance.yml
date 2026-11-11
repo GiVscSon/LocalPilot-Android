@@ -6,6 +6,7 @@ on:
       - 'app/**'
       - 'game-lab/**'
       - 'model-lab/**'
+      - 'tests/ModelLabComputePolicy*.java'
       - 'shared/**'
       - 'scripts/unified_pipeline.py'
       - 'tests/NesBridge*.java'
@@ -73,6 +74,7 @@ jobs:
           java tests/NesBridgeVerify.java build/integration/rom/evidence.txt
           java tests/NesExperimentPolicyVerify.java
           java tests/ModelLabPolicyVerify.java
+          java tests/ModelLabComputePolicyVerify.java
       - name: Verify script agents and ten-game CPU simulator training remain isolated
         run: |
           set -euo pipefail
