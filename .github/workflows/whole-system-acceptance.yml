@@ -11,6 +11,8 @@ on:
       - 'scripts/unified_pipeline.py'
       - 'tests/NesBridge*.java'
       - 'tests/nes_bridge_e2e.cjs'
+      - 'tests/nes_visual_bridge_smoke.cjs'
+      - 'tests/NesFrameTransferVerify.java'
       - 'tests/NesExperimentPolicyVerify.java'
       - 'tests/NesExperimentPolicyTest.java'
       - 'game-lab/src/main/java/org/localpilot/gamelab/NesExperimentPolicy.java'
@@ -89,6 +91,11 @@ jobs:
           java tests/ModelLabCatalogVerify.java
           java tests/ModelLabRegistrySnapshotVerify.java
           java tests/NesRomDownloadVerify.java
+          node tests/nes_visual_bridge_smoke.cjs
+          javac --release 17 -d build/integration/rom \
+            shared/src/main/java/org/localpilot/shared/NesFrameTransfer.java \
+            tests/NesFrameTransferVerify.java
+          java -cp build/integration/rom NesFrameTransferVerify
       - name: Verify script agents and ten-game CPU simulator training remain isolated
         run: |
           set -euo pipefail
