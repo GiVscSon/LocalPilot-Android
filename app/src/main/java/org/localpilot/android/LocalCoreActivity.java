@@ -48,11 +48,11 @@ public final class LocalCoreActivity extends Activity {
      "Неправильный ход заменяется проверенным CPU-планом. "+
      "Переключение режима вызывает STOP и требует новой привязки окна.");
    TextView mode=label(layout,"Режим MNN 2048: выключен");
-   PilotService connected=PilotService.instance;
+   Object connected=PilotService.instance;
    if(connected instanceof Neural2048Access enabled&&enabled.mnn2048Enabled())
     mode.setText("Режим MNN 2048: включён (до завершения службы)");
    button(layout,"Включить / выключить MNN 2048",()->{
-    PilotService service=PilotService.instance;
+    Object service=PilotService.instance;
     if(service==null){mode.setText("Сначала включите службу специальных возможностей LocalPilot");return;}
     if(!(service instanceof Neural2048Access neural)){
      mode.setText("Установленный игровой движок не поддерживает MNN 2048. Ввод отключён.");return;
