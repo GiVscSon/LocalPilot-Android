@@ -32,6 +32,9 @@ public final class ModelLabStore {
  private final Context app;
  private final File directory,registry;
  private final ArrayList<Entry> entries=new ArrayList<>();
+ // Immutable committed view: UI refresh does not wait on a >500 MB HTTPS download.
+ // The mutable entries list is confined to synchronized store methods.
+ private volatile List<Entry> published=List.of();
  private final Map<String,Boolean> verified=new HashMap<>();
 
  public static final class Entry {
@@ -64,11 +67,13 @@ public final class ModelLabStore {
   try{
    if(BuildConfig.PRELOADED_MODELS)loadIncluded();
    loadImported();
+   publishSnapshot();
   }catch(Exception error){
    throw new IllegalStateException("Не удалось проверить каталог моделей: "+error.getMessage(),error);
   }
  }
- public synchronized List<Entry> list(){return new ArrayList<>(entries);}
+ public List<Entry> list(){return new ArrayList<>(published);}
+ private void publishSnapshot(){published=List.copyOf(entries);}
  public interface Progress { void onBytes(String phase,long done,long total); }
  private int importedCount(){int n=0;for(Entry e:entries)if(!e.bundled)n++;return n;}
  public synchronized Entry find(String id){
@@ -189,6 +194,8 @@ public final class ModelLabStore {
    stream=atomic.startWrite();
    stream.write(rows.toString().getBytes(StandardCharsets.UTF_8));
    atomic.finishWrite(stream);
+   // Publish only a fully persisted registry. Failed writes never affect the UI.
+   publishSnapshot();
   }catch(Exception failure){
    if(stream!=null)atomic.failWrite(stream);
    throw failure;
