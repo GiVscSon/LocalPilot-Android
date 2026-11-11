@@ -180,7 +180,7 @@ Java_org_localpilot_android_EmbeddedGgufRuntime_nativeAnalyzeImage(
     if(bitmap&&chunks){
      std::string user="Analyze the attached game screenshot. <__media__>\n"+p.str();
      std::string formatted=chat(
-       "You are a game vision diagnostician. Describe only visible objects "+
+       "You are a game vision diagnostician. Describe only visible objects "
        "and uncertainty. Never issue a gesture, coordinates or action commands.",user);
      mtmd_input_text input{formatted.data(),formatted.size(),true,true};
      const mtmd_bitmap *bitmapArray[]={bitmap};
