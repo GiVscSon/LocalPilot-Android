@@ -33,6 +33,21 @@ public final class LocalCoreContractTest {
   ok(!LocalCoreContract.acceptEnglish("Answer: "+("This is a repeated phrase. ").repeat(9)),
     "loop detection");
   ok(!LocalCoreContract.acceptEnglish(""),"empty output fails closed");
+  ok("Keep the corner tile stable.".equals(LocalCoreContract.visibleAnswer(
+      "<think>Internal reasoning about moves</think> Keep the corner tile stable.")),
+    "Qwen internal reasoning not shown to users");
+  ok("Maintain free cells.".equals(LocalCoreContract.visibleAnswer(
+      "<think>\n\n</think>\nMaintain free cells.")),
+    "Qwen empty reasoning block stripped");
+  ok(LocalCoreContract.visibleAnswer("<think>unfinished reasoning").isEmpty(),
+    "incomplete internal block rejected");
+  ok(LocalCoreContract.visibleAnswer("<think>thoughts</think>").isEmpty(),
+    "thought-only response is unusable");
+  ok(LocalCoreContract.visibleAnswer("<|im_start|>assistant").isEmpty(),
+    "generation control tokens rejected");
+  ok(!LocalCoreContract.acceptEnglish(
+      "<think>inner thoughts</think>Game CPU remains independent."),
+    "raw model thoughts may not bypass sanitizer");
   System.out.println("LOCAL_CORE_CONTRACT_PASS checks="+checks);
  }
 }

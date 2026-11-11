@@ -94,7 +94,8 @@ public final class LocalModelCore {
      .getJSONArray("choices").getJSONObject(0);
    if("length".equals(choice.optString("finish_reason","")))
     return "";
-   return choice.getJSONObject("message").optString("content","");
+   return LocalCoreContract.visibleAnswer(
+     choice.getJSONObject("message").optString("content",""));
   }finally{release(connection);}
  }
 
@@ -136,7 +137,8 @@ public final class LocalModelCore {
     JSONObject choice=body.getJSONArray("choices").getJSONObject(0);
     if("length".equals(choice.optString("finish_reason","")))
      return "Local response cut off at the token limit. No game action taken.";
-    String response=choice.getJSONObject("message").optString("content","");
+    String response=LocalCoreContract.visibleAnswer(
+      choice.getJSONObject("message").optString("content",""));
     if(!LocalCoreContract.acceptEnglish(response))
      return "Local response rejected: looping, non-English, missing or too long. No game action taken.";
     return "MNN-Pocket local · English\n"+response;

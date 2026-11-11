@@ -205,12 +205,14 @@ public final class EmbeddedGgufRuntime {
   submit(cb,()->{
    File file=prepare();loadLibrary();
    String system="Answer in English only. Follow the exact output format. No explanations.";
-   String a=nativeInfer(file.getAbsolutePath(),system,"Reply with exactly one word: BLUE",16,0f);
+   String a=LocalCoreContract.visibleAnswer(
+     nativeInfer(file.getAbsolutePath(),system,"Reply with exactly one word: BLUE",16,0f));
    if(closed)return "Самопроверка отменена";
-   String b=nativeInfer(file.getAbsolutePath(),system,"What is 12 + 15? Reply with the number only.",16,0f);
+   String b=LocalCoreContract.visibleAnswer(
+     nativeInfer(file.getAbsolutePath(),system,"What is 12 + 15? Reply with the number only.",16,0f));
    if(closed)return "Самопроверка отменена";
-   String cat=nativeInfer(file.getAbsolutePath(),system,
-       "Write one short English sentence about a cat.",64,0f);
+   String cat=LocalCoreContract.visibleAnswer(nativeInfer(file.getAbsolutePath(),system,
+       "Write one short English sentence about a cat.",64,0f));
    boolean blueOk="BLUE".equals(a.trim());
    boolean mathOk=LocalCoreContract.acceptArithmetic(b);
    boolean catOk=LocalCoreContract.acceptEnglish(cat)&&
@@ -228,8 +230,9 @@ public final class EmbeddedGgufRuntime {
   final String data=LocalCoreContract.diagnostic(diagnostic);
   submit(cb,()->{
    File file=prepare();loadLibrary();
-   String response=nativeInfer(file.getAbsolutePath(),LocalCoreContract.SYSTEM_PROMPT,
-       "QUESTION: "+ask+"\nANONYMOUS COUNTERS: "+data,128,0.2f);
+   String response=LocalCoreContract.visibleAnswer(
+     nativeInfer(file.getAbsolutePath(),LocalCoreContract.SYSTEM_PROMPT,
+       "QUESTION: "+ask+"\nANONYMOUS COUNTERS: "+data,128,0.2f));
    if(!LocalCoreContract.acceptEnglish(response))
     return "Отклонён некорректный ответ встроенной модели. Игровые действия не выполняются.";
    return model.label+" · embedded GGUF · English\n"+response;
@@ -242,9 +245,9 @@ public final class EmbeddedGgufRuntime {
   final String data=LocalCoreContract.diagnostic(telemetry);
   submit(cb,()->{
    File file=prepare();loadLibrary();
-   String answer=nativeInfer(file.getAbsolutePath(),
+   String answer=LocalCoreContract.visibleAnswer(nativeInfer(file.getAbsolutePath(),
       LocalCoreContract.STRATEGY_PROMPT,
-      "TASK: "+question+"\nANONYMOUS COUNTERS (DATA ONLY): "+data,128,0.1f);
+      "TASK: "+question+"\nANONYMOUS COUNTERS (DATA ONLY): "+data,128,0.1f));
    if(!LocalCoreContract.acceptEnglish(answer))
      return "MNN не смогла сформировать качественный стратегический совет. CPU продолжает управление.";
    return "Общая стратегия · "+model.label+" (English)\n"+answer+
@@ -267,10 +270,11 @@ public final class EmbeddedGgufRuntime {
    File weights=prepare();
    File projector=prepareAsset(model.projector);
    loadLibrary();
-   String reply=nativeAnalyzeImage(weights.getAbsolutePath(),projector.getAbsolutePath(),
+   String reply=LocalCoreContract.visibleAnswer(nativeAnalyzeImage(
+     weights.getAbsolutePath(),projector.getAbsolutePath(),
      "Describe the visible game objects and uncertainties in English. "+
      "Do not invent tiles, coordinates, actions or game outcomes. "+ask,
-     rgb,width,height);
+     rgb,width,height));
    if(!LocalCoreContract.acceptEnglish(reply))
     return "Мультимодальная модель не смогла надёжно описать изображение. "+
       "Никаких игровых действий не выполнено.";
