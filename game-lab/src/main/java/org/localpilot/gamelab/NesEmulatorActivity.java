@@ -57,6 +57,9 @@ public final class NesEmulatorActivity extends Activity {
  private NesTrial readyTrial;
  private NesTrial exportTrial;
  private final NesSnapshotGate snapshotGate=new NesSnapshotGate();
+ // Unlike snapshot tokens, frame epochs also fence delayed onFrame/onAgentAction
+ // after a ROM switch, failed load, or Android WebView replay.
+ private final NesFrameEpoch frameEpoch=new NesFrameEpoch();
  private TrialPending pendingTrial;
  private static final class TrialPending{
   final String button;
@@ -110,6 +113,7 @@ public final class NesEmulatorActivity extends Activity {
   download.setOnClickListener(v->{
    if(closed)return;
    download.setEnabled(false);
+   final String previousRom=frameEpoch.token();
    state.setText("Проверяю локальную копию или скачиваю подлинный VOID LANCER...");
    romDownloads.execute(()->{
     byte[] rom=null;
@@ -128,6 +132,10 @@ public final class NesEmulatorActivity extends Activity {
      if(closed)return;
      download.setEnabled(true);
      if(problem!=null){state.setText(problem+" · можно скачать ROM через браузер");return;}
+     // A manual/demo ROM selected while the download was running wins.
+     if(!previousRom.equals(frameEpoch.token())){
+      state.setText("ROM загружен и сохранён. Текущую игру не заменяю.");return;
+     }
      if(!resumed||!pageLoaded){
       state.setText("ROM сохранён. Вернись в NES и повторно нажми «Скачать и запустить».");return;
      }
@@ -199,9 +207,9 @@ public final class NesEmulatorActivity extends Activity {
    }
   });
   web.addJavascriptInterface(new Object(){
-   @JavascriptInterface public void onFrame(int count,int pixelsHash){
+   @JavascriptInterface public void onFrame(int count,int pixelsHash,String session){
     runOnUiThread(()->{
-     if(!resumed)return;
+     if(!resumed||!frameEpoch.accept(session,count))return;
      frames=count;hash=pixelsHash;
      if(experiment.running()&&pendingTrial!=null&&
         count-pendingTrial.frame>180){
@@ -214,8 +222,9 @@ public final class NesEmulatorActivity extends Activity {
        +" · касаний "+touches.get()+" · только эмуляция (не результат Маркета)");
     });
    }
-   @JavascriptInterface public void onAgentAction(String name,int started,int finished){
+   @JavascriptInterface public void onAgentAction(String name,int started,int finished,String session){
     runOnUiThread(()->{
+     if(!resumed||!frameEpoch.current(session))return;
      TrialPending current=pendingTrial;
      if(current!=null&&current.button.equals(name)&&current.downAck&&
         started>=current.frame&&finished>=started+4&&finished<=started+60)
@@ -451,6 +460,7 @@ public final class NesEmulatorActivity extends Activity {
    state.setText("NES-ядро ещё не загружено или ROM недоступен");return;
   }
   String encoded=Base64.encodeToString(rom,Base64.NO_WRAP);
+  String session=frameEpoch.begin();
   frames=hash=0;touches.set(0);
   ++experimentGeneration;experiment.stop();
   snapshotGate.cancel();exportTrial=null;
@@ -459,8 +469,11 @@ public final class NesEmulatorActivity extends Activity {
   if(cpuAgentButton!=null)cpuAgentButton.setEnabled(false);
   if(cpuBatchButton!=null)cpuBatchButton.setEnabled(false);
   web.evaluateJavascript("window.retroLoadRom("+org.json.JSONObject.quote(encoded)+","
-    +(dendy?"true":"false")+","+(homebrew?"true":"false")+")",success->{
+    +(dendy?"true":"false")+","+(homebrew?"true":"false")+","
+    +org.json.JSONObject.quote(session)+")",success->{
+   if(closed||!frameEpoch.current(session))return;
    boolean launched="true".equals(success);
+   if(!launched)frameEpoch.cancel();
    if(cpuAgentButton!=null)cpuAgentButton.setEnabled(launched&&homebrew);
    if(cpuBatchButton!=null)cpuBatchButton.setEnabled(launched&&homebrew);
    if(!launched)state.setText("NES ROM не запущен. Проверьте mapper и ядро.");
@@ -521,7 +534,7 @@ public final class NesEmulatorActivity extends Activity {
   }
  }
  @Override protected void onDestroy(){
-  closed=true;snapshotGate.cancel();exportTrial=null;
+  closed=true;frameEpoch.cancel();snapshotGate.cancel();exportTrial=null;
   romDownloads.shutdownNow();
   ++experimentGeneration;experiment.stop();
   if(web!=null){web.evaluateJavascript("window.retroStop()",null);

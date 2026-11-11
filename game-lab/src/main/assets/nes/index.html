@@ -19,6 +19,7 @@ const image=ctx.createImageData(256,240),stat=document.getElementById("status");
 const keyMap={LEFT:"BUTTON_LEFT",RIGHT:"BUTTON_RIGHT",UP:"BUTTON_UP",DOWN:"BUTTON_DOWN",
  A:"BUTTON_A",B:"BUTTON_B",START:"BUTTON_START",SELECT:"BUTTON_SELECT"};
 let nes=null,timer=null,frames=0,validFrame=0,paused=false,sampleRate=44100;
+let activeRomSession=null;
 let gamepadLatch=null,agentTrial=null,homebrewRom=false;
 let audioContext=null,audioNode=null;
 const SIZE=32768,ringL=new Float32Array(SIZE),ringR=new Float32Array(SIZE);
@@ -67,7 +68,7 @@ function sendFrame(rgb){
   let hash=2166136261>>>0;
   for(let i=0;i<256*240;i+=241)hash=Math.imul(hash^rgb[i],16777619)>>>0;
   validFrame=hash;
-  try{if(window.GameLabBridge)window.GameLabBridge.onFrame(frames,hash|0);}catch(error){}
+  try{if(window.GameLabBridge)window.GameLabBridge.onFrame(frames,hash|0,activeRomSession);}catch(error){}
  }
 }
 function tick(){
@@ -81,7 +82,7 @@ function tick(){
    gamepadLatch.change(trial.name,trial.code,false,frames);
    gamepadLatch.flush(frames);
    try{if(window.GameLabBridge)
-    window.GameLabBridge.onAgentAction(trial.name,trial.started,frames);
+    window.GameLabBridge.onAgentAction(trial.name,trial.started,frames,activeRomSession);
    }catch(ignored){}
   }
   if(gamepadLatch)gamepadLatch.flush(frames);
@@ -90,7 +91,7 @@ function tick(){
 function stop(){
  if(timer!==null){clearInterval(timer);timer=null;}
  if(gamepadLatch){gamepadLatch.clear();gamepadLatch=null;}
- agentTrial=null;homebrewRom=false;
+ agentTrial=null;homebrewRom=false;activeRomSession=null;
  nes=null;paused=true;audioStop();
 }
 window.retroStop=function(){stop();status("Игра остановлена");};
@@ -114,9 +115,12 @@ window.retroResume=function(){
  timer=setInterval(tick,window.retroDendy?20:1000/60);
  return true;
 };
-window.retroLoadRom=function(encoded,dendy,homebrew){
+window.retroLoadRom=function(encoded,dendy,homebrew,session){
  try{
   stop();
+  if(typeof session!=="string"||!(/^[1-9][0-9]{0,18}$/).test(session))
+   throw new Error("Отсутствует идентификатор NES-сеанса");
+  activeRomSession=session;
   if(!window.jsnes||typeof jsnes.NES!=="function"||!jsnes.Controller)
    throw new Error("В APK отсутствует JSNES-ядро");
   const binary=atob(encoded);

@@ -17,6 +17,9 @@ on:
       - 'tests/nes_bridge_e2e.cjs'
       - 'tests/nes_visual_bridge_smoke.cjs'
       - 'tests/NesSnapshotGateVerify.java'
+      - 'tests/NesFrameEpochVerify.java'
+      - 'tests/nes_session_frame_smoke.cjs'
+      - 'game-lab/src/main/java/org/localpilot/gamelab/NesFrameEpoch.java'
       - 'game-lab/src/main/java/org/localpilot/gamelab/NesSnapshotGate.java'
       - 'tests/NesFrameTransferVerify.java'
       - 'tests/NesExperimentPolicyVerify.java'
@@ -85,6 +88,8 @@ jobs:
             build/nes-runtime/demo.nes \
             build/nes-runtime/nes-trial.txt
           java tests/NesSnapshotGateVerify.java
+          java tests/NesFrameEpochVerify.java
+          node tests/nes_session_frame_smoke.cjs
           java tests/NesBridgeVerify.java build/nes-runtime/nes-trial.txt
           java tests/NesExperimentPolicyVerify.java
           node tests/nes_visual_bridge_smoke.cjs
