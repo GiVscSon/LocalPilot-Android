@@ -68,7 +68,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          ./gradlew --no-daemon -PbundleLocalModel=true :app:assembleDebug
+          # Asset packaging processes ~192 MB of GGUF bytes. The default Gradle
+          # JVM heap can exhaust at :app:compressDebugAssets. Limit parallelism
+          # and explicitly allocate enough heap without increasing host RAM.
+          free -h
+          ./gradlew --no-daemon --max-workers=2 --no-parallel \
+            -Dorg.gradle.jvmargs="-Xmx4096m -XX:MaxMetaspaceSize=768m -Dfile.encoding=UTF-8" \
+            -PbundleLocalModel=true :app:assembleDebug
       - name: Verify native library, APK model checksum, packaging and signature
         shell: bash
         run: |
