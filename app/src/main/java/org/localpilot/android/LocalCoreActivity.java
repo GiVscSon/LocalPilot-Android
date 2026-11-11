@@ -71,26 +71,6 @@ public final class LocalCoreActivity extends Activity {
     connection.setText("Тестирую два независимых английских запроса...");
    }catch(IllegalStateException failure){connection.setText("Ядро занято или закрыто");}
   });
-  title(layout,"Стратегия для текущей игры",18);
-  TextView strategy=label(layout,
-    "Модель объясняет общую тактику на английском. Не выдаёт команды для следующего хода.");
-  button(layout,"Объяснить стратегию · MNN",()->{
-   if(busy()){strategy.setText("Нейросеть занята; CPU работает независимо.");return;}
-   PilotService service=PilotService.instance;
-   String snapshot=service==null
-     ?"{\"schema\":\"localpilot-telemetry-v1\",\"status\":\"SERVICE_NOT_CONNECTED\"}"
-     :service.advisoryDiagnosticSnapshot();
-   // User-selected profile is already persisted by PilotService.chooseProfile().
-   // Avoid parsing telemetry on the UI thread or unhandled JSONException.
-   int profile=getSharedPreferences("panel",MODE_PRIVATE).getInt("profile",-1);
-   try{
-    if(bundled())embedded.adviseStrategy(profile,snapshot,strategy::setText);
-    else core.adviseStrategy(profile,snapshot,strategy::setText);
-    strategy.setText("Формирую стратегию в фоне. CPU не ожидает ответа.");
-   }catch(IllegalArgumentException|IllegalStateException error){
-    strategy.setText(error.getMessage());
-   }
-  });
   title(layout,"Вопрос ядру · English",18);
   question=new EditText(this);
   question.setSingleLine(false);
@@ -110,6 +90,26 @@ public final class LocalCoreActivity extends Activity {
     result.setText("Локальная модель думает... Ввод в игру не выполняется.");
    }catch(IllegalArgumentException|IllegalStateException error){
     result.setText(error.getMessage());
+   }
+  });
+  title(layout,"Стратегия для текущей игры",18);
+  TextView strategy=label(layout,
+    "Модель объясняет общую тактику на английском. Не выдаёт команды для следующего хода.");
+  button(layout,"Объяснить стратегию · MNN",()->{
+   if(busy()){strategy.setText("Нейросеть занята; CPU работает независимо.");return;}
+   PilotService service=PilotService.instance;
+   String snapshot=service==null
+     ?"{\"schema\":\"localpilot-telemetry-v1\",\"status\":\"SERVICE_NOT_CONNECTED\"}"
+     :service.advisoryDiagnosticSnapshot();
+   // User-selected profile is already persisted by PilotService.chooseProfile().
+   // Avoid parsing telemetry on the UI thread or unhandled JSONException.
+   int profile=getSharedPreferences("panel",MODE_PRIVATE).getInt("profile",-1);
+   try{
+    if(bundled())embedded.adviseStrategy(profile,snapshot,strategy::setText);
+    else core.adviseStrategy(profile,snapshot,strategy::setText);
+    strategy.setText("Формирую стратегию в фоне. CPU не ожидает ответа.");
+   }catch(IllegalArgumentException|IllegalStateException error){
+    strategy.setText(error.getMessage());
    }
   });
   title(layout,"Выбор локальной нейросети",18);
