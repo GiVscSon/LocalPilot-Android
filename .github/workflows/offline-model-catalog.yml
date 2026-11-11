@@ -1,0 +1,116 @@
+name: Offline Android Catalog · Qwen + LFM + Vision
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'app/**'
+      - 'tools/bundle_optional_models.py'
+      - 'tools/bundle_embedded_gguf.py'
+      - '.github/workflows/offline-model-catalog.yml'
+      - 'tests/LocalModelCatalogVerify.java'
+permissions:
+  contents: read
+jobs:
+  bundled-catalog:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 110
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Android and CMake packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
+            'platforms;android-35' 'build-tools;35.0.0' 'cmake;3.22.1' 'ndk;27.2.12479018'
+      - name: Validate pure-JVM model catalogue
+        run: |
+          set -euo pipefail
+          java tests/LocalModelCatalogVerify.java
+      - name: Fetch pinned native inference engine
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p third_party/llama.cpp
+          cd third_party/llama.cpp
+          git init
+          git remote add origin https://github.com/ggml-org/llama.cpp.git
+          git fetch --depth 1 origin 2b66bfbf7107e43f5cd2fe99802ff6e872e4c4d0
+          git checkout --detach FETCH_HEAD
+          test "$(git rev-parse HEAD)" = 2b66bfbf7107e43f5cd2fe99802ff6e872e4c4d0
+      - name: Download reviewed MNN and verified optional GGUF snapshots
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/bundle_embedded_gguf.py prepare
+          python3 tools/bundle_optional_models.py prepare
+          cp third_party/llama.cpp/LICENSE build/embedded-model-assets/licenses/llama.cpp-LICENSE.txt
+          du -sh build/embedded-model-assets
+          cat build/reports/embedded-extra-models.json
+      - name: Compile same JNI source on Linux and test text plus actual vision
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake -S app/src/main/cpp -B build/embedded-host-cmake -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/embedded-host-cmake --target localpilot_embedded -j 3
+          mkdir -p build/embedded-jvm build/reports
+          javac --release 17 -d build/embedded-jvm \
+            tests/native/org/localpilot/android/EmbeddedGgufRuntime.java \
+            app/src/main/java/org/localpilot/android/LocalCoreContract.java \
+            app/src/main/java/org/localpilot/android/TextRepetitionGuard.java
+          java -Djava.library.path="$PWD/build/embedded-host-cmake" \
+            -cp build/embedded-jvm org.localpilot.android.EmbeddedGgufRuntime \
+            "$PWD/build/embedded-model-assets/models/MNN-Pocket-0.3B-Instruct-Q4_1.gguf" \
+            "$PWD/build/embedded-model-assets/models/Qwen3.5-0.8B-Q4_0.gguf" \
+            "$PWD/build/embedded-model-assets/models/LFM2.5-350M-Q4_0.gguf" \
+            "$PWD/build/embedded-model-assets/models/LFM2.5-VL-450M-Q4_0.gguf" \
+            "$PWD/build/embedded-model-assets/models/mmproj-LFM2.5-VL-450m-Q8_0.gguf" \
+            2>&1 | tee build/reports/whole-catalog-native-smoke.txt
+          grep -q NATIVE_MULTI_MODEL_AND_VISION_SMOKE_PASS build/reports/whole-catalog-native-smoke.txt
+      - name: Build one ARM64 offline APK with every weight and the projector
+        shell: bash
+        run: |
+          set -euo pipefail
+          free -h
+          ./gradlew --no-daemon --max-workers=1 --no-parallel \
+            -Dorg.gradle.jvmargs="-Xmx5120m -XX:MaxMetaspaceSize=768m -Dfile.encoding=UTF-8" \
+            -PbundleLocalModelCatalog=true :app:assembleDebug
+      - name: Verify complete offline models, JNI, APK and signature
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK=app/build/outputs/apk/debug/app-debug.apk
+          python3 tools/bundle_embedded_gguf.py verify "$APK"
+          python3 tools/bundle_optional_models.py verify "$APK"
+          unzip -p "$APK" lib/arm64-v8a/liblocalpilot_embedded.so > build/reports/model-native.so
+          readelf -h build/reports/model-native.so | grep -q 'Machine:.*AArch64'
+          readelf -Ws build/reports/model-native.so | grep -q 'Java_org_localpilot_android_EmbeddedGgufRuntime_nativeAnalyzeImage'
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$APK"
+          sha256sum "$APK" | tee build/reports/offline-catalog-apk.sha256
+          ls -lh "$APK"
+      - name: Upload JVM/JNI evidence on failure or success
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: LocalPilot-Catalog-Native-Evidence-${{ github.sha }}
+          if-no-files-found: ignore
+          retention-days: 14
+          path: |
+            build/reports/whole-catalog-native-smoke.txt
+            build/reports/embedded-extra-models.json
+            build/reports/offline-catalog-apk.sha256
+      - name: Upload real fully preloaded ARM64 APK
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: LocalPilot-Qwen-LFM-Vision-Offline-${{ github.sha }}
+          retention-days: 14
+          if-no-files-found: error
+          compression-level: 0
+          path: app/build/outputs/apk/debug/app-debug.apk
