@@ -1,6 +1,6 @@
 package org.localpilot.android;
 import android.accessibilityservice.*;import android.app.AlertDialog;import android.app.KeyguardManager;import android.content.*;import android.graphics.*;import android.os.*;import android.view.*;import android.view.accessibility.*;import android.widget.*;
-public class PilotService extends AccessibilityService {
+public class PilotService extends AccessibilityService implements Neural2048Access {
  public static PilotService instance;
  private ExperienceStore experience;private ArcadeLearningStore arcadeLearning;private boolean collecting;
  public void enableExamples(){stop("Сбор примеров включён; привяжите игру заново");if(experience==null){note="Хранилище недоступно; сбор выключен";update();return;}collecting=true;update();}
