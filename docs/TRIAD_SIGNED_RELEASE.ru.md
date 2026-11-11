@@ -39,3 +39,6 @@ Workflow собирает из одного SHA `:app:assembleRelease`, `:game-l
 Подписанный кандидат **не является стабильным релизом**, пока эти критерии не подтверждены. `ModelLab` хранит скачанные модели в собственном приватном каталоге, который нельзя терять при обновлении.
 
 Источники: https://developer.android.com/studio/publish/app-signing и https://docs.github.com/en/actions/how-tos/write-workflows/choose-what-workflows-do/use-secrets.
+## Защита уже установленных приложений перед обновлением
+
+Новый read-only скрипт [DEVICE_TRIAD_PREFLIGHT.ru.md](DEVICE_TRIAD_PREFLIGHT.ru.md) сравнивает три APK с **текущими подписантами и версиями на физическом Android** через `adb pull`, `aapt`, `apksigner`. Он блокирует замену сертификата или downgrade **до** установки, не удаляет приложения и не переносит данные автоматически. Скрипт покрыт отдельной 12-кейсной отрицательной матрицей и входит в CI.

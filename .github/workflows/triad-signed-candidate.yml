@@ -4,6 +4,8 @@ on:
     paths:
       - 'tools/triad_release_gate.py'
       - 'tests/test_triad_release_gate.py'
+      - 'tools/triad_device_preflight.py'
+      - 'tests/test_triad_device_preflight.py'
       - 'docs/TRIAD_SIGNED_RELEASE.ru.md'
       - '.github/workflows/triad-signed-candidate.yml'
   workflow_dispatch:
@@ -28,6 +30,8 @@ jobs:
           set -euo pipefail
           python3 -m unittest discover -s tests -p 'test_triad_release_gate.py' -v
           python3 -O -m unittest discover -s tests -p 'test_triad_release_gate.py' -v
+          python3 -m unittest discover -s tests -p 'test_triad_device_preflight.py' -v
+          python3 -O -m unittest discover -s tests -p 'test_triad_device_preflight.py' -v
 
   signed-candidate:
     if: github.event_name == 'workflow_dispatch'
