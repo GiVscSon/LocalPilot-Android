@@ -337,6 +337,10 @@ public final class ModelLabStore {
    int index=entries.indexOf(found);
    entries.set(index,next);
    try{persist();}catch(Exception failure){entries.set(index,found);throw failure;}
+   // The old projector may be shared with other models. Delete it only
+   // after the new registry has been committed, and only if no entry uses it.
+   if(found.projectorName!=null&&!found.projectorName.equals(file.filename))
+    deleteUnusedBlob(found.projectorName);
    return next;
   }
   String id="import:"+file.sha.substring(0,16);
@@ -392,20 +396,21 @@ public final class ModelLabStore {
   return ensure(present.projectorName,present.projectorBytes,
     present.projectorSha,present.bundled);
  }
+ /** Never remove a content-addressed GGUF if another imported entry refers to it. */
+ private void deleteUnusedBlob(String filename){
+  if(filename==null||!simpleName(filename)||!filename.startsWith("import-"))return;
+  for(Entry other:entries)
+   if(filename.equals(other.modelName)||filename.equals(other.projectorName))return;
+  verified.remove(filename);
+  new File(directory,filename).delete();
+ }
  public synchronized void remove(Entry model)throws Exception{
   Entry current=find(model.id);
   if(current==null||current.bundled)throw new IllegalArgumentException("Встроенную модель нельзя удалить");
   entries.remove(current);
   try{persist();}catch(Exception failure){entries.add(current);throw failure;}
-  // Imported files are addressed by SHA. Do not delete a blob used by another model.
-  for(String filename:new String[]{current.modelName,current.projectorName}){
-   if(filename==null)continue;
-   boolean stillUsed=false;
-   for(Entry other:entries)
-    if(filename.equals(other.modelName)||filename.equals(other.projectorName)){
-     stillUsed=true;break;
-    }
-   if(!stillUsed)new File(directory,filename).delete();
-  }
+  // Imported files are addressed by SHA. The same mmproj can be shared.
+  deleteUnusedBlob(current.modelName);
+  deleteUnusedBlob(current.projectorName);
  }
 }
