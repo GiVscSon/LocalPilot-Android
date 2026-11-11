@@ -18,6 +18,12 @@ public final class LocalCoreContractTest {
     "sanitized telemetry");
   try{LocalCoreContract.diagnostic("{\"unsafe\":1}");throw new AssertionError("unsafe telemetry");}
   catch(IllegalArgumentException expected){checks++;}
+  ok(LocalCoreContract.acceptArithmetic("27"),"correct number");
+  ok(LocalCoreContract.acceptArithmetic("12 + 15 = 27"),"equivalent correct equation");
+  ok(LocalCoreContract.acceptArithmetic("12 + 15 = 27."),"equation punctuation");
+  ok(!LocalCoreContract.acceptArithmetic("The answer is 27, I guess"),"reject vague math");
+  ok(!LocalCoreContract.acceptArithmetic("12 + 15 = 28"),"reject incorrect math");
+  ok(!LocalCoreContract.acceptArithmetic("27 27 27"),"reject repeated math");
   ok(LocalCoreContract.acceptEnglish("The model is connected. No image or motion has been verified."),
     "short English answer");
   ok(!LocalCoreContract.acceptEnglish("Я не интернет. Я не интернет. Я не интернет."),

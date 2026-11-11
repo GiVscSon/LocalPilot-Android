@@ -1,0 +1,117 @@
+name: Self-contained Android APK · embedded GGUF
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'app/**'
+      - 'tools/bundle_embedded_gguf.py'
+      - '.github/workflows/embedded-gguf-apk.yml'
+      - 'docs/EMBEDDED_MNN_GGUF.ru.md'
+permissions:
+  contents: read
+jobs:
+  embedded:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 65
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Install Android SDK and native toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
+            'platforms;android-35' 'build-tools;35.0.0' 'cmake;3.22.1' 'ndk;27.2.12479018'
+      - name: Validate negative packaging and checksum tests
+        run: |
+          python3 -m unittest discover -s tests -p 'test_embedded_gguf.py' -v
+          python3 -O -m unittest discover -s tests -p 'test_embedded_gguf.py' -v
+      - name: Fetch pinned official llama.cpp source
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p third_party/llama.cpp
+          cd third_party/llama.cpp
+          git init
+          git remote add origin https://github.com/ggml-org/llama.cpp.git
+          git fetch --depth 1 origin 2b66bfbf7107e43f5cd2fe99802ff6e872e4c4d0
+          git checkout --detach FETCH_HEAD
+          test "$(git rev-parse HEAD)" = "2b66bfbf7107e43f5cd2fe99802ff6e872e4c4d0"
+      - name: Download official GGUF and validate original LFS SHA256
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/bundle_embedded_gguf.py prepare
+          cp third_party/llama.cpp/LICENSE build/embedded-model-assets/licenses/llama.cpp-LICENSE.txt
+      - name: Run real English inference using production JNI on Linux host
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake -S app/src/main/cpp -B build/embedded-host-cmake -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/embedded-host-cmake --target localpilot_embedded -j 4
+          mkdir -p build/embedded-jvm build/reports
+          javac --release 17 -d build/embedded-jvm \
+            tests/native/org/localpilot/android/EmbeddedGgufRuntime.java \
+            app/src/main/java/org/localpilot/android/LocalCoreContract.java \
+            app/src/main/java/org/localpilot/android/TextRepetitionGuard.java
+          java -Djava.library.path="$PWD/build/embedded-host-cmake" \
+            -cp build/embedded-jvm org.localpilot.android.EmbeddedGgufRuntime \
+            "$PWD/build/embedded-model-assets/models/MNN-Pocket-0.3B-Instruct-Q4_1.gguf" \
+            2>&1 | tee build/reports/embedded-host-smoke.txt
+      - name: Build arm64 APK with native inference and bundled weights
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Asset packaging processes ~192 MB of GGUF bytes. The default Gradle
+          # JVM heap can exhaust at :app:compressDebugAssets. Limit parallelism
+          # and explicitly allocate enough heap without increasing host RAM.
+          free -h
+          ./gradlew --no-daemon --max-workers=2 --no-parallel \
+            -Dorg.gradle.jvmargs="-Xmx4096m -XX:MaxMetaspaceSize=768m -Dfile.encoding=UTF-8" \
+            -PbundleLocalModel=true :app:assembleDebug
+      - name: Verify native library, APK model checksum, packaging and signature
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK=app/build/outputs/apk/debug/app-debug.apk
+          python3 tools/bundle_embedded_gguf.py verify "$APK"
+          unzip -p "$APK" lib/arm64-v8a/liblocalpilot_embedded.so > build/reports/liblocalpilot_embedded.so
+          readelf -h build/reports/liblocalpilot_embedded.so > build/reports/embedded-elf-header.txt
+          grep -q 'Machine:.*AArch64' build/reports/embedded-elf-header.txt
+          readelf -Ws build/reports/liblocalpilot_embedded.so > build/reports/embedded-elf-symbols.txt
+          for symbol in nativeInfer nativeInterrupt nativeRelease; do
+            grep -Fq "Java_org_localpilot_android_EmbeddedGgufRuntime_$symbol" build/reports/embedded-elf-symbols.txt
+          done
+          readelf -d build/reports/liblocalpilot_embedded.so | awk '/NEEDED/ { sub(/^.*\[/,""); sub(/\].*$/,""); print }' > build/reports/native-dependencies.txt
+          if grep -Ev '^(liblog|libm|libdl|libc)\.so$' build/reports/native-dependencies.txt; then
+            echo 'Unsupported Android native dependency' >&2
+            exit 1
+          fi
+          rm build/reports/liblocalpilot_embedded.so
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" \
+            | grep "^package: name='org.localpilot.android.dev.mnnembedded' "
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$APK"
+          sha256sum "$APK" | tee build/reports/embedded-apk.sha256
+      - name: Publish native inference smoke-test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: LocalPilot-Embedded-JNI-Smoke-${{ github.sha }}
+          if-no-files-found: ignore
+          path: build/reports/embedded-host-smoke.txt
+      - name: Publish self-contained APK and verified source provenance
+        uses: actions/upload-artifact@v4
+        with:
+          name: LocalPilot-Embedded-MNN-GGUF-${{ github.sha }}
+          if-no-files-found: error
+          retention-days: 21
+          path: |
+            app/build/outputs/apk/debug/app-debug.apk
+            build/reports/embedded-gguf.json
+            build/reports/embedded-apk.sha256
