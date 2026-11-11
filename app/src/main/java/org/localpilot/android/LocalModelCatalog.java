@@ -30,11 +30,20 @@ public final class LocalModelCatalog {
  public static boolean bundled(Model m,boolean multiple){
   return m==Model.POCKET||multiple;
  }
- public static String[] labels(boolean multiple){
+ /** UI availability has two independent dimensions: an embedded engine and a full catalog. */
+ public static boolean bundled(Model m,boolean embedded,boolean multiple){
+  return embedded&&bundled(m,multiple);
+ }
+ public static String[] labels(boolean embedded,boolean multiple){
   Model[] models=Model.values();
   String[] labels=new String[models.length];
   for(int i=0;i<models.length;i++)
-   labels[i]=models[i].label+(bundled(models[i],multiple)?" · внутри APK":" · не включена в APK");
+   labels[i]=models[i].label+
+     (bundled(models[i],embedded,multiple)?" · внутри APK":" · не включена в APK");
   return labels;
+ }
+ /** Existing embedded-APK contract, retained for existing callers/tests. */
+ public static String[] labels(boolean multiple){
+  return labels(true,multiple);
  }
 }
