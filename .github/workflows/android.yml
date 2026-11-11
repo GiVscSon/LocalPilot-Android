@@ -64,6 +64,7 @@ jobs:
       java tests/TextRepetitionGuardVerify.java
       java tests/LocalCoreContractVerify.java
       java tests/StrategyAdviceVerify.java
+      java tests/LocalModelCatalogVerify.java
       java tests/JumperWeightShadowVerify.java
       java tests/VisionV2Verify.java
       java tests/RealGameNeuralVerify.java

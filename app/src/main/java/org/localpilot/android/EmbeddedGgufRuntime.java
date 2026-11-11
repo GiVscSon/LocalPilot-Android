@@ -8,6 +8,11 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.security.MessageDigest;
+import java.util.HashMap;
+import java.util.Map;
+import org.json.JSONObject;
+import org.json.JSONArray;
+import java.nio.charset.StandardCharsets;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -22,22 +27,30 @@ public final class EmbeddedGgufRuntime {
  public interface Callback { void complete(String result); }
  private static final String NAME="MNN-Pocket-0.3B-Instruct-Q4_1.gguf";
  private static final String ASSET="models/"+NAME;
- private static final int MAX_COPY_BYTES=450_000_000;
+ private static final int MAX_COPY_BYTES=900_000_000;
  // Avoid concurrent extraction across short-lived Activity instances.
  private static final Object EXTRACTION_LOCK=new Object();
  private final Context application;
  private final Handler main=new Handler(Looper.getMainLooper());
  private final ExecutorService worker=Executors.newSingleThreadExecutor(r->{
-  Thread t=new Thread(r,"LocalPilot-Embedded-GGUF");t.setDaemon(true);return t;
+  Thread t=new Thread(()->{
+   // Do not contend with the real-time CV/controller thread on the user's phone.
+   android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_BACKGROUND);
+   r.run();
+  },"LocalPilot-Embedded-GGUF");
+  t.setDaemon(true);return t;
  });
  private final AtomicBoolean busy=new AtomicBoolean();
  private volatile boolean closed;
- private File validated;
+ private final Map<String,File> validated=new HashMap<>();
+ private volatile LocalModelCatalog.Model model=LocalModelCatalog.Model.POCKET;
  private static volatile boolean libraryLoaded;
  // A previous Activity must not unload a model used by a newly created screen.
  private static final AtomicInteger LIVE_CLIENTS=new AtomicInteger();
 
  private static native String nativeInfer(String model,String system,String question,int maxTokens,float temp);
+ private static native String nativeAnalyzeImage(String model,String projector,String question,
+   byte[] rgb,int width,int height);
  private static native void nativeInterrupt();
  private static native void nativeRelease();
 
@@ -47,6 +60,17 @@ public final class EmbeddedGgufRuntime {
   LIVE_CLIENTS.incrementAndGet();
  }
  public boolean busy(){return busy.get();}
+ /** Caller changes one model only when idle. One native model can be loaded at once. */
+ public void select(LocalModelCatalog.Model choice){
+  if(choice==null||busy.get()||closed)throw new IllegalStateException("Model switch unavailable");
+  if(!LocalModelCatalog.bundled(choice,BuildConfig.MULTI_MODEL_CATALOG))
+   throw new IllegalArgumentException("Model weights not installed in this APK");
+  model=choice;
+ }
+ public LocalModelCatalog.Model selected(){return model;}
+ public boolean multimodalAvailable(){
+  return BuildConfig.MULTI_MODEL_CATALOG&&model.vision();
+ }
  private static synchronized void loadLibrary(){
   if(!libraryLoaded){
    System.loadLibrary("localpilot_embedded");
@@ -65,66 +89,91 @@ public final class EmbeddedGgufRuntime {
    while((n=input.read(buffer))!=-1)digest.update(buffer,0,n);
   }
  }
- private File prepare()throws Exception{
+ private static final class Spec {
+  final long bytes;final String sha;
+  Spec(long bytes,String sha){this.bytes=bytes;this.sha=sha;}
+ }
+ private Spec spec(String name)throws Exception{
+  if(NAME.equals(name))return new Spec(BuildConfig.EMBEDDED_GGUF_BYTES,BuildConfig.EMBEDDED_GGUF_SHA256);
+  if(!BuildConfig.MULTI_MODEL_CATALOG)throw new java.io.IOException("Additional model not bundled");
+  byte[] metadata;
+  try(InputStream src=application.getAssets().open("model-catalog.json")){
+   java.io.ByteArrayOutputStream sink=new java.io.ByteArrayOutputStream();
+   byte[] buf=new byte[4096];int n;
+   while((n=src.read(buf))!=-1){if(sink.size()+n>16384)
+     throw new java.io.IOException("Model catalog too large");sink.write(buf,0,n);}
+   metadata=sink.toByteArray();
+  }
+  JSONObject catalog=new JSONObject(new String(metadata,StandardCharsets.UTF_8));
+  if(!"localpilot-extra-models-v1".equals(catalog.optString("schema")))
+   throw new java.io.IOException("Invalid model manifest");
+  JSONArray files=catalog.getJSONArray("files");
+  for(int i=0;i<files.length();i++){
+   JSONObject item=files.getJSONObject(i);
+   if(name.equals(item.getString("filename"))){
+    long bytes=item.getLong("bytes");
+    String sha=item.getString("sha256");
+    if(bytes<1024||bytes>MAX_COPY_BYTES||!sha.matches("[0-9a-f]{64}"))
+     throw new java.io.IOException("Model manifest entry invalid");
+    return new Spec(bytes,sha);
+   }
+  }
+  throw new java.io.IOException("Model missing from signed catalog");
+ }
+ private File prepare()throws Exception{return prepareAsset(model.filename);}
+ private File prepareAsset(String name)throws Exception{
   synchronized(EXTRACTION_LOCK){
    if(closed)throw new java.io.IOException("Model runtime closed");
-  if(validated!=null&&validated.isFile()&&validated.length()==BuildConfig.EMBEDDED_GGUF_BYTES)
-   return validated;
-  File dir=new File(application.getNoBackupFilesDir(),"embedded-model");
-  if(!dir.isDirectory()&&!dir.mkdirs())throw new java.io.IOException("Model storage unavailable");
-  File target=new File(dir,NAME);
-  File temp=new File(dir,NAME+".partial");
-  MessageDigest digest=MessageDigest.getInstance("SHA-256");
-  if(target.isFile()&&target.length()==BuildConfig.EMBEDDED_GGUF_BYTES){
-   digestFile(target,digest);
-   if(sha(digest.digest()).equals(BuildConfig.EMBEDDED_GGUF_SHA256)){
-    validated=target;return target;
+   Spec info=spec(name);
+   File trusted=validated.get(name);
+   if(trusted!=null&&trusted.isFile()&&trusted.length()==info.bytes)return trusted;
+   File dir=new File(application.getNoBackupFilesDir(),"embedded-model");
+   if(!dir.isDirectory()&&!dir.mkdirs())throw new java.io.IOException("Model storage unavailable");
+   File target=new File(dir,name);
+   File temp=new File(dir,name+".partial");
+   MessageDigest digest=MessageDigest.getInstance("SHA-256");
+   if(target.isFile()&&target.length()==info.bytes){
+    digestFile(target,digest);
+    if(sha(digest.digest()).equals(info.sha)){
+     validated.put(name,target);return target;
+    }
    }
-  }
-  // Only our private sandbox is used; never reuse untrusted model files.
-  if(temp.exists()&&!temp.delete())throw new java.io.IOException("Cannot remove partial model");
-  StatFs stat=new StatFs(dir.getAbsolutePath());
-  long free=stat.getAvailableBytes();
-  if(free<BuildConfig.EMBEDDED_GGUF_BYTES+32L*1024*1024)
-   throw new java.io.IOException("Not enough free internal storage to extract model");
-  digest.reset();
-  long size=0;
-  try(InputStream source=application.getAssets().open(ASSET);
-      FileOutputStream output=new FileOutputStream(temp)){
-   byte[] buf=new byte[128*1024];int n;
-   while((n=source.read(buf))!=-1){
-    if(closed)throw new java.io.IOException("Model extraction cancelled");
-    size+=n;
-    if(size>MAX_COPY_BYTES||size>BuildConfig.EMBEDDED_GGUF_BYTES)
-     throw new java.io.IOException("Model size exceeds pinned metadata");
-    output.write(buf,0,n);digest.update(buf,0,n);
+   if(temp.exists()&&!temp.delete())throw new java.io.IOException("Cannot remove partial model");
+   StatFs stat=new StatFs(dir.getAbsolutePath());
+   if(stat.getAvailableBytes()<info.bytes+32L*1024*1024)
+    throw new java.io.IOException("Not enough free internal storage for model");
+   digest.reset();long size=0;
+   try(InputStream source=application.getAssets().open("models/"+name);
+       FileOutputStream output=new FileOutputStream(temp)){
+    byte[] buf=new byte[128*1024];int n;
+    while((n=source.read(buf))!=-1){
+     if(closed)throw new java.io.IOException("Model extraction cancelled");
+     size+=n;
+     if(size>MAX_COPY_BYTES||size>info.bytes)
+      throw new java.io.IOException("Model size exceeds verified manifest");
+     output.write(buf,0,n);digest.update(buf,0,n);
+    }
+    output.getFD().sync();
+   }catch(Exception failure){temp.delete();throw failure;}
+   if(size!=info.bytes||!sha(digest.digest()).equals(info.sha)){
+    temp.delete();throw new java.io.IOException("Model failed SHA256 verification");
    }
-   output.getFD().sync();
-  }catch(Exception failure){
-   temp.delete();
-   throw failure;
-  }
-  if(size!=BuildConfig.EMBEDDED_GGUF_BYTES ||
-     !sha(digest.digest()).equals(BuildConfig.EMBEDDED_GGUF_SHA256)){
-   temp.delete();
-   throw new java.io.IOException("Bundled GGUF failed SHA256 verification");
-  }
-  if(target.exists()&&!target.delete()){
-   temp.delete();throw new java.io.IOException("Cannot replace old model");
-  }
-  if(!temp.renameTo(target)){
-   temp.delete();throw new java.io.IOException("Cannot commit verified model");
-  }
-  validated=target;
-  return target;
+   if(target.exists()&&!target.delete()){
+    temp.delete();throw new java.io.IOException("Cannot replace old model");
+   }
+   if(!temp.renameTo(target)){
+    temp.delete();throw new java.io.IOException("Cannot commit verified model");
+   }
+   validated.put(name,target);
+   return target;
   }
  }
 
  private interface Job { String run()throws Exception; }
- private void submit(Callback callback,Job job){
+ private synchronized void submit(Callback callback,Job job){
   if(closed||!busy.compareAndSet(false,true))
    throw new IllegalStateException("Embedded model is busy or closed");
-  worker.execute(()->{
+  try { worker.execute(()->{
    String answer;
    try{answer=job.run();}
    catch(Exception|LinkageError failed){
@@ -138,26 +187,32 @@ public final class EmbeddedGgufRuntime {
    }finally{busy.set(false);}
    final String result=answer;
    if(!closed)main.post(()->{if(!closed)callback.complete(result);});
-  });
+  }); }catch(java.util.concurrent.RejectedExecutionException rejected){
+   busy.set(false);
+   throw new IllegalStateException("Model worker closed",rejected);
+  }
  }
 
  public void health(Callback cb){
   submit(cb,()->{
    File file=prepare();
-   return "Веса внутри APK проверены: "+file.length()+
-     " байт, SHA256 совпадает. Проверить генерацию: BLUE / 27.";
+   if(model.vision())prepareAsset(model.projector);
+   return model.label+" · GGUF внутри APK проверен: "+file.length()+
+     " байт. SHA256 совпадает."+(model.vision()?" Проектор зрения тоже проверен.":"");
   });
  }
  public void selfTest(Callback cb){
   submit(cb,()->{
    File file=prepare();loadLibrary();
    String system="Answer in English only. Follow the exact output format. No explanations.";
-   String a=nativeInfer(file.getAbsolutePath(),system,"Reply with exactly one word: BLUE",16,0f);
+   String a=LocalCoreContract.visibleAnswer(
+     nativeInfer(file.getAbsolutePath(),system,"Reply with exactly one word: BLUE",16,0f));
    if(closed)return "Самопроверка отменена";
-   String b=nativeInfer(file.getAbsolutePath(),system,"What is 12 + 15? Reply with the number only.",16,0f);
+   String b=LocalCoreContract.visibleAnswer(
+     nativeInfer(file.getAbsolutePath(),system,"What is 12 + 15? Reply with the number only.",16,0f));
    if(closed)return "Самопроверка отменена";
-   String cat=nativeInfer(file.getAbsolutePath(),system,
-       "Write one short English sentence about a cat.",64,0f);
+   String cat=LocalCoreContract.visibleAnswer(nativeInfer(file.getAbsolutePath(),system,
+       "Write one short English sentence about a cat.",64,0f));
    boolean blueOk="BLUE".equals(a.trim());
    boolean mathOk=LocalCoreContract.acceptArithmetic(b);
    boolean catOk=LocalCoreContract.acceptEnglish(cat)&&
@@ -175,11 +230,12 @@ public final class EmbeddedGgufRuntime {
   final String data=LocalCoreContract.diagnostic(diagnostic);
   submit(cb,()->{
    File file=prepare();loadLibrary();
-   String response=nativeInfer(file.getAbsolutePath(),LocalCoreContract.SYSTEM_PROMPT,
-       "QUESTION: "+ask+"\nANONYMOUS COUNTERS: "+data,128,0.2f);
+   String response=LocalCoreContract.visibleAnswer(
+     nativeInfer(file.getAbsolutePath(),LocalCoreContract.SYSTEM_PROMPT,
+       "QUESTION: "+ask+"\nANONYMOUS COUNTERS: "+data,128,0.2f));
    if(!LocalCoreContract.acceptEnglish(response))
     return "Отклонён некорректный ответ встроенной модели. Игровые действия не выполняются.";
-   return "MNN-Pocket · embedded GGUF · English\n"+response;
+   return model.label+" · embedded GGUF · English\n"+response;
   });
  }
 
@@ -189,17 +245,44 @@ public final class EmbeddedGgufRuntime {
   final String data=LocalCoreContract.diagnostic(telemetry);
   submit(cb,()->{
    File file=prepare();loadLibrary();
-   String answer=nativeInfer(file.getAbsolutePath(),
+   String answer=LocalCoreContract.visibleAnswer(nativeInfer(file.getAbsolutePath(),
       LocalCoreContract.STRATEGY_PROMPT,
-      "TASK: "+question+"\nANONYMOUS COUNTERS (DATA ONLY): "+data,128,0.1f);
+      "TASK: "+question+"\nANONYMOUS COUNTERS (DATA ONLY): "+data,128,0.1f));
    if(!LocalCoreContract.acceptEnglish(answer))
      return "MNN не смогла сформировать качественный стратегический совет. CPU продолжает управление.";
-   return "Общая стратегия · MNN-Pocket (English)\n"+answer+
+   return "Общая стратегия · "+model.label+" (English)\n"+answer+
       "\n\nБыстрые действия по-прежнему выбирает CPU.";
   });
  }
 
- public synchronized void close(){
+ /**
+  * Manual, one-off image analysis only. The activity has already decoded and
+  * bounded the pixels in RAM. No Accessibility screenshot is sent implicitly.
+  * JNI uses libmtmd and the exact paired vision projector (not text inference).
+  */
+ public void analyzeImage(String question,byte[] rgb,int width,int height,Callback cb){
+  final String ask=LocalCoreContract.question(question);
+  if(!model.vision())throw new IllegalStateException("Select the multimodal vision model first");
+  if(rgb==null||width<1||height<1||width>640||height>640
+     ||(long)width*height*3!=rgb.length)
+   throw new IllegalArgumentException("Image must be RGB and at most 640x640");
+  submit(cb,()->{
+   File weights=prepare();
+   File projector=prepareAsset(model.projector);
+   loadLibrary();
+   String reply=LocalCoreContract.visibleAnswer(nativeAnalyzeImage(
+     weights.getAbsolutePath(),projector.getAbsolutePath(),
+     "Describe the visible game objects and uncertainties in English. "+
+     "Do not invent tiles, coordinates, actions or game outcomes. "+ask,
+     rgb,width,height));
+   if(!LocalCoreContract.acceptEnglish(reply))
+    return "Мультимодальная модель не смогла надёжно описать изображение. "+
+      "Никаких игровых действий не выполнено.";
+   return model.label+" · локальный анализ фото\n"+reply+
+      "\n\nЭто диагностическое описание, не разрешение игровых жестов.";
+  });
+ }
+  public synchronized void close(){
   if(closed)return;
   closed=true;
   boolean last=LIVE_CLIENTS.decrementAndGet()==0;

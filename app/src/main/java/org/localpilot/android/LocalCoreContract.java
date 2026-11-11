@@ -82,6 +82,24 @@ public final class LocalCoreContract {
   return value;
  }
 
+ /**
+  * Present only the final user-facing answer. Some Qwen families prepend
+  * internal <think> blocks; incomplete/thought-only responses are rejected.
+  * Never pass untrusted model control tokens to diagnostics or the UI.
+  */
+ public static String visibleAnswer(String raw){
+  if(raw==null||raw.length()>4096)return "";
+  String value=raw.trim();
+  if(value.startsWith("<think>")){
+   int end=value.indexOf("</think>");
+   if(end<0)return "";
+   value=value.substring(end+"</think>".length()).trim();
+  }
+  if(value.contains("<think>")||value.contains("</think>")||
+     value.contains("<|")||value.contains("|>"))return "";
+  return value;
+ }
+
  /** Accept only exact arithmetic or the tiny model's equivalent equation. */
  public static boolean acceptArithmetic(String raw){
   if(raw==null || raw.length()>64)return false;
@@ -92,6 +110,7 @@ public final class LocalCoreContract {
 
  public static boolean acceptEnglish(String response){
   if(response==null || response.isBlank() || response.length()>MAX_ANSWER ||
+      !visibleAnswer(response).equals(response.trim()) ||
       TextRepetitionGuard.inspect(response)!=TextRepetitionGuard.Result.OK)
    return false;
   int latin=0,other=0;
