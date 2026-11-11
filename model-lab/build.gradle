@@ -3,6 +3,7 @@ plugins { id 'com.android.application' }
 
 // A single, permanently separate package: NO applicationIdSuffix variants.
 def preloaded = providers.gradleProperty('modelLabPreloaded').orElse('false').get().toBoolean()
+def enableVulkan = providers.gradleProperty('modelLabVulkan').orElse('false').get().toBoolean()
 def pocket = null
 if (preloaded) {
  def report = rootProject.file('build/reports/embedded-gguf.json')
@@ -26,13 +27,17 @@ android {
  buildFeatures { buildConfig true }
  androidResources { noCompress += ['gguf'] }
  ndkVersion '27.2.12479018'
- externalNativeBuild { cmake { path file('../app/src/main/cpp/CMakeLists.txt'); version '3.22.1' } }
+ externalNativeBuild {
+  cmake { path file('../app/src/main/cpp/CMakeLists.txt'); version '3.22.1' }
+ }
  defaultConfig {
   applicationId 'org.localpilot.modellab'
   minSdk 30
   targetSdk 35
   versionCode 1
-  versionName '1.0.0-candidate'
+  versionName enableVulkan ? '1.0.0-vulkan-experimental' : '1.0.0-candidate'
+  externalNativeBuild { cmake { arguments enableVulkan ? '-DMODEL_LAB_VULKAN=ON' : '-DMODEL_LAB_VULKAN=OFF' } }
+  buildConfigField 'boolean', 'VULKAN_COMPILED', enableVulkan.toString()
   buildConfigField 'boolean', 'PRELOADED_MODELS', preloaded.toString()
   buildConfigField 'String', 'POCKET_SHA256',
     preloaded ? ('"' + pocket.sha256 + '"') : '""'
