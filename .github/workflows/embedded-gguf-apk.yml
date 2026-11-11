@@ -87,7 +87,7 @@ jobs:
           readelf -h build/reports/liblocalpilot_embedded.so > build/reports/embedded-elf-header.txt
           grep -q 'Machine:.*AArch64' build/reports/embedded-elf-header.txt
           readelf -Ws build/reports/liblocalpilot_embedded.so > build/reports/embedded-elf-symbols.txt
-          for symbol in nativeInfer nativeInterrupt nativeRelease; do
+          for symbol in nativeInfer nativeInferDirection nativeInterrupt nativeRelease; do
             grep -Fq "Java_org_localpilot_android_EmbeddedGgufRuntime_$symbol" build/reports/embedded-elf-symbols.txt
           done
           readelf -d build/reports/liblocalpilot_embedded.so | awk '/NEEDED/ { sub(/^.*\[/,""); sub(/\].*$/,""); print }' > build/reports/native-dependencies.txt
