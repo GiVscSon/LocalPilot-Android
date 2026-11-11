@@ -33,6 +33,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.localpilot.shared.HubContract;
 import org.localpilot.shared.NesTrial;
+import org.localpilot.shared.NesFrameTransfer;
 
 /**
  * NES CPU/PPU emulation: JSNES 2.1.0 execution inside a
@@ -54,6 +55,8 @@ public final class NesEmulatorActivity extends Activity {
  private long experimentGeneration;
  private boolean homebrewRom;
  private NesTrial readyTrial;
+ private NesTrial exportTrial;
+ private boolean exportPending;
  private TrialPending pendingTrial;
  private static final class TrialPending{
   final String button;
@@ -222,6 +225,23 @@ public final class NesEmulatorActivity extends Activity {
      else pendingTrial=null;
     });
    }
+   @JavascriptInterface public void onSnapshot(String encoded){
+    // JavascriptInterface runs on a different WebView thread. Reject huge
+    // responses before allocating or decoding any PNG bytes.
+    byte[] png=null;
+    if(encoded!=null&&encoded.length()<=NesFrameTransfer.MAX_BASE64_CHARS){
+     try{
+      byte[] candidate=Base64.decode(encoded,Base64.NO_WRAP);
+      NesFrameTransfer.verify(candidate);
+      png=candidate;
+     }catch(RuntimeException ignored){ /* Text evidence still transfers. */ }
+    }
+    final byte[] accepted=png;
+    runOnUiThread(()->{
+     if(!exportPending||closed||!resumed)return;
+     completeExport(accepted);
+    });
+   }
    @JavascriptInterface public void onStatus(String message){
     runOnUiThread(()->state.setText(message));
    }
@@ -366,11 +386,34 @@ public final class NesEmulatorActivity extends Activity {
  }
  private void sendTrialToModelLab(){
   if(readyTrial==null){state.setText("Для отчёта запусти NES и нажми кнопку");return;}
+  if(exportPending||!resumed||!pageLoaded||web==null){
+   state.setText("Сначала открой работающий NES-эмулятор");return;
+  }
+  exportPending=true;
+  exportTrial=readyTrial;
+  shareTrial.setEnabled(false);
+  // Snapshot callback is optional: old WebViews can still send the trusted
+  // structured observation alone. Never wait indefinitely for the bridge.
+  web.evaluateJavascript("window.retroSnapshot()",value->{
+   if(exportPending&&!"true".equals(value))completeExport(null);
+  });
+  shareTrial.postDelayed(()->{
+   if(exportPending&&resumed&&!closed)completeExport(null);
+  },2500);
+ }
+ private void completeExport(byte[] png){
+  if(!exportPending)return;
+  NesTrial evidence=exportTrial;
+  exportPending=false;exportTrial=null;
+  if(shareTrial!=null)shareTrial.setEnabled(readyTrial!=null);
+  if(evidence==null||closed||!resumed)return;
   Intent intent=new Intent(NesTrial.ACTION);
   intent.setClassName("org.localpilot.modellab","org.localpilot.android.ModelLabActivity");
-  intent.putExtra(NesTrial.EXTRA,readyTrial.serialize());
-  try{startActivity(intent);}
-  catch(android.content.ActivityNotFoundException missing){
+  intent.putExtra(NesTrial.EXTRA,evidence.serialize());
+  if(png!=null)intent.putExtra(NesFrameTransfer.EXTRA_PNG,png);
+  try{
+   startActivity(intent);
+  }catch(android.content.ActivityNotFoundException missing){
    state.setText("Установи отдельный ModelLab, затем отправь NES-эпизод повторно");
   }catch(SecurityException denied){
    state.setText("ModelLab не разрешил приём: проверь установленную версию");
@@ -404,6 +447,7 @@ public final class NesEmulatorActivity extends Activity {
   String encoded=Base64.encodeToString(rom,Base64.NO_WRAP);
   frames=hash=0;touches.set(0);
   ++experimentGeneration;experiment.stop();
+  exportPending=false;exportTrial=null;
   homebrewRom=homebrew;pendingTrial=null;readyTrial=null;
   if(shareTrial!=null)shareTrial.setEnabled(false);
   if(cpuAgentButton!=null)cpuAgentButton.setEnabled(false);
@@ -454,7 +498,9 @@ public final class NesEmulatorActivity extends Activity {
   }
  }
  @Override protected void onPause(){
-  resumed=false;GameLabEvidenceProvider.clear("nes");
+  resumed=false;exportPending=false;exportTrial=null;
+  if(shareTrial!=null)shareTrial.setEnabled(readyTrial!=null);
+  GameLabEvidenceProvider.clear("nes");
   if(experiment.running())stopCpuExperiment("STOP: NES ушла в фон");
   pendingTrial=null; // Do not link a paused/resumed frame to an old input.
   if(web!=null&&pageLoaded)web.evaluateJavascript("window.retroPause()",null);
@@ -469,7 +515,7 @@ public final class NesEmulatorActivity extends Activity {
   }
  }
  @Override protected void onDestroy(){
-  closed=true;
+  closed=true;exportPending=false;exportTrial=null;
   romDownloads.shutdownNow();
   ++experimentGeneration;experiment.stop();
   if(web!=null){web.evaluateJavascript("window.retroStop()",null);
