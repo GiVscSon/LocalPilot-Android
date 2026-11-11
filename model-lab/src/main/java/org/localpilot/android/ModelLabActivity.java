@@ -127,7 +127,7 @@ public final class ModelLabActivity extends Activity {
    if(presetDownloadRunning){presetStatus.setText("Уже идёт загрузка модели");return;}
    presetDownloadRunning=true;
    downloadCancelled=false;
-   task("Загружаю "+preset.label,()->{
+   boolean queued=task("Загружаю "+preset.label,()->{
     try{
      ModelLabStore.Entry installed=store.downloadPreset(preset,(phase,done,total)->{
       if(downloadCancelled)throw new IllegalStateException("Загрузка отменена пользователем");
@@ -144,6 +144,7 @@ public final class ModelLabActivity extends Activity {
      return "Установлена "+installed.label;
     }finally{presetDownloadRunning=false;}
    },true);
+   if(!queued)presetDownloadRunning=false;
   });
   button(col,"Отменить загрузку GGUF",()->{
    if(presetDownloadRunning){
@@ -400,9 +401,9 @@ public final class ModelLabActivity extends Activity {
    getPreferences(MODE_PRIVATE).edit().putString("selected",displayed.get(selection).id).apply();
  }
  private interface Task { String run()throws Exception; }
- private void task(String message,Task action,boolean refresh){
-  if(closed)return;
-  if(engine.busy()){status.setText("Проводится генерация. Заверши текущий тест.");return;}
+ private boolean task(String message,Task action,boolean refresh){
+  if(closed)return false;
+  if(engine.busy()){status.setText("Проводится генерация. Заверши текущий тест.");return false;}
   status.setText(message+"...");
   try{
    io.execute(()->{
@@ -419,8 +420,10 @@ public final class ModelLabActivity extends Activity {
      if(refresh)refresh();
     });
    });
+   return true;
   }catch(java.util.concurrent.RejectedExecutionException e){
    status.setText("Операция завершена: экран закрыт");
+   return false;
   }
  }
  private void title(LinearLayout parent,String value){
