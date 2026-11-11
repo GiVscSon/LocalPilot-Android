@@ -34,7 +34,7 @@ public final class ModelLabStore {
  private final ArrayList<Entry> entries=new ArrayList<>();
  // Immutable committed view: UI refresh does not wait on a >500 MB HTTPS download.
  // The mutable entries list is confined to synchronized store methods.
- private volatile List<Entry> published=List.of();
+ private final ModelLabRegistrySnapshot<Entry> published=new ModelLabRegistrySnapshot<>();
  private final Map<String,Boolean> verified=new HashMap<>();
 
  public static final class Entry {
@@ -72,8 +72,8 @@ public final class ModelLabStore {
    throw new IllegalStateException("Не удалось проверить каталог моделей: "+error.getMessage(),error);
   }
  }
- public List<Entry> list(){return new ArrayList<>(published);}
- private void publishSnapshot(){published=List.copyOf(entries);}
+ public List<Entry> list(){return published.read();}
+ private void publishSnapshot(){published.publish(entries);}
  public interface Progress { void onBytes(String phase,long done,long total); }
  private int importedCount(){int n=0;for(Entry e:entries)if(!e.bundled)n++;return n;}
  public synchronized Entry find(String id){
