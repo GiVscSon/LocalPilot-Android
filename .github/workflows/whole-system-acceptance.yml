@@ -24,6 +24,8 @@ on:
       - 'tests/NesRomDownloadVerify.java'
       - 'tests/nes_real_rom_smoke.cjs'
       - 'tools/verify_public_nes.py'
+      - 'tools/device_triad_acceptance.py'
+      - 'tests/test_device_triad_acceptance.py'
       - 'settings.gradle'
       - '.github/workflows/whole-system-acceptance.yml'
 permissions:
@@ -99,6 +101,7 @@ jobs:
       - name: Verify script agents and ten-game CPU simulator training remain isolated
         run: |
           set -euo pipefail
+          python3 tests/test_device_triad_acceptance.py
           python3 scripts/unified_pipeline.py verify
           python3 scripts/unified_pipeline.py selfplay
       - name: Fetch only reviewed native GGUF llama.cpp runtime
