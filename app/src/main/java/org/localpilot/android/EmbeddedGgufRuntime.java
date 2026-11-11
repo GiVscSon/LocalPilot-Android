@@ -47,6 +47,9 @@ public final class EmbeddedGgufRuntime {
  private static volatile boolean libraryLoaded;
  // A previous Activity must not unload a model used by a newly created screen.
  private static final AtomicInteger LIVE_CLIENTS=new AtomicInteger();
+ // Native GGUF is a process-wide singleton. Different Activity runtimes must
+ // not reset one another's cancellation flag or model while running.
+ private static final AtomicBoolean NATIVE_JOB_ACTIVE=new AtomicBoolean();
 
  private static native String nativeInfer(String model,String system,String question,int maxTokens,float temp);
  private static native String nativeAnalyzeImage(String model,String projector,String question,
@@ -60,10 +63,10 @@ public final class EmbeddedGgufRuntime {
   application=context.getApplicationContext();
   LIVE_CLIENTS.incrementAndGet();
  }
- public boolean busy(){return busy.get();}
+ public boolean busy(){return busy.get()||NATIVE_JOB_ACTIVE.get();}
  /** Caller changes one model only when idle. One native model can be loaded at once. */
  public void select(LocalModelCatalog.Model choice){
-  if(choice==null||busy.get()||closed)throw new IllegalStateException("Model switch unavailable");
+  if(choice==null||busy()||closed)throw new IllegalStateException("Model switch unavailable");
   if(!LocalModelCatalog.bundled(choice,BuildConfig.MULTI_MODEL_CATALOG))
    throw new IllegalArgumentException("Model weights not installed in this APK");
   model=choice;
@@ -186,6 +189,10 @@ public final class EmbeddedGgufRuntime {
  private synchronized void submit(Callback callback,Job job){
   if(closed||!busy.compareAndSet(false,true))
    throw new IllegalStateException("Embedded model is busy or closed");
+  if(!NATIVE_JOB_ACTIVE.compareAndSet(false,true)){
+   busy.set(false);
+   throw new IllegalStateException("Other diagnostic screen already uses native GGUF");
+  }
   try { worker.execute(()->{
    String answer;
    try{answer=job.run();}
@@ -197,11 +204,15 @@ public final class EmbeddedGgufRuntime {
     if(reason.length()>160)reason=reason.substring(0,160)+"…";
     answer="Встроенная модель недоступна ["+failed.getClass().getSimpleName()+
       "]: "+reason+". Проверьте свободное место, ARM64 и целостность APK.";
-   }finally{busy.set(false);}
+   }finally{
+    busy.set(false);
+    NATIVE_JOB_ACTIVE.set(false);
+   }
    final String result=answer;
    if(!closed)main.post(()->{if(!closed)callback.complete(result);});
   }); }catch(java.util.concurrent.RejectedExecutionException rejected){
    busy.set(false);
+   NATIVE_JOB_ACTIVE.set(false);
    throw new IllegalStateException("Model worker closed",rejected);
   }
  }
