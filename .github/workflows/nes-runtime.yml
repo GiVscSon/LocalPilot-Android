@@ -12,6 +12,9 @@ on:
       - 'tests/NesBridgeVerify.java'
       - 'tests/NesBridgeTest.java'
       - 'tests/nes_bridge_e2e.cjs'
+      - 'tests/NesExperimentPolicyVerify.java'
+      - 'tests/NesExperimentPolicyTest.java'
+      - 'game-lab/src/main/java/org/localpilot/gamelab/NesExperimentPolicy.java'
   pull_request:
     paths:
       - 'game-lab/**'
@@ -75,6 +78,7 @@ jobs:
             build/nes-runtime/demo.nes \
             build/nes-runtime/nes-trial.txt
           java tests/NesBridgeVerify.java build/nes-runtime/nes-trial.txt
+          java tests/NesExperimentPolicyVerify.java
       - name: Store proof from both emulated CPU and Java contract
         if: success()
         uses: actions/upload-artifact@v4

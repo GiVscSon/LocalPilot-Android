@@ -47,6 +47,9 @@ ok(html.includes('!homebrewRom||agentTrial')&&html.includes('name!=="A"'),
  "autonomous input cannot run for arbitrary user ROMs");
 ok(html.includes('frames>=agentTrial.started+agentTrial.holdFrames'),
  "CPU action duration gated by actual NES frames not wall clock");
+ok(html.includes('window.retroCancelAgent=function()')&&
+   html.includes('if(gamepadLatch)gamepadLatch.clear()'),
+ "manual STOP always clears held simulated buttons");
 const activity=fs.readFileSync(path.join(root,
  "game-lab/src/main/java/org/localpilot/gamelab/NesEmulatorActivity.java"),"utf8");
 ok(activity.includes('file:///android_asset/nes/latched-buttons.js'),

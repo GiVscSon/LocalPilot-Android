@@ -94,6 +94,12 @@ function stop(){
  nes=null;paused=true;audioStop();
 }
 window.retroStop=function(){stop();status("Игра остановлена");};
+window.retroCancelAgent=function(){
+ const wasActive=Boolean(agentTrial);
+ agentTrial=null;
+ if(gamepadLatch)gamepadLatch.clear();
+ return wasActive;
+};
 window.retroPause=function(){
  if(gamepadLatch)gamepadLatch.clear();
  agentTrial=null;

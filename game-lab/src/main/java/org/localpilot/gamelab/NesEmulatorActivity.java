@@ -18,6 +18,7 @@ import android.webkit.WebViewClient;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
 import android.widget.Button;
+import android.widget.CheckBox;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -40,7 +41,10 @@ public final class NesEmulatorActivity extends Activity {
  private static final String[] GAMEPAD={"UP","LEFT","DOWN","RIGHT","SELECT","START","B","A"};
  private WebView web;
  private TextView state;
- private Button demoButton,aButton,bButton,shareTrial,cpuAgentButton;
+ private Button demoButton,aButton,bButton,shareTrial,cpuAgentButton,cpuBatchButton,stopCpuButton;
+ private CheckBox exploratoryStopSwitch;
+ private final NesExperimentPolicy experiment=new NesExperimentPolicy();
+ private long experimentGeneration;
  private boolean homebrewRom;
  private NesTrial readyTrial;
  private TrialPending pendingTrial;
@@ -89,8 +93,28 @@ public final class NesEmulatorActivity extends Activity {
   cpuAgentButton=new Button(this);
   cpuAgentButton.setText("CPU NES-агент · тестовый ход A (16 кадров)");
   cpuAgentButton.setEnabled(false);
-  cpuAgentButton.setOnClickListener(v->runHomebrewCpuAgent());
+  cpuAgentButton.setOnClickListener(v->{
+   if(experiment.running())return;
+   runHomebrewCpuAgent();
+  });
   root.addView(cpuAgentButton);
+  exploratoryStopSwitch=new CheckBox(this);
+  exploratoryStopSwitch.setText(
+    "Лаборатория NES: игнорировать авто-STOP при неизменном кадре (только тестовый ROM)");
+  exploratoryStopSwitch.setChecked(false);
+  exploratoryStopSwitch.setOnCheckedChangeListener((view,checked)->{
+   if(experiment.running())stopCpuExperiment("Режим изменён: серия остановлена");
+  });
+  root.addView(exploratoryStopSwitch);
+  cpuBatchButton=new Button(this);
+  cpuBatchButton.setText("Серия CPU-агента · до "+NesExperimentPolicy.MAX_STEPS+" ходов");
+  cpuBatchButton.setEnabled(false);
+  cpuBatchButton.setOnClickListener(v->startCpuExperiment());
+  root.addView(cpuBatchButton);
+  stopCpuButton=new Button(this);
+  stopCpuButton.setText("STOP · немедленно остановить CPU-агента");
+  stopCpuButton.setOnClickListener(v->stopCpuExperiment("STOP: агент остановлен пользователем"));
+  root.addView(stopCpuButton);
   web=new WebView(this);
   web.setBackgroundColor(HubContract.BACKGROUND);
   web.getSettings().setJavaScriptEnabled(true);
@@ -124,6 +148,10 @@ public final class NesEmulatorActivity extends Activity {
     runOnUiThread(()->{
      if(!resumed)return;
      frames=count;hash=pixelsHash;
+     if(experiment.running()&&pendingTrial!=null&&
+        count-pendingTrial.frame>180){
+      stopCpuExperiment("STOP: не получено подтверждение хода в пределах 180 кадров");
+     }
      completeTrialOnFreshFrame(count,pixelsHash);
      publishEvidence();
      if(count%60==0)
@@ -137,6 +165,8 @@ public final class NesEmulatorActivity extends Activity {
      if(current!=null&&current.button.equals(name)&&current.downAck&&
         started>=current.frame&&finished>=started+4&&finished<=started+60)
       current.upAck=true;
+     else if(experiment.running())
+      stopCpuExperiment("STOP: несогласованный ACK эмулятора");
      else pendingTrial=null;
     });
    }
@@ -194,9 +224,34 @@ public final class NesEmulatorActivity extends Activity {
   if(resumed&&demoButton!=null)
    GameLabEvidenceProvider.nes(dendy,frames,hash,touches.get(),demoButton,aButton,bButton);
  }
+ private void startCpuExperiment(){
+  if(experiment.running())return;
+  if(!resumed||!homebrewRom||!pageLoaded||frames<15||hash==0){
+   state.setText("Серия доступна только внутри запущенной тестовой NES-игры");
+   return;
+  }
+  experiment.start(true,exploratoryStopSwitch!=null&&exploratoryStopSwitch.isChecked());
+  ++experimentGeneration;
+  if(cpuBatchButton!=null)cpuBatchButton.setEnabled(false);
+  if(cpuAgentButton!=null)cpuAgentButton.setEnabled(false);
+  runHomebrewCpuAgent();
+ }
+ private void stopCpuExperiment(String reason){
+  ++experimentGeneration;
+  experiment.stop();
+  pendingTrial=null;
+  if(web!=null&&pageLoaded)
+   web.evaluateJavascript("window.retroCancelAgent()",null);
+  if(cpuBatchButton!=null)cpuBatchButton.setEnabled(homebrewRom&&pageLoaded&&resumed);
+  if(cpuAgentButton!=null)cpuAgentButton.setEnabled(homebrewRom&&pageLoaded&&resumed);
+  if(state!=null)state.setText(reason);
+ }
  private void runHomebrewCpuAgent(){
-  if(!homebrewRom||!pageLoaded||frames<15||hash==0){
-   state.setText("CPU-агент доступен только в запущенном homebrew NES");return;
+  if(!resumed||!homebrewRom||!pageLoaded||frames<15||hash==0||
+     (pendingTrial!=null)){
+   if(experiment.running())stopCpuExperiment("STOP: тестовая NES недоступна");
+   else state.setText("CPU-агент доступен только в запущенном homebrew NES");
+   return;
   }
   beginTrial("A");
   web.evaluateJavascript("window.retroAgentTrial('A',16)",result->{
@@ -204,8 +259,11 @@ public final class NesEmulatorActivity extends Activity {
    if(current==null)return;
    current.downAck="true".equals(result);
    if(!current.downAck){
-    pendingTrial=null;
-    state.setText("CPU-агент не подтвердил начало эмулированного ввода");
+    if(experiment.running())stopCpuExperiment("STOP: не подтверждён ввод NES");
+    else {
+     pendingTrial=null;
+     state.setText("CPU-агент не подтвердил начало эмулированного ввода");
+    }
    }
   });
  }
@@ -224,7 +282,34 @@ public final class NesEmulatorActivity extends Activity {
      current.button,current.frame,count,current.hash,pixelHash);
    if(shareTrial!=null)shareTrial.setEnabled(true);
    state.setText(readyTrial.summary()+" · можно передать в ModelLab");
-  }catch(IllegalArgumentException invalid){readyTrial=null;}
+   if(experiment.running()){
+    NesExperimentPolicy.Decision result=experiment.observe(readyTrial.status);
+    if(result==NesExperimentPolicy.Decision.CONTINUE){
+     long serial=experimentGeneration;
+     String diagnostic=readyTrial.status.equals("NO_VISUAL_CHANGE")
+       ?" · ОШИБКА: кадр не изменился, лабораторное продолжение"
+       :" · кадр изменился";
+     state.setText("CPU NES: шаг "+experiment.completed()+"/"+
+       NesExperimentPolicy.MAX_STEPS+diagnostic);
+     web.post(()->{
+      if(serial==experimentGeneration&&experiment.running()&&resumed&&
+         homebrewRom&&pageLoaded)runHomebrewCpuAgent();
+     });
+    }else{
+     String reason=switch(result){
+      case STOP_NO_CHANGE->"STOP: после хода кадр не изменился";
+      case STOP_LIMIT->"STOP: достигнут обязательный предел "+
+        NesExperimentPolicy.MAX_STEPS+" шагов";
+      case STOP_INTEGRITY->"STOP: недействительный отчёт";
+      default->"STOP: эксперимент завершён";
+     };
+     stopCpuExperiment(reason+" · "+readyTrial.status);
+    }
+   }
+  }catch(IllegalArgumentException invalid){
+   readyTrial=null;
+   if(experiment.running())stopCpuExperiment("STOP: несогласованные кадры NES");
+  }
   pendingTrial=null;
  }
  private void sendTrialToModelLab(){
@@ -245,13 +330,16 @@ public final class NesEmulatorActivity extends Activity {
   }
   String encoded=Base64.encodeToString(rom,Base64.NO_WRAP);
   frames=hash=0;touches.set(0);
+  ++experimentGeneration;experiment.stop();
   homebrewRom=homebrew;pendingTrial=null;readyTrial=null;
   if(shareTrial!=null)shareTrial.setEnabled(false);
   if(cpuAgentButton!=null)cpuAgentButton.setEnabled(false);
+  if(cpuBatchButton!=null)cpuBatchButton.setEnabled(false);
   web.evaluateJavascript("window.retroLoadRom("+org.json.JSONObject.quote(encoded)+","
     +(dendy?"true":"false")+","+(homebrew?"true":"false")+")",success->{
    boolean launched="true".equals(success);
    if(cpuAgentButton!=null)cpuAgentButton.setEnabled(launched&&homebrew);
+   if(cpuBatchButton!=null)cpuBatchButton.setEnabled(launched&&homebrew);
    if(!launched)state.setText("NES ROM не запущен. Проверьте mapper и ядро.");
   });
  }
@@ -294,6 +382,7 @@ public final class NesEmulatorActivity extends Activity {
  }
  @Override protected void onPause(){
   resumed=false;GameLabEvidenceProvider.clear("nes");
+  if(experiment.running())stopCpuExperiment("STOP: NES ушла в фон");
   pendingTrial=null; // Do not link a paused/resumed frame to an old input.
   if(web!=null&&pageLoaded)web.evaluateJavascript("window.retroPause()",null);
   if(web!=null)web.onPause();
@@ -307,6 +396,7 @@ public final class NesEmulatorActivity extends Activity {
   }
  }
  @Override protected void onDestroy(){
+  ++experimentGeneration;experiment.stop();
   if(web!=null){web.evaluateJavascript("window.retroStop()",null);
    web.removeJavascriptInterface("GameLabBridge");
    web.destroy();web=null;

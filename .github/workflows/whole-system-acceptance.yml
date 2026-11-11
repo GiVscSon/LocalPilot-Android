@@ -10,6 +10,9 @@ on:
       - 'scripts/unified_pipeline.py'
       - 'tests/NesBridge*.java'
       - 'tests/nes_bridge_e2e.cjs'
+      - 'tests/NesExperimentPolicyVerify.java'
+      - 'tests/NesExperimentPolicyTest.java'
+      - 'game-lab/src/main/java/org/localpilot/gamelab/NesExperimentPolicy.java'
       - 'tests/nes_controller_framehold.cjs'
       - 'tests/ModelLabPolicyVerify.java'
       - 'settings.gradle'
@@ -68,6 +71,7 @@ jobs:
             build/integration/rom/homebrew.nes \
             build/integration/rom/evidence.txt
           java tests/NesBridgeVerify.java build/integration/rom/evidence.txt
+          java tests/NesExperimentPolicyVerify.java
           java tests/ModelLabPolicyVerify.java
       - name: Verify script agents and ten-game CPU simulator training remain isolated
         run: |
