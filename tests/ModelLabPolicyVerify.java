@@ -20,7 +20,8 @@ class ModelLabPolicyVerify {
    String[] yesUrls={
      "https://huggingface.co/ggml-org/Qwen3.5-0.8B-GGUF/resolve/main/Qwen3.5-0.8B-Q4_0.gguf",
      "https://cas-bridge.xethub.hf.co/path/model",
-     "https://cdn-lfs.huggingface.co/path"};
+     "https://cdn-lfs.huggingface.co/path",
+     "https://us.aws.cdn.hf.co/path"};
    for(String url:yesUrls)
     yes((boolean)allowed.invoke(null,url),"expected HTTPS HF host: "+url);
    String[] bad={
@@ -34,6 +35,7 @@ class ModelLabPolicyVerify {
      "https://user:token@huggingface.co/file.gguf",
      "https://huggingface.co/file.gguf#fragment",
      "https://evil.example/file.gguf",
+     "https://us.aws.cdn.hf.co.evil.example/file.gguf",
      "https://huggingface.co@localhost/file.gguf",
      null};
    for(String url:bad)yes(!(boolean)allowed.invoke(null,url),"network host should be rejected: "+url);
