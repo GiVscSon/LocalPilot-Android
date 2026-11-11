@@ -40,6 +40,7 @@ public final class ModelLabActivity extends Activity {
  private Spinner modelPicker,computePicker,presetPicker;
  private TextView presetStatus;
  private volatile String preferredModelId;
+ private volatile boolean presetDownloadRunning,downloadCancelled;
  private TextView computeStatus;
  private final ModelLabComputePolicy compute=new ModelLabComputePolicy();
  private final List<ModelLabStore.Entry> displayed=new ArrayList<>();
@@ -123,9 +124,14 @@ public final class ModelLabActivity extends Activity {
    if(index<0||index>=ModelLabPresetCatalog.ALL.size())return;
    ModelLabPresetCatalog.Preset preset=ModelLabPresetCatalog.ALL.get(index);
    if(engine.busy()){presetStatus.setText("Сначала заверши анализ");return;}
+   if(presetDownloadRunning){presetStatus.setText("Уже идёт загрузка модели");return;}
+   presetDownloadRunning=true;
+   downloadCancelled=false;
    task("Загружаю "+preset.label,()->{
-    ModelLabStore.Entry installed=store.downloadPreset(preset,(phase,done,total)->{
-     runOnUiThread(()->{
+    try{
+     ModelLabStore.Entry installed=store.downloadPreset(preset,(phase,done,total)->{
+      if(downloadCancelled)throw new IllegalStateException("Загрузка отменена пользователем");
+      runOnUiThread(()->{
       if(!closed)presetStatus.setText(preset.label+" · "+phase+" · "+
        (total>0?((done*100)/total)+"%":done+" байт"));
      });
@@ -135,8 +141,15 @@ public final class ModelLabActivity extends Activity {
      if(!closed)presetStatus.setText("Готово · "+installed.label+
       ". SHA-256 и точный размер подтверждены, модель доступна в списке.");
     });
-    return "Установлена "+installed.label;
+     return "Установлена "+installed.label;
+    }finally{presetDownloadRunning=false;}
    },true);
+  });
+  button(col,"Отменить загрузку GGUF",()->{
+   if(presetDownloadRunning){
+    downloadCancelled=true;
+    presetStatus.setText("Отмена запрошена; проверка при следующем блоке данных...");
+   }else presetStatus.setText("Сейчас нет активной загрузки");
   });
   title(col,"Ускорение нейросети · CPU / Vulkan GPU");
   line(col,"На POCO X7 Pro установлен Mali-G720. Vulkan экспериментален: "+
@@ -490,6 +503,7 @@ public final class ModelLabActivity extends Activity {
  }
  @Override protected void onDestroy(){
   closed=true;
+  downloadCancelled=true;
   rgb=null;
   if(preview!=null)preview.setImageDrawable(null);
   if(previewBitmap!=null)previewBitmap.recycle();
