@@ -47,6 +47,9 @@ public final class ModelLabActivity extends Activity {
  private final List<ModelLabStore.Entry> displayed=new ArrayList<>();
  private TextView status,result,modelStatus,imageStatus,nesStatus;
  private NesTrial nesTrial;
+ // A callback from an earlier NES episode or screenshot is never displayed
+ // as the result of a later one. UI-thread confined revision tracking.
+ private final ModelLabResultGate revisions=new ModelLabResultGate();
  private EditText prompt,url,sha256;
  private ImageView preview;
  private Bitmap previewBitmap;
@@ -100,17 +103,22 @@ public final class ModelLabActivity extends Activity {
    if(evidence==null){nesStatus.setText("Сначала передай NES-эпизод из GameLab");return;}
    if(selection==null){nesStatus.setText("Выбери или импортируй GGUF-модель");return;}
    if(engine.busy()){nesStatus.setText("Сейчас выполняется другой анализ");return;}
+   final long episodeRevision=revisions.nes();
    task("Проверяю модель для NES-анализа",()->{
     File weights=store.modelFile(selection);
     runOnUiThread(()->{
-     if(closed)return;
+     if(closed||!revisions.currentNes(episodeRevision))return;
      try{
       engine.text(weights,evidence.advisoryPrompt(),selectedGpuLayers(selection),(answer,elapsed)->{
-       if(!closed)nesStatus.setText(evidence.summary()+"\n"+
-         selection.label+" · "+elapsed+" мс\n"+answer);
+       if(!closed&&revisions.currentNes(episodeRevision))
+        nesStatus.setText(evidence.summary()+"\n"+
+          selection.label+" · "+elapsed+" мс\n"+answer);
       });
-      nesStatus.setText("Анализирую подтверждённый факт изменения кадра...");
-     }catch(Exception failure){nesStatus.setText("NES-анализ: "+failure.getMessage());}
+      nesStatus.setText("Анализирую текущий NES-эпизод...");
+     }catch(Exception failure){
+      if(revisions.currentNes(episodeRevision))
+       nesStatus.setText("NES-анализ: "+failure.getMessage());
+     }
     });
     return "Только текстовая стратегия, без доступа к игровым кнопкам";
    },false);
@@ -324,23 +332,29 @@ public final class ModelLabActivity extends Activity {
    if(engine.busy()){imageStatus.setText("Модель занята");return;}
    final byte[] data=rgb.clone();
    final int w=width,h=height;
+   final long imageRevision=revisions.image();
+   final boolean sourceIsNes=nesFrameLoaded;
    task("Проверяю веса и проектор",()->{
     File model=store.modelFile(e);
     File projector=store.projectorFile(e);
     runOnUiThread(()->{
-     if(closed)return;
+     if(closed||!revisions.currentImage(imageRevision))return;
      try{
       engine.image(model,projector,
-        (nesFrameLoaded?
+        (sourceIsNes?
           "This is a downsized NES screenshot captured when the episode was shared. "+
           "Describe visible game objects and uncertainty. The screenshot is NOT "+
           "proof of scoring, action causality or a successful game move. ":
           "Describe the visible game objects, colors and uncertain elements."),
         data,w,h,selectedGpuLayers(e),(answer,elapsed)->{
-         if(!closed)imageStatus.setText(e.label+" · "+elapsed+" мс\n"+answer);
+         if(!closed&&revisions.currentImage(imageRevision))
+          imageStatus.setText(e.label+" · "+elapsed+" мс\n"+answer);
         });
-      imageStatus.setText("Обрабатываю RGB-пиксели в фоне...");
-     }catch(Exception failure){imageStatus.setText(failure.getMessage());}
+      imageStatus.setText("Обрабатываю выбранный RGB-кадр в фоне...");
+     }catch(Exception failure){
+      if(revisions.currentImage(imageRevision))
+       imageStatus.setText(failure.getMessage());
+     }
     });
     return "Проверка GGUF и mmproj пройдена";
    },false);
@@ -353,16 +367,18 @@ public final class ModelLabActivity extends Activity {
 
  private void receiveNesIntent(Intent intent){
   if(intent==null||!NesTrial.ACTION.equals(intent.getAction()))return;
+  // Even a malformed incoming trial invalidates old asynchronous results.
+  revisions.newNes();
+  revisions.newImage();
+  nesTrial=null;
+  rgb=null;nesFrameLoaded=false;width=0;height=0;
+  if(preview!=null){preview.setImageDrawable(null);preview.setVisibility(View.GONE);}
+  if(previewBitmap!=null){previewBitmap.recycle();previewBitmap=null;}
+  if(imageStatus!=null)
+   imageStatus.setText("Новый NES-эпизод: ожидаю кадр или выбери фото вручную.");
   try{
    String serialized=intent.getStringExtra(NesTrial.EXTRA);
    nesTrial=NesTrial.parse(serialized);
-   // Never leave a previous experiment's screenshot available as if it
-   // represented the newly received NES trial.
-   rgb=null;nesFrameLoaded=false;width=0;height=0;
-   if(preview!=null){preview.setImageDrawable(null);preview.setVisibility(View.GONE);}
-   if(previewBitmap!=null){previewBitmap.recycle();previewBitmap=null;}
-   if(imageStatus!=null)
-    imageStatus.setText("Новый NES-эпизод: ожидаю кадр или выбери фото вручную.");
    if(nesStatus!=null)nesStatus.setText("Принят эпизод: "+nesTrial.summary()+
      "\nМожно анализировать текстовый отчёт или полученный снимок через vision GGUF. "+
      "Происхождение данных не аутентифицировано.");
@@ -517,7 +533,8 @@ public final class ModelLabActivity extends Activity {
   }
  }
  private void loadImage(Uri uri){
-  rgb=null;
+  revisions.newImage();
+  rgb=null;nesFrameLoaded=false;
   try{
    BitmapFactory.Options size=new BitmapFactory.Options();size.inJustDecodeBounds=true;
    try(InputStream in=getContentResolver().openInputStream(uri)){
@@ -566,7 +583,9 @@ public final class ModelLabActivity extends Activity {
   rgb=null;
   if(preview!=null)preview.setImageDrawable(null);
   if(previewBitmap!=null)previewBitmap.recycle();
-  io.shutdown();
+  // Interrupt pending downloads/imports instead of letting a discarded
+  // Activity continue writing multi-gigabyte GGUF files after rotation.
+  io.shutdownNow();
   super.onDestroy();
  }
 }

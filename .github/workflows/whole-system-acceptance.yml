@@ -29,6 +29,8 @@ on:
       - 'tools/verify_modellab_cancel.py'
       - 'tests/ModelLabCatalogVerify.java'
       - 'tests/ModelLabRegistrySnapshotVerify.java'
+      - 'tests/ModelLabResultGateVerify.java'
+      - 'model-lab/src/main/java/org/localpilot/android/ModelLabResultGate.java'
       - 'model-lab/src/main/java/org/localpilot/android/ModelLabRegistrySnapshot.java'
       - 'tests/NesRomDownloadVerify.java'
       - 'tests/nes_real_rom_smoke.cjs'
@@ -105,6 +107,7 @@ jobs:
           java tests/ModelLabComputePolicyVerify.java
           java tests/ModelLabCatalogVerify.java
           java tests/ModelLabRegistrySnapshotVerify.java
+          java tests/ModelLabResultGateVerify.java
           java tests/NesRomDownloadVerify.java
           node tests/nes_visual_bridge_smoke.cjs
           javac --release 17 -d build/integration/rom \

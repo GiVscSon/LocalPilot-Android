@@ -241,6 +241,8 @@ public final class ModelLabStore {
    out.getFD().sync();
   }catch(Exception failure){temp.delete();throw failure;}
   try{
+   if(Thread.currentThread().isInterrupted())
+    throw new java.io.InterruptedIOException("Импорт GGUF прерван");
    if(expectedBytes>0&&copied!=expectedBytes)
     throw new SecurityException("Модель скачана не полностью");
    if(progress!=null)progress.onBytes("Проверка SHA-256",copied,expectedBytes);
@@ -253,6 +255,8 @@ public final class ModelLabStore {
    String sha=hash(digest.digest());
    if(expectedSha!=null&&!expectedSha.isBlank()&&!sha.equalsIgnoreCase(expectedSha))
     throw new SecurityException("Контрольная сумма модели не совпадает");
+   if(Thread.currentThread().isInterrupted())
+    throw new java.io.InterruptedIOException("Импорт GGUF отменён до записи");
    String finalName="import-"+sha+".gguf";
    File dest=new File(directory,finalName);
    if(dest.isFile()){

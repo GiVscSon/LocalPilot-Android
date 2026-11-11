@@ -16,6 +16,8 @@ on:
       - 'tools/verify_modellab_cancel.py'
       - 'tests/ModelLabCatalogVerify.java'
       - 'tests/ModelLabRegistrySnapshotVerify.java'
+      - 'tests/ModelLabResultGateVerify.java'
+      - 'model-lab/src/main/java/org/localpilot/android/ModelLabResultGate.java'
       - 'model-lab/src/main/java/org/localpilot/android/ModelLabRegistrySnapshot.java'
       - 'model-lab/src/main/java/org/localpilot/android/ModelLabPresetCatalog.java'
       - 'tests/ModelLabComputePolicy*.java'
@@ -45,6 +47,7 @@ jobs:
           java tests/ModelLabComputePolicyVerify.java
           java tests/ModelLabCatalogVerify.java
           java tests/ModelLabRegistrySnapshotVerify.java
+          java tests/ModelLabResultGateVerify.java
           python3 tools/verify_modellab_cancel.py
       - name: Verify immutable Hugging Face links and approved CDN redirects (no weights)
         run: |
