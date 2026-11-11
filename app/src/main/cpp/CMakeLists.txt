@@ -21,10 +21,17 @@ set(GGML_NATIVE OFF CACHE BOOL "" FORCE)
 set(GGML_OPENMP OFF CACHE BOOL "" FORCE)
 set(GGML_LLAMAFILE OFF CACHE BOOL "" FORCE)
 set(GGML_BACKEND_DL OFF CACHE BOOL "" FORCE)
+# Only the dedicated ModelLab experimental APK enables Vulkan. The normal
+# LocalPilot/game/NES APKs continue to build and run the CPU backend.
+if(MODEL_LAB_VULKAN)
+  set(GGML_VULKAN ON CACHE BOOL "" FORCE)
+else()
+  set(GGML_VULKAN OFF CACHE BOOL "" FORCE)
+endif()
 add_subdirectory("${LLAMA_SRC}" "${CMAKE_CURRENT_BINARY_DIR}/llama-cpp")
 add_library(localpilot_embedded SHARED localpilot_embedded.cpp)
 target_include_directories(localpilot_embedded PRIVATE
-  "${LLAMA_SRC}/include" "${LLAMA_SRC}/tools/mtmd")
+  "${LLAMA_SRC}/include" "${LLAMA_SRC}/ggml/include" "${LLAMA_SRC}/tools/mtmd")
 if(ANDROID)
   target_link_libraries(localpilot_embedded PRIVATE llama mtmd log)
 else()
