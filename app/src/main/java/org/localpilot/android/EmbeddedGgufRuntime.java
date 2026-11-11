@@ -52,6 +52,7 @@ public final class EmbeddedGgufRuntime {
  private static native String nativeAnalyzeImage(String model,String projector,String question,
    byte[] rgb,int width,int height);
  private static native void nativeInterrupt();
+ private static native void nativeResetInterrupt();
  private static native void nativeRelease();
 
  public EmbeddedGgufRuntime(Context context){
@@ -75,6 +76,18 @@ public final class EmbeddedGgufRuntime {
   if(!libraryLoaded){
    System.loadLibrary("localpilot_embedded");
    libraryLoaded=true;
+  }
+ }
+ /** Each new diagnostics job must clear the prior interruption before JNI,
+  * but STOP during initialization or Activity destruction must still win.
+  * No reset is allowed between questions in the same self-test job. */
+ private void prepareNativeInference()throws java.io.IOException{
+  if(closed)throw new java.io.IOException("Model runtime closed");
+  loadLibrary();
+  nativeResetInterrupt();
+  if(closed){
+   nativeInterrupt();
+   throw new java.io.IOException("Model runtime closed during JNI preparation");
   }
  }
  private static String sha(byte[] bytes){
@@ -203,7 +216,7 @@ public final class EmbeddedGgufRuntime {
  }
  public void selfTest(Callback cb){
   submit(cb,()->{
-   File file=prepare();loadLibrary();
+   File file=prepare();prepareNativeInference();
    String system="Answer in English only. Follow the exact output format. No explanations.";
    String a=LocalCoreContract.visibleAnswer(
      nativeInfer(file.getAbsolutePath(),system,"Reply with exactly one word: BLUE",16,0f));
@@ -229,7 +242,7 @@ public final class EmbeddedGgufRuntime {
   final String ask=LocalCoreContract.question(question);
   final String data=LocalCoreContract.diagnostic(diagnostic);
   submit(cb,()->{
-   File file=prepare();loadLibrary();
+   File file=prepare();prepareNativeInference();
    String response=LocalCoreContract.visibleAnswer(
      nativeInfer(file.getAbsolutePath(),LocalCoreContract.SYSTEM_PROMPT,
        "QUESTION: "+ask+"\nANONYMOUS COUNTERS: "+data,128,0.2f));
@@ -244,7 +257,7 @@ public final class EmbeddedGgufRuntime {
   final String question=LocalCoreContract.strategyQuestion(gameProfile);
   final String data=LocalCoreContract.diagnostic(telemetry);
   submit(cb,()->{
-   File file=prepare();loadLibrary();
+   File file=prepare();prepareNativeInference();
    String answer=LocalCoreContract.visibleAnswer(nativeInfer(file.getAbsolutePath(),
       LocalCoreContract.STRATEGY_PROMPT,
       "TASK: "+question+"\nANONYMOUS COUNTERS (DATA ONLY): "+data,128,0.1f));
@@ -269,7 +282,7 @@ public final class EmbeddedGgufRuntime {
   submit(cb,()->{
    File weights=prepare();
    File projector=prepareAsset(model.projector);
-   loadLibrary();
+   prepareNativeInference();
    String reply=LocalCoreContract.visibleAnswer(nativeAnalyzeImage(
      weights.getAbsolutePath(),projector.getAbsolutePath(),
      "Describe the visible game objects and uncertainties in English. "+

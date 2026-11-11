@@ -34,3 +34,14 @@ check("engine.requestCancel()" in activity, "user cannot stop inference")
 check("BIND_ACCESSIBILITY_SERVICE" not in manifest and
       "SYSTEM_ALERT_WINDOW" not in manifest, "ModelLab must remain isolated")
 print("MODELLAB_CANCEL_CONTRACT_PASS checks=10")
+
+app_runtime=Path("app/src/main/java/org/localpilot/android/EmbeddedGgufRuntime.java").read_text(encoding="utf-8")
+check("private static native void nativeResetInterrupt();" in app_runtime,
+      "embedded LocalPilot adapter missing native reset declaration")
+check("private void prepareNativeInference()" in app_runtime,
+      "embedded LocalPilot adapter has no safe request start")
+check(app_runtime.count("prepareNativeInference();")==4,
+      "not every embedded inference job resets stale cancellation")
+check("if(closed){\n   nativeInterrupt();" in app_runtime,
+      "embedded runtime must re-interrupt if shutdown races with reset")
+print("EMBEDDED_GGUF_CANCEL_COMPAT_PASS checks=4")
