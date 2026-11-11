@@ -1,5 +1,6 @@
 #include <jni.h>
 #include "llama.h"
+#include "ggml-backend.h"
 #include "mtmd.h"
 #include "mtmd-helper.h"
 #include <cstdint>
@@ -15,6 +16,32 @@ std::atomic<bool> cancelled(false);
 llama_model * model=nullptr;
 llama_context * ctx=nullptr;
 std::string path;
+int gpuLayersRequested=0;
+int gpuLayersLoaded=0;
+bool anyGpu(){
+ llama_backend_init();
+ const size_t count=ggml_backend_dev_count();
+ for(size_t i=0;i<count;i++){
+  auto device=ggml_backend_dev_get(i);
+  auto type=ggml_backend_dev_type(device);
+  if(type==GGML_BACKEND_DEVICE_TYPE_GPU||type==GGML_BACKEND_DEVICE_TYPE_IGPU)
+   return true;
+ }
+ return false;
+}
+std::string gpuName(){
+ llama_backend_init();
+ const size_t count=ggml_backend_dev_count();
+ for(size_t i=0;i<count;i++){
+  auto device=ggml_backend_dev_get(i);
+  auto type=ggml_backend_dev_type(device);
+  if(type==GGML_BACKEND_DEVICE_TYPE_GPU||type==GGML_BACKEND_DEVICE_TYPE_IGPU){
+   const char *desc=ggml_backend_dev_description(device);
+   return desc?std::string(desc):"GPU detected";
+  }
+ }
+ return "GPU backend not compiled or no Vulkan compute device";
+}
 
 struct Utf {
  JNIEnv *e; jstring s; const char *p;
@@ -26,23 +53,37 @@ struct Utf {
 void unload(){
  if(ctx){llama_free(ctx);ctx=nullptr;}
  if(model){llama_model_free(model);model=nullptr;}
- path.clear();
+ path.clear();gpuLayersLoaded=0;
 }
 
 bool init(const std::string &name){
- if(model&&ctx&&name==path)return true;
+ if(model&&ctx&&name==path&&gpuLayersLoaded==gpuLayersRequested)return true;
  unload();
  if(name.empty())return false;
  llama_backend_init();
  auto mp=llama_model_default_params();
- mp.n_gpu_layers=0;
+ mp.n_gpu_layers=gpuLayersRequested;
+ if(mp.n_gpu_layers>0&&!anyGpu())mp.n_gpu_layers=0;
  model=llama_model_load_from_file(name.c_str(),mp);
+ if(!model&&mp.n_gpu_layers>0){
+  // Recover from ordinary OOM or unsupported offload errors.
+  // A native driver crash is NOT recoverable inside the same process.
+  mp.n_gpu_layers=0;
+  model=llama_model_load_from_file(name.c_str(),mp);
+ }
  if(!model)return false;
  auto cp=llama_context_default_params();
  cp.n_ctx=4096; cp.n_batch=512; cp.n_ubatch=256;
  cp.n_threads=4; cp.n_threads_batch=4;
  ctx=llama_init_from_model(model,cp);
+ if(!ctx&&mp.n_gpu_layers>0){
+  llama_model_free(model);model=nullptr;
+  mp.n_gpu_layers=0;
+  model=llama_model_load_from_file(name.c_str(),mp);
+  if(model)ctx=llama_init_from_model(model,cp);
+ }
  if(!ctx){unload();return false;}
+ gpuLayersLoaded=mp.n_gpu_layers;
  path=name;return true;
 }
 
@@ -135,14 +176,48 @@ std::string infer(const std::string &sys,const std::string &usr,int limit,float 
 }
 }
 
+// GPU offload selection affects only a standalone diagnostics process.
+// No game service is allowed to call this entrypoint.
+extern "C" JNIEXPORT jstring JNICALL
+Java_org_localpilot_android_EmbeddedGgufRuntime_nativeGpuDescription(JNIEnv *e,jclass){
+ std::lock_guard<std::mutex> guard(lock);
+ std::string text=gpuName();
+ if(text.size()>200)text.resize(200);
+ for(unsigned char c:text)if((c&0xf8)==0xf0){text="GPU device detected";break;}
+ return e->NewStringUTF(text.c_str());
+}
+extern "C" JNIEXPORT jboolean JNICALL
+Java_org_localpilot_android_EmbeddedGgufRuntime_nativeConfigureGpuLayers(
+ JNIEnv *,jclass,jint value){
+ std::lock_guard<std::mutex> guard(lock);
+ if(value!=0&&value!=8&&value!=16)return JNI_FALSE;
+ if(value>0&&!anyGpu())return JNI_FALSE;
+ if(gpuLayersRequested!=value){
+  gpuLayersRequested=value;
+  unload();
+ }
+ return JNI_TRUE;
+}
+extern "C" JNIEXPORT jint JNICALL
+Java_org_localpilot_android_EmbeddedGgufRuntime_nativeLoadedGpuLayers(JNIEnv *,jclass){
+ std::lock_guard<std::mutex> guard(lock);
+ return static_cast<jint>(gpuLayersLoaded);
+}
+
+// Only the serialized Java inference worker resets cancellation at the start
+// of a NEW request. Individual JNI inference entrypoints must never reset it:
+// a user STOP may race with JNI dispatch and must remain effective.
+extern "C" JNIEXPORT void JNICALL
+Java_org_localpilot_android_EmbeddedGgufRuntime_nativeResetInterrupt(JNIEnv *,jclass){
+ cancelled.store(false);
+}
 extern "C" JNIEXPORT jstring JNICALL
 Java_org_localpilot_android_EmbeddedGgufRuntime_nativeInfer(
  JNIEnv *e,jclass,jstring filename,jstring system,jstring question,jint maxTokens,jfloat temperature){
  Utf f(e,filename),s(e,system),q(e,question);
  std::lock_guard<std::mutex> guard(lock);
- cancelled.store(false);
  std::string result;
- if(init(f.str()))result=infer(s.str(),q.str(),maxTokens,temperature);
+ if(!cancelled.load()&&init(f.str()))result=infer(s.str(),q.str(),maxTokens,temperature);
  // JNI NewStringUTF expects Modified UTF-8, not 4-byte emoji sequences.
  // Reject unsupported supplementary characters rather than risking a VM abort.
  for(unsigned char byte:result){
@@ -164,11 +239,10 @@ Java_org_localpilot_android_EmbeddedGgufRuntime_nativeAnalyzeImage(
                        reinterpret_cast<jbyte*>(pixels.data()));
  if(e->ExceptionCheck())return nullptr;
  std::lock_guard<std::mutex> guard(lock);
- cancelled.store(false);
  std::string reply;
- if(init(f.str())&&!cancelled.load()){
+ if(!cancelled.load()&&init(f.str())&&!cancelled.load()){
   auto params=mtmd_context_params_default();
-  params.use_gpu=false;
+  params.use_gpu=gpuLayersLoaded>0;
   params.n_threads=4;
   params.warmup=false;
   params.image_max_tokens=512;

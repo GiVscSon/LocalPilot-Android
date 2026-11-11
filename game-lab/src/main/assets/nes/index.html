@@ -19,7 +19,8 @@ const image=ctx.createImageData(256,240),stat=document.getElementById("status");
 const keyMap={LEFT:"BUTTON_LEFT",RIGHT:"BUTTON_RIGHT",UP:"BUTTON_UP",DOWN:"BUTTON_DOWN",
  A:"BUTTON_A",B:"BUTTON_B",START:"BUTTON_START",SELECT:"BUTTON_SELECT"};
 let nes=null,timer=null,frames=0,validFrame=0,paused=false,sampleRate=44100;
-let gamepadLatch=null;
+let activeRomSession=null;
+let gamepadLatch=null,agentTrial=null,homebrewRom=false;
 let audioContext=null,audioNode=null;
 const SIZE=32768,ringL=new Float32Array(SIZE),ringR=new Float32Array(SIZE);
 let writeAt=0,readAt=0;
@@ -67,21 +68,42 @@ function sendFrame(rgb){
   let hash=2166136261>>>0;
   for(let i=0;i<256*240;i+=241)hash=Math.imul(hash^rgb[i],16777619)>>>0;
   validFrame=hash;
-  try{if(window.GameLabBridge)window.GameLabBridge.onFrame(frames,hash|0);}catch(error){}
+  try{if(window.GameLabBridge)window.GameLabBridge.onFrame(frames,hash|0,activeRomSession);}catch(error){}
  }
 }
 function tick(){
  if(!nes||paused)return;
- try{nes.frame();if(gamepadLatch)gamepadLatch.flush(frames);}catch(error){stop();status("Ошибка игры: "+String(error.message||error));}
+ try{
+  nes.frame();
+  // CPU baseline executes only the original homebrew, never user ROMs.
+  // Button release is counted against REAL emulated frames, not a timer.
+  if(agentTrial&&frames>=agentTrial.started+agentTrial.holdFrames){
+   const trial=agentTrial;agentTrial=null;
+   gamepadLatch.change(trial.name,trial.code,false,frames);
+   gamepadLatch.flush(frames);
+   try{if(window.GameLabBridge)
+    window.GameLabBridge.onAgentAction(trial.name,trial.started,frames,activeRomSession);
+   }catch(ignored){}
+  }
+  if(gamepadLatch)gamepadLatch.flush(frames);
+ }catch(error){stop();status("Ошибка игры: "+String(error.message||error));}
 }
 function stop(){
  if(timer!==null){clearInterval(timer);timer=null;}
  if(gamepadLatch){gamepadLatch.clear();gamepadLatch=null;}
+ agentTrial=null;homebrewRom=false;activeRomSession=null;
  nes=null;paused=true;audioStop();
 }
 window.retroStop=function(){stop();status("Игра остановлена");};
+window.retroCancelAgent=function(){
+ const wasActive=Boolean(agentTrial);
+ agentTrial=null;
+ if(gamepadLatch)gamepadLatch.clear();
+ return wasActive;
+};
 window.retroPause=function(){
  if(gamepadLatch)gamepadLatch.clear();
+ agentTrial=null;
  paused=true;
  if(timer!==null){clearInterval(timer);timer=null;}
  if(audioContext)audioContext.suspend();
@@ -93,9 +115,12 @@ window.retroResume=function(){
  timer=setInterval(tick,window.retroDendy?20:1000/60);
  return true;
 };
-window.retroLoadRom=function(encoded,dendy){
+window.retroLoadRom=function(encoded,dendy,homebrew,session){
  try{
   stop();
+  if(typeof session!=="string"||!(/^[1-9][0-9]{0,18}$/).test(session))
+   throw new Error("Отсутствует идентификатор NES-сеанса");
+  activeRomSession=session;
   if(!window.jsnes||typeof jsnes.NES!=="function"||!jsnes.Controller)
    throw new Error("В APK отсутствует JSNES-ядро");
   const binary=atob(encoded);
@@ -108,6 +133,7 @@ window.retroLoadRom=function(encoded,dendy){
    onFrame:sendFrame,onAudioSample:audioWrite});
   machine.loadROM(binary);nes=machine;
   gamepadLatch=new FrameHeldButtons(machine,4);
+  homebrewRom=Boolean(homebrew);
   window.retroDendy=Boolean(dendy);
   frames=0;validFrame=0;
   audioStart();paused=false;
@@ -118,11 +144,40 @@ window.retroLoadRom=function(encoded,dendy){
   stop();status("ROM не запущен: "+String(error.message||error));return false;
  }
 };
+window.retroAgentTrial=function(name,holdFrames){
+ if(!nes||paused||!gamepadLatch||!homebrewRom||agentTrial||
+    name!=="A"||!Number.isInteger(holdFrames)||holdFrames<4||holdFrames>60)
+   return false;
+ const code=jsnes.Controller.BUTTON_A;
+ if(!gamepadLatch.change(name,code,true,frames))return false;
+ agentTrial={name,code,started:frames,holdFrames};
+ return true;
+};
 window.retroButton=function(name,down){
  if(!nes||!gamepadLatch||paused||!Object.prototype.hasOwnProperty.call(keyMap,name))return false;
  const value=jsnes.Controller[keyMap[name]];
  if(typeof value!=="number")return false;
  return gamepadLatch.change(name,value,Boolean(down),frames);
+};
+// A user-triggered, downsized RGB screenshot. This is a NEW frame at export,
+// not a replay of the action-end fingerprint or a reward signal.
+window.retroSnapshot=function(token){
+ // Token is chosen by Android for this exact request, not by the ROM.
+ if(typeof token!=="string"||!(/^[1-9][0-9]{0,18}$/).test(token)||
+    !nes||paused||!window.GameLabBridge)return false;
+ try{
+  const small=document.createElement("canvas");
+  small.width=128;small.height=120;
+  const output=small.getContext("2d",{alpha:false});
+  if(!output)return false;
+  output.imageSmoothingEnabled=false;
+  output.drawImage(canvas,0,0,128,120);
+  const image=small.toDataURL("image/png");
+  const prefix="data:image/png;base64,";
+  if(!image.startsWith(prefix)||image.length-prefix.length>200000)return false;
+  window.GameLabBridge.onSnapshot(image.substring(prefix.length),token);
+  return true;
+ }catch(error){return false;}
 };
 window.retroMetrics=function(){return JSON.stringify({frames,pixel_hash:validFrame,running:!!nes&&!paused});};
 document.addEventListener("visibilitychange",function(){

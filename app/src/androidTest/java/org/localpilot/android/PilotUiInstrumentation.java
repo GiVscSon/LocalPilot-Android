@@ -331,18 +331,39 @@ public final class PilotUiInstrumentation extends Instrumentation {
 
         click("Свернуть");
         await(this::compact, 2_000, "Panel did not compact before hide/show setup");
+        View previousPanel=onMain(()->(View)field("panel"));
         onMain(() -> { service.hidePanel(); service.showPanel(); return null; });
-        await(() -> present("Свернуть"), 2_000, "Reopened panel is not expanded");
+        // WindowManager addView() and the accessibility node snapshot do not
+        // become ready in the same traversal. A stale overlay button could
+        // report visible before it is capable of receiving real OS touches.
+        await(()->onMain(()->{
+            Object current=field("panel");
+            return current instanceof View view&&view!=previousPanel&&
+                view.isAttachedToWindow()&&booleanField("panelRegistered");
+        }),4_000,"Fresh overlay was not attached after hide/show");
+        require(!armed(),"Hide/show must revoke the old gesture ticket");
+        await(() -> present("Свернуть"), 3_000, "Reopened panel is not expanded");
         require(!compact(), "Reopened panel retained stale compact flag");
+        if(android.os.Build.VERSION.SDK_INT>=33) {
+            await(()->{
+                AccessibilityNodeInfo node=findText("Свернуть");
+                if(node==null)return false;
+                try{return node.refresh()&&node.isVisibleToUser()&&node.isClickable();}
+                finally{node.recycle();}
+            },4_000,"Fresh collapsed-control accessibility node was not published");
+        }
         click("Свернуть");
-        await(this::compact, 2_000, "First collapse after hide/show failed");
+        await(this::compact, 3_000, "First collapse after hide/show failed");
         require(present("STOP"), "STOP missing after reopen/collapse");
         addCheck("first_collapse_after_hide_show", new JSONObject().put("hide_show_method", "public_service_api"));
     }
 
     private void checkFullDemo() throws Exception {
         launchDemo();
-        click("Начать проверку ×10");
+        // launchDemo() hides/recreates the panel. Previous game/window tickets
+        // were revoked by STOP, so the test must explicitly rebind the NEW window
+        // and obtain bounded consent rather than relying on a stale prior session.
+        armAndStart();
         await(() -> score() > 0, 6_000, "Demo made no first move");
         long configEpoch=onMain(()->gate().epoch());
         onMain(()->{
@@ -390,7 +411,8 @@ public final class PilotUiInstrumentation extends Instrumentation {
 
     private void checkRotationStopsInput() throws Exception {
         launchDemo();
-        click("Начать проверку ×10");
+        // Rotation is meaningful only after a fresh, explicitly armed session.
+        armAndStart();
         await(() -> score() >= 1, 6_000, "No real target touch before rotation");
         require(automation.setRotation(UiAutomation.ROTATION_FREEZE_90), "Cannot rotate isolated test device");
         try {

@@ -47,11 +47,15 @@ public final class EmbeddedGgufRuntime {
  private static volatile boolean libraryLoaded;
  // A previous Activity must not unload a model used by a newly created screen.
  private static final AtomicInteger LIVE_CLIENTS=new AtomicInteger();
+ // Native GGUF is a process-wide singleton. Different Activity runtimes must
+ // not reset one another's cancellation flag or model while running.
+ private static final AtomicBoolean NATIVE_JOB_ACTIVE=new AtomicBoolean();
 
  private static native String nativeInfer(String model,String system,String question,int maxTokens,float temp);
  private static native String nativeAnalyzeImage(String model,String projector,String question,
    byte[] rgb,int width,int height);
  private static native void nativeInterrupt();
+ private static native void nativeResetInterrupt();
  private static native void nativeRelease();
 
  public EmbeddedGgufRuntime(Context context){
@@ -59,10 +63,10 @@ public final class EmbeddedGgufRuntime {
   application=context.getApplicationContext();
   LIVE_CLIENTS.incrementAndGet();
  }
- public boolean busy(){return busy.get();}
+ public boolean busy(){return busy.get()||NATIVE_JOB_ACTIVE.get();}
  /** Caller changes one model only when idle. One native model can be loaded at once. */
  public void select(LocalModelCatalog.Model choice){
-  if(choice==null||busy.get()||closed)throw new IllegalStateException("Model switch unavailable");
+  if(choice==null||busy()||closed)throw new IllegalStateException("Model switch unavailable");
   if(!LocalModelCatalog.bundled(choice,BuildConfig.MULTI_MODEL_CATALOG))
    throw new IllegalArgumentException("Model weights not installed in this APK");
   model=choice;
@@ -75,6 +79,18 @@ public final class EmbeddedGgufRuntime {
   if(!libraryLoaded){
    System.loadLibrary("localpilot_embedded");
    libraryLoaded=true;
+  }
+ }
+ /** Each new diagnostics job must clear the prior interruption before JNI,
+  * but STOP during initialization or Activity destruction must still win.
+  * No reset is allowed between questions in the same self-test job. */
+ private void prepareNativeInference()throws java.io.IOException{
+  if(closed)throw new java.io.IOException("Model runtime closed");
+  loadLibrary();
+  nativeResetInterrupt();
+  if(closed){
+   nativeInterrupt();
+   throw new java.io.IOException("Model runtime closed during JNI preparation");
   }
  }
  private static String sha(byte[] bytes){
@@ -173,6 +189,10 @@ public final class EmbeddedGgufRuntime {
  private synchronized void submit(Callback callback,Job job){
   if(closed||!busy.compareAndSet(false,true))
    throw new IllegalStateException("Embedded model is busy or closed");
+  if(!NATIVE_JOB_ACTIVE.compareAndSet(false,true)){
+   busy.set(false);
+   throw new IllegalStateException("Other diagnostic screen already uses native GGUF");
+  }
   try { worker.execute(()->{
    String answer;
    try{answer=job.run();}
@@ -184,11 +204,15 @@ public final class EmbeddedGgufRuntime {
     if(reason.length()>160)reason=reason.substring(0,160)+"…";
     answer="Встроенная модель недоступна ["+failed.getClass().getSimpleName()+
       "]: "+reason+". Проверьте свободное место, ARM64 и целостность APK.";
-   }finally{busy.set(false);}
+   }finally{
+    busy.set(false);
+    NATIVE_JOB_ACTIVE.set(false);
+   }
    final String result=answer;
    if(!closed)main.post(()->{if(!closed)callback.complete(result);});
   }); }catch(java.util.concurrent.RejectedExecutionException rejected){
    busy.set(false);
+   NATIVE_JOB_ACTIVE.set(false);
    throw new IllegalStateException("Model worker closed",rejected);
   }
  }
@@ -203,7 +227,7 @@ public final class EmbeddedGgufRuntime {
  }
  public void selfTest(Callback cb){
   submit(cb,()->{
-   File file=prepare();loadLibrary();
+   File file=prepare();prepareNativeInference();
    String system="Answer in English only. Follow the exact output format. No explanations.";
    String a=LocalCoreContract.visibleAnswer(
      nativeInfer(file.getAbsolutePath(),system,"Reply with exactly one word: BLUE",16,0f));
@@ -229,7 +253,7 @@ public final class EmbeddedGgufRuntime {
   final String ask=LocalCoreContract.question(question);
   final String data=LocalCoreContract.diagnostic(diagnostic);
   submit(cb,()->{
-   File file=prepare();loadLibrary();
+   File file=prepare();prepareNativeInference();
    String response=LocalCoreContract.visibleAnswer(
      nativeInfer(file.getAbsolutePath(),LocalCoreContract.SYSTEM_PROMPT,
        "QUESTION: "+ask+"\nANONYMOUS COUNTERS: "+data,128,0.2f));
@@ -244,7 +268,7 @@ public final class EmbeddedGgufRuntime {
   final String question=LocalCoreContract.strategyQuestion(gameProfile);
   final String data=LocalCoreContract.diagnostic(telemetry);
   submit(cb,()->{
-   File file=prepare();loadLibrary();
+   File file=prepare();prepareNativeInference();
    String answer=LocalCoreContract.visibleAnswer(nativeInfer(file.getAbsolutePath(),
       LocalCoreContract.STRATEGY_PROMPT,
       "TASK: "+question+"\nANONYMOUS COUNTERS (DATA ONLY): "+data,128,0.1f));
@@ -269,7 +293,7 @@ public final class EmbeddedGgufRuntime {
   submit(cb,()->{
    File weights=prepare();
    File projector=prepareAsset(model.projector);
-   loadLibrary();
+   prepareNativeInference();
    String reply=LocalCoreContract.visibleAnswer(nativeAnalyzeImage(
      weights.getAbsolutePath(),projector.getAbsolutePath(),
      "Describe the visible game objects and uncertainties in English. "+

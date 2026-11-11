@@ -1,0 +1,174 @@
+name: Whole System · NES GameLab ModelLab CPU integration
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.head.repo.full_name || github.repository }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'app/**'
+      - 'game-lab/**'
+      - 'model-lab/**'
+      - 'tests/ModelLabComputePolicy*.java'
+      - 'shared/**'
+      - 'scripts/unified_pipeline.py'
+      - 'tests/NesBridge*.java'
+      - 'tests/nes_bridge_e2e.cjs'
+      - 'tests/nes_visual_bridge_smoke.cjs'
+      - 'tests/NesSnapshotGateVerify.java'
+      - 'tests/NesFrameEpochVerify.java'
+      - 'tests/nes_session_frame_smoke.cjs'
+      - 'game-lab/src/main/java/org/localpilot/gamelab/NesFrameEpoch.java'
+      - 'game-lab/src/main/java/org/localpilot/gamelab/NesSnapshotGate.java'
+      - 'tests/NesFrameTransferVerify.java'
+      - 'tests/NesExperimentPolicyVerify.java'
+      - 'tests/NesExperimentPolicyTest.java'
+      - 'game-lab/src/main/java/org/localpilot/gamelab/NesExperimentPolicy.java'
+      - 'tests/nes_controller_framehold.cjs'
+      - 'tests/ModelLabPolicyVerify.java'
+      - 'tools/verify_modellab_cancel.py'
+      - 'tests/ModelLabCatalogVerify.java'
+      - 'tests/ModelLabRegistrySnapshotVerify.java'
+      - 'tests/ModelLabResultGateVerify.java'
+      - 'model-lab/src/main/java/org/localpilot/android/ModelLabResultGate.java'
+      - 'model-lab/src/main/java/org/localpilot/android/ModelLabRegistrySnapshot.java'
+      - 'tests/NesRomDownloadVerify.java'
+      - 'tests/nes_real_rom_smoke.cjs'
+      - 'tools/verify_public_nes.py'
+      - 'tools/device_triad_acceptance.py'
+      - 'tests/test_device_triad_acceptance.py'
+      - 'settings.gradle'
+      - '.github/workflows/whole-system-acceptance.yml'
+permissions:
+  contents: read
+jobs:
+  integrated-acceptance:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 70
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Install compatible Android tooling
+        run: |
+          set -euo pipefail
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
+            'platforms;android-35' 'build-tools;35.0.0' 'cmake;3.22.1' 'ndk;27.2.12479018'
+      - name: Verify real NES engine from immutable npm integrity digest
+        run: |
+          set -euo pipefail
+          npm pack jsnes@2.1.0 --ignore-scripts --silent
+          python3 - <<'PY'
+          import hashlib,base64
+          from pathlib import Path
+          raw=Path('jsnes-2.1.0.tgz').read_bytes()
+          expected='LUa++E5Dfs1A6ZYB5HiSOR4JrUzrZEXGLZ5Imczhu9lkg7f+94SqnLZ/MXwGa7oc02+j/xYyHR0azGQ6LCU68g=='
+          assert base64.b64encode(hashlib.sha512(raw).digest()).decode()==expected
+          print('WHOLE_SYSTEM_JSNES_SHA512_PASS')
+          PY
+          mkdir -p build/integration/core
+          tar -xzf jsnes-2.1.0.tgz -C build/integration/core package/dist/jsnes.min.js
+      - name: Replay actual NES CPU PPU and prove ModelLab bridge parser
+        run: |
+          set -euo pipefail
+          mkdir -p build/integration/rom
+          javac --release 17 -d build/integration/rom \
+            game-lab/src/main/java/org/localpilot/gamelab/HomebrewNes.java \
+            tests/ExportHomebrewNes.java
+          java -cp build/integration/rom ExportHomebrewNes build/integration/rom/homebrew.nes
+          node tests/nes_controller_framehold.cjs
+          node tests/jsnes_nes_smoke.cjs \
+            build/integration/core/package/dist/jsnes.min.js \
+            build/integration/rom/homebrew.nes
+          # A REAL author-published ROM from a pinned MIT release, not the test cartridge.
+          python3 tools/verify_public_nes.py build/integration/rom/void-lancer.nes
+          node tests/nes_real_rom_smoke.cjs \
+            build/integration/core/package/dist/jsnes.min.js \
+            build/integration/rom/void-lancer.nes
+          node tests/nes_bridge_e2e.cjs \
+            build/integration/core/package/dist/jsnes.min.js \
+            build/integration/rom/homebrew.nes \
+            build/integration/rom/evidence.txt
+          java tests/NesSnapshotGateVerify.java
+          java tests/NesFrameEpochVerify.java
+          node tests/nes_session_frame_smoke.cjs
+          java tests/NesBridgeVerify.java build/integration/rom/evidence.txt
+          java tests/NesExperimentPolicyVerify.java
+          java tests/ModelLabPolicyVerify.java
+          python3 tools/verify_modellab_cancel.py
+          java tests/ModelLabComputePolicyVerify.java
+          java tests/ModelLabCatalogVerify.java
+          java tests/ModelLabRegistrySnapshotVerify.java
+          java tests/ModelLabResultGateVerify.java
+          java tests/NesRomDownloadVerify.java
+          node tests/nes_visual_bridge_smoke.cjs
+          javac --release 17 -d build/integration/rom \
+            shared/src/main/java/org/localpilot/shared/NesFrameTransfer.java \
+            tests/NesFrameTransferVerify.java
+          java -cp build/integration/rom NesFrameTransferVerify
+      - name: Verify script agents and ten-game CPU simulator training remain isolated
+        run: |
+          set -euo pipefail
+          python3 tests/test_device_triad_acceptance.py
+          python3 scripts/unified_pipeline.py verify
+          python3 scripts/unified_pipeline.py selfplay
+      - name: Fetch only reviewed native GGUF llama.cpp runtime
+        run: |
+          set -euo pipefail
+          mkdir -p third_party/llama.cpp
+          cd third_party/llama.cpp
+          git init
+          git remote add origin https://github.com/ggml-org/llama.cpp.git
+          git fetch --depth 1 origin 2b66bfbf7107e43f5cd2fe99802ff6e872e4c4d0
+          git checkout --detach FETCH_HEAD
+          test "$(git rev-parse HEAD)" = 2b66bfbf7107e43f5cd2fe99802ff6e872e4c4d0
+      - name: Assemble three different Android packages from ONE source SHA
+        run: |
+          set -euo pipefail
+          ./gradlew --no-daemon --max-workers=2 --no-parallel \
+            -Dorg.gradle.jvmargs="-Xmx4096m -XX:MaxMetaspaceSize=768m -Dfile.encoding=UTF-8" \
+            -PincludeModelLab=true :app:assembleDebug :game-lab:assembleDebug \
+            :model-lab:assembleDebug :model-lab:lintDebug
+      - name: Verify installed package identities, privileges, NES assets and signatures
+        run: |
+          set -euo pipefail
+          AAPT="$ANDROID_HOME/build-tools/35.0.0/aapt"
+          SIGN="$ANDROID_HOME/build-tools/35.0.0/apksigner"
+          APP=app/build/outputs/apk/debug/app-debug.apk
+          LAB=game-lab/build/outputs/apk/debug/game-lab-debug.apk
+          MODELS=model-lab/build/outputs/apk/debug/model-lab-debug.apk
+          "$AAPT" dump badging "$APP" | grep "^package: name='org.localpilot.android.dev.install1081' "
+          "$AAPT" dump badging "$LAB" | grep "^package: name='org.localpilot.gamelab' "
+          "$AAPT" dump badging "$MODELS" | grep "^package: name='org.localpilot.modellab' "
+          for apk in "$APP" "$LAB"; do
+            unzip -Z1 "$apk" | grep -q '^assets/nes/jsnes.min.js$'
+            unzip -Z1 "$apk" | grep -q '^assets/nes/latched-buttons.js$'
+            "$SIGN" verify --verbose "$apk"
+          done
+          unzip -Z1 "$MODELS" | grep -q 'lib/arm64-v8a/liblocalpilot_embedded.so'
+          if "$AAPT" dump permissions "$MODELS" |
+               grep -E 'BIND_ACCESSIBILITY_SERVICE|SYSTEM_ALERT_WINDOW|MANAGE_EXTERNAL_STORAGE|FOREGROUND_SERVICE_MEDIA_PROJECTION'; then
+            echo 'ModelLab must remain without game input privileges' >&2
+            exit 1
+          fi
+          "$SIGN" verify --verbose "$MODELS"
+          echo "WHOLE_SYSTEM_ANDROID_PACKAGES_PASS"
+          sha256sum "$APP" "$LAB" "$MODELS"
+      - name: Upload cross-module acceptance evidence, not ROM or commercial game files
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: LocalPilot-ModelLab-NES-Whole-System-${{ github.sha }}
+          retention-days: 14
+          if-no-files-found: ignore
+          path: |
+            build/integration/rom/evidence.txt
+            build/reports/unified-script-engine/selfplay/model-gate.md

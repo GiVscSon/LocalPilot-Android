@@ -1,4 +1,7 @@
 name: GameLab NES CPU/PPU runtime
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.head.repo.full_name || github.repository }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
 on:
   push:
     paths:
@@ -7,6 +10,21 @@ on:
       - 'tests/nes_controller_framehold.cjs'
       - 'tests/ExportHomebrewNes.java'
       - '.github/workflows/nes-runtime.yml'
+      - 'model-lab/**'
+      - 'shared/src/main/java/org/localpilot/shared/NesTrial.java'
+      - 'tests/NesBridgeVerify.java'
+      - 'tests/NesBridgeTest.java'
+      - 'tests/nes_bridge_e2e.cjs'
+      - 'tests/nes_visual_bridge_smoke.cjs'
+      - 'tests/NesSnapshotGateVerify.java'
+      - 'tests/NesFrameEpochVerify.java'
+      - 'tests/nes_session_frame_smoke.cjs'
+      - 'game-lab/src/main/java/org/localpilot/gamelab/NesFrameEpoch.java'
+      - 'game-lab/src/main/java/org/localpilot/gamelab/NesSnapshotGate.java'
+      - 'tests/NesFrameTransferVerify.java'
+      - 'tests/NesExperimentPolicyVerify.java'
+      - 'tests/NesExperimentPolicyTest.java'
+      - 'game-lab/src/main/java/org/localpilot/gamelab/NesExperimentPolicy.java'
   pull_request:
     paths:
       - 'game-lab/**'
@@ -14,6 +32,11 @@ on:
       - 'tests/nes_controller_framehold.cjs'
       - 'tests/ExportHomebrewNes.java'
       - '.github/workflows/nes-runtime.yml'
+      - 'model-lab/**'
+      - 'shared/src/main/java/org/localpilot/shared/NesTrial.java'
+      - 'tests/NesBridgeVerify.java'
+      - 'tests/NesBridgeTest.java'
+      - 'tests/nes_bridge_e2e.cjs'
 permissions:
   contents: read
 jobs:
@@ -57,3 +80,27 @@ jobs:
           node tests/jsnes_nes_smoke.cjs \
             build/test-core/package/dist/jsnes.min.js \
             build/nes-runtime/demo.nes
+      - name: E2E actual NES pixels to independent ModelLab evidence parser
+        run: |
+          set -euo pipefail
+          node tests/nes_bridge_e2e.cjs \
+            build/test-core/package/dist/jsnes.min.js \
+            build/nes-runtime/demo.nes \
+            build/nes-runtime/nes-trial.txt
+          java tests/NesSnapshotGateVerify.java
+          java tests/NesFrameEpochVerify.java
+          node tests/nes_session_frame_smoke.cjs
+          java tests/NesBridgeVerify.java build/nes-runtime/nes-trial.txt
+          java tests/NesExperimentPolicyVerify.java
+          node tests/nes_visual_bridge_smoke.cjs
+          javac --release 17 -d build/nes-runtime \
+            shared/src/main/java/org/localpilot/shared/NesFrameTransfer.java \
+            tests/NesFrameTransferVerify.java
+          java -cp build/nes-runtime NesFrameTransferVerify
+      - name: Store proof from both emulated CPU and Java contract
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: NES-ModelLab-Real-Emulator-Evidence-${{ github.sha }}
+          retention-days: 14
+          path: build/nes-runtime/nes-trial.txt
