@@ -26,6 +26,19 @@ REPORT = Path("build/reports/embedded-extra-models.json")
 ASSET_MANIFEST = ROOT / "model-catalog.json"
 MAX_FILE = 900_000_000
 MAX_TOTAL = 1_700_000_000
+# Locked after the first *fully verified* ARM64 APK at GitHub Actions
+# run 43028634955, SHA256 818b350cd1fe57776f41248a521c93e426b8b410feb2e68dea48906b744bbb63.
+PINNED_REVISIONS = {
+    "ggml-org/Qwen3.5-0.8B-GGUF": "807dfd9a6fadbf703207aac3bfb0b2b3040d077c",
+    "LiquidAI/LFM2.5-350M-GGUF": "657e078c94084481950a2d555a941481f715536b",
+    "LiquidAI/LFM2.5-VL-450M-GGUF": "1abed04b6fe71314d8c446a1371c03d7c332266d",
+}
+PINNED_FILES = {
+    "Qwen3.5-0.8B-Q4_0.gguf": (563_036_064, "57d1997790d1744fba5b40a7317df71ea5e2acee28c47e78f0cce39c0703f8cf"),
+    "LFM2.5-350M-Q4_0.gguf": (219_309_792, "85e32858daafad55b7bcd6b97a1343ee0661188e8036f9862d14d6b563142f50"),
+    "LFM2.5-VL-450M-Q4_0.gguf": (219_311_264, "6d2757dd0f0b98aea7dc90477bb5b3a0df1089be85ef92943f8cecb05121ccbf"),
+    "mmproj-LFM2.5-VL-450m-Q8_0.gguf": (102_815_168, "ebfc428baa37efad8bae93864f914b2634a09009f91ad59f974fe1a1565d8561"),
+}
 EXTRAS = (
     ("qwen35", "ggml-org/Qwen3.5-0.8B-GGUF", "Qwen3.5-0.8B-Q4_0.gguf", False),
     ("lfm350", "LiquidAI/LFM2.5-350M-GGUF", "LFM2.5-350M-Q4_0.gguf", False),
@@ -50,11 +63,9 @@ def sha_stream(stream,output=None,limit=MAX_FILE):
     return digest.hexdigest(),size
 
 def repo_snapshot(repository):
-    with get(BASE+"/api/models/"+repository) as src:
-        metadata=json.load(src)
-    revision=metadata.get("sha")
-    if not isinstance(revision,str) or len(revision)!=40 or any(x not in "0123456789abcdef" for x in revision):
-        raise ValueError("Missing immutable snapshot revision")
+    revision=PINNED_REVISIONS.get(repository)
+    if not revision or len(revision)!=40:
+        raise ValueError("Unreviewed HF repository revision")
     with get(BASE+"/api/models/"+repository+"/tree/"+revision+"?recursive=true") as src:
         tree=json.load(src)
     return revision,{x.get("path"):x for x in tree if isinstance(x,dict)}
@@ -75,6 +86,8 @@ def download():
             raise ValueError("Invalid original SHA256 for "+name)
         if not isinstance(size,int) or not (128<size<MAX_FILE):
             raise ValueError("Unexpected weight size for "+name)
+        if PINNED_FILES.get(name)!=(size,expected):
+            raise ValueError("HF GGUF changed from reviewed exact SHA256/size: "+name)
         total+=size
         if total>MAX_TOTAL: raise ValueError("Optional models exceed APK budget")
         out=ROOT/"models"/name
@@ -107,7 +120,7 @@ def download():
         (lic/licname).write_bytes(body)
     result={"schema":"localpilot-extra-models-v1","source":"immutable-HF-LFS",
             "runtime":"offline-only","files":files,"total_bytes":total,
-            "reproducible_release":False}
+            "weights_revision_locked":True,"reproducible_release":False}
     REPORT.parent.mkdir(parents=True,exist_ok=True)
     REPORT.write_text(json.dumps(result,indent=2,sort_keys=True)+"\n")
     ASSET_MANIFEST.write_text(json.dumps(result,sort_keys=True)+"\n")
