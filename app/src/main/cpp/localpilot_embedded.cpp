@@ -92,7 +92,7 @@ std::string infer(const std::string &sys,const std::string &usr,int limit,float 
   if(actionGrammar){
    // GBNF restricts every decoded token: free-form output such as "LEFT UP"
    // can never become an actionable proposal.
-   const char *grammar="root ::= \\"LEFT\\" | \\"UP\\" | \\"RIGHT\\" | \\"DOWN\\"";
+   const char *grammar="root ::= \"LEFT\" | \"UP\" | \"RIGHT\" | \"DOWN\"";
    llama_sampler *restricted=llama_sampler_init_grammar(vocab,grammar,"root");
    if(!restricted)ok=false;
    else llama_sampler_chain_add(sampler,restricted);
