@@ -39,6 +39,14 @@ class ModelLabPolicyVerify {
      "https://huggingface.co@localhost/file.gguf",
      null};
    for(String url:bad)yes(!(boolean)allowed.invoke(null,url),"network host should be rejected: "+url);
+   // An observed Hugging Face CDN is valid as a redirect, never as an initial URL.
+   var open=net.getMethod("open",String.class);
+   boolean refused=false;
+   try{open.invoke(null,"https://us.aws.cdn.hf.co/model.gguf");}
+   catch(java.lang.reflect.InvocationTargetException failure){
+    refused=failure.getCause() instanceof SecurityException;
+   }
+   yes(refused,"a CDN URL cannot bypass Hugging Face model origin");
    Class<?> a=loader.loadClass("org.localpilot.android.ModelLabAnswer");
    var visible=a.getMethod("visible",String.class);
    yes("Maintain space.".equals(visible.invoke(null,
