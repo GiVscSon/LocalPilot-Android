@@ -78,6 +78,16 @@ public final class ModelLabActivity extends Activity {
    status.setText("Ошибка локального каталога: "+failure.getMessage());return;
   }
   title(col,"NES · единый эксперимент GameLab → ModelLab");
+  button(col,"Вернуться в GameLab · настоящий NES",()->{
+   try{
+    Intent companion=new Intent(Intent.ACTION_MAIN)
+      .setClassName("org.localpilot.gamelab","org.localpilot.gamelab.TestDeviceActivity")
+      .addCategory(Intent.CATEGORY_LAUNCHER);
+    startActivity(companion);
+   }catch(android.content.ActivityNotFoundException|SecurityException missing){
+    status.setText("GameLab не установлен или недоступен. Установи GameLab APK рядом с ModelLab.");
+   }
+  });
   nesStatus=line(col,"Передай эпизод из GameLab NES: кнопка → кадры → реальное изменение пикселей. "+
     "Это НЕ оценка победы, награда или доказательство причинности.");
   button(col,"Объяснить последний NES-эпизод выбранной нейросетью",()->{
