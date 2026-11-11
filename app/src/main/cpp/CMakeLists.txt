@@ -26,7 +26,7 @@ add_library(localpilot_embedded SHARED localpilot_embedded.cpp)
 target_include_directories(localpilot_embedded PRIVATE
   "${LLAMA_SRC}/include" "${LLAMA_SRC}/tools/mtmd")
 if(ANDROID)
-  target_link_libraries(localpilot_embedded PRIVATE llama mtmd mtmd-helper log)
+  target_link_libraries(localpilot_embedded PRIVATE llama mtmd log)
 else()
   # Host smoke testing exercises the SAME JNI implementation with original GGUF.
   if(NOT DEFINED ENV{JAVA_HOME})
@@ -34,5 +34,5 @@ else()
   endif()
   target_include_directories(localpilot_embedded PRIVATE
     "$ENV{JAVA_HOME}/include" "$ENV{JAVA_HOME}/include/linux")
-  target_link_libraries(localpilot_embedded PRIVATE llama mtmd mtmd-helper)
+  target_link_libraries(localpilot_embedded PRIVATE llama mtmd)
 endif()
