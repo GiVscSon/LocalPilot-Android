@@ -19,6 +19,7 @@ if (preloaded) {
  }
 }
 android {
+ sourceSets { main { java.srcDirs += ['../shared/src/main/java'] } }
  namespace 'org.localpilot.android'
  compileSdk 35
  if (preloaded) sourceSets { main { assets.srcDirs += [rootProject.file('build/embedded-model-assets')] } }

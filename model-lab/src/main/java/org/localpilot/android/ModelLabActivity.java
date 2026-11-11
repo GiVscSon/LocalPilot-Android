@@ -24,6 +24,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import org.localpilot.shared.NesTrial;
 
 /**
  * Independent on-device AI laboratory. No LocalPilot service/gestures are present.
@@ -38,7 +39,8 @@ public final class ModelLabActivity extends Activity {
  });
  private Spinner modelPicker;
  private final List<ModelLabStore.Entry> displayed=new ArrayList<>();
- private TextView status,result,modelStatus,imageStatus;
+ private TextView status,result,modelStatus,imageStatus,nesStatus;
+ private NesTrial nesTrial;
  private EditText prompt,url,sha256;
  private ImageView preview;
  private Bitmap previewBitmap;
@@ -70,6 +72,31 @@ public final class ModelLabActivity extends Activity {
   }catch(Exception failure){
    status.setText("Ошибка локального каталога: "+failure.getMessage());return;
   }
+  title(col,"NES · единый эксперимент GameLab → ModelLab");
+  nesStatus=line(col,"Передай эпизод из GameLab NES: кнопка → кадры → реальное изменение пикселей. "+
+    "Это НЕ оценка победы, награда или доказательство причинности.");
+  button(col,"Объяснить последний NES-эпизод выбранной нейросетью",()->{
+   NesTrial evidence=nesTrial;
+   ModelLabStore.Entry selection=selected();
+   if(evidence==null){nesStatus.setText("Сначала передай NES-эпизод из GameLab");return;}
+   if(selection==null){nesStatus.setText("Выбери или импортируй GGUF-модель");return;}
+   if(engine.busy()){nesStatus.setText("Сейчас выполняется другой анализ");return;}
+   task("Проверяю модель для NES-анализа",()->{
+    File weights=store.modelFile(selection);
+    runOnUiThread(()->{
+     if(closed)return;
+     try{
+      engine.text(weights,evidence.advisoryPrompt(),(answer,elapsed)->{
+       if(!closed)nesStatus.setText(evidence.summary()+"\n"+
+         selection.label+" · "+elapsed+" мс\n"+answer);
+      });
+      nesStatus.setText("Анализирую подтверждённый факт изменения кадра...");
+     }catch(Exception failure){nesStatus.setText("NES-анализ: "+failure.getMessage());}
+    });
+    return "Только текстовая стратегия, без доступа к игровым кнопкам";
+   },false);
+  });
+  receiveNesIntent(getIntent());
   title(col,"Выбор модели");
   modelPicker=new Spinner(this);
   col.addView(modelPicker);
@@ -183,6 +210,24 @@ public final class ModelLabActivity extends Activity {
   refresh();
  }
 
+ private void receiveNesIntent(Intent intent){
+  if(intent==null||!NesTrial.ACTION.equals(intent.getAction()))return;
+  try{
+   String serialized=intent.getStringExtra(NesTrial.EXTRA);
+   nesTrial=NesTrial.parse(serialized);
+   if(nesStatus!=null)nesStatus.setText("Принят эпизод: "+nesTrial.summary()+
+     "\nПосле выбора модели нажми «Объяснить последний NES-эпизод». "+
+     "Происхождение данных не аутентифицировано.");
+  }catch(IllegalArgumentException|RuntimeException error){
+   nesTrial=null;
+   if(nesStatus!=null)nesStatus.setText("Неправильный или повреждённый NES-эпизод");
+  }
+ }
+ @Override protected void onNewIntent(Intent next){
+  super.onNewIntent(next);
+  setIntent(next);
+  receiveNesIntent(next);
+ }
  private static String filenameFromUrl(String link){
   try{
    String path=new java.net.URI(link).getPath();

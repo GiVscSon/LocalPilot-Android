@@ -26,6 +26,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.localpilot.shared.HubContract;
+import org.localpilot.shared.NesTrial;
 
 /**
  * NES CPU/PPU emulation: JSNES 2.1.0 execution inside a
@@ -39,7 +40,18 @@ public final class NesEmulatorActivity extends Activity {
  private static final String[] GAMEPAD={"UP","LEFT","DOWN","RIGHT","SELECT","START","B","A"};
  private WebView web;
  private TextView state;
- private Button demoButton,aButton,bButton;
+ private Button demoButton,aButton,bButton,shareTrial;
+ private boolean homebrewRom;
+ private NesTrial readyTrial;
+ private TrialPending pendingTrial;
+ private static final class TrialPending{
+  final String button;
+  final int frame,hash;
+  boolean downAck,upAck;
+  TrialPending(String button,int frame,int hash){
+   this.button=button;this.frame=frame;this.hash=hash;
+  }
+ }
  private boolean resumed;
  private boolean pageLoaded;
  private int frames,hash;
@@ -68,7 +80,12 @@ public final class NesEmulatorActivity extends Activity {
   demoButton=new Button(this);Button demo=demoButton;
   demo.setText("Запустить тестовую NES-игру");
   root.addView(demo);
-  demo.setOnClickListener(v->launchRom(HomebrewNes.cartridge()));
+  demo.setOnClickListener(v->launchRom(HomebrewNes.cartridge(),true));
+  shareTrial=new Button(this);
+  shareTrial.setText("NES → ModelLab · передать проверенный эпизод");
+  shareTrial.setEnabled(false);
+  shareTrial.setOnClickListener(v->sendTrialToModelLab());
+  root.addView(shareTrial);
   web=new WebView(this);
   web.setBackgroundColor(HubContract.BACKGROUND);
   web.getSettings().setJavaScriptEnabled(true);
@@ -102,6 +119,7 @@ public final class NesEmulatorActivity extends Activity {
     runOnUiThread(()->{
      if(!resumed)return;
      frames=count;hash=pixelsHash;
+     completeTrialOnFreshFrame(count,pixelsHash);
      publishEvidence();
      if(count%60==0)
       state.setText("Кадров "+frames+" · экран CRC="+Integer.toHexString(hash)
@@ -124,13 +142,25 @@ public final class NesEmulatorActivity extends Activity {
     btn.setOnTouchListener((view,event)->{
      int type=event.getActionMasked();
      if(type==MotionEvent.ACTION_DOWN){
-      gamepad(name,true);
+      beginTrial(name);
+      gamepad(name,true,accepted->{
+       if(pendingTrial!=null&&pendingTrial.button.equals(name)){
+        pendingTrial.downAck=accepted;
+        if(!accepted)pendingTrial=null;
+       }
+      });
       touches.incrementAndGet();lastInputAt=SystemClock.elapsedRealtime();
       publishEvidence();
       return true;
      }
      if(type==MotionEvent.ACTION_UP||type==MotionEvent.ACTION_CANCEL){
-      gamepad(name,false);return true;
+      gamepad(name,false,accepted->{
+       if(pendingTrial!=null&&pendingTrial.button.equals(name)){
+        pendingTrial.upAck=accepted;
+        if(!accepted)pendingTrial=null;
+       }
+      });
+      return true;
      }
      return true;
     });
@@ -150,21 +180,54 @@ public final class NesEmulatorActivity extends Activity {
   if(resumed&&demoButton!=null)
    GameLabEvidenceProvider.nes(dendy,frames,hash,touches.get(),demoButton,aButton,bButton);
  }
- private void launchRom(byte[] rom){
+ private void beginTrial(String key){
+  readyTrial=null;
+  if(shareTrial!=null)shareTrial.setEnabled(false);
+  pendingTrial=(frames>=15&&hash!=0)?new TrialPending(key,frames,hash):null;
+ }
+ private void completeTrialOnFreshFrame(int count,int pixelHash){
+  TrialPending current=pendingTrial;
+  if(current==null||!current.downAck||!current.upAck)return;
+  if(count-current.frame>600){pendingTrial=null;return;}
+  if(count-current.frame<15||pixelHash==0)return;
+  try{
+   readyTrial=NesTrial.create(homebrewRom?"HOMEBREW":"USER_ROM",
+     current.button,current.frame,count,current.hash,pixelHash);
+   if(shareTrial!=null)shareTrial.setEnabled(true);
+   state.setText(readyTrial.summary()+" · можно передать в ModelLab");
+  }catch(IllegalArgumentException invalid){readyTrial=null;}
+  pendingTrial=null;
+ }
+ private void sendTrialToModelLab(){
+  if(readyTrial==null){state.setText("Для отчёта запусти NES и нажми кнопку");return;}
+  Intent intent=new Intent(NesTrial.ACTION);
+  intent.setClassName("org.localpilot.modellab","org.localpilot.android.ModelLabActivity");
+  intent.putExtra(NesTrial.EXTRA,readyTrial.serialize());
+  try{startActivity(intent);}
+  catch(android.content.ActivityNotFoundException missing){
+   state.setText("Установи отдельный ModelLab, затем отправь NES-эпизод повторно");
+  }catch(SecurityException denied){
+   state.setText("ModelLab не разрешил приём: проверь установленную версию");
+  }
+ }
+ private void launchRom(byte[] rom,boolean homebrew){
   if(!pageLoaded||web==null||rom==null||rom.length>MAX_ROM){
    state.setText("NES-ядро ещё не загружено или ROM недоступен");return;
   }
   String encoded=Base64.encodeToString(rom,Base64.NO_WRAP);
   frames=hash=0;touches.set(0);
+  homebrewRom=homebrew;pendingTrial=null;readyTrial=null;
+  if(shareTrial!=null)shareTrial.setEnabled(false);
   web.evaluateJavascript("window.retroLoadRom("+org.json.JSONObject.quote(encoded)+","
     +(dendy?"true":"false")+")",success->{
    if(!"true".equals(success))state.setText("NES ROM не запущен. Проверьте mapper и ядро.");
   });
  }
- private void gamepad(String key,boolean down){
-  if(web==null||!pageLoaded)return;
+ private interface InputAck{void result(boolean accepted);}
+ private void gamepad(String key,boolean down,InputAck ack){
+  if(web==null||!pageLoaded){ack.result(false);return;}
   web.evaluateJavascript("window.retroButton("+org.json.JSONObject.quote(key)+","
-   +(down?"true":"false")+")",null);
+   +(down?"true":"false")+")",response->ack.result("true".equals(response)));
  }
  private String filename(Uri uri){
   try(Cursor cursor=getContentResolver().query(uri,new String[]{OpenableColumns.DISPLAY_NAME},null,null,null)){
@@ -191,7 +254,7 @@ public final class NesEmulatorActivity extends Activity {
       RetroEmulatorCatalog.System.NES,name,rom).recognized())
     throw new IOException("iNES/NES2 cartridge header not recognized");
    if(!pageLoaded)throw new IOException("emulator page not yet loaded");
-   launchRom(rom);
+   launchRom(rom,false);
   }catch(IOException|RuntimeException exception){
    state.setText("ROM не запущен: "+exception.getClass().getSimpleName());
    Toast.makeText(this,"Неподдерживаемый или слишком большой файл игры",Toast.LENGTH_LONG).show();
@@ -199,6 +262,7 @@ public final class NesEmulatorActivity extends Activity {
  }
  @Override protected void onPause(){
   resumed=false;GameLabEvidenceProvider.clear("nes");
+  pendingTrial=null; // Do not link a paused/resumed frame to an old input.
   if(web!=null&&pageLoaded)web.evaluateJavascript("window.retroPause()",null);
   if(web!=null)web.onPause();
   super.onPause();
