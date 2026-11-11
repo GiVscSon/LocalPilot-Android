@@ -18,6 +18,9 @@ public final class EmbeddedGgufRuntime {
  private static native String nativeInfer(String model,String system,String question,int tokens,float temperature);
  private static native String nativeAnalyzeImage(String model,String projector,String question,
    byte[] rgb,int width,int height);
+ private static native String nativeGpuDescription();
+ private static native boolean nativeConfigureGpuLayers(int layers);
+ private static native int nativeLoadedGpuLayers();
  private static native void nativeInterrupt();
  private static native void nativeRelease();
  private static volatile boolean loaded;
@@ -32,18 +35,54 @@ public final class EmbeddedGgufRuntime {
  });
  private final Handler ui=new Handler(Looper.getMainLooper());
  private final AtomicBoolean busy=new AtomicBoolean();
+ private volatile int lastGpuLayers;
  public boolean busy(){return busy.get();}
+ public int lastGpuLayers(){return lastGpuLayers;}
+ /** Read-only GPU discovery, only on explicit user click. No offload yet. */
+ public void probeGpu(Result callback){
+  submit(callback,()->{
+   if(!BuildConfig.VULKAN_COMPILED)
+    return "Vulkan не собран в этом APK. CPU остаётся доступен.";
+   return "Обнаружено через ggml: "+nativeGpuDescription()+
+     ". Поддержка драйвера ещё не означает ускорение.";
+  });
+ }
+ private int chooseLayers(int requested){
+  if(requested!=0&&requested!=8&&requested!=16)
+   throw new IllegalArgumentException("GPU layers must be 0, 8, or 16");
+  int attempt=BuildConfig.VULKAN_COMPILED?requested:0;
+  if(!nativeConfigureGpuLayers(attempt)){
+   nativeConfigureGpuLayers(0);
+   return 0;
+  }
+  return attempt;
+ }
  public void text(File model,String prompt,Result callback){
+  text(model,prompt,0,callback);
+ }
+ /** GPU offload is opt-in; 0 is the CPU default. */
+ public void text(File model,String prompt,int requestedGpuLayers,Result callback){
   if(model==null||!model.isFile())throw new IllegalArgumentException("Model GGUF missing");
   if(prompt==null||prompt.isBlank()||prompt.length()>1000)
    throw new IllegalArgumentException("Prompt must be 1-1000 characters");
-  submit(callback,()->nativeInfer(model.getAbsolutePath(),
-   "You are an offline on-device model being evaluated. Answer briefly and in English. "+
-   "If the question is uncertain, say so; do not provide executable commands.",
-    prompt,160,0.2f));
+  submit(callback,()->{
+   int requested=chooseLayers(requestedGpuLayers);
+   String answer=nativeInfer(model.getAbsolutePath(),
+    "You are an offline on-device model being evaluated. Answer briefly and in English. "+
+    "If the question is uncertain, say so; do not provide executable commands.",
+    prompt,160,0.2f);
+   lastGpuLayers=nativeLoadedGpuLayers();
+   return answer==null?"":answer+
+    "\n\n[Вычисления: "+(lastGpuLayers>0?"GPU "+lastGpuLayers+" слоёв":
+      requestedGpuLayers>0?"CPU, GPU не сработал":"CPU")+"]";
+  });
  }
  public void image(File model,File projector,String prompt,byte[] rgb,int width,int height,
                    Result callback){
+  image(model,projector,prompt,rgb,width,height,0,callback);
+ }
+ public void image(File model,File projector,String prompt,byte[] rgb,int width,int height,
+                   int requestedGpuLayers,Result callback){
   if(model==null||projector==null||!model.isFile()||!projector.isFile())
    throw new IllegalArgumentException("A GGUF model and matching mmproj GGUF are required");
   if(prompt==null||prompt.isBlank()||prompt.length()>1000||
@@ -52,10 +91,17 @@ public final class EmbeddedGgufRuntime {
    throw new IllegalArgumentException("Invalid RGB screenshot/prompt");
   // Snapshot user data: a new picked image cannot modify an inflight inference.
   final byte[] copy=rgb.clone();
-  submit(callback,()->nativeAnalyzeImage(model.getAbsolutePath(),
-   projector.getAbsolutePath(),
-   "Describe only what is visible in the attached image. Mention uncertainty. "+prompt,
-   copy,width,height));
+  submit(callback,()->{
+   chooseLayers(requestedGpuLayers);
+   String answer=nativeAnalyzeImage(model.getAbsolutePath(),
+     projector.getAbsolutePath(),
+     "Describe only what is visible in the attached image. Mention uncertainty. "+prompt,
+     copy,width,height);
+   lastGpuLayers=nativeLoadedGpuLayers();
+   return answer==null?"":answer+
+     "\n\n[Вычисления: "+(lastGpuLayers>0?"GPU "+lastGpuLayers+" слоёв":
+       requestedGpuLayers>0?"CPU, GPU не сработал":"CPU")+"]";
+  });
  }
  private interface Work { String run()throws Exception; }
  private void submit(Result callback,Work work){
