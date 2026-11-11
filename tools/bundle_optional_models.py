@@ -130,6 +130,16 @@ def verify(apk):
     metadata=json.loads(REPORT.read_text())
     if metadata.get("schema")!="localpilot-extra-models-v1":
         raise ValueError("Invalid catalogue metadata")
+    rows=metadata.get("files")
+    if (not isinstance(rows,list) or len(rows)!=len(EXTRAS) or
+        set(x.get("filename") for x in rows)!=set(PINNED_FILES)):
+        raise ValueError("Incomplete verified model catalogue")
+    if metadata.get("total_bytes")!=sum(PINNED_FILES[name][0] for name in PINNED_FILES):
+        raise ValueError("Incorrect model size sum")
+    for row in rows:
+        if ((row.get("bytes"),row.get("sha256"))!=PINNED_FILES[row["filename"]] or
+            row.get("revision")!=PINNED_REVISIONS.get(row.get("repository"))):
+            raise ValueError("Forged or unpinned model provenance: "+row["filename"])
     with zipfile.ZipFile(apk) as zipped:
         manifest=json.loads(zipped.read("assets/model-catalog.json"))
         if manifest!=metadata: raise ValueError("APK catalogue differs from verified build report")
