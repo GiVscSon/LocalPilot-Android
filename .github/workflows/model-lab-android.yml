@@ -9,6 +9,7 @@ on:
       - 'tools/bundle_optional_models.py'
       - 'tools/bundle_embedded_gguf.py'
       - 'tests/ModelLabPolicyVerify.java'
+      - 'tests/ModelLabComputePolicy*.java'
       - '.github/workflows/model-lab-android.yml'
 permissions:
   contents: read
@@ -30,7 +31,9 @@ jobs:
           set -euo pipefail
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-35' 'build-tools;35.0.0' 'cmake;3.22.1' 'ndk;27.2.12479018'
       - name: Validate standalone URL policy and output contract
-        run: java tests/ModelLabPolicyVerify.java
+        run: |
+          java tests/ModelLabPolicyVerify.java
+          java tests/ModelLabComputePolicyVerify.java
       - name: Fetch pinned llama.cpp
         run: |
           set -euo pipefail
@@ -86,7 +89,9 @@ jobs:
           set -euo pipefail
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-35' 'build-tools;35.0.0' 'cmake;3.22.1' 'ndk;27.2.12479018'
       - name: Verify Java import/download security
-        run: java tests/ModelLabPolicyVerify.java
+        run: |
+          java tests/ModelLabPolicyVerify.java
+          java tests/ModelLabComputePolicyVerify.java
       - name: Fetch pinned llama.cpp
         run: |
           set -euo pipefail
