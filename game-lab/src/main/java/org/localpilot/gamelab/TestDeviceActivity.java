@@ -71,7 +71,9 @@ public final class TestDeviceActivity extends Activity {
    try{
     Intent models=new Intent(Intent.ACTION_MAIN)
       .setClassName("org.localpilot.modellab","org.localpilot.android.ModelLabActivity")
-      .addCategory(Intent.CATEGORY_LAUNCHER);
+      .addCategory(Intent.CATEGORY_LAUNCHER)
+      .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|
+        Intent.FLAG_ACTIVITY_CLEAR_TOP|Intent.FLAG_ACTIVITY_SINGLE_TOP);
     startActivity(models);
    }catch(android.content.ActivityNotFoundException|SecurityException absent){
     new AlertDialog.Builder(this)
@@ -132,20 +134,30 @@ public final class TestDeviceActivity extends Activity {
   });
   TextView retroStatus=label("NES и Денди: запуск реального ROM. DOS: пока подготовка ядра.",11);
   retroStatus.setTextColor(HubContract.SECONDARY);root.addView(retroStatus);
-  String pilotPackage=getIntent().getStringExtra("pilot_package");
-  if(HubContract.supportedPilotPackage(pilotPackage))
-   addButton(retroRow,"К LocalPilot",()->{
-    // Explicit exported launcher avoids Android 11+ package-visibility false
-    // negatives. Launching Pilot never grants Accessibility consent.
+  String requestedPilot=getIntent().getStringExtra("pilot_package");
+  addButton(retroRow,"К LocalPilot",()->{
+   // The tested standalone debug and the release package are separate choices.
+   // No implicit app search or Accessibility authority is needed.
+   String[] candidates=HubContract.supportedPilotPackage(requestedPilot)
+     ?new String[]{requestedPilot}
+     :new String[]{"org.localpilot.android.dev.install1081","org.localpilot.android"};
+   for(String pkg:candidates){
     try{
      Intent back=new Intent(Intent.ACTION_MAIN)
-       .setClassName(pilotPackage,"org.localpilot.android.MainActivity")
-       .addCategory(Intent.CATEGORY_LAUNCHER);
+       .setClassName(pkg,"org.localpilot.android.MainActivity")
+       .addCategory(Intent.CATEGORY_LAUNCHER)
+       .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|
+         Intent.FLAG_ACTIVITY_CLEAR_TOP|Intent.FLAG_ACTIVITY_SINGLE_TOP);
      startActivity(back);
-    }catch(android.content.ActivityNotFoundException notInstalled){
-     addLog("PILOT_LAUNCHER_NOT_FOUND");
+     return;
+    }catch(android.content.ActivityNotFoundException|SecurityException notInstalled){
+     addLog("PILOT_LAUNCHER_NOT_FOUND "+pkg);
     }
-   });
+   }
+   new AlertDialog.Builder(this).setTitle("LocalPilot не установлен")
+     .setMessage("Установи LocalPilot APK. GameLab и ModelLab остаются автономными.")
+     .setPositiveButton("ОК",null).show();
+  });
   status=label("",12);root.addView(status);
   setContentView(root);
   root.requestApplyInsets();
