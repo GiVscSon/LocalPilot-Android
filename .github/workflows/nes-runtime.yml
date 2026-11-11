@@ -12,6 +12,8 @@ on:
       - 'tests/NesBridgeVerify.java'
       - 'tests/NesBridgeTest.java'
       - 'tests/nes_bridge_e2e.cjs'
+      - 'tests/nes_visual_bridge_smoke.cjs'
+      - 'tests/NesFrameTransferVerify.java'
       - 'tests/NesExperimentPolicyVerify.java'
       - 'tests/NesExperimentPolicyTest.java'
       - 'game-lab/src/main/java/org/localpilot/gamelab/NesExperimentPolicy.java'
@@ -79,6 +81,11 @@ jobs:
             build/nes-runtime/nes-trial.txt
           java tests/NesBridgeVerify.java build/nes-runtime/nes-trial.txt
           java tests/NesExperimentPolicyVerify.java
+          node tests/nes_visual_bridge_smoke.cjs
+          javac --release 17 -d build/nes-runtime \
+            shared/src/main/java/org/localpilot/shared/NesFrameTransfer.java \
+            tests/NesFrameTransferVerify.java
+          java -cp build/nes-runtime NesFrameTransferVerify
       - name: Store proof from both emulated CPU and Java contract
         if: success()
         uses: actions/upload-artifact@v4
