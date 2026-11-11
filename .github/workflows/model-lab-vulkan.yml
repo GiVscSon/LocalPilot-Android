@@ -22,16 +22,39 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
-      - name: Install Android NDK, Vulkan host shader compiler and SPIR-V headers
+      - name: Prepare pinned Vulkan tools from Android NDK (no Ubuntu apt mirrors)
         shell: bash
         run: |
           set -euo pipefail
-          sudo apt-get update -qq
-          sudo apt-get install -y glslc spirv-headers libvulkan-dev
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
             'platforms;android-35' 'build-tools;35.0.0' 'cmake;3.22.1' 'ndk;27.2.12479018'
-          command -v glslc
-          test -d "$ANDROID_HOME/ndk/27.2.12479018"
+          NDK="$ANDROID_HOME/ndk/27.2.12479018"
+          GLSLC="$NDK/shader-tools/linux-x86_64/glslc"
+          test -x "$GLSLC"
+          "$GLSLC" --version
+          test -f "$NDK/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include/vulkan/vulkan.h"
+          test -f "$NDK/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/24/libvulkan.so"
+          echo "Vulkan host GLSL compiler: $GLSLC"
+      - name: Install immutable Khronos SPIR-V headers locally
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p third_party/SPIRV-Headers
+          cd third_party/SPIRV-Headers
+          git init
+          git remote add origin https://github.com/KhronosGroup/SPIRV-Headers.git
+          git fetch --depth 1 origin 09913f088a1197aba4aefd300a876b2ebbaa3391
+          git checkout --detach FETCH_HEAD
+          test "$(git rev-parse HEAD)" = 09913f088a1197aba4aefd300a876b2ebbaa3391
+          cd ../..
+          cmake -S third_party/SPIRV-Headers -B build/spirv-header-host \
+            -DSPIRV_HEADERS_ENABLE_TESTS=OFF \
+            -DSPIRV_HEADERS_ENABLE_INSTALL=ON \
+            -DCMAKE_INSTALL_PREFIX="$PWD/build/spirv-headers-install"
+          cmake --install build/spirv-header-host
+          test -f build/spirv-headers-install/include/spirv/unified1/spirv.hpp
+          test -f build/spirv-headers-install/share/cmake/SPIRV-Headers/SPIRV-HeadersConfig.cmake
+          echo "SPIRV_HEAD_SRC=09913f088a1197aba4aefd300a876b2ebbaa3391"
       - name: Verify Auto safety gate never assumes GPU is faster
         run: |
           set -euo pipefail
@@ -68,6 +91,9 @@ jobs:
           readelf -Ws model-lab-native.so | grep -q 'Java_org_localpilot_android_EmbeddedGgufRuntime_nativeGpuDescription'
           readelf -Ws model-lab-native.so | grep -q 'Java_org_localpilot_android_EmbeddedGgufRuntime_nativeConfigureGpuLayers'
           readelf -Ws model-lab-native.so | grep -q 'Java_org_localpilot_android_EmbeddedGgufRuntime_nativeLoadedGpuLayers'
+          readelf -d model-lab-native.so | grep -q 'NEEDED.*libvulkan.so'
+          # 'GPU' in a menu is NOT evidence of native Vulkan link and shaders.
+          echo "MODEL_LAB_VULKAN_LINKED_TO_LIBVULKAN_PASS"
           if "$ANDROID_HOME/build-tools/35.0.0/aapt" dump permissions "$APK" \
             | grep -E 'BIND_ACCESSIBILITY_SERVICE|SYSTEM_ALERT_WINDOW|MANAGE_EXTERNAL_STORAGE'; then
             echo 'GPU diagnostics must not have any game-control permissions' >&2

@@ -36,7 +36,16 @@ android {
   targetSdk 35
   versionCode 1
   versionName enableVulkan ? '1.0.0-vulkan-experimental' : '1.0.0-candidate'
-  externalNativeBuild { cmake { arguments enableVulkan ? '-DMODEL_LAB_VULKAN=ON' : '-DMODEL_LAB_VULKAN=OFF' } }
+  externalNativeBuild { cmake { 
+   if (enableVulkan) {
+    arguments '-DMODEL_LAB_VULKAN=ON',
+      '-DVulkan_GLSLC_EXECUTABLE=' + System.getenv('ANDROID_HOME') + '/ndk/27.2.12479018/shader-tools/linux-x86_64/glslc',
+      '-DSPIRV-Headers_DIR=' + rootProject.file('build/spirv-headers-install/share/cmake/SPIRV-Headers').absolutePath,
+      '-DMODEL_LAB_SPIRV_INCLUDE_DIR=' + rootProject.file('build/spirv-headers-install/include').absolutePath
+   } else {
+    arguments '-DMODEL_LAB_VULKAN=OFF'
+   }
+  } }
   buildConfigField 'boolean', 'VULKAN_COMPILED', enableVulkan.toString()
   buildConfigField 'boolean', 'PRELOADED_MODELS', preloaded.toString()
   buildConfigField 'String', 'POCKET_SHA256',
