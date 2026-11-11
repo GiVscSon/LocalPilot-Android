@@ -104,7 +104,7 @@ public final class ModelLabStore {
     if(out.size()+n>max)throw new IllegalArgumentException("Слишком большой манифест");
     out.write(buf,0,n);
    }
-   return out.toString(StandardCharsets.UTF_8);
+   return new String(out.toByteArray(), StandardCharsets.UTF_8);
   }
  }
  private void loadIncluded()throws Exception{
