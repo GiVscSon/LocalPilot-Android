@@ -66,7 +66,7 @@ bool run_batch(llama_batch_ext *batch,const llama_token *tokens,int count,int of
  return llama_process(ctx,LLAMA_PROCESS_TYPE_DECODE,batch)==0;
 }
 
-std::string infer(const std::string &sys,const std::string &usr,int limit,float temp,bool actionGrammar=false){
+std::string infer(const std::string &sys,const std::string &usr,int limit,float temp){
  if(!ctx||limit<1||limit>192)return "";
  std::string formatted=chat(sys,usr);
  if(formatted.empty())return "";
@@ -89,16 +89,6 @@ std::string infer(const std::string &sys,const std::string &usr,int limit,float 
  auto *sampler=llama_sampler_chain_init(llama_sampler_chain_default_params());
  if(!sampler)ok=false;
  if(ok){
-  if(actionGrammar){
-   // GBNF restricts every decoded token: free-form output such as "LEFT UP"
-   // can never become an actionable proposal.
-   const char *grammar="root ::= \"LEFT\" | \"UP\" | \"RIGHT\" | \"DOWN\"";
-   llama_sampler *restricted=llama_sampler_init_grammar(vocab,grammar,"root");
-   if(!restricted)ok=false;
-   else llama_sampler_chain_add(sampler,restricted);
-  }
- }
- if(ok){
   llama_sampler_chain_add(sampler,llama_sampler_init_penalties(
    llama_vocab_n_tokens(vocab),64,1.18f,0.0f,0.0f));
   if(temp<=0.0f)llama_sampler_chain_add(sampler,llama_sampler_init_greedy());
@@ -118,9 +108,8 @@ std::string infer(const std::string &sys,const std::string &usr,int limit,float 
   int sz=llama_token_to_piece(vocab,token,piece,sizeof(piece),0,true);
   if(sz<0||sz>512||output.size()+sz>3000){ok=false;break;}
   output.append(piece,sz);
-  // llama_sampler_sample() already accepts the token in pinned llama.cpp.
-  // Calling llama_sampler_accept() again corrupts grammar state and can abort
-  // the process after valid actions such as LEFT.
+  // Pinned llama.cpp's llama_sampler_sample() already accepts the token.
+  // Never accept twice: duplicate acceptance corrupts penalty/grammar state.
   if(step+1<limit)ok=run_batch(batch,&token,1,n+step,true);
  }
  if(sampler)llama_sampler_free(sampler);
@@ -144,20 +133,6 @@ Java_org_localpilot_android_EmbeddedGgufRuntime_nativeInfer(
  for(unsigned char byte:result){
   if((byte&0xF8)==0xF0){result.clear();break;}
  }
- return e->NewStringUTF(result.c_str());
-}
-
-extern "C" JNIEXPORT jstring JNICALL
-Java_org_localpilot_android_EmbeddedGgufRuntime_nativeInferDirection(
- JNIEnv *e,jclass,jstring filename,jstring system,jstring question){
- Utf f(e,filename),sys(e,system),ask(e,question);
- std::lock_guard<std::mutex> guard(lock);
- cancelled.store(false);
- std::string result;
- if(init(f.str()))result=infer(sys.str(),ask.str(),24,0.0f,true);
- // The GBNF grammar excludes all Unicode and all multi-action responses.
- if(result!="LEFT"&&result!="UP"&&result!="RIGHT"&&result!="DOWN")
-  result.clear();
  return e->NewStringUTF(result.c_str());
 }
 

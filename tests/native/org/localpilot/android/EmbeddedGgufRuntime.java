@@ -9,7 +9,6 @@ public final class EmbeddedGgufRuntime {
  private static native String nativeInfer(
    String filename,String system,String question,int maxTokens,float temperature);
  private static native void nativeRelease();
- private static native String nativeInferDirection(String filename,String system,String question);
 
  public static void main(String[] args) {
   if(args.length!=1)throw new IllegalArgumentException("Supply the verified GGUF model");
@@ -27,21 +26,6 @@ public final class EmbeddedGgufRuntime {
        !cat.toLowerCase(java.util.Locale.ROOT).contains("cat"))
     throw new AssertionError("A loaded model is not necessarily a reliable English core; keep the APK experimental");
    System.out.println("NATIVE_MODEL_ENGLISH_SMOKE_PASS");
-   Board2048 board=new Board2048(new int[]{
-     2,2,0,0, 4,4,0,0, 0,0,0,0, 0,0,0,0
-   });
-   String proposal=nativeInferDirection(args[0],
-     "You are a 2048 puzzle solver. Reply with one legal direction word only. "+
-     "No explanation, punctuation or extra tokens.",
-     Neural2048Verifier.prompt(board,0));
-   int parsed=Neural2048Verifier.parse(proposal);
-   int baseline=board.chooseAvoiding(0);
-   var gate=Neural2048Verifier.verify(board,board,0,baseline,proposal);
-   System.out.println("NATIVE_2048_PROPOSAL raw="+quote(proposal)+
-     " parsed="+parsed+" accepted="+gate.accepted+" decision="+gate.direction+
-     " reason="+gate.reason);
-   if(parsed<0)throw new AssertionError("MNN failed strict one-token 2048 action grammar");
-
   } finally {
    nativeRelease();
   }

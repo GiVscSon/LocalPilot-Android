@@ -99,6 +99,16 @@ public final class LocalModelCore {
  }
 
  public void ask(String question,String snapshot,Callback callback){
+  askWithSystem(question,snapshot,LocalCoreContract.SYSTEM_PROMPT,callback);
+ }
+
+ /** The HTTP fallback is also advisory and never invoked by PilotService. */
+ public void adviseStrategy(int gameProfile,String snapshot,Callback callback){
+  askWithSystem(LocalCoreContract.strategyQuestion(gameProfile),snapshot,
+     LocalCoreContract.STRATEGY_PROMPT,callback);
+ }
+
+ private void askWithSystem(String question,String snapshot,String systemPrompt,Callback callback){
   final String validatedQuestion=LocalCoreContract.question(question);
   final String diagnostic=LocalCoreContract.diagnostic(snapshot);
   execute(callback,()->{
@@ -110,7 +120,7 @@ public final class LocalModelCore {
    request.put("repeat_penalty",1.18);
    request.put("max_tokens",128);
    request.put("messages",new JSONArray()
-     .put(new JSONObject().put("role","system").put("content",LocalCoreContract.SYSTEM_PROMPT))
+     .put(new JSONObject().put("role","system").put("content",systemPrompt))
      .put(new JSONObject().put("role","user").put("content",
        "QUESTION: "+validatedQuestion+"\nANONYMOUS COUNTERS: "+diagnostic)));
    byte[] bytes=request.toString().getBytes(StandardCharsets.UTF_8);

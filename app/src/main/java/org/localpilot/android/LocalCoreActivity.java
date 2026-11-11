@@ -38,31 +38,9 @@ public final class LocalCoreActivity extends Activity {
   label(layout,bundled()
    ?"Веса GGUF и нативный движок входят в APK. Termux, интернет, API-ключ и загрузка модели не нужны. При первом запуске веса проверяются и распаковываются во внутреннюю память."
    :"Главный локальный языковой backend: Termux / llama-server / 127.0.0.1:8080. Запросы на английском; облако не нужно.");
-  label(layout,"MNN-Pocket может анализировать диагностику и, после явного включения, "+
-   "предлагать ход 2048. Нейросеть сама не выполняет жесты: каждый ход отдельно "+
-   "проверяется на свежем поле и проходит STOP, ActionGate, InputPermit и TTL.");
-  if(bundled()){
-   title(layout,"Проверяемое управление 2048",18);
-   label(layout,"Экспериментальный режим: только 2048. Модель предлагает LEFT/UP/RIGHT/DOWN. "+
-     "Правила игры и новый стабильный кадр проверяются независимо. "+
-     "Неправильный ход заменяется проверенным CPU-планом. "+
-     "Переключение режима вызывает STOP и требует новой привязки окна.");
-   TextView mode=label(layout,"Режим MNN 2048: выключен");
-   Object connected=PilotService.instance;
-   if(connected instanceof Neural2048Access enabled&&enabled.mnn2048Enabled())
-    mode.setText("Режим MNN 2048: включён (до завершения службы)");
-   button(layout,"Включить / выключить MNN 2048",()->{
-    Object service=PilotService.instance;
-    if(service==null){mode.setText("Сначала включите службу специальных возможностей LocalPilot");return;}
-    if(!(service instanceof Neural2048Access neural)){
-     mode.setText("Установленный игровой движок не поддерживает MNN 2048. Ввод отключён.");return;
-    }
-    neural.setMnn2048Enabled(!neural.mnn2048Enabled());
-    mode.setText(neural.mnn2048Enabled()
-       ?"MNN 2048 включена. Вернитесь в игру и заново привяжите окно."
-       :"MNN 2048 выключена. Используется проверенный CPU-контроллер.");
-   });
-  }
+  label(layout,"MNN-Pocket объясняет общую стратегию по обезличенным показателям игры. "+
+   "CPU выполняет все быстрые решения, жесты и проверку результата. "+
+   "Текст MNN не может управлять вводом. STOP, ActionGate, InputPermit, TTL и ROI сохранены.");
   connection=label(layout,"Нажмите «Проверить подключение».");
   button(layout,bundled()?"Проверить встроенные веса":"Проверить подключение",()->{
    try{
@@ -78,6 +56,26 @@ public final class LocalCoreActivity extends Activity {
     else core.selfTest(value->connection.setText(value));
     connection.setText("Тестирую два независимых английских запроса...");
    }catch(IllegalStateException failure){connection.setText("Ядро занято или закрыто");}
+  });
+  title(layout,"Стратегия для текущей игры",18);
+  TextView strategy=label(layout,
+    "Модель объясняет общую тактику на английском. Не выдаёт команды для следующего хода.");
+  button(layout,"Объяснить стратегию · MNN",()->{
+   if(busy()){strategy.setText("Нейросеть занята; CPU работает независимо.");return;}
+   PilotService service=PilotService.instance;
+   String snapshot=service==null
+     ?"{\"schema\":\"localpilot-telemetry-v1\",\"status\":\"SERVICE_NOT_CONNECTED\"}"
+     :service.advisoryDiagnosticSnapshot();
+   int profile=service==null
+     ?getSharedPreferences("panel",MODE_PRIVATE).getInt("profile",-1)
+     :new org.json.JSONObject(snapshot).optInt("profile",-1);
+   try{
+    if(bundled())embedded.adviseStrategy(profile,snapshot,strategy::setText);
+    else core.adviseStrategy(profile,snapshot,strategy::setText);
+    strategy.setText("Формирую стратегию в фоне. CPU не ожидает ответа.");
+   }catch(IllegalArgumentException|IllegalStateException error){
+    strategy.setText(error.getMessage());
+   }
   });
   title(layout,"Вопрос ядру · English",18);
   question=new EditText(this);

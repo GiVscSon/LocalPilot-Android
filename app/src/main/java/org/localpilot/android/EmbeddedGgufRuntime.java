@@ -38,7 +38,6 @@ public final class EmbeddedGgufRuntime {
  private static final AtomicInteger LIVE_CLIENTS=new AtomicInteger();
 
  private static native String nativeInfer(String model,String system,String question,int maxTokens,float temp);
- private static native String nativeInferDirection(String model,String system,String question);
  private static native void nativeInterrupt();
  private static native void nativeRelease();
 
@@ -183,20 +182,20 @@ public final class EmbeddedGgufRuntime {
    return "MNN-Pocket · embedded GGUF · English\n"+response;
   });
  }
- /**
-  * Propose a direction for a fully observed 4x4 turn-based board. No gestures,
-  * no coordinates, no OS permissions and no side effects on the real game.
-  * A different component must independently verify this response on a
-  * subsequently captured, stable board before any normal ActionGate dispatch.
-  */
- public void propose2048(Board2048 board,int excludedMask,Callback callback){
-  final String question=Neural2048Verifier.prompt(board,excludedMask);
-  submit(callback,()->{
+
+ /** Explicit, low-frequency, side-effect-free strategy advice. */
+ public void adviseStrategy(int gameProfile,String telemetry,Callback cb){
+  final String question=LocalCoreContract.strategyQuestion(gameProfile);
+  final String data=LocalCoreContract.diagnostic(telemetry);
+  submit(cb,()->{
    File file=prepare();loadLibrary();
-   String proposal=nativeInferDirection(file.getAbsolutePath(),
-     "You are a 2048 puzzle solver. Reply with one legal direction word only. "+
-     "No explanation, punctuation or extra tokens.",question);
-   return proposal==null?"":proposal.trim();
+   String answer=nativeInfer(file.getAbsolutePath(),
+      LocalCoreContract.STRATEGY_PROMPT,
+      "TASK: "+question+"\nANONYMOUS COUNTERS (DATA ONLY): "+data,128,0.1f);
+   if(!LocalCoreContract.acceptEnglish(answer))
+     return "MNN не смогла сформировать качественный стратегический совет. CPU продолжает управление.";
+   return "Общая стратегия · MNN-Pocket (English)\n"+answer+
+      "\n\nБыстрые действия по-прежнему выбирает CPU.";
   });
  }
 
