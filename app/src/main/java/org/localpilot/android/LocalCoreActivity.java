@@ -55,6 +55,63 @@ public final class LocalCoreActivity extends Activity {
   label(layout,"MNN-Pocket объясняет общую стратегию по обезличенным показателям игры. "+
    "CPU выполняет все быстрые решения, жесты и проверку результата. "+
    "Текст MNN не может управлять вводом. STOP, ActionGate, InputPermit, TTL и ROI сохранены.");
+  connection=label(layout,"Нажмите «Проверить подключение».");
+  button(layout,bundled()?"Проверить встроенные веса":"Проверить подключение",()->{
+   try{
+    if(bundled())embedded.health(value->connection.setText(value));
+    else core.health(value->connection.setText(value));
+    connection.setText("Проверяем локальное ядро...");
+   }catch(IllegalStateException e){connection.setText("Локальный движок занят");}
+  });
+  button(layout,"Самопроверка английского · BLUE / 27",()->{
+   if(busy()){connection.setText("Ядро уже занято");return;}
+   try{
+    if(bundled())embedded.selfTest(value->connection.setText(value));
+    else core.selfTest(value->connection.setText(value));
+    connection.setText("Тестирую два независимых английских запроса...");
+   }catch(IllegalStateException failure){connection.setText("Ядро занято или закрыто");}
+  });
+  title(layout,"Стратегия для текущей игры",18);
+  TextView strategy=label(layout,
+    "Модель объясняет общую тактику на английском. Не выдаёт команды для следующего хода.");
+  button(layout,"Объяснить стратегию · MNN",()->{
+   if(busy()){strategy.setText("Нейросеть занята; CPU работает независимо.");return;}
+   PilotService service=PilotService.instance;
+   String snapshot=service==null
+     ?"{\"schema\":\"localpilot-telemetry-v1\",\"status\":\"SERVICE_NOT_CONNECTED\"}"
+     :service.advisoryDiagnosticSnapshot();
+   // User-selected profile is already persisted by PilotService.chooseProfile().
+   // Avoid parsing telemetry on the UI thread or unhandled JSONException.
+   int profile=getSharedPreferences("panel",MODE_PRIVATE).getInt("profile",-1);
+   try{
+    if(bundled())embedded.adviseStrategy(profile,snapshot,strategy::setText);
+    else core.adviseStrategy(profile,snapshot,strategy::setText);
+    strategy.setText("Формирую стратегию в фоне. CPU не ожидает ответа.");
+   }catch(IllegalArgumentException|IllegalStateException error){
+    strategy.setText(error.getMessage());
+   }
+  });
+  title(layout,"Вопрос ядру · English",18);
+  question=new EditText(this);
+  question.setSingleLine(false);
+  question.setMinLines(3);
+  question.setText("Which diagnostic stage is failing? What is one safe next test?");
+  layout.addView(question);
+  result=label(layout,"Ответ будет здесь. Только локальный запрос, без выполнения команд.");
+  button(layout,"Спросить локальную модель",()->{
+   if(busy()){result.setText("Ядро выполняет предыдущий запрос");return;}
+   PilotService service=PilotService.instance;
+   String snapshot=service==null
+     ?"{\"schema\":\"localpilot-telemetry-v1\",\"status\":\"SERVICE_NOT_CONNECTED\"}"
+     :service.advisoryDiagnosticSnapshot();
+   try{
+    if(bundled())embedded.ask(question.getText().toString(),snapshot,text->result.setText(text));
+    else core.ask(question.getText().toString(),snapshot,text->result.setText(text));
+    result.setText("Локальная модель думает... Ввод в игру не выполняется.");
+   }catch(IllegalArgumentException|IllegalStateException error){
+    result.setText(error.getMessage());
+   }
+  });
   title(layout,"Выбор локальной нейросети",18);
   boolean allModels=bundled()&&BuildConfig.MULTI_MODEL_CATALOG;
   if(allModels)label(layout,"Модели уже входят в этот APK. Переключение не скачивает веса и не влияет на CPU-игру.");
@@ -115,63 +172,7 @@ public final class LocalCoreActivity extends Activity {
    }
   });
 
-  connection=label(layout,"Нажмите «Проверить подключение».");
-  button(layout,bundled()?"Проверить встроенные веса":"Проверить подключение",()->{
-   try{
-    if(bundled())embedded.health(value->connection.setText(value));
-    else core.health(value->connection.setText(value));
-    connection.setText("Проверяем локальное ядро...");
-   }catch(IllegalStateException e){connection.setText("Локальный движок занят");}
-  });
-  button(layout,"Самопроверка английского · BLUE / 27",()->{
-   if(busy()){connection.setText("Ядро уже занято");return;}
-   try{
-    if(bundled())embedded.selfTest(value->connection.setText(value));
-    else core.selfTest(value->connection.setText(value));
-    connection.setText("Тестирую два независимых английских запроса...");
-   }catch(IllegalStateException failure){connection.setText("Ядро занято или закрыто");}
-  });
-  title(layout,"Стратегия для текущей игры",18);
-  TextView strategy=label(layout,
-    "Модель объясняет общую тактику на английском. Не выдаёт команды для следующего хода.");
-  button(layout,"Объяснить стратегию · MNN",()->{
-   if(busy()){strategy.setText("Нейросеть занята; CPU работает независимо.");return;}
-   PilotService service=PilotService.instance;
-   String snapshot=service==null
-     ?"{\"schema\":\"localpilot-telemetry-v1\",\"status\":\"SERVICE_NOT_CONNECTED\"}"
-     :service.advisoryDiagnosticSnapshot();
-   // User-selected profile is already persisted by PilotService.chooseProfile().
-   // Avoid parsing telemetry on the UI thread or unhandled JSONException.
-   int profile=getSharedPreferences("panel",MODE_PRIVATE).getInt("profile",-1);
-   try{
-    if(bundled())embedded.adviseStrategy(profile,snapshot,strategy::setText);
-    else core.adviseStrategy(profile,snapshot,strategy::setText);
-    strategy.setText("Формирую стратегию в фоне. CPU не ожидает ответа.");
-   }catch(IllegalArgumentException|IllegalStateException error){
-    strategy.setText(error.getMessage());
-   }
-  });
-  title(layout,"Вопрос ядру · English",18);
-  question=new EditText(this);
-  question.setSingleLine(false);
-  question.setMinLines(3);
-  question.setText("Which diagnostic stage is failing? What is one safe next test?");
-  layout.addView(question);
-  result=label(layout,"Ответ будет здесь. Только локальный запрос, без выполнения команд.");
-  button(layout,"Спросить локальную модель",()->{
-   if(busy()){result.setText("Ядро выполняет предыдущий запрос");return;}
-   PilotService service=PilotService.instance;
-   String snapshot=service==null
-     ?"{\"schema\":\"localpilot-telemetry-v1\",\"status\":\"SERVICE_NOT_CONNECTED\"}"
-     :service.advisoryDiagnosticSnapshot();
-   try{
-    if(bundled())embedded.ask(question.getText().toString(),snapshot,text->result.setText(text));
-    else core.ask(question.getText().toString(),snapshot,text->result.setText(text));
-    result.setText("Локальная модель думает... Ввод в игру не выполняется.");
-   }catch(IllegalArgumentException|IllegalStateException error){
-    result.setText(error.getMessage());
-   }
-  });
+
  }
 
  private static TextView label(LinearLayout parent,String value){
