@@ -215,8 +215,10 @@ public final class ModelLabStore {
   try(InputStream in=input;FileOutputStream out=new FileOutputStream(temp)){
    byte[] buf=new byte[131072];int n;
    StatFs fs=new StatFs(directory.getAbsolutePath());
-   if(fs.getAvailableBytes()<SPACE_RESERVE)
-    throw new IllegalStateException("Недостаточно памяти для импорта модели");
+   long free=fs.getAvailableBytes();
+   if(free<SPACE_RESERVE || (expectedBytes>0 &&
+       (expectedBytes>free || free-expectedBytes<SPACE_RESERVE)))
+    throw new IllegalStateException("Не хватает места для модели и резерва 128 МБ");
    while((n=in.read(buf))!=-1){
     copied+=n;
     if(expectedBytes>0&&copied>expectedBytes)throw new SecurityException("Размер модели не совпадает");
