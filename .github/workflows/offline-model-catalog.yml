@@ -93,6 +93,8 @@ jobs:
           unzip -p "$APK" lib/arm64-v8a/liblocalpilot_embedded.so > build/reports/model-native.so
           readelf -h build/reports/model-native.so | grep -q 'Machine:.*AArch64'
           readelf -Ws build/reports/model-native.so | grep -q 'Java_org_localpilot_android_EmbeddedGgufRuntime_nativeAnalyzeImage'
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" \
+            | grep "^package: name='org.localpilot.android.dev.offlinecatalog' "
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$APK"
           sha256sum "$APK" | tee build/reports/offline-catalog-apk.sha256
           ls -lh "$APK"

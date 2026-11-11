@@ -69,7 +69,9 @@ android {
  // Keep legacy dev package literals intact for strict release tooling.
  // Only the dedicated embedded APK uses its own install identity.
  if (bundledGguf) {
-   buildTypes.debug.applicationIdSuffix = '.dev.mnnembedded'
+   // Separate APK identities prevent independently signed CI candidates
+   // from conflicting with one another on the same Android device.
+   buildTypes.debug.applicationIdSuffix = bundledCatalog ? '.dev.offlinecatalog' : '.dev.mnnembedded'
    buildTypes.debug.versionNameSuffix = bundledCatalog ? '-offline-catalog-candidate' : '-embedded-mnn-candidate'
  }
  lint { checkTestSources true }
