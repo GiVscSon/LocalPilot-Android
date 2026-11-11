@@ -38,6 +38,7 @@ public final class EmbeddedGgufRuntime {
  private static final AtomicInteger LIVE_CLIENTS=new AtomicInteger();
 
  private static native String nativeInfer(String model,String system,String question,int maxTokens,float temp);
+ private static native String nativeInferDirection(String model,String system,String question);
  private static native void nativeInterrupt();
  private static native void nativeRelease();
 
@@ -192,10 +193,9 @@ public final class EmbeddedGgufRuntime {
   final String question=Neural2048Verifier.prompt(board,excludedMask);
   submit(callback,()->{
    File file=prepare();loadLibrary();
-   String proposal=nativeInfer(file.getAbsolutePath(),
+   String proposal=nativeInferDirection(file.getAbsolutePath(),
      "You are a 2048 puzzle solver. Reply with one legal direction word only. "+
-     "No explanation, punctuation or extra tokens.",
-     question,24,0f);
+     "No explanation, punctuation or extra tokens.",question);
    return proposal==null?"":proposal.trim();
   });
  }
