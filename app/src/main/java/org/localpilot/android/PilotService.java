@@ -769,6 +769,7 @@ public class PilotService extends AccessibilityService {
     +" epoch="+stopEpoch+" profile="+selectedProfile+" sent="+captureSent
     +" ack="+captureCompleted+" grid_verified="+gridVerified);
   board2048Stalls.reset();
+  mnn2048Nonce++;mnn2048Busy=false; // Invalidate all outstanding neural proposals.
   permit.revoke();gate.stop();browserSceneGate.reset();visionV2.reset();visionV2Snapshot=null;
   rebindGeneration++;rebindStability.reset();
   if(playingJumper)CrashDiagnostics.captureStopped();
@@ -2390,6 +2391,23 @@ public class PilotService extends AccessibilityService {
    },captureDelay());
   });
  }
+ /** Explicit, session-lifetime opt-in; no model can acquire or extend InputPermit. */
+ private boolean mnn2048Enabled, mnn2048Busy;
+ private long mnn2048Nonce;
+ private EmbeddedGgufRuntime embedded2048;
+ public boolean mnn2048Enabled(){return BuildConfig.EMBEDDED_GGUF&&mnn2048Enabled;}
+ /** Switches mode only with STOP, requiring the normal re-arm/consent path. */
+ public void setMnn2048Enabled(boolean enabled){
+  if(enabled&&!BuildConfig.EMBEDDED_GGUF){note="В этом APK нет встроенной MNN";update();return;}
+  if(mnn2048Enabled==enabled)return;
+  if(gate.armed()||playing2048||playingGrid||playingJumper||playingMini)
+   stop("MNN 2048 MODE_CHANGED: требуется новая привязка окна");
+  mnn2048Enabled=enabled;
+  mnn2048Nonce++;mnn2048Busy=false;
+  note=enabled?"MNN 2048: включён проверяемый выбор, заново привяжите окно":
+    "MNN 2048: отключён, работает физический CPU-алгоритм";
+  update();
+ }
  private void start2048(){start2048(false);}
  private void start2048(boolean colored){
   if(busy||captureBusy||discoveringBoard||autoLeft>0||playing2048||playingMini||playingJumper||playingGrid||!gate.armed()||boardRoi==null){note=colored?"Цветной 2048: привяжите игру и выберите поле 4×4":"Привязать → Поле 4×4 → Авто2048";update();return;}
@@ -2451,19 +2469,107 @@ public class PilotService extends AccessibilityService {
     note="2048: перепроверяю сцену браузера · без ввода";update();long generation=boardReadGeneration;
     handler.postDelayed(()->{if(epoch==gate.epoch()&&generation==boardReadGeneration&&playing2048&&!focusPaused)round2048(epoch);},captureDelay());return;
    }
-   metrics.attempt(StageMetrics.Stage.POLICY);long policyNs=SystemClock.elapsedRealtimeNanos();long started=SystemClock.elapsedRealtime();int d;try{d=board.chooseAvoiding(board2048Stalls.failedMask(board,epoch));}
-   catch(RuntimeException error){failStage(StageMetrics.Stage.POLICY,"POLICY_FAILED","Не удалось выбрать ход");return;}metrics.record(StageMetrics.Stage.POLICY,SystemClock.elapsedRealtimeNanos()-policyNs);long think=SystemClock.elapsedRealtime()-started;if(d<0){stop(board2048Stalls.failedMask(board,epoch)!=0?"2048: альтернативные подтверждаемые направления закончились · проверьте ROI и управление":"2048: допустимых ходов нет");return;}if(!Verified2048.mask(board)[d]){stop("2048: ход вне маски");return;}if(!valid(ticket)){if(deferFocus(invalidReason(ticket)))return;stop("План устарел");return;}
-   Rect r=new Rect(boardRoi);float x=r.exactCenterX(),y=r.exactCenterY(),dx=0,dy=0;switch(d){case Board2048.LEFT:dx=-r.width()*.30f;break;case Board2048.RIGHT:dx=r.width()*.30f;break;case Board2048.UP:dy=-r.height()*.30f;break;case Board2048.DOWN:dy=r.height()*.30f;break;}
-   try{board2048Stalls.sent(board,d,epoch,SystemClock.elapsedRealtime());}
-   catch(IllegalArgumentException rejected){stop("2048: скрипт отклонил повтор неответившего направления");return;}
-   before2048=board;direction2048=d;moves2048++;uiStats="кадр "+captureMs+" мс · CPU "+think+" мс · проверено "+(moves2048-1);note="Ход "+moves2048+" · max "+board.max()+" · кадр "+captureMs+"мс · CPU "+think+"мс";update();
-   long sentBefore=dispatchedInputs;
-   send(x-dx/2,y-dy/2,x+dx/2,y+dy/2,ticket,()->{board2048Stalls.ack(epoch,SystemClock.elapsedRealtime());note="Проверяю исход хода "+moves2048;update();long generation=boardReadGeneration;handler.postDelayed(()->{if(generation==boardReadGeneration)round2048(epoch);},captureDelay());});
-   if(dispatchedInputs==sentBefore&&playing2048&&epoch==gate.epoch()){
-    board2048Stalls.cancelledUnsent(epoch);before2048=null;moves2048--;long generation=boardReadGeneration;
-    if(!focusPaused)handler.postDelayed(()->{if(generation==boardReadGeneration)round2048(epoch);},captureDelay());
+   metrics.attempt(StageMetrics.Stage.POLICY);
+   long policyNs=SystemClock.elapsedRealtimeNanos();
+   long started=SystemClock.elapsedRealtime();
+   int excluded=board2048Stalls.failedMask(board,epoch);
+   int baseline;
+   try{baseline=board.chooseAvoiding(excluded);}
+   catch(RuntimeException error){failStage(StageMetrics.Stage.POLICY,"POLICY_FAILED","Не удалось выбрать ход");return;}
+   metrics.record(StageMetrics.Stage.POLICY,SystemClock.elapsedRealtimeNanos()-policyNs);
+   long think=SystemClock.elapsedRealtime()-started;
+   if(baseline<0){
+    stop(excluded!=0?"2048: альтернативные подтверждаемые направления закончились · проверьте ROI и управление":
+       "2048: допустимых ходов нет");
+    return;
    }
+   if(!Verified2048.mask(board)[baseline]){stop("2048: ход вне маски");return;}
+
+   if(mnn2048Enabled&&BuildConfig.EMBEDDED_GGUF){
+    if(mnn2048Busy)return; // Single model question in flight, never queue gestures.
+    if(embedded2048==null)embedded2048=new EmbeddedGgufRuntime(this);
+    final long request=++mnn2048Nonce,generation=boardReadGeneration;
+    mnn2048Busy=true;
+    try {
+     embedded2048.propose2048(board,excluded,raw->{
+      if(request!=mnn2048Nonce)return;
+      mnn2048Busy=false;
+      if(!mnn2048Enabled||!playing2048||epoch!=gate.epoch()
+         ||generation!=boardReadGeneration||focusPaused||before2048!=null)return;
+      // The model has no direct path to send(). Read a SECOND stable board.
+      stable(epoch,(fresh,freshTicket,freshCaptureMs)->{
+       if(request!=mnn2048Nonce||!mnn2048Enabled||!playing2048
+          ||epoch!=gate.epoch()||generation!=boardReadGeneration||focusPaused
+          ||before2048!=null)return;
+       Neural2048Verifier.Result checked=Neural2048Verifier.verify(
+         board,fresh,excluded,baseline,raw);
+       if(checked.direction<0){
+        note="MNN 2048: поле изменилось или нет безопасного хода · перечитываю";
+        update();
+        postBoardTask(epoch,captureDelay(),()->round2048(epoch));return;
+       }
+       dispatch2048Verified(fresh,freshTicket,freshCaptureMs,checked.direction,
+           think,epoch,checked.accepted?"MNN проверена":"CPU: MNN отклонена");
+      });
+     });
+    }catch(RuntimeException failure){
+     mnn2048Busy=false;
+     dispatch2048Verified(board,ticket,captureMs,baseline,think,epoch,"CPU: MNN недоступна");
+    }
+    return;
+   }
+   dispatch2048Verified(board,ticket,captureMs,baseline,think,epoch,"CPU");
+
   });
+ }
+
+
+ /**
+  * The ONLY dispatch site for both CPU and neural-proposed 2048 directions.
+  * Normal ActionGate TTL, window binding, InputPermit, STOP and post-gesture
+  * visual verification stay unchanged. No model callback calls send() directly.
+  */
+ private void dispatch2048Verified(Board2048 board,ActionGate.Ticket ticket,
+                                   long captureMs,int d,long think,long epoch,
+                                   String source){
+  if(epoch!=gate.epoch()||!playing2048||focusPaused||boardRoi==null)return;
+  if(d<0||d>3||!Verified2048.mask(board)[d]
+      ||(board2048Stalls.failedMask(board,epoch)&(1<<d))!=0){
+   stop("2048: нейросетевой ход отклонён независимой маской");return;
+  }
+  if(!valid(ticket)){
+   if(deferFocus(invalidReason(ticket)))return;
+   stop("План устарел");return;
+  }
+  Rect r=new Rect(boardRoi);
+  float x=r.exactCenterX(),y=r.exactCenterY(),dx=0,dy=0;
+  switch(d){
+   case Board2048.LEFT:dx=-r.width()*.30f;break;
+   case Board2048.RIGHT:dx=r.width()*.30f;break;
+   case Board2048.UP:dy=-r.height()*.30f;break;
+   case Board2048.DOWN:dy=r.height()*.30f;break;
+  }
+  try{board2048Stalls.sent(board,d,epoch,SystemClock.elapsedRealtime());}
+  catch(IllegalArgumentException rejected){
+   stop("2048: повтор неответившего направления отклонён");return;
+  }
+  before2048=board;direction2048=d;moves2048++;
+  uiStats="кадр "+captureMs+" мс · CPU "+think+" мс · проверено "+(moves2048-1);
+  note="Ход "+moves2048+" · "+source+" · max "+board.max();
+  update();
+  long sentBefore=dispatchedInputs;
+  send(x-dx/2,y-dy/2,x+dx/2,y+dy/2,ticket,()->{
+   board2048Stalls.ack(epoch,SystemClock.elapsedRealtime());
+   note="Проверяю исход хода "+moves2048;update();
+   long generation=boardReadGeneration;
+   handler.postDelayed(()->{if(generation==boardReadGeneration)round2048(epoch);},captureDelay());
+  });
+  if(dispatchedInputs==sentBefore&&playing2048&&epoch==gate.epoch()){
+   board2048Stalls.cancelledUnsent(epoch);before2048=null;moves2048--;
+   long generation=boardReadGeneration;
+   if(!focusPaused)handler.postDelayed(
+     ()->{if(generation==boardReadGeneration)round2048(epoch);},captureDelay());
+  }
  }
 
  private boolean miniMarker(AccessibilityNodeInfo root,String marker,int depth){if(root==null||depth>30)return false;if(marker.equals(String.valueOf(root.getContentDescription())))return true;for(int i=0;i<Math.min(100,root.getChildCount());i++)if(miniMarker(root.getChild(i),marker,depth+1))return true;return false;}
@@ -2519,5 +2625,5 @@ public class PilotService extends AccessibilityService {
   // target window remain the same. The normal per-frame window gate still applies.
   if(!changed){update();return;}
   stop("Поворот/конфигурация — STOP. Выберите окно игры заново");explicitWindow=false;browserProfileConfirmed=false;visualRoi=null;manualVisualRoi=false;visualOwner="";visualWindow=-1;visualWindowBounds.setEmpty();if(layout!=null){layout.x=0;layout.y=dp(48);updatePanelLayout();}}
- @Override public void onDestroy(){destroying=true;if(diagnosticUplink!=null)diagnosticUplink.close();CrashDiagnostics.phase("SERVICE_DESTROYED");permit.revoke();gate.stop();if(instance==this)instance=null;try{CaptureCleanup.run(this::hidePanel,this::clearDiagnosticFrame,this::clearRetainedGridFrame,gestureFlight::clear,()->gestureHandler.removeCallbacksAndMessages(null),()->handler.removeCallbacksAndMessages(null),()->visionWorker.shutdownNow());}finally{busy=false;super.onDestroy();}}
+ @Override public void onDestroy(){destroying=true;mnn2048Nonce++;mnn2048Busy=false;if(embedded2048!=null)embedded2048.close();if(diagnosticUplink!=null)diagnosticUplink.close();CrashDiagnostics.phase("SERVICE_DESTROYED");permit.revoke();gate.stop();if(instance==this)instance=null;try{CaptureCleanup.run(this::hidePanel,this::clearDiagnosticFrame,this::clearRetainedGridFrame,gestureFlight::clear,()->gestureHandler.removeCallbacksAndMessages(null),()->handler.removeCallbacksAndMessages(null),()->visionWorker.shutdownNow());}finally{busy=false;super.onDestroy();}}
 }
