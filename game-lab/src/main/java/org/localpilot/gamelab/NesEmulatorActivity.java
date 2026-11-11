@@ -40,7 +40,7 @@ public final class NesEmulatorActivity extends Activity {
  private static final String[] GAMEPAD={"UP","LEFT","DOWN","RIGHT","SELECT","START","B","A"};
  private WebView web;
  private TextView state;
- private Button demoButton,aButton,bButton,shareTrial;
+ private Button demoButton,aButton,bButton,shareTrial,cpuAgentButton;
  private boolean homebrewRom;
  private NesTrial readyTrial;
  private TrialPending pendingTrial;
@@ -86,6 +86,11 @@ public final class NesEmulatorActivity extends Activity {
   shareTrial.setEnabled(false);
   shareTrial.setOnClickListener(v->sendTrialToModelLab());
   root.addView(shareTrial);
+  cpuAgentButton=new Button(this);
+  cpuAgentButton.setText("CPU NES-агент · тестовый ход A (16 кадров)");
+  cpuAgentButton.setEnabled(false);
+  cpuAgentButton.setOnClickListener(v->runHomebrewCpuAgent());
+  root.addView(cpuAgentButton);
   web=new WebView(this);
   web.setBackgroundColor(HubContract.BACKGROUND);
   web.getSettings().setJavaScriptEnabled(true);
@@ -124,6 +129,15 @@ public final class NesEmulatorActivity extends Activity {
      if(count%60==0)
       state.setText("Кадров "+frames+" · экран CRC="+Integer.toHexString(hash)
        +" · касаний "+touches.get()+" · только эмуляция (не результат Маркета)");
+    });
+   }
+   @JavascriptInterface public void onAgentAction(String name,int started,int finished){
+    runOnUiThread(()->{
+     TrialPending current=pendingTrial;
+     if(current!=null&&current.button.equals(name)&&current.downAck&&
+        started>=current.frame&&finished>=started+4&&finished<=started+60)
+      current.upAck=true;
+     else pendingTrial=null;
     });
    }
    @JavascriptInterface public void onStatus(String message){
@@ -180,6 +194,21 @@ public final class NesEmulatorActivity extends Activity {
   if(resumed&&demoButton!=null)
    GameLabEvidenceProvider.nes(dendy,frames,hash,touches.get(),demoButton,aButton,bButton);
  }
+ private void runHomebrewCpuAgent(){
+  if(!homebrewRom||!pageLoaded||frames<15||hash==0){
+   state.setText("CPU-агент доступен только в запущенном homebrew NES");return;
+  }
+  beginTrial("A");
+  web.evaluateJavascript("window.retroAgentTrial('A',16)",result->{
+   TrialPending current=pendingTrial;
+   if(current==null)return;
+   current.downAck="true".equals(result);
+   if(!current.downAck){
+    pendingTrial=null;
+    state.setText("CPU-агент не подтвердил начало эмулированного ввода");
+   }
+  });
+ }
  private void beginTrial(String key){
   readyTrial=null;
   if(shareTrial!=null)shareTrial.setEnabled(false);
@@ -218,9 +247,12 @@ public final class NesEmulatorActivity extends Activity {
   frames=hash=0;touches.set(0);
   homebrewRom=homebrew;pendingTrial=null;readyTrial=null;
   if(shareTrial!=null)shareTrial.setEnabled(false);
+  if(cpuAgentButton!=null)cpuAgentButton.setEnabled(false);
   web.evaluateJavascript("window.retroLoadRom("+org.json.JSONObject.quote(encoded)+","
-    +(dendy?"true":"false")+")",success->{
-   if(!"true".equals(success))state.setText("NES ROM не запущен. Проверьте mapper и ядро.");
+    +(dendy?"true":"false")+","+(homebrew?"true":"false")+")",success->{
+   boolean launched="true".equals(success);
+   if(cpuAgentButton!=null)cpuAgentButton.setEnabled(launched&&homebrew);
+   if(!launched)state.setText("NES ROM не запущен. Проверьте mapper и ядро.");
   });
  }
  private interface InputAck{void result(boolean accepted);}

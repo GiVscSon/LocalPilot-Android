@@ -41,6 +41,12 @@ ok(html.includes('<script src="latched-buttons.js"></script>'),"runtime includes
 ok(html.includes('gamepadLatch.flush(frames)'),"real CPU frame clock drives button releases");
 ok(html.includes('gamepadLatch.change(name,value,Boolean(down),frames)'),
  "real Android taps enter the frame-held controller");
+ok(html.includes('window.retroAgentTrial=function(name,holdFrames)'),
+ "CPU homebrew agent has explicit bounded API");
+ok(html.includes('!homebrewRom||agentTrial')&&html.includes('name!=="A"'),
+ "autonomous input cannot run for arbitrary user ROMs");
+ok(html.includes('frames>=agentTrial.started+agentTrial.holdFrames'),
+ "CPU action duration gated by actual NES frames not wall clock");
 const activity=fs.readFileSync(path.join(root,
  "game-lab/src/main/java/org/localpilot/gamelab/NesEmulatorActivity.java"),"utf8");
 ok(activity.includes('file:///android_asset/nes/latched-buttons.js'),
