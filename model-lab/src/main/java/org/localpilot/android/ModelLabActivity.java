@@ -37,7 +37,9 @@ public final class ModelLabActivity extends Activity {
  private final ExecutorService io=Executors.newSingleThreadExecutor(task->{
   Thread t=new Thread(task,"ModelLab-Storage");t.setDaemon(true);return t;
  });
- private Spinner modelPicker;
+ private Spinner modelPicker,computePicker;
+ private TextView computeStatus;
+ private final ModelLabComputePolicy compute=new ModelLabComputePolicy();
  private final List<ModelLabStore.Entry> displayed=new ArrayList<>();
  private TextView status,result,modelStatus,imageStatus,nesStatus;
  private NesTrial nesTrial;
@@ -86,7 +88,7 @@ public final class ModelLabActivity extends Activity {
     runOnUiThread(()->{
      if(closed)return;
      try{
-      engine.text(weights,evidence.advisoryPrompt(),(answer,elapsed)->{
+      engine.text(weights,evidence.advisoryPrompt(),selectedGpuLayers(selection),(answer,elapsed)->{
        if(!closed)nesStatus.setText(evidence.summary()+"\n"+
          selection.label+" · "+elapsed+" мс\n"+answer);
       });
@@ -101,6 +103,70 @@ public final class ModelLabActivity extends Activity {
   modelPicker=new Spinner(this);
   col.addView(modelPicker);
   modelStatus=line(col,"Одна активная модель. Остальные не загружены в RAM.");
+  title(col,"Ускорение нейросети · CPU / Vulkan GPU");
+  line(col,"На POCO X7 Pro установлен Mali-G720. Vulkan экспериментален: "+
+    "производительность и устойчивость нужно измерить. По умолчанию всегда CPU. "+
+    "При тесте GPU держи ModelLab на экране: некоторые драйверы Mali "+
+    "могут зависать при переходе приложения в фон.");
+  computePicker=new Spinner(this);
+  computePicker.setAdapter(new ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,
+    new String[]{"CPU · надёжный режим","Vulkan GPU · 8 слоёв (эксперимент)",
+      "Vulkan GPU · 16 слоёв (эксперимент)","Auto · GPU только после успешного сравнения"}));
+  col.addView(computePicker);
+  computePicker.setSelection(0); // Explicit opt-in after every app start.
+  computeStatus=line(col,BuildConfig.VULKAN_COMPILED?
+    "В этом APK собран Vulkan. GPU не используется, пока не выбран пользователем.":
+    "Эта сборка только CPU. Нужен отдельный ModelLab Vulkan APK для теста GPU.");
+  button(col,"Проверить наличие Vulkan GPU",()->{
+   if(engine.busy()){computeStatus.setText("Движок занят");return;}
+   engine.probeGpu((answer,elapsed)->{
+    if(!closed)computeStatus.setText(answer+" · "+elapsed+" мс");
+   });
+  });
+  button(col,"Сравнить CPU и GPU на одинаковом английском запросе",()->{
+   ModelLabStore.Entry choice=selected();
+   if(choice==null){computeStatus.setText("Сначала выбери GGUF");return;}
+   if(!BuildConfig.VULKAN_COMPILED){
+    computeStatus.setText("Vulkan отсутствует в этом APK. Для сравнения нужна GPU-сборка.");return;
+   }
+   if(engine.busy()){computeStatus.setText("Движок занят");return;}
+   final String fixed="Explain why empty cells matter in 2048. Reply in one English sentence.";
+   computeStatus.setText("Бенчмарк CPU → GPU8, один запрос, без игровых жестов...");
+   task("Проверяю модель для бенчмарка",()->{
+    File model=store.modelFile(choice);
+    runOnUiThread(()->{
+     if(closed)return;
+     try{
+      engine.text(model,fixed,0,(cpuAnswer,cpuMs)->{
+       if(closed)return;
+       boolean validCpu=validBenchmarkText(cpuAnswer);
+       compute.benchmark(choice.id,false,cpuMs,validCpu);
+       if(!validCpu){
+        computeStatus.setText("CPU не выдал пригодный ответ; сравнение отменено.");
+        return;
+       }
+       try{
+        computeStatus.setText("CPU "+cpuMs+" мс. Тестирую Vulkan GPU8...");
+        engine.text(model,fixed,8,(gpuAnswer,gpuMs)->{
+         if(closed)return;
+         boolean validGpu=validBenchmarkText(gpuAnswer)&&engine.lastGpuLayers()>0;
+         compute.benchmark(choice.id,true,gpuMs,validGpu);
+         computeStatus.setText(compute.summary(choice.id)+
+           (validGpu?" · GPU реально использован":" · GPU не задействован или ошибка")+
+           ". Автоматический режим выберет только измеренно быстрый backend.");
+        });
+       }catch(RuntimeException error){
+        compute.benchmark(choice.id,true,1,false);
+        computeStatus.setText("GPU тест не начат: "+error.getClass().getSimpleName());
+       }
+      });
+     }catch(RuntimeException error){
+      computeStatus.setText("CPU тест не начат: "+error.getClass().getSimpleName());
+     }
+    });
+    return "Модель проверена";
+   },false);
+  });
   button(col,"Обновить список",this::refresh);
   button(col,"Удалить выбранную импортированную модель",()->{
    ModelLabStore.Entry e=selected();
@@ -161,7 +227,7 @@ public final class ModelLabActivity extends Activity {
     runOnUiThread(()->{
      if(closed)return;
      try{
-      engine.text(model,text,(answer,elapsed)->{
+      engine.text(model,text,selectedGpuLayers(e),(answer,elapsed)->{
        if(!closed)result.setText(e.label+" · "+elapsed+" мс\n"+answer);
       });
       result.setText("Генерация в фоне...");
@@ -198,7 +264,7 @@ public final class ModelLabActivity extends Activity {
      try{
       engine.image(model,projector,
         "Describe the visible game objects, colors and uncertain elements.",
-        data,w,h,(answer,elapsed)->{
+        data,w,h,selectedGpuLayers(e),(answer,elapsed)->{
          if(!closed)imageStatus.setText(e.label+" · "+elapsed+" мс\n"+answer);
         });
       imageStatus.setText("Обрабатываю RGB-пиксели в фоне...");
@@ -244,6 +310,20 @@ public final class ModelLabActivity extends Activity {
   if(modelPicker==null)return null;
   int pos=modelPicker.getSelectedItemPosition();
   return pos>=0&&pos<displayed.size()?displayed.get(pos):null;
+ }
+ private boolean validBenchmarkText(String answer){
+  return answer!=null&&!answer.isBlank()&&
+   !answer.startsWith("Ошибка локальной модели:")&&
+   !answer.startsWith("Нет ответа.")&&
+   !answer.startsWith("Ответ обрезан")&&
+   !answer.startsWith("Ответ содержит служебные");
+ }
+ private int selectedGpuLayers(ModelLabStore.Entry entry){
+  if(entry==null||computePicker==null)return 0;
+  int position=computePicker.getSelectedItemPosition();
+  if(position<0||position>=ModelLabComputePolicy.Mode.values().length)return 0;
+  return compute.layers(ModelLabComputePolicy.Mode.values()[position],
+    entry.id,BuildConfig.VULKAN_COMPILED);
  }
  private void refresh(){
   if(closed||modelPicker==null)return;
