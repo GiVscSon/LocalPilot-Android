@@ -37,7 +37,9 @@ public final class ModelLabActivity extends Activity {
  private final ExecutorService io=Executors.newSingleThreadExecutor(task->{
   Thread t=new Thread(task,"ModelLab-Storage");t.setDaemon(true);return t;
  });
- private Spinner modelPicker,computePicker;
+ private Spinner modelPicker,computePicker,presetPicker;
+ private TextView presetStatus;
+ private volatile String preferredModelId;
  private TextView computeStatus;
  private final ModelLabComputePolicy compute=new ModelLabComputePolicy();
  private final List<ModelLabStore.Entry> displayed=new ArrayList<>();
@@ -103,6 +105,39 @@ public final class ModelLabActivity extends Activity {
   modelPicker=new Spinner(this);
   col.addView(modelPicker);
   modelStatus=line(col,"Одна активная модель. Остальные не загружены в RAM.");
+  title(col,"Проверенный каталог · модели загружаются отдельно");
+  line(col,"APK не содержит тяжёлых весов. Выбери модель: ссылка указывает на "+
+    "закреплённую ревизию Hugging Face, размер и SHA-256 проверяются до установки. "+
+    "Для зрения автоматически загружается соответствующий mmproj. "+
+    "Загруженные веса остаются в приватной памяти приложения.");
+  presetPicker=new Spinner(this);
+  List<String> recommended=new ArrayList<>();
+  for(ModelLabPresetCatalog.Preset p:ModelLabPresetCatalog.ALL)recommended.add(p.description());
+  presetPicker.setAdapter(new ArrayAdapter<>(this,
+    android.R.layout.simple_spinner_dropdown_item,recommended));
+  presetPicker.setSelection(1); // Qwen text is the recommended default, no auto-download.
+  col.addView(presetPicker);
+  presetStatus=line(col,"Ничего не загружено автоматически. Подключение нужно только для скачивания.");
+  button(col,"Скачать выбранную модель по проверенной ссылке",()->{
+   int index=presetPicker.getSelectedItemPosition();
+   if(index<0||index>=ModelLabPresetCatalog.ALL.size())return;
+   ModelLabPresetCatalog.Preset preset=ModelLabPresetCatalog.ALL.get(index);
+   if(engine.busy()){presetStatus.setText("Сначала заверши анализ");return;}
+   task("Загружаю "+preset.label,()->{
+    ModelLabStore.Entry installed=store.downloadPreset(preset,(phase,done,total)->{
+     runOnUiThread(()->{
+      if(!closed)presetStatus.setText(preset.label+" · "+phase+" · "+
+       (total>0?((done*100)/total)+"%":done+" байт"));
+     });
+    });
+    preferredModelId=installed.id;
+    runOnUiThread(()->{
+     if(!closed)presetStatus.setText("Готово · "+installed.label+
+      ". SHA-256 и точный размер подтверждены, модель доступна в списке.");
+    });
+    return "Установлена "+installed.label;
+   },true);
+  });
   title(col,"Ускорение нейросети · CPU / Vulkan GPU");
   line(col,"На POCO X7 Pro установлен Mali-G720. Vulkan экспериментален: "+
     "производительность и устойчивость нужно измерить. По умолчанию всегда CPU. "+
@@ -328,8 +363,10 @@ public final class ModelLabActivity extends Activity {
  }
  private void refresh(){
   if(closed||modelPicker==null)return;
-  String selectedId=selected()==null?getPreferences(MODE_PRIVATE)
+  String selectedId=preferredModelId!=null?preferredModelId:
+    selected()==null?getPreferences(MODE_PRIVATE)
     .getString("selected","builtin:qwen35"):selected().id;
+  preferredModelId=null;
   List<ModelLabStore.Entry> current=store.list();
   displayed.clear();displayed.addAll(current);
   List<String> labels=new ArrayList<>();
