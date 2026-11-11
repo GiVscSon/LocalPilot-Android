@@ -25,6 +25,7 @@ import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import org.localpilot.shared.NesTrial;
+import org.localpilot.shared.NesFrameTransfer;
 
 /**
  * Independent on-device AI laboratory. No LocalPilot service/gestures are present.
@@ -50,6 +51,7 @@ public final class ModelLabActivity extends Activity {
  private ImageView preview;
  private Bitmap previewBitmap;
  private byte[] rgb;
+ private boolean nesFrameLoaded;
  private int width,height;
  private boolean closed;
 
@@ -111,7 +113,6 @@ public final class ModelLabActivity extends Activity {
     return "Только текстовая стратегия, без доступа к игровым кнопкам";
    },false);
   });
-  receiveNesIntent(getIntent());
   title(col,"Выбор модели");
   modelPicker=new Spinner(this);
   col.addView(modelPicker);
@@ -323,7 +324,11 @@ public final class ModelLabActivity extends Activity {
      if(closed)return;
      try{
       engine.image(model,projector,
-        "Describe the visible game objects, colors and uncertain elements.",
+        (nesFrameLoaded?
+          "This is a downsized NES screenshot captured when the episode was shared. "+
+          "Describe visible game objects and uncertainty. The screenshot is NOT "+
+          "proof of scoring, action causality or a successful game move. ":
+          "Describe the visible game objects, colors and uncertain elements."),
         data,w,h,selectedGpuLayers(e),(answer,elapsed)->{
          if(!closed)imageStatus.setText(e.label+" · "+elapsed+" мс\n"+answer);
         });
@@ -334,6 +339,9 @@ public final class ModelLabActivity extends Activity {
    },false);
   });
   refresh();
+  // Image picker and preview must exist before a received NES screenshot can
+  // be decoded. onNewIntent also handles repeated exports in singleTop mode.
+  receiveNesIntent(getIntent());
  }
 
  private void receiveNesIntent(Intent intent){
@@ -342,8 +350,28 @@ public final class ModelLabActivity extends Activity {
    String serialized=intent.getStringExtra(NesTrial.EXTRA);
    nesTrial=NesTrial.parse(serialized);
    if(nesStatus!=null)nesStatus.setText("Принят эпизод: "+nesTrial.summary()+
-     "\nПосле выбора модели нажми «Объяснить последний NES-эпизод». "+
+     "\nМожно анализировать текстовый отчёт или полученный снимок через vision GGUF. "+
      "Происхождение данных не аутентифицировано.");
+   byte[] png=intent.getByteArrayExtra(NesFrameTransfer.EXTRA_PNG);
+   if(png!=null&&preview!=null&&imageStatus!=null){
+    try{
+     NesFrameTransfer.verify(png);
+     Bitmap image=BitmapFactory.decodeByteArray(png,0,png.length);
+     if(image==null||image.getWidth()!=NesFrameTransfer.WIDTH||
+        image.getHeight()!=NesFrameTransfer.HEIGHT){
+      if(image!=null)image.recycle();
+      throw new IllegalArgumentException("PNG decoder rejected NES screenshot");
+     }
+     applyBitmap(image,true);
+     imageStatus.setText("Кадр NES при отправке эпизода: "+
+       width+"×"+height+". Выбери VL-модель с mmproj и нажми «Анализировать фото». "+
+       "Кадр не доказывает результат хода.");
+    }catch(RuntimeException|OutOfMemoryError invalid){
+     nesFrameLoaded=false;
+     imageStatus.setText("Скриншот NES отклонён; текстовый отчёт доступен. "+
+       invalid.getClass().getSimpleName());
+    }
+   }
   }catch(RuntimeException error){
    nesTrial=null;
    if(nesStatus!=null)nesStatus.setText("Неправильный или повреждённый NES-эпизод");
@@ -491,6 +519,13 @@ public final class ModelLabActivity extends Activity {
     decoded=BitmapFactory.decodeStream(in,null,opts);
    }
    if(decoded==null)throw new IllegalArgumentException("Фото не декодируется");
+   applyBitmap(decoded,false);
+  }catch(Exception|OutOfMemoryError failure){
+   rgb=null;nesFrameLoaded=false;
+   imageStatus.setText("Ошибка фото: "+failure.getClass().getSimpleName());
+  }
+ }
+ private void applyBitmap(Bitmap decoded,boolean fromNes){
    int w=decoded.getWidth(),h=decoded.getHeight();
    if(w>640||h>640){
     float ratio=Math.min(640f/w,640f/h);
@@ -505,14 +540,11 @@ public final class ModelLabActivity extends Activity {
     bytes[3*i+1]=(byte)((rgba[i]>>>8)&255);
     bytes[3*i+2]=(byte)(rgba[i]&255);
    }
-   rgb=bytes;width=w;height=h;
+   rgb=bytes;width=w;height=h;nesFrameLoaded=fromNes;
    if(previewBitmap!=null){preview.setImageDrawable(null);previewBitmap.recycle();}
    previewBitmap=decoded;
    preview.setImageBitmap(decoded);preview.setVisibility(View.VISIBLE);
    imageStatus.setText("RGB "+w+"×"+h+" готово. EXIF не передаётся.");
-  }catch(Exception|OutOfMemoryError failure){
-   rgb=null;imageStatus.setText("Ошибка фото: "+failure.getClass().getSimpleName());
-  }
  }
  @Override protected void onDestroy(){
   closed=true;
