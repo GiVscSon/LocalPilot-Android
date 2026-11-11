@@ -1,0 +1,336 @@
+package org.localpilot.android;
+
+import android.app.Activity;
+import android.content.Intent;
+import android.database.Cursor;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.net.Uri;
+import android.os.Bundle;
+import android.provider.OpenableColumns;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.ArrayAdapter;
+import android.widget.Button;
+import android.widget.EditText;
+import android.widget.ImageView;
+import android.widget.LinearLayout;
+import android.widget.ScrollView;
+import android.widget.Spinner;
+import android.widget.TextView;
+import java.io.File;
+import java.io.InputStream;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
+/**
+ * Independent on-device AI laboratory. No LocalPilot service/gestures are present.
+ * Only explicit user clicks import models, start evaluation or share an image.
+ */
+public final class ModelLabActivity extends Activity {
+ private static final int OPEN_MODEL=820,OPEN_PROJECTOR=821,OPEN_IMAGE=822;
+ private ModelLabStore store;
+ private EmbeddedGgufRuntime engine;
+ private final ExecutorService io=Executors.newSingleThreadExecutor(task->{
+  Thread t=new Thread(task,"ModelLab-Storage");t.setDaemon(true);return t;
+ });
+ private Spinner modelPicker;
+ private final List<ModelLabStore.Entry> displayed=new ArrayList<>();
+ private TextView status,result,modelStatus,imageStatus;
+ private EditText prompt,url,sha256;
+ private ImageView preview;
+ private Bitmap previewBitmap;
+ private byte[] rgb;
+ private int width,height;
+ private boolean closed;
+
+ @Override public void onCreate(Bundle saved){
+  super.onCreate(saved);
+  ScrollView scroll=new ScrollView(this);
+  LinearLayout col=new LinearLayout(this);
+  col.setOrientation(LinearLayout.VERTICAL);
+  col.setPadding(24,24,24,24);
+  scroll.addView(col);setContentView(scroll);
+  scroll.setOnApplyWindowInsetsListener((view,insets)->{
+   android.graphics.Insets bars=insets.getInsets(
+     android.view.WindowInsets.Type.systemBars()|android.view.WindowInsets.Type.displayCutout());
+   view.setPadding(bars.left,bars.top,bars.right,bars.bottom);
+   return insets;
+  });
+  scroll.requestApplyInsets();
+  title(col,"ModelLab · локальные нейросети");
+  line(col,"Отдельное приложение. Никаких игровых жестов или Accessibility. "+
+    "GGUF работает локально через llama.cpp. Новые модели могут быть несовместимы с движком.");
+  status=line(col,"Готовлю библиотеку моделей...");
+  try {
+   ModelLabApp app=(ModelLabApp)getApplication();
+   store=app.store();engine=app.engine();
+  }catch(Exception failure){
+   status.setText("Ошибка локального каталога: "+failure.getMessage());return;
+  }
+  title(col,"Выбор модели");
+  modelPicker=new Spinner(this);
+  col.addView(modelPicker);
+  modelStatus=line(col,"Одна активная модель. Остальные не загружены в RAM.");
+  button(col,"Обновить список",this::refresh);
+  button(col,"Удалить выбранную импортированную модель",()->{
+   ModelLabStore.Entry e=selected();
+   if(e==null||e.bundled){status.setText("Предустановленную модель нельзя удалить");return;}
+   if(engine.busy()){status.setText("Заверши текущий тест");return;}
+   task("Удаляю модель",()->{store.remove(e);return "Модель удалена";},true);
+  });
+
+  title(col,"Добавить другие модели");
+  line(col,"Поддерживаются GGUF, включая Qwen, LFM, SmolLM и совместимые архитектуры. "+
+    "ONNX, MNN и TFLite требуют отдельных движков и здесь пока не запускаются. "+
+    "Для моделей со зрением импортируй отдельно GGUF и совместимый mmproj.gguf.");
+  sha256=new EditText(this);
+  sha256.setSingleLine(true);
+  sha256.setHint("Ожидаемый SHA-256, необязательно");
+  col.addView(sha256);
+  button(col,"Импорт GGUF из файлов",()->openFile(OPEN_MODEL,"*/*"));
+  button(col,"Привязать mmproj к выбранной импортированной модели",()->{
+   ModelLabStore.Entry e=selected();
+   if(e==null||e.bundled){status.setText("Выбери свою импортированную модель");return;}
+   openFile(OPEN_PROJECTOR,"*/*");
+  });
+  url=new EditText(this);
+  url.setSingleLine(false);url.setMaxLines(3);
+  url.setHint("https://huggingface.co/.../resolve/main/model.gguf");
+  col.addView(url);
+  button(col,"Скачать GGUF с Hugging Face",()->{
+   String link=url.getText().toString().trim();
+   String digest=sha256.getText().toString().trim();
+   task("Скачиваю GGUF по HTTPS",()->{
+    ModelLabStore.Entry added=store.download(link,filenameFromUrl(link),digest,null);
+    return "Импортирован "+added.label+" · SHA256 "+added.modelSha;
+   },true);
+  });
+  button(col,"Скачать mmproj по ссылке для выбранной модели",()->{
+   ModelLabStore.Entry selected=selected();
+   if(selected==null||selected.bundled){status.setText("Сначала выбери импортированный GGUF");return;}
+   String link=url.getText().toString().trim();
+   String digest=sha256.getText().toString().trim();
+   task("Загружаю проектор",()->{
+    ModelLabStore.Entry updated=store.download(link,"mmproj",digest,selected.id);
+    return "Проектор привязан к "+updated.label;
+   },true);
+  });
+
+  title(col,"Текстовый тест");
+  prompt=new EditText(this);
+  prompt.setText("Explain a useful strategy for keeping empty cells in the game 2048.");
+  prompt.setMinLines(2);col.addView(prompt);
+  result=line(col,"Ответ и задержка будут показаны здесь.");
+  button(col,"Запустить локальную генерацию",()->{
+   ModelLabStore.Entry e=selected();
+   if(e==null||engine.busy()){result.setText("Нет модели или движок занят");return;}
+   String text=prompt.getText().toString().trim();
+   if(text.isBlank()||text.length()>1000){result.setText("Текст от 1 до 1000 символов");return;}
+   task("Проверяю SHA-256 модели",()->{
+    File model=store.modelFile(e);
+    runOnUiThread(()->{
+     if(closed)return;
+     try{
+      engine.text(model,text,(answer,elapsed)->{
+       if(!closed)result.setText(e.label+" · "+elapsed+" мс\n"+answer);
+      });
+      result.setText("Генерация в фоне...");
+     }catch(Exception error){result.setText(error.getMessage());}
+    });
+    return "Модель проверена, загружена одна GGUF";
+   },false);
+  });
+
+  title(col,"Анализ фотографии / игрового скриншота");
+  line(col,"Только вручную выбранные изображения. Для зрения нужен "+
+   "мультимодальный GGUF с совместимым файлом mmproj. "+
+   "Фотография не отправляется на сервер, ответ не запускает игровые действия.");
+  preview=new ImageView(this);
+  preview.setVisibility(View.GONE);
+  preview.setAdjustViewBounds(true);
+  col.addView(preview,new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,360));
+  imageStatus=line(col,"Изображение не выбрано");
+  button(col,"Выбрать фото",()->openFile(OPEN_IMAGE,"image/*"));
+  button(col,"Анализировать фото локально",()->{
+   ModelLabStore.Entry e=selected();
+   if(e==null||!e.vision()){
+    imageStatus.setText("Выбери модель с mmproj");return;
+   }
+   if(rgb==null){imageStatus.setText("Сначала выбери изображение");return;}
+   if(engine.busy()){imageStatus.setText("Модель занята");return;}
+   final byte[] data=rgb.clone();
+   final int w=width,h=height;
+   task("Проверяю веса и проектор",()->{
+    File model=store.modelFile(e);
+    File projector=store.projectorFile(e);
+    runOnUiThread(()->{
+     if(closed)return;
+     try{
+      engine.image(model,projector,
+        "Describe the visible game objects, colors and uncertain elements.",
+        data,w,h,(answer,elapsed)->{
+         if(!closed)imageStatus.setText(e.label+" · "+elapsed+" мс\n"+answer);
+        });
+      imageStatus.setText("Обрабатываю RGB-пиксели в фоне...");
+     }catch(Exception failure){imageStatus.setText(failure.getMessage());}
+    });
+    return "Проверка GGUF и mmproj пройдена";
+   },false);
+  });
+  refresh();
+ }
+
+ private static String filenameFromUrl(String link){
+  try{
+   String path=new java.net.URI(link).getPath();
+   String file=path.substring(path.lastIndexOf('/')+1);
+   return file.isBlank()?"Downloaded GGUF":file;
+  }catch(Exception e){return "Downloaded GGUF";}
+ }
+ private void openFile(int code,String mime){
+  Intent intent=new Intent(Intent.ACTION_OPEN_DOCUMENT);
+  intent.addCategory(Intent.CATEGORY_OPENABLE);intent.setType(mime);
+  startActivityForResult(intent,code);
+ }
+ private ModelLabStore.Entry selected(){
+  if(modelPicker==null)return null;
+  int pos=modelPicker.getSelectedItemPosition();
+  return pos>=0&&pos<displayed.size()?displayed.get(pos):null;
+ }
+ private void refresh(){
+  if(closed||modelPicker==null)return;
+  String selectedId=selected()==null?getPreferences(MODE_PRIVATE)
+    .getString("selected","builtin:qwen35"):selected().id;
+  List<ModelLabStore.Entry> current=store.list();
+  displayed.clear();displayed.addAll(current);
+  List<String> labels=new ArrayList<>();
+  int selection=0;
+  for(int i=0;i<current.size();i++){
+   ModelLabStore.Entry e=current.get(i);
+   labels.add(e.description());
+   if(e.id.equals(selectedId))selection=i;
+  }
+  if(labels.isEmpty())labels.add("Добавь GGUF из памяти или Hugging Face");
+  modelPicker.setAdapter(new ArrayAdapter<>(this,
+    android.R.layout.simple_spinner_dropdown_item,labels));
+  if(!displayed.isEmpty())modelPicker.setSelection(selection);
+  modelStatus.setText("Каталог: "+displayed.size()+" моделей; "+
+    (BuildConfig.PRELOADED_MODELS?"4 предзагружены в APK":"моделей в APK нет")+
+    ". Память расходует только выбранная загружаемая модель.");
+  if(!displayed.isEmpty())
+   getPreferences(MODE_PRIVATE).edit().putString("selected",displayed.get(selection).id).apply();
+ }
+ private interface Task { String run()throws Exception; }
+ private void task(String message,Task action,boolean refresh){
+  if(closed)return;
+  if(engine.busy()){status.setText("Проводится генерация. Заверши текущий тест.");return;}
+  status.setText(message+"...");
+  try{
+   io.execute(()->{
+    String outcome;
+    try{outcome=action.run();}
+    catch(Exception|LinkageError failure){
+     outcome="Ошибка: "+failure.getClass().getSimpleName()+
+       (failure.getMessage()==null?"":": "+failure.getMessage());
+    }
+    String finalOutcome=outcome;
+    runOnUiThread(()->{
+     if(closed)return;
+     status.setText(finalOutcome);
+     if(refresh)refresh();
+    });
+   });
+  }catch(java.util.concurrent.RejectedExecutionException e){
+   status.setText("Операция завершена: экран закрыт");
+  }
+ }
+ private void title(LinearLayout parent,String value){
+  TextView v=line(parent,value);v.setTextSize(20);
+ }
+ private TextView line(LinearLayout parent,String value){
+  TextView text=new TextView(this);
+  text.setText(value);text.setTextSize(15);
+  text.setPadding(0,10,0,14);parent.addView(text);return text;
+ }
+ private void button(LinearLayout parent,String name,Runnable click){
+  Button b=new Button(this);b.setText(name);b.setOnClickListener(v->click.run());
+  parent.addView(b,new LinearLayout.LayoutParams(
+    ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT));
+ }
+ private String displayName(Uri uri){
+  try(Cursor cursor=getContentResolver().query(uri,
+     new String[]{OpenableColumns.DISPLAY_NAME},null,null,null)){
+   if(cursor!=null&&cursor.moveToFirst())return cursor.getString(0);
+  }catch(Exception ignored){}
+  return "Imported GGUF";
+ }
+ @Override protected void onActivityResult(int code,int result,Intent data){
+  super.onActivityResult(code,result,data);
+  if(result!=RESULT_OK||data==null||data.getData()==null)return;
+  Uri uri=data.getData();
+  if(code==OPEN_IMAGE){loadImage(uri);return;}
+  if(code==OPEN_MODEL||code==OPEN_PROJECTOR){
+   ModelLabStore.Entry target=code==OPEN_PROJECTOR?selected():null;
+   if(code==OPEN_PROJECTOR&&(target==null||target.bundled)){
+    status.setText("Для mmproj выбери импортированную модель");return;
+   }
+   String name=displayName(uri),sha=sha256.getText().toString().trim();
+   task("Импортирую GGUF из файлов",()->{
+    ModelLabStore.Entry entry=store.importFile(uri,name,sha,
+       target==null?null:target.id);
+    return "Добавлено: "+entry.label+" · SHA256 "+entry.modelSha;
+   },true);
+  }
+ }
+ private void loadImage(Uri uri){
+  rgb=null;
+  try{
+   BitmapFactory.Options size=new BitmapFactory.Options();size.inJustDecodeBounds=true;
+   try(InputStream in=getContentResolver().openInputStream(uri)){
+    BitmapFactory.decodeStream(in,null,size);
+   }
+   if(size.outWidth<=0||size.outHeight<=0||size.outWidth>20000||size.outHeight>20000)
+    throw new IllegalArgumentException("Неподдерживаемые размеры фото");
+   int sampling=1;
+   while(Math.max(size.outWidth/sampling,size.outHeight/sampling)>640)sampling*=2;
+   BitmapFactory.Options opts=new BitmapFactory.Options();opts.inSampleSize=sampling;
+   Bitmap decoded;
+   try(InputStream in=getContentResolver().openInputStream(uri)){
+    decoded=BitmapFactory.decodeStream(in,null,opts);
+   }
+   if(decoded==null)throw new IllegalArgumentException("Фото не декодируется");
+   int w=decoded.getWidth(),h=decoded.getHeight();
+   if(w>640||h>640){
+    float ratio=Math.min(640f/w,640f/h);
+    Bitmap smaller=Bitmap.createScaledBitmap(decoded,Math.max(1,(int)(w*ratio)),
+      Math.max(1,(int)(h*ratio)),true);
+    decoded.recycle();decoded=smaller;w=decoded.getWidth();h=decoded.getHeight();
+   }
+   int[] rgba=new int[w*h];decoded.getPixels(rgba,0,w,0,0,w,h);
+   byte[] bytes=new byte[w*h*3];
+   for(int i=0;i<rgba.length;i++){
+    bytes[3*i]=(byte)((rgba[i]>>>16)&255);
+    bytes[3*i+1]=(byte)((rgba[i]>>>8)&255);
+    bytes[3*i+2]=(byte)(rgba[i]&255);
+   }
+   rgb=bytes;width=w;height=h;
+   if(previewBitmap!=null){preview.setImageDrawable(null);previewBitmap.recycle();}
+   previewBitmap=decoded;
+   preview.setImageBitmap(decoded);preview.setVisibility(View.VISIBLE);
+   imageStatus.setText("RGB "+w+"×"+h+" готово. EXIF не передаётся.");
+  }catch(Exception|OutOfMemoryError failure){
+   rgb=null;imageStatus.setText("Ошибка фото: "+failure.getClass().getSimpleName());
+  }
+ }
+ @Override protected void onDestroy(){
+  closed=true;
+  rgb=null;
+  if(preview!=null)preview.setImageDrawable(null);
+  if(previewBitmap!=null)previewBitmap.recycle();
+  io.shutdown();
+  super.onDestroy();
+ }
+}
