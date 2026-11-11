@@ -157,8 +157,10 @@ window.retroButton=function(name,down){
 };
 // A user-triggered, downsized RGB screenshot. This is a NEW frame at export,
 // not a replay of the action-end fingerprint or a reward signal.
-window.retroSnapshot=function(){
- if(!nes||paused||!window.GameLabBridge)return false;
+window.retroSnapshot=function(token){
+ // Token is chosen by Android for this exact request, not by the ROM.
+ if(typeof token!=="string"||!(/^[1-9][0-9]{0,18}$/).test(token)||
+    !nes||paused||!window.GameLabBridge)return false;
  try{
   const small=document.createElement("canvas");
   small.width=128;small.height=120;
@@ -169,7 +171,7 @@ window.retroSnapshot=function(){
   const image=small.toDataURL("image/png");
   const prefix="data:image/png;base64,";
   if(!image.startsWith(prefix)||image.length-prefix.length>200000)return false;
-  window.GameLabBridge.onSnapshot(image.substring(prefix.length));
+  window.GameLabBridge.onSnapshot(image.substring(prefix.length),token);
   return true;
  }catch(error){return false;}
 };

@@ -56,7 +56,7 @@ public final class NesEmulatorActivity extends Activity {
  private boolean homebrewRom;
  private NesTrial readyTrial;
  private NesTrial exportTrial;
- private boolean exportPending;
+ private final NesSnapshotGate snapshotGate=new NesSnapshotGate();
  private TrialPending pendingTrial;
  private static final class TrialPending{
   final String button;
@@ -225,7 +225,7 @@ public final class NesEmulatorActivity extends Activity {
      else pendingTrial=null;
     });
    }
-   @JavascriptInterface public void onSnapshot(String encoded){
+   @JavascriptInterface public void onSnapshot(String encoded,String token){
     // JavascriptInterface runs on a different WebView thread. Reject huge
     // responses before allocating or decoding any PNG bytes.
     byte[] png=null;
@@ -238,8 +238,8 @@ public final class NesEmulatorActivity extends Activity {
     }
     final byte[] accepted=png;
     runOnUiThread(()->{
-     if(!exportPending||closed||!resumed)return;
-     completeExport(accepted);
+     if(closed||!resumed||!snapshotGate.current(token))return;
+     completeExport(token,accepted);
     });
    }
    @JavascriptInterface public void onStatus(String message){
@@ -386,25 +386,27 @@ public final class NesEmulatorActivity extends Activity {
  }
  private void sendTrialToModelLab(){
   if(readyTrial==null){state.setText("Для отчёта запусти NES и нажми кнопку");return;}
-  if(exportPending||!resumed||!pageLoaded||web==null){
+  if(snapshotGate.pending()||!resumed||!pageLoaded||web==null){
    state.setText("Сначала открой работающий NES-эмулятор");return;
   }
-  exportPending=true;
+  String token=snapshotGate.begin();
   exportTrial=readyTrial;
   shareTrial.setEnabled(false);
   // Snapshot callback is optional: old WebViews can still send the trusted
   // structured observation alone. Never wait indefinitely for the bridge.
-  web.evaluateJavascript("window.retroSnapshot()",value->{
-   if(exportPending&&!"true".equals(value))completeExport(null);
+  web.evaluateJavascript("window.retroSnapshot("+org.json.JSONObject.quote(token)+")",value->{
+   if(snapshotGate.current(token)&&!"true".equals(value))completeExport(token,null);
   });
   shareTrial.postDelayed(()->{
-   if(exportPending&&resumed&&!closed)completeExport(null);
+   if(snapshotGate.current(token)&&resumed&&!closed)completeExport(token,null);
   },2500);
  }
- private void completeExport(byte[] png){
-  if(!exportPending)return;
+ private void completeExport(String token,byte[] png){
+  // Delayed JavaScriptInterface deliveries and old timeout callbacks can never
+  // satisfy a newer transfer, even if the user switched ROMs in between.
+  if(!snapshotGate.finish(token))return;
   NesTrial evidence=exportTrial;
-  exportPending=false;exportTrial=null;
+  exportTrial=null;
   if(shareTrial!=null)shareTrial.setEnabled(readyTrial!=null);
   if(evidence==null||closed||!resumed)return;
   Intent intent=new Intent(NesTrial.ACTION);
@@ -451,7 +453,7 @@ public final class NesEmulatorActivity extends Activity {
   String encoded=Base64.encodeToString(rom,Base64.NO_WRAP);
   frames=hash=0;touches.set(0);
   ++experimentGeneration;experiment.stop();
-  exportPending=false;exportTrial=null;
+  snapshotGate.cancel();exportTrial=null;
   homebrewRom=homebrew;pendingTrial=null;readyTrial=null;
   if(shareTrial!=null)shareTrial.setEnabled(false);
   if(cpuAgentButton!=null)cpuAgentButton.setEnabled(false);
@@ -502,7 +504,7 @@ public final class NesEmulatorActivity extends Activity {
   }
  }
  @Override protected void onPause(){
-  resumed=false;exportPending=false;exportTrial=null;
+  resumed=false;snapshotGate.cancel();exportTrial=null;
   if(shareTrial!=null)shareTrial.setEnabled(readyTrial!=null);
   GameLabEvidenceProvider.clear("nes");
   if(experiment.running())stopCpuExperiment("STOP: NES ушла в фон");
@@ -519,7 +521,7 @@ public final class NesEmulatorActivity extends Activity {
   }
  }
  @Override protected void onDestroy(){
-  closed=true;exportPending=false;exportTrial=null;
+  closed=true;snapshotGate.cancel();exportTrial=null;
   romDownloads.shutdownNow();
   ++experimentGeneration;experiment.stop();
   if(web!=null){web.evaluateJavascript("window.retroStop()",null);
