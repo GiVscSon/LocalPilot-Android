@@ -155,6 +155,24 @@ window.retroButton=function(name,down){
  if(typeof value!=="number")return false;
  return gamepadLatch.change(name,value,Boolean(down),frames);
 };
+// A user-triggered, downsized RGB screenshot. This is a NEW frame at export,
+// not a replay of the action-end fingerprint or a reward signal.
+window.retroSnapshot=function(){
+ if(!nes||paused||!window.GameLabBridge)return false;
+ try{
+  const small=document.createElement("canvas");
+  small.width=128;small.height=120;
+  const output=small.getContext("2d",{alpha:false});
+  if(!output)return false;
+  output.imageSmoothingEnabled=false;
+  output.drawImage(canvas,0,0,128,120);
+  const image=small.toDataURL("image/png");
+  const prefix="data:image/png;base64,";
+  if(!image.startsWith(prefix)||image.length-prefix.length>200000)return false;
+  window.GameLabBridge.onSnapshot(image.substring(prefix.length));
+  return true;
+ }catch(error){return false;}
+};
 window.retroMetrics=function(){return JSON.stringify({frames,pixel_hash:validFrame,running:!!nes&&!paused});};
 document.addEventListener("visibilitychange",function(){
  if(document.hidden)window.retroPause();
