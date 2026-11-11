@@ -66,9 +66,9 @@ public final class LocalCoreActivity extends Activity {
    String snapshot=service==null
      ?"{\"schema\":\"localpilot-telemetry-v1\",\"status\":\"SERVICE_NOT_CONNECTED\"}"
      :service.advisoryDiagnosticSnapshot();
-   int profile=service==null
-     ?getSharedPreferences("panel",MODE_PRIVATE).getInt("profile",-1)
-     :new org.json.JSONObject(snapshot).optInt("profile",-1);
+   // User-selected profile is already persisted by PilotService.chooseProfile().
+   // Avoid parsing telemetry on the UI thread or unhandled JSONException.
+   int profile=getSharedPreferences("panel",MODE_PRIVATE).getInt("profile",-1);
    try{
     if(bundled())embedded.adviseStrategy(profile,snapshot,strategy::setText);
     else core.adviseStrategy(profile,snapshot,strategy::setText);
