@@ -33,7 +33,12 @@ public final class EmbeddedGgufRuntime {
  private final Context application;
  private final Handler main=new Handler(Looper.getMainLooper());
  private final ExecutorService worker=Executors.newSingleThreadExecutor(r->{
-  Thread t=new Thread(r,"LocalPilot-Embedded-GGUF");t.setDaemon(true);return t;
+  Thread t=new Thread(()->{
+   // Do not contend with the real-time CV/controller thread on the user's phone.
+   android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_BACKGROUND);
+   r.run();
+  },"LocalPilot-Embedded-GGUF");
+  t.setDaemon(true);return t;
  });
  private final AtomicBoolean busy=new AtomicBoolean();
  private volatile boolean closed;
@@ -165,10 +170,10 @@ public final class EmbeddedGgufRuntime {
  }
 
  private interface Job { String run()throws Exception; }
- private void submit(Callback callback,Job job){
+ private synchronized void submit(Callback callback,Job job){
   if(closed||!busy.compareAndSet(false,true))
    throw new IllegalStateException("Embedded model is busy or closed");
-  worker.execute(()->{
+  try { worker.execute(()->{
    String answer;
    try{answer=job.run();}
    catch(Exception|LinkageError failed){
@@ -182,7 +187,10 @@ public final class EmbeddedGgufRuntime {
    }finally{busy.set(false);}
    final String result=answer;
    if(!closed)main.post(()->{if(!closed)callback.complete(result);});
-  });
+  }); }catch(java.util.concurrent.RejectedExecutionException rejected){
+   busy.set(false);
+   throw new IllegalStateException("Model worker closed",rejected);
+  }
  }
 
  public void health(Callback cb){

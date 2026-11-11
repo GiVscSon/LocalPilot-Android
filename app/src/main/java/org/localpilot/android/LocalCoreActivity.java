@@ -52,7 +52,7 @@ public final class LocalCoreActivity extends Activity {
   label(layout,bundled()
    ?"Веса GGUF и нативный движок входят в APK. Termux, интернет, API-ключ и загрузка модели не нужны. При первом запуске веса проверяются и распаковываются во внутреннюю память."
    :"Главный локальный языковой backend: Termux / llama-server / 127.0.0.1:8080. Запросы на английском; облако не нужно.");
-  label(layout,"MNN-Pocket объясняет общую стратегию по обезличенным показателям игры. "+
+  label(layout,"Локальная модель объясняет общую стратегию по обезличенным показателям игры. "+
    "CPU выполняет все быстрые решения, жесты и проверку результата. "+
    "Текст MNN не может управлять вводом. STOP, ActionGate, InputPermit, TTL и ROI сохранены.");
   connection=label(layout,"Нажмите «Проверить подключение».");
@@ -95,7 +95,7 @@ public final class LocalCoreActivity extends Activity {
   title(layout,"Стратегия для текущей игры",18);
   TextView strategy=label(layout,
     "Модель объясняет общую тактику на английском. Не выдаёт команды для следующего хода.");
-  button(layout,"Объяснить стратегию · MNN",()->{
+  button(layout,"Объяснить стратегию · локальная ИИ",()->{
    if(busy()){strategy.setText("Нейросеть занята; CPU работает независимо.");return;}
    PilotService service=PilotService.instance;
    String snapshot=service==null
@@ -113,12 +113,16 @@ public final class LocalCoreActivity extends Activity {
    }
   });
   title(layout,"Выбор локальной нейросети",18);
-  boolean allModels=bundled()&&BuildConfig.MULTI_MODEL_CATALOG;
+  if(!bundled()){
+   label(layout,"Эта сборка использует внешнюю модель Termux/localhost. "+
+     "Ни одна GGUF-модель внутрь обычного APK не включена.");
+  } else {
+  boolean allModels=BuildConfig.MULTI_MODEL_CATALOG;
   if(allModels)label(layout,"Модели уже входят в этот APK. Переключение не скачивает веса и не влияет на CPU-игру.");
   else label(layout,"В обычном APK встроена только MNN-Pocket. Для других моделей нужна сборка Offline Catalog.");
   Spinner picker=new Spinner(this);
   picker.setAdapter(new ArrayAdapter<String>(this,android.R.layout.simple_spinner_dropdown_item,
-    LocalModelCatalog.labels(allModels)));
+    LocalModelCatalog.labels(true,allModels)));
   layout.addView(picker);
   LocalModelCatalog.Model defaultModel=LocalModelCatalog.defaultModel(allModels);
   LocalModelCatalog.Model previous=LocalModelCatalog.find(
@@ -141,6 +145,7 @@ public final class LocalCoreActivity extends Activity {
    }
   });
 
+  if(allModels){
   title(layout,"Ручной анализ фотографии",18);
   label(layout,"Только LFM2.5-VL-450M с модулем зрения. Выбери фотографию "+
     "или скриншот, затем нажми «Анализировать». Изображение не отправляется в интернет "+
@@ -171,7 +176,10 @@ public final class LocalCoreActivity extends Activity {
     photoStatus.setText(ex.getMessage());
    }
   });
-
+  } else {
+   label(layout,"Фотографии поддерживаются только в Offline Catalog APK с LFM2.5-VL.");
+  }
+  }
 
  }
 

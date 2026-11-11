@@ -5,10 +5,9 @@ Only used for -PbundleLocalModelCatalog=true. Download a single immutable
 HF snapshot per repo. Every file is checked against its snapshot LFS oid and
 size before it is added to the signed APK; model code cannot fetch at runtime.
 
-NOTE: revision resolution uses the latest public snapshot at build time.
-The immutable commit id, bytes and digest are written to the artifact report.
-Promotion to a reproducible release requires moving those values into a
-reviewed lock file. This is a development candidate, not a stable release.
+All optional revisions, model lengths and SHA-256 digests are pinned to a
+reviewed release-candidate snapshot. License copies and CI toolchain may
+change independently, so this remains a development candidate.
 """
 from __future__ import annotations
 import hashlib

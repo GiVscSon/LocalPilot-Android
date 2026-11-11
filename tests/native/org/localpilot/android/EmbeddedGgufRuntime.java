@@ -48,8 +48,9 @@ public final class EmbeddedGgufRuntime {
     String vision=nativeAnalyzeImage(args[3],args[4],
       "Describe the two colored areas that you can see. Avoid guessing game objects.",rgb,w,h);
     System.out.println("NATIVE_VISION_RAW="+quote(vision));
-    if(vision==null||vision.isBlank())throw new AssertionError(
-      "LFM2.5-VL did not produce any image-conditioned text");
+    String lower=vision==null?"":vision.toLowerCase(java.util.Locale.ROOT);
+    if(!lower.contains("red")||!lower.contains("green"))
+     throw new AssertionError("LFM2.5-VL did not identify BOTH real image colors: "+quote(vision));
     System.out.println("NATIVE_MULTI_MODEL_AND_VISION_SMOKE_PASS");
    }
   } finally {

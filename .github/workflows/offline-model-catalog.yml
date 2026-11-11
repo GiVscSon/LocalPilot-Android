@@ -29,10 +29,12 @@ jobs:
           set -euo pipefail
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
             'platforms;android-35' 'build-tools;35.0.0' 'cmake;3.22.1' 'ndk;27.2.12479018'
-      - name: Validate pure-JVM model catalogue
+      - name: Validate model integrity, negative cases and pure-JVM catalogue
         run: |
           set -euo pipefail
           java tests/LocalModelCatalogVerify.java
+          python3 -m unittest discover -s tests -p 'test_optional_models.py' -v
+          python3 -O -m unittest discover -s tests -p 'test_optional_models.py' -v
       - name: Fetch pinned native inference engine
         shell: bash
         run: |

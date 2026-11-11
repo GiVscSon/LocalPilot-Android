@@ -17,8 +17,12 @@ class LocalModelCatalogVerify {
    if(vals.length!=4)throw new AssertionError("must be four predefined model choices");
    var all=(String[])cat.getMethod("labels",boolean.class).invoke(null,true);
    var basic=(String[])cat.getMethod("labels",boolean.class).invoke(null,false);
-   if(all.length!=4||basic.length!=4||all[0].contains("не включена")||
-      !basic[1].contains("не включена"))throw new AssertionError("wrong APK compatibility");
+   var plain=(String[])cat.getMethod("labels",boolean.class,boolean.class)
+     .invoke(null,false,false);
+   if(all.length!=4||basic.length!=4||plain.length!=4||all[0].contains("не включена")||
+      !basic[1].contains("не включена")||
+      !java.util.Arrays.stream(plain).allMatch(v->v.contains("не включена")))
+      throw new AssertionError("plain APK must never claim to have GGUF weights");
    var ids=new java.util.HashSet<String>();
    for(Object entry:vals){
     String id=(String)model.getField("id").get(entry);
