@@ -409,6 +409,10 @@ public final class NesEmulatorActivity extends Activity {
   if(evidence==null||closed||!resumed)return;
   Intent intent=new Intent(NesTrial.ACTION);
   intent.setClassName("org.localpilot.modellab","org.localpilot.android.ModelLabActivity");
+  // Reuse the existing ModelLab task/session (and its in-RAM inference engine)
+  // rather than creating a second separate, competing model instance.
+  intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|
+    Intent.FLAG_ACTIVITY_CLEAR_TOP|Intent.FLAG_ACTIVITY_SINGLE_TOP);
   intent.putExtra(NesTrial.EXTRA,evidence.serialize());
   if(png!=null)intent.putExtra(NesFrameTransfer.EXTRA_PNG,png);
   try{
