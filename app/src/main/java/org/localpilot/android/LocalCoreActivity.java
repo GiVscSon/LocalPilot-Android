@@ -38,9 +38,9 @@ public final class LocalCoreActivity extends Activity {
   label(layout,bundled()
    ?"Веса GGUF и нативный движок входят в APK. Termux, интернет, API-ключ и загрузка модели не нужны. При первом запуске веса проверяются и распаковываются во внутреннюю память."
    :"Главный локальный языковой backend: Termux / llama-server / 127.0.0.1:8080. Запросы на английском; облако не нужно.");
-  label(layout,"Сейчас доступна ручная диагностика обезличенных счётчиков. "+
-   "Вывод модели не может отправлять игровые жесты. Для управления реальными играми "+
-   "по-прежнему действуют визуальная проверка, STOP, ActionGate, InputPermit и TTL.");
+  label(layout,"MNN-Pocket объясняет общую стратегию по обезличенным показателям игры. "+
+   "CPU выполняет все быстрые решения, жесты и проверку результата. "+
+   "Текст MNN не может управлять вводом. STOP, ActionGate, InputPermit, TTL и ROI сохранены.");
   connection=label(layout,"Нажмите «Проверить подключение».");
   button(layout,bundled()?"Проверить встроенные веса":"Проверить подключение",()->{
    try{
@@ -56,6 +56,26 @@ public final class LocalCoreActivity extends Activity {
     else core.selfTest(value->connection.setText(value));
     connection.setText("Тестирую два независимых английских запроса...");
    }catch(IllegalStateException failure){connection.setText("Ядро занято или закрыто");}
+  });
+  title(layout,"Стратегия для текущей игры",18);
+  TextView strategy=label(layout,
+    "Модель объясняет общую тактику на английском. Не выдаёт команды для следующего хода.");
+  button(layout,"Объяснить стратегию · MNN",()->{
+   if(busy()){strategy.setText("Нейросеть занята; CPU работает независимо.");return;}
+   PilotService service=PilotService.instance;
+   String snapshot=service==null
+     ?"{\"schema\":\"localpilot-telemetry-v1\",\"status\":\"SERVICE_NOT_CONNECTED\"}"
+     :service.advisoryDiagnosticSnapshot();
+   // User-selected profile is already persisted by PilotService.chooseProfile().
+   // Avoid parsing telemetry on the UI thread or unhandled JSONException.
+   int profile=getSharedPreferences("panel",MODE_PRIVATE).getInt("profile",-1);
+   try{
+    if(bundled())embedded.adviseStrategy(profile,snapshot,strategy::setText);
+    else core.adviseStrategy(profile,snapshot,strategy::setText);
+    strategy.setText("Формирую стратегию в фоне. CPU не ожидает ответа.");
+   }catch(IllegalArgumentException|IllegalStateException error){
+    strategy.setText(error.getMessage());
+   }
   });
   title(layout,"Вопрос ядру · English",18);
   question=new EditText(this);

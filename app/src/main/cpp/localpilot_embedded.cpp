@@ -108,7 +108,8 @@ std::string infer(const std::string &sys,const std::string &usr,int limit,float 
   int sz=llama_token_to_piece(vocab,token,piece,sizeof(piece),0,true);
   if(sz<0||sz>512||output.size()+sz>3000){ok=false;break;}
   output.append(piece,sz);
-  llama_sampler_accept(sampler,token);
+  // Pinned llama.cpp's llama_sampler_sample() already accepts the token.
+  // Never accept twice: duplicate acceptance corrupts penalty/grammar state.
   if(step+1<limit)ok=run_batch(batch,&token,1,n+step,true);
  }
  if(sampler)llama_sampler_free(sampler);

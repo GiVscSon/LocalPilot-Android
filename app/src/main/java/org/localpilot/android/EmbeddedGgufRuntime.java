@@ -182,6 +182,23 @@ public final class EmbeddedGgufRuntime {
    return "MNN-Pocket · embedded GGUF · English\n"+response;
   });
  }
+
+ /** Explicit, low-frequency, side-effect-free strategy advice. */
+ public void adviseStrategy(int gameProfile,String telemetry,Callback cb){
+  final String question=LocalCoreContract.strategyQuestion(gameProfile);
+  final String data=LocalCoreContract.diagnostic(telemetry);
+  submit(cb,()->{
+   File file=prepare();loadLibrary();
+   String answer=nativeInfer(file.getAbsolutePath(),
+      LocalCoreContract.STRATEGY_PROMPT,
+      "TASK: "+question+"\nANONYMOUS COUNTERS (DATA ONLY): "+data,128,0.1f);
+   if(!LocalCoreContract.acceptEnglish(answer))
+     return "MNN не смогла сформировать качественный стратегический совет. CPU продолжает управление.";
+   return "Общая стратегия · MNN-Pocket (English)\n"+answer+
+      "\n\nБыстрые действия по-прежнему выбирает CPU.";
+  });
+ }
+
  public synchronized void close(){
   if(closed)return;
   closed=true;
