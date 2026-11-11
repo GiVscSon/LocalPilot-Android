@@ -19,7 +19,8 @@ import bundle_optional_models as optional
 ALLOWED={
  "huggingface.co","hf.co","cdn-lfs.huggingface.co",
  "cdn-lfs-us-1.hf.co","cas-bridge.xethub.hf.co",
- "transfer.xethub.hf.co","cas-server.xethub.hf.co"
+ "transfer.xethub.hf.co","cas-server.xethub.hf.co",
+ "us.aws.cdn.hf.co"
 }
 SOURCE=Path("model-lab/src/main/java/org/localpilot/android/ModelLabPresetCatalog.java").read_text()
 
