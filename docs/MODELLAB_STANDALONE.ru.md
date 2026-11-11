@@ -30,3 +30,17 @@
 Перед сборкой нужен закреплённый `third_party/llama.cpp` и Android NDK. Для полной сборки сначала выполни `python3 tools/bundle_embedded_gguf.py prepare` и `python3 tools/bundle_optional_models.py prepare`.
 
 GitHub Actions: `.github/workflows/model-lab-android.yml`. Не считать релизом до успешного CI, теста открытия фото с реальной VLM и испытаний на POCO X7 Pro (12 ГБ RAM).
+
+## Mali-G720 GPU: экспериментальный Vulkan backend
+
+В POCO X7 Pro установлен Mali-G720 и 12 ГБ RAM. GGUF модели можно протестировать с Vulkan offload, но CPU остаётся надёжным режимом по умолчанию. Обычные APK никак не используют новый backend.
+
+В ModelLab добавлены:
+- **CPU**, **Vulkan GPU8**, **Vulkan GPU16**, **Auto**. GPU16 означает попытку перенести 16 слоёв трансформера на GPU, а не обещание их полной совместимости.
+- Кнопка проверки устройства через ggml backend enumeration. Если реальная Vulkan-библиотека отсутствует, выбирается CPU.
+- Бенчмарк **одного и того же** фиксированного английского промпта на CPU и GPU8; фиксируются времена полного ответа и факт `nativeLoadedGpuLayers()>0`. **Auto** использует GPU только если тот реально отработал и показал меньшее время на этой модели. Данные измерений не переносятся на другие модели.
+- Отдельный экспериментальный workflow `.github/workflows/model-lab-vulkan.yml` собирает GPU-вариант с `-PincludeModelLab=true -PmodelLabVulkan=true`, CMake `GGML_VULKAN=ON`. При отсутствии shader compiler/SPIRV-Headers сборка не должна подменять GPU на CPU молча.
+
+**Ограничения:** драйверы Mali при фоновой GPU-нагрузке способны зависать. Нативный Vulkan crash или блокировка GPU-очереди может быть неустранимым из того же процесса. Поэтому использовать GPU-режим только в отдельном ModelLab, не сворачивать его во время теста и не направлять его вывод в игровые жесты. GPU-прирост нельзя утверждать без замера на конкретном POCO. Обе версии APK имеют один ID `org.localpilot.modellab`, поэтому для обновлений нужен общий стабильный ключ подписи.
+
+Отдельный чип NPU MediaTek не равен Vulkan GPU, для него требуется отдельный runtime и поддерживаемая модель. Он здесь не активирован.
