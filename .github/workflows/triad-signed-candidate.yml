@@ -6,6 +6,8 @@ on:
       - 'tests/test_triad_release_gate.py'
       - 'tools/triad_device_preflight.py'
       - 'tests/test_triad_device_preflight.py'
+      - 'tools/setup_triad_signing.ps1'
+      - 'tests/test_triad_signing_scope.py'
       - 'docs/TRIAD_SIGNED_RELEASE.ru.md'
       - '.github/workflows/triad-signed-candidate.yml'
   workflow_dispatch:
@@ -32,6 +34,8 @@ jobs:
           python3 -O -m unittest discover -s tests -p 'test_triad_release_gate.py' -v
           python3 -m unittest discover -s tests -p 'test_triad_device_preflight.py' -v
           python3 -O -m unittest discover -s tests -p 'test_triad_device_preflight.py' -v
+          python3 -m unittest discover -s tests -p 'test_triad_signing_scope.py' -v
+          python3 -O -m unittest discover -s tests -p 'test_triad_signing_scope.py' -v
 
   signed-candidate:
     if: github.event_name == 'workflow_dispatch'

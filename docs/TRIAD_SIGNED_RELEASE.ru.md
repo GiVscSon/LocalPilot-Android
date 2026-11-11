@@ -14,8 +14,8 @@
 
 1. На доверенном локальном ПК создайте и сохраните резервную копию долгоживущего PKCS12-ключа командой `keytool -genkeypair -keystore LocalPilot-RELEASE.p12 -storetype PKCS12 -alias localpilot-triad -keyalg RSA -keysize 3072 -validity 11000 -dname "CN=LocalPilot Release, O=LocalPilot"`. Команда интерактивно запросит пароль. **Если у уже установленной версии есть постоянный release-ключ, используйте именно его вместо нового.**
 2. Получите публичный SHA-256 сертификата: `keytool -list -v -keystore LocalPilot-RELEASE.p12 -alias localpilot-triad`. Скопируйте SHA256 **без двоеточий**, 64 шестнадцатеричных символа.
-3. С помощью защищённого интерфейса GitHub Settings → Secrets and variables → Actions добавьте четыре секрета: `LOCALPILOT_RELEASE_KEYSTORE_B64` (Base64 от байтов PKCS12), `LOCALPILOT_RELEASE_STORE_PASS`, `LOCALPILOT_RELEASE_KEY_PASS`, `LOCALPILOT_RELEASE_KEY_ALIAS`. Не вставляйте ключ/пароли в чат, Issue, git commit, логи или Markdown.
-4. Добавьте **публичную** GitHub Actions variable `LOCALPILOT_RELEASE_CERT_SHA256` с сертификатом из пункта 2. При желании создайте защищённое Environment `android-signing`, требующее подтверждения владельца. Workflow никогда не выдает запасную debug-подпись при отсутствии секретов.
+3. В **GitHub Settings → Environments → android-signing** сначала создайте и защитите окружение (желательно с обязательным одобрением владельца). Добавьте **четыре environment secrets**, НЕ общерепозиторных secrets: `LOCALPILOT_RELEASE_KEYSTORE_B64` (Base64 от байтов PKCS12), `LOCALPILOT_RELEASE_STORE_PASS`, `LOCALPILOT_RELEASE_KEY_PASS`, `LOCALPILOT_RELEASE_KEY_ALIAS`. Не вставляйте ключ/пароли в чат, Issue, git commit, логи или Markdown.
+4. В этом же окружении добавьте **публичную** GitHub Actions environment variable `LOCALPILOT_RELEASE_CERT_SHA256` с сертификатом из пункта 2. При желании создайте защищённое Environment `android-signing`, требующее подтверждения владельца. Workflow никогда не выдает запасную debug-подпись при отсутствии секретов.
 5. После попадания workflow в default branch запускайте вручную `Signed triad candidate · protected key + fail-closed audit` с `source_sha`, точно равным выбранному SHA. До первой публикации сохраняйте резервную копию ключа вне GitHub. Секреты живут в Actions; ключ не включается в APK артефакт.
 
 ## Автоматическая проверка
@@ -42,3 +42,9 @@ Workflow собирает из одного SHA `:app:assembleRelease`, `:game-l
 ## Защита уже установленных приложений перед обновлением
 
 Новый read-only скрипт [DEVICE_TRIAD_PREFLIGHT.ru.md](DEVICE_TRIAD_PREFLIGHT.ru.md) сравнивает три APK с **текущими подписантами и версиями на физическом Android** через `adb pull`, `aapt`, `apksigner`. Он блокирует замену сертификата или downgrade **до** установки, не удаляет приложения и не переносит данные автоматически. Скрипт покрыт отдельной 12-кейсной отрицательной матрицей и входит в CI.
+
+## Безопасная настройка с Windows
+
+Добавлен [tools/setup_triad_signing.ps1](../tools/setup_triad_signing.ps1). Его можно запустить **только на доверенном компьютере владельца ключа** после создания и защиты окружения `android-signing`. Скрипт проверяет наличие окружения **до чтения или создания ключа**, отправляет PKCS12 и пароли в **environment secrets** через стандартный ввод `gh` (не в командной строке и не в репозитории) и фиксирует публичный отпечаток в **environment variable**. При отсутствии окружения прекращает работу и никогда не переходит к общерепозиторным secrets. Оставшийся старый ключ на диске надо хранить вместе с резервной копией и паролем вне репозитория.
+
+Пример PowerShell 7: `pwsh ./tools/setup_triad_signing.ps1 -KeystorePath 'D:\\Safe\\MyExistingRelease.p12' -Alias myalias`, или **только для новой подписи**, когда прежнего ключа нет, `pwsh ./tools/setup_triad_signing.ps1 -CreateNew`. Размещение сертификата в CI не означает подписанный релиз: требуется вручную запустить подписывающий workflow и проверить реальное устройство.
