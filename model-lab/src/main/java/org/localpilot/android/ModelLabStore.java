@@ -3,6 +3,7 @@ package org.localpilot.android;
 import android.content.Context;
 import android.net.Uri;
 import android.os.StatFs;
+import android.util.AtomicFile;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import java.io.File;
@@ -68,6 +69,8 @@ public final class ModelLabStore {
   }
  }
  public synchronized List<Entry> list(){return new ArrayList<>(entries);}
+ public interface Progress { void onBytes(String phase,long done,long total); }
+ private int importedCount(){int n=0;for(Entry e:entries)if(!e.bundled)n++;return n;}
  public synchronized Entry find(String id){
   for(Entry e:entries)if(e.id.equals(id))return e;
   return null;
@@ -141,10 +144,12 @@ public final class ModelLabStore {
    two==null?0:two.getLong("bytes"),two==null?null:two.getString("sha256"),true));
  }
  private void loadImported()throws Exception{
-  if(!registry.isFile())return;
-  if(registry.length()>128000)throw new IllegalArgumentException("Слишком большой реестр");
+  AtomicFile atomic=new AtomicFile(registry);
+  if(!registry.isFile()&&!new File(directory,"registry.json.bak").isFile())return;
+  if(registry.isFile()&&registry.length()>128000)
+   throw new IllegalArgumentException("Слишком большой реестр");
   String text;
-  try(InputStream in=new FileInputStream(registry)){text=bounded(in,128000);}
+  try(InputStream in=atomic.openRead()){text=bounded(in,128000);}
   JSONArray rows=new JSONArray(text);
   if(rows.length()>MAX_IMPORTS)throw new IllegalArgumentException("Слишком много моделей");
   for(int i=0;i<rows.length();i++){
@@ -177,12 +182,17 @@ public final class ModelLabStore {
    o.put("projectorSha",e.projectorSha==null?"":e.projectorSha);
    rows.put(o);
   }
-  File part=new File(directory,"registry.json.partial");
-  try(FileOutputStream out=new FileOutputStream(part)){
-   out.write(rows.toString().getBytes(StandardCharsets.UTF_8));out.getFD().sync();
+  // Android AtomicFile preserves the previous registry across power loss/crashes.
+  AtomicFile atomic=new AtomicFile(registry);
+  FileOutputStream stream=null;
+  try{
+   stream=atomic.startWrite();
+   stream.write(rows.toString().getBytes(StandardCharsets.UTF_8));
+   atomic.finishWrite(stream);
+  }catch(Exception failure){
+   if(stream!=null)atomic.failWrite(stream);
+   throw failure;
   }
-  if(registry.exists()&&!registry.delete())throw new IllegalStateException("Cannot update registry");
-  if(!part.renameTo(registry))throw new IllegalStateException("Cannot save registry");
  }
  private static final class ImportedFile {
   final String filename,sha;
@@ -192,6 +202,10 @@ public final class ModelLabStore {
   }
  }
  private ImportedFile copy(InputStream input,String expectedSha)throws Exception{
+  return copy(input,expectedSha,-1,null);
+ }
+ private ImportedFile copy(InputStream input,String expectedSha,long expectedBytes,
+                           Progress progress)throws Exception{
   if(input==null)throw new IllegalArgumentException("Файл не открыт");
   if(expectedSha!=null&&!expectedSha.isBlank()&&!expectedSha.matches("(?i)[0-9a-f]{64}"))
    throw new IllegalArgumentException("SHA256 должен состоять из 64 шестнадцатеричных знаков");
@@ -205,6 +219,9 @@ public final class ModelLabStore {
     throw new IllegalStateException("Недостаточно памяти для импорта модели");
    while((n=in.read(buf))!=-1){
     copied+=n;
+    if(expectedBytes>0&&copied>expectedBytes)throw new SecurityException("Размер модели не совпадает");
+    if(progress!=null&&(copied%(4L*1024*1024))<n)
+     progress.onBytes("Скачивание GGUF",copied,expectedBytes);
     if(copied>MAX_IMPORT_BYTES)throw new IllegalArgumentException("GGUF превышает лимит 3,5 ГБ");
     if((copied% (16*1024*1024))<n &&fs.getAvailableBytes()<SPACE_RESERVE)
      throw new IllegalStateException("Закончилось свободное место");
@@ -213,6 +230,9 @@ public final class ModelLabStore {
    out.getFD().sync();
   }catch(Exception failure){temp.delete();throw failure;}
   try{
+   if(expectedBytes>0&&copied!=expectedBytes)
+    throw new SecurityException("Модель скачана не полностью");
+   if(progress!=null)progress.onBytes("Проверка SHA-256",copied,expectedBytes);
    if(copied<128)throw new IllegalArgumentException("Файл GGUF слишком мал");
    try(InputStream in=new FileInputStream(temp)){
     byte[] magic=new byte[4];
@@ -237,20 +257,64 @@ public final class ModelLabStore {
                                        String attachProjectorTo)throws Exception{
   if(uri==null||!"content".equals(uri.getScheme()))
    throw new SecurityException("Только Android Content Picker");
-  if(attachProjectorTo==null&&entries.size()>MAX_IMPORTS+4)
+  if(attachProjectorTo==null&&importedCount()>=MAX_IMPORTS)
    throw new IllegalStateException("Слишком много импортированных GGUF");
   InputStream stream=app.getContentResolver().openInputStream(uri);
   return register(copy(stream,expectedSha),label,attachProjectorTo);
  }
  public synchronized Entry download(String link,String label,String expectedSha,
                                     String attachProjectorTo)throws Exception{
-  if(attachProjectorTo==null&&entries.size()>MAX_IMPORTS+4)
+  if(attachProjectorTo==null&&importedCount()>=MAX_IMPORTS)
    throw new IllegalStateException("Слишком много импортированных GGUF");
   HttpURLConnection connection=ModelLabNetworkPolicy.open(link);
   try{
    if(connection.getContentLengthLong()>MAX_IMPORT_BYTES)
     throw new IllegalArgumentException("Удалённый GGUF больше лимита 3,5 ГБ");
    return register(copy(connection.getInputStream(),expectedSha),label,attachProjectorTo);
+  }finally{connection.disconnect();}
+ }
+ /** Download only a preset from the reviewed catalogue, including its optional vision projector.
+  * HTTP size, actual bytes, SHA-256 and GGUF header are all checked before registration. */
+ public synchronized Entry downloadPreset(ModelLabPresetCatalog.Preset preset,Progress progress)throws Exception{
+  boolean trusted=false;
+  for(ModelLabPresetCatalog.Preset item:ModelLabPresetCatalog.ALL)
+   if(item==preset){trusted=true;break;}
+  if(!trusted)throw new SecurityException("Непроверенная запись каталога");
+  Entry bundled=find("builtin:"+preset.id);
+  if(bundled!=null){
+   modelFile(bundled);
+   if(bundled.vision())projectorFile(bundled);
+   return bundled;
+  }
+  String expectedId="import:"+preset.sha256.substring(0,16);
+  Entry chosen=find(expectedId);
+  if(chosen==null){
+   if(importedCount()>=MAX_IMPORTS)throw new IllegalStateException("Каталог заполнен");
+   chosen=downloadChecked(preset.modelUrl(),preset.label,preset.sha256,
+     preset.bytes,null,progress);
+  }else{
+   if(!chosen.modelSha.equals(preset.sha256)||chosen.modelBytes!=preset.bytes)
+    throw new SecurityException("Не совпали метаданные модели");
+   modelFile(chosen); // Verify its existing bytes before skipping the download.
+  }
+  if(preset.vision()){
+   if(!chosen.vision()||!preset.projectorSha256.equals(chosen.projectorSha)||
+       chosen.projectorBytes!=preset.projectorBytes){
+    chosen=downloadChecked(preset.projectorUrl(),"mmproj",preset.projectorSha256,
+      preset.projectorBytes,chosen.id,progress);
+   }else projectorFile(chosen);
+  }
+  return chosen;
+ }
+ private Entry downloadChecked(String link,String label,String digest,long bytes,
+                               String projectorFor,Progress progress)throws Exception{
+  HttpURLConnection connection=ModelLabNetworkPolicy.open(link);
+  try{
+   long advertised=connection.getContentLengthLong();
+   if(advertised>0&&advertised!=bytes)
+    throw new SecurityException("Размер GGUF по HTTPS не совпадает с каталогом");
+   if(progress!=null)progress.onBytes("Загружаю "+label,0,bytes);
+   return register(copy(connection.getInputStream(),digest,bytes,progress),label,projectorFor);
   }finally{connection.disconnect();}
  }
  private Entry register(ImportedFile file,String label,String projectorFor)throws Exception{
