@@ -218,7 +218,7 @@ public final class ModelLabActivity extends Activity {
    if(nesStatus!=null)nesStatus.setText("Принят эпизод: "+nesTrial.summary()+
      "\nПосле выбора модели нажми «Объяснить последний NES-эпизод». "+
      "Происхождение данных не аутентифицировано.");
-  }catch(IllegalArgumentException|RuntimeException error){
+  }catch(RuntimeException error){
    nesTrial=null;
    if(nesStatus!=null)nesStatus.setText("Неправильный или повреждённый NES-эпизод");
   }
