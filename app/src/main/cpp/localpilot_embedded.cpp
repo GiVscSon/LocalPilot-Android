@@ -1,5 +1,8 @@
 #include <jni.h>
 #include "llama.h"
+#include "mtmd.h"
+#include "mtmd-helper.h"
+#include <cstdint>
 #include <algorithm>
 #include <atomic>
 #include <mutex>
@@ -66,26 +69,12 @@ bool run_batch(llama_batch_ext *batch,const llama_token *tokens,int count,int of
  return llama_process(ctx,LLAMA_PROCESS_TYPE_DECODE,batch)==0;
 }
 
-std::string infer(const std::string &sys,const std::string &usr,int limit,float temp){
- if(!ctx||limit<1||limit>192)return "";
- std::string formatted=chat(sys,usr);
- if(formatted.empty())return "";
+std::string generate_from_logits(int pos,int limit,float temp){
+ if(!ctx||pos<1||limit<1||limit>192)return "";
  const auto *vocab=llama_model_get_vocab(model);
- int required=llama_tokenize(vocab,formatted.c_str(),formatted.size(),nullptr,0,true,true);
- required=required<0?-required:required;
- if(required<1||required>3000||required+limit>4096)return "";
- std::vector<llama_token> tokens(required);
- int n=llama_tokenize(vocab,formatted.c_str(),formatted.size(),tokens.data(),required,true,true);
- if(n<1||n>required)return "";
-
- llama_memory_clear(llama_get_memory(ctx),true);
  auto *batch=llama_batch_ext_init(ctx);
  if(!batch)return "";
  bool ok=true;
- for(int i=0;i<n && ok && !cancelled.load();i+=256){
-  int length=std::min(256,n-i);
-  ok=run_batch(batch,tokens.data()+i,length,i,i+length==n);
- }
  auto *sampler=llama_sampler_chain_init(llama_sampler_chain_default_params());
  if(!sampler)ok=false;
  if(ok){
@@ -110,13 +99,39 @@ std::string infer(const std::string &sys,const std::string &usr,int limit,float 
   output.append(piece,sz);
   // Pinned llama.cpp's llama_sampler_sample() already accepts the token.
   // Never accept twice: duplicate acceptance corrupts penalty/grammar state.
-  if(step+1<limit)ok=run_batch(batch,&token,1,n+step,true);
+  if(step+1<limit)ok=run_batch(batch,&token,1,pos+step,true);
  }
  if(sampler)llama_sampler_free(sampler);
  llama_batch_ext_free(batch);
  if(!ok||cancelled.load())return "";
  if(!ended)return ""; // No EOS: fail closed instead of accepting a sentinel as text
  return output;
+}
+
+std::string infer(const std::string &sys,const std::string &usr,int limit,float temp){
+ if(!ctx||limit<1||limit>192)return "";
+ std::string formatted=chat(sys,usr);
+ if(formatted.empty())return "";
+ const auto *vocab=llama_model_get_vocab(model);
+ int required=llama_tokenize(vocab,formatted.c_str(),formatted.size(),nullptr,0,true,true);
+ required=required<0?-required:required;
+ if(required<1||required>3000||required+limit>4096)return "";
+ std::vector<llama_token> tokens(required);
+ int n=llama_tokenize(vocab,formatted.c_str(),formatted.size(),tokens.data(),required,true,true);
+ if(n<1||n>required)return "";
+
+ llama_memory_clear(llama_get_memory(ctx),true);
+ auto *batch=llama_batch_ext_init(ctx);
+ if(!batch)return "";
+ bool ok=true;
+ for(int i=0;i<n && ok && !cancelled.load();i+=256){
+  int length=std::min(256,n-i);
+  ok=run_batch(batch,tokens.data()+i,length,i,i+length==n);
+ }
+ if(!ok||cancelled.load()){llama_batch_ext_free(batch);return "";}
+ llama_batch_ext_free(batch);
+ return generate_from_logits(n,limit,temp);
+
 }
 }
 
@@ -134,6 +149,58 @@ Java_org_localpilot_android_EmbeddedGgufRuntime_nativeInfer(
   if((byte&0xF8)==0xF0){result.clear();break;}
  }
  return e->NewStringUTF(result.c_str());
+}
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_org_localpilot_android_EmbeddedGgufRuntime_nativeAnalyzeImage(
+ JNIEnv *e,jclass,jstring filename,jstring mmproj,jstring prompt,
+ jbyteArray pixelData,jint width,jint height){
+ Utf f(e,filename),m(e,mmproj),p(e,prompt);
+ if(!pixelData||width<1||height<1||width>640||height>640||
+    e->GetArrayLength(pixelData)!=width*height*3)
+  return e->NewStringUTF("");
+ std::vector<uint8_t> pixels(static_cast<size_t>(width)*height*3);
+ e->GetByteArrayRegion(pixelData,0,pixels.size(),
+                       reinterpret_cast<jbyte*>(pixels.data()));
+ if(e->ExceptionCheck())return nullptr;
+ std::lock_guard<std::mutex> guard(lock);
+ cancelled.store(false);
+ std::string reply;
+ if(init(f.str())&&!cancelled.load()){
+  auto params=mtmd_context_params_default();
+  params.use_gpu=false;
+  params.n_threads=4;
+  params.warmup=false;
+  params.image_max_tokens=512;
+  mtmd_context *vision=mtmd_init_from_file(m.str().c_str(),model,params);
+  if(vision){
+   if(mtmd_support_vision(vision)){
+    mtmd_bitmap *bitmap=mtmd_bitmap_init(width,height,pixels.data());
+    mtmd_input_chunks *chunks=mtmd_input_chunks_init();
+    if(bitmap&&chunks){
+     std::string user="Analyze the attached game screenshot. <__media__>\n"+p.str();
+     std::string formatted=chat(
+       "You are a game vision diagnostician. Describe only visible objects "+
+       "and uncertainty. Never issue a gesture, coordinates or action commands.",user);
+     mtmd_input_text input{formatted.data(),formatted.size(),true,true};
+     const mtmd_bitmap *bitmapArray[]={bitmap};
+     if(!formatted.empty()&&
+         mtmd_tokenize(vision,chunks,&input,bitmapArray,1)==0){
+      llama_memory_clear(llama_get_memory(ctx),true);
+      llama_pos after=0;
+      if(mtmd_helper_eval_chunks(vision,ctx,chunks,0,0,512,true,&after)==0
+          &&after>0&&after+128<4096&&!cancelled.load())
+       reply=generate_from_logits(after,128,0.1f);
+     }
+    }
+    if(chunks)mtmd_input_chunks_free(chunks);
+    if(bitmap)mtmd_bitmap_free(bitmap);
+   }
+   mtmd_free(vision);
+  }
+ }
+ for(unsigned char c:reply)if((c&0xF8)==0xF0){reply.clear();break;}
+ return e->NewStringUTF(reply.c_str());
 }
 
 extern "C" JNIEXPORT void JNICALL
