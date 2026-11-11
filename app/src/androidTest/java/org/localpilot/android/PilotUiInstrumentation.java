@@ -342,7 +342,10 @@ public final class PilotUiInstrumentation extends Instrumentation {
 
     private void checkFullDemo() throws Exception {
         launchDemo();
-        click("Начать проверку ×10");
+        // launchDemo() hides/recreates the panel. Previous game/window tickets
+        // were revoked by STOP, so the test must explicitly rebind the NEW window
+        // and obtain bounded consent rather than relying on a stale prior session.
+        armAndStart();
         await(() -> score() > 0, 6_000, "Demo made no first move");
         long configEpoch=onMain(()->gate().epoch());
         onMain(()->{
@@ -390,7 +393,8 @@ public final class PilotUiInstrumentation extends Instrumentation {
 
     private void checkRotationStopsInput() throws Exception {
         launchDemo();
-        click("Начать проверку ×10");
+        // Rotation is meaningful only after a fresh, explicitly armed session.
+        armAndStart();
         await(() -> score() >= 1, 6_000, "No real target touch before rotation");
         require(automation.setRotation(UiAutomation.ROTATION_FREEZE_90), "Cannot rotate isolated test device");
         try {
