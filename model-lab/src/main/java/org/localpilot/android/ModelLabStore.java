@@ -270,6 +270,7 @@ public final class ModelLabStore {
    throw new SecurityException("Только Android Content Picker");
   if(attachProjectorTo==null&&importedCount()>=MAX_IMPORTS)
    throw new IllegalStateException("Слишком много импортированных GGUF");
+  requireProjectorTarget(attachProjectorTo);
   InputStream stream=app.getContentResolver().openInputStream(uri);
   return register(copy(stream,expectedSha),label,attachProjectorTo);
  }
@@ -277,6 +278,7 @@ public final class ModelLabStore {
                                     String attachProjectorTo)throws Exception{
   if(attachProjectorTo==null&&importedCount()>=MAX_IMPORTS)
    throw new IllegalStateException("Слишком много импортированных GGUF");
+  requireProjectorTarget(attachProjectorTo);
   HttpURLConnection connection=ModelLabNetworkPolicy.open(link);
   try{
    if(connection.getContentLengthLong()>MAX_IMPORT_BYTES)
@@ -328,6 +330,13 @@ public final class ModelLabStore {
    return register(copy(connection.getInputStream(),digest,bytes,progress),label,projectorFor);
   }finally{connection.disconnect();}
  }
+ /** Reject a stale/missing projector target BEFORE any large download/import. */
+ private void requireProjectorTarget(String id){
+  if(id==null)return;
+  Entry entry=find(id);
+  if(entry==null||entry.bundled)
+   throw new IllegalArgumentException("Выбери существующую импортированную модель для mmproj");
+ }
  private Entry register(ImportedFile file,String label,String projectorFor)throws Exception{
   if(projectorFor!=null){
    Entry found=find(projectorFor);
@@ -336,7 +345,11 @@ public final class ModelLabStore {
    Entry next=found.withProjector(file.filename,file.bytes,file.sha);
    int index=entries.indexOf(found);
    entries.set(index,next);
-   try{persist();}catch(Exception failure){entries.set(index,found);throw failure;}
+   try{persist();}catch(Exception failure){
+    entries.set(index,found);
+    deleteUnusedBlob(file.filename);
+    throw failure;
+   }
    // The old projector may be shared with other models. Delete it only
    // after the new registry has been committed, and only if no entry uses it.
    if(found.projectorName!=null&&!found.projectorName.equals(file.filename))
@@ -345,11 +358,21 @@ public final class ModelLabStore {
   }
   String id="import:"+file.sha.substring(0,16);
   Entry existing=find(id);
-  if(existing!=null)return existing;
+  if(existing!=null){
+   if(!existing.modelSha.equals(file.sha)){
+    deleteUnusedBlob(file.filename);
+    throw new SecurityException("Найдена коллизия укороченного ID SHA-256");
+   }
+   return existing;
+  }
   Entry next=new Entry(id,display(label),file.filename,file.bytes,file.sha,
       null,0,null,false);
   entries.add(next);
-  try{persist();}catch(Exception failure){entries.remove(next);throw failure;}
+  try{persist();}catch(Exception failure){
+   entries.remove(next);
+   deleteUnusedBlob(file.filename);
+   throw failure;
+  }
   return next;
  }
  private File ensure(String name,long bytes,String sha,boolean bundled)throws Exception{
