@@ -10,7 +10,7 @@ TARGET = Path(__file__).resolve().parents[1] / "tools" / "triad_release_gate.py"
 spec = importlib.util.spec_from_file_location("triad_release_gate", TARGET)
 gate = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(gate)
-CERT = "a" * 64
+CERTS = {"LocalPilot": "a" * 64, "GameLab": "c" * 64, "ModelLab": "e" * 64}
 SHA = "b" * 40
 
 
@@ -25,7 +25,7 @@ def fake_sdk(argv):
         return "uses-permission: name='android.permission.INTERNET'"
     if argv[1] == "verify":
         return "Verified using v2 scheme (APK Signature Scheme v2): true\n" \
-               f"Signer #1 certificate SHA-256 digest: {CERT}\n"
+               f"Signer #1 certificate SHA-256 digest: {CERTS[Path(argv[-1]).stem]}\n"
     raise AssertionError(argv)
 
 
@@ -53,7 +53,7 @@ class VerifyTriad(unittest.TestCase):
                 z.writestr(name, b"data")
 
     def check(self, **kwargs):
-        return gate.audit(self.files, "aapt", "apksigner", kwargs.get("certificate", CERT),
+        return gate.audit(self.files, "aapt", "apksigner", kwargs.get("certificates", CERTS),
                           kwargs.get("sha", SHA), kwargs.get("previous"))
 
     def test_valid_manifest_has_no_release_claim(self):
@@ -74,7 +74,15 @@ class VerifyTriad(unittest.TestCase):
 
     def test_bad_certificate_blocked(self):
         with self.assertRaisesRegex(ValueError, "Signing key"):
-            self.check(certificate="f" * 64)
+            self.check(certificates={**CERTS, "GameLab": "f" * 64})
+
+    def test_reject_same_signer_for_multiple_packages(self):
+        with self.assertRaisesRegex(ValueError, "distinct"):
+            self.check(certificates={**CERTS, "GameLab": CERTS["LocalPilot"]})
+
+    def test_missing_package_pin_rejected(self):
+        with self.assertRaisesRegex(ValueError, "each package"):
+            self.check(certificates={"LocalPilot": CERTS["LocalPilot"]})
 
     def test_bad_source_sha_blocked(self):
         with self.assertRaisesRegex(ValueError, "40-digit"):
