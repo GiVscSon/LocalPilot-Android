@@ -21,6 +21,7 @@ on:
       - 'game-lab/src/main/java/org/localpilot/gamelab/NesFrameEpoch.java'
       - 'game-lab/src/main/java/org/localpilot/gamelab/NesSnapshotGate.java'
       - 'tests/NesFrameTransferVerify.java'
+      - 'tests/ConsoleAgentPolicy*.java'
       - 'tests/NesExperimentPolicyVerify.java'
       - 'tests/NesExperimentPolicyTest.java'
       - 'game-lab/src/main/java/org/localpilot/gamelab/NesExperimentPolicy.java'
@@ -101,6 +102,7 @@ jobs:
           java tests/NesFrameEpochVerify.java
           node tests/nes_session_frame_smoke.cjs
           java tests/NesBridgeVerify.java build/integration/rom/evidence.txt
+          java tests/ConsoleAgentPolicyVerify.java
           java tests/NesExperimentPolicyVerify.java
           java tests/ModelLabPolicyVerify.java
           python3 tools/verify_modellab_cancel.py

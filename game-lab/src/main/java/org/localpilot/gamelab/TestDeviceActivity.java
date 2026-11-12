@@ -56,6 +56,9 @@ public final class TestDeviceActivity extends Activity {
  }};
  @Override public void onCreate(Bundle state){
   super.onCreate(state);
+  // New unified product: console agents only. Legacy mocks stay in sources for
+  // standalone Android QA, but are not exposed to All-in-One users.
+  if(getPackageName().startsWith("org.localpilot.android")){showConsoleHub();return;}
   game(0);
   LinearLayout root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);
   GameLabInsets.install(this,root,12);root.setBackgroundColor(HubContract.BACKGROUND);
@@ -169,6 +172,30 @@ public final class TestDeviceActivity extends Activity {
   root.requestApplyInsets();
   addLog("START game="+engine.game.name());
  }
+ private void showConsoleHub(){
+  LinearLayout root=new LinearLayout(this);
+  root.setOrientation(LinearLayout.VERTICAL);
+  GameLabInsets.install(this,root,16);
+  root.setBackgroundColor(HubContract.BACKGROUND);
+  TextView title=label("LocalPilot · консольные нейроагенты",22);
+  title.setTextColor(HubContract.ACCENT);root.addView(title);
+  root.addView(label("Настоящие NES/Денди ROM в JSNES. Симуляторы игр Яндекса убраны. Каждая установленная GGUF может быть назначена агентом, который получает кадры и проверяет результат своих действий.",14));
+  LinearLayout consoles=new LinearLayout(this);root.addView(consoles);
+  addButton(consoles,"🎮 NES",()->startActivity(new Intent(this,NesEmulatorActivity.class).putExtra("dendy",false)));
+  addButton(consoles,"🎮 Денди",()->startActivity(new Intent(this,NesEmulatorActivity.class).putExtra("dendy",true)));
+  LinearLayout tools=new LinearLayout(this);root.addView(tools);
+  addButton(tools,"🧠 Модели и агенты",()->{
+   try{startActivity(new Intent(this,Class.forName("org.localpilot.android.ModelLabActivity")));}
+   catch(ClassNotFoundException|SecurityException unavailable){
+    new AlertDialog.Builder(this).setMessage("ModelLab отсутствует в этой сборке.")
+     .setPositiveButton("OK",null).show();
+   }
+  });
+  addButton(tools,"Другие консоли",()->startActivity(new Intent(this,RetroLibraryActivity.class)));
+  TextView limits=label("ИИ-контроллер сначала доступен на встроенном homebrew ROM: максимум 4 подтверждённых хода и обязательный STOP. Другие системы подключаются только после появления настоящего проверенного ядра. DOS пока не исполняется.",13);
+  limits.setTextColor(HubContract.SECONDARY);root.addView(limits);
+  setContentView(root);root.requestApplyInsets();
+ }
  private Button addButton(LinearLayout parent,String title,Runnable run){
   Button b=new Button(this);b.setText(title);b.setTextSize(11);
   b.setOnClickListener(v->run.run());parent.addView(b,new LinearLayout.LayoutParams(0,-2,1));
@@ -202,7 +229,7 @@ public final class TestDeviceActivity extends Activity {
   if(records.size()>=512)records.remove(0);
   records.add(SystemClock.elapsedRealtime()+","+entry.replace(',',';'));
  }
- @Override protected void onResume(){super.onResume();handler.post(clock);}
+ @Override protected void onResume(){super.onResume();if(!getPackageName().startsWith("org.localpilot.android"))handler.post(clock);}
  /** Save GameLab episodes to the SAME APK's private lab-only training store.
   * The separately installed companion retains its normal SAF export mode.
   * This never writes real-game verified experience or changes input permits.
@@ -242,7 +269,8 @@ public final class TestDeviceActivity extends Activity {
   }finally{if(temp!=null)temp.delete();}
  }
  @Override protected void onPause(){
-  saveEmbeddedExperience();handler.removeCallbacks(clock);
+  if(!getPackageName().startsWith("org.localpilot.android"))saveEmbeddedExperience();
+  handler.removeCallbacks(clock);
   GameLabEvidenceProvider.clear("gamelab");super.onPause();
  }
  @Override protected void onDestroy(){if(surface!=null)surface.release();super.onDestroy();}

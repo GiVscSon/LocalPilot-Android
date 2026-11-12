@@ -7,10 +7,21 @@ package org.localpilot.gamelab;
  */
 public final class NesSnapshotGate {
  private long serial;
+ private final long stride;
  private String active;
+ public NesSnapshotGate(){this(1,1);}
+ // Distinct odd/even token spaces prevent delayed AI snapshots from being
+ // accepted as manual exports, even when both request counters begin anew.
+ public NesSnapshotGate(int first,int step){
+  if(first<1||step<1||first>step)
+   throw new IllegalArgumentException("Invalid disjoint snapshot namespace");
+  serial=(long)first-step;stride=step;
+ }
  public String begin(){
   if(active!=null)throw new IllegalStateException("NES screenshot already requested");
-  serial=serial==Long.MAX_VALUE?1:serial+1;
+  if(serial>Long.MAX_VALUE-stride)
+   throw new IllegalStateException("Snapshot token exhausted; fail closed");
+  serial+=stride;
   active=Long.toString(serial);
   return active;
  }

@@ -248,7 +248,7 @@ def verify(apk: Path, output: Path) -> dict:
         raise RuntimeError("GameLab launched in a different process")
     checks.append({"name": "in_app_game_lab_navigation", "status": "PASS"})
 
-    tap_text("Настоящая NES")
+    tap_text("🎮 NES")
     wait_activity(NES)
     if one_process() != process:
         raise RuntimeError("NES launched in a different process")

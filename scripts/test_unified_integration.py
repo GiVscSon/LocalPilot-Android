@@ -37,7 +37,8 @@ class UnifiedAppContracts(unittest.TestCase):
         path = "gamelab-sim-experience-v1.lpx"
         self.assertIn(path, game)
         self.assertIn(path, training)
-        self.assertIn("saveEmbeddedExperience();handler.removeCallbacks(clock)", game)
+        self.assertIn('if(!getPackageName().startsWith("org.localpilot.android"))saveEmbeddedExperience();', game)
+        self.assertIn("showConsoleHub();return;", game)
         self.assertIn("org.localpilot.android", game)
         self.assertIn("StandardCopyOption.ATOMIC_MOVE", game)
         self.assertIn("SimExperience.decode(", training)

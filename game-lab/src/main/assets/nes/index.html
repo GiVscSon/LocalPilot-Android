@@ -146,9 +146,11 @@ window.retroLoadRom=function(encoded,dendy,homebrew,session){
 };
 window.retroAgentTrial=function(name,holdFrames){
  if(!nes||paused||!gamepadLatch||!homebrewRom||agentTrial||
-    name!=="A"||!Number.isInteger(holdFrames)||holdFrames<4||holdFrames>60)
+    !["A","B","UP","DOWN","LEFT","RIGHT"].includes(name)||
+    !Number.isInteger(holdFrames)||holdFrames<4||holdFrames>60)
    return false;
- const code=jsnes.Controller.BUTTON_A;
+ const code=jsnes.Controller[keyMap[name]];
+ if(typeof code!=="number")return false;
  if(!gamepadLatch.change(name,code,true,frames))return false;
  agentTrial={name,code,started:frames,holdFrames};
  return true;
