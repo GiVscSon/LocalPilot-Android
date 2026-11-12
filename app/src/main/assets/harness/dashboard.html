@@ -69,7 +69,7 @@ function cmd(action,id=""){
  if(!hasNative){lastError="Эта команда выполняется внутри APK LocalPilot. В автономном HTML доступен только просмотр интерфейса.";render();return;}
  if(action==="delete"&&!confirm("Удалить импортированную модель? Активную модель сначала нужно отключить."))return;
  if(action==="stop"&&!confirm("Запросить STOP текущего игрового агента?"))return;
- if(action==="learn"){lastError="Обучение недоступно: для NES пока нет верифицированной награды. Эпизоды сохраняются, но не выдаются за обучающие примеры.";render();return;}
+
  try{window.Harness.command(action,id);setTimeout(load,300);}
  catch(err){lastError=String(err);render();}
 }
@@ -92,8 +92,9 @@ function modelCard(m,detailed=false){
 function overview(){
  const ms=models(),ep=episodes(),used=new Set(ms.filter(isRealUse).map(m=>m.id));
  const ok=ep.filter(e=>e.rows.some(x=>x.stage==="VISUAL"&&x.status==="PIXELS_DIFFER")).length;
+ const learned=snapshot.imitation?.active===true;
  const goals=ep.filter(e=>e.rows.some(x=>x.stage==="GOAL"&&x.status==="VERIFIED")).length;
- const stat=[["Загружено моделей",ms.length,"◈"],["Подключено к агенту",ms.filter(m=>m.bound).length,"⌘"],["Использовано в игре",used.size,"↯"],["Цель подтверждена",goals,"✓"]];
+ const stat=[["Загружено GGUF",ms.length,"◈"],["Подключено к агенту",ms.filter(m=>m.bound).length+(learned&&String(snapshot.assignedModelId).startsWith("fast-policy:")?1:0),"⌘"],["Использовано в игре",new Set(events().filter(x=>x.stage==="MODEL"&&x.status==="MODEL_USED").map(x=>x.modelId)).size,"↯"],["Обучено Fast Policy",learned?1:0,"✦"]];
  return '<div class="tiles">'+stat.map(x=>'<div class="tile"><div class="topline"><span>'+x[0]+'</span><span class="symbol">'+x[2]+'</span></div><div class="count">'+x[1]+'</div><small>'+ (x[0]==="Цель подтверждена"?"Не путать с изменением пикселей":"По данным текущего APK")+'</small></div>').join("")+'</div><div class="layout"><div class="stack">'+
  panel("Модели в едином окружении","Каждая запись связана с реальным ModelLabStore",ms.length?'<div class="list">'+ms.slice(0,5).map(m=>modelCard(m)).join("")+'</div>':empty("Пока нет GGUF","Открой каталог моделей и скачай проверенный файл","◈"),button("Каталог моделей","tab","models","small"))+
  panel("Цепочка игрового агента","Последний настоящий NES-эпизод",renderPipeline(ep[0]),button("Все эпизоды","tab","episodes","small"))+
@@ -141,13 +142,25 @@ function episodesPage(){
 }
 function trainingPage(){
  const es=episodes(),changed=es.filter(e=>e.rows.some(x=>x.stage==="VISUAL"&&x.status==="PIXELS_DIFFER")).length;
- return '<div class="section-intro"><div><h2>Обучение и переиспользование</h2><p>Опыт → верифицированная награда → обновление политики → отложенная проверка → запуск</p></div></div>'+
- '<div class="tiles">'+[["Эпизодов собрано",es.length,"≡"],["Реакций экрана",changed,"◫"],["Готово к RL",snapshot.learning.eligibleTransitions||0,"✦"],["Обучено политик",snapshot.learning.trainedPolicies||0,"↯"]].map(x=>'<div class="tile"><div class="topline">'+E(x[0])+'<span>'+x[2]+'</span></div><div class="count">'+x[1]+'</div></div>').join("")+'</div>'+
+ const im=snapshot.imitation||{},examples=Number(snapshot.learning.imitationExamples||0);
+ const trained=im.active===true,eligible=examples>=12;
+ return '<div class="section-intro"><div><h2>Обучение и переиспользование</h2><p>Настоящая имитация действий GGUF → компактная CPU-политика. RL с наградой пока отдельно заблокирован.</p></div></div>'+
+ '<div class="tiles">'+[["Реальных эпизодов",es.length,"≡"],["Визуальных переходов",changed,"◫"],["Примеров для имитации",examples,"✦"],["Принято Fast Policy",trained?1:0,"↯"]].map(x=>'<div class="tile"><div class="topline">'+E(x[0])+'<span>'+x[2]+'</span></div><div class="count">'+x[1]+'</div></div>').join("")+'</div>'+
  '<div class="layout"><div class="stack">'+
- panel("Происхождение обучающих данных","Только реальные и отмеченные эпизоды",'<div class="row-stats"><span>REAL_JSNES · записанные эпизоды</span><b>'+es.length+'</b></div><div class="row-stats"><span>PIXELS_DIFFER · ещё не награда</span><b>'+changed+'</b></div><div class="row-stats"><span>REWARD VERIFIED · пригодно к обучению</span><b>0</b></div><div class="row-stats"><span>POLICY UPDATED · изменённые веса</span><b>0</b></div><div class="callout">Награда UNKNOWN. Обычный RL и продвижение новой модели заблокированы. Никакой фиктивной тренировки не выполняется.</div><div class="compact-row">'+button("Экспортировать опыт","export")+button("Обучить и сравнить","learn","","primary",true)+'</div></div>')+
+ panel("Реальное имитационное обучение","Учитель GGUF → проверенный переход NES → обучаемые веса",'<div class="panel-body">'+
+ '<div class="runtime"><h3>✦ Fast Policy · softmax 8×8</h3><p>Использует настоящие пиксельные признаки NES и действия учителя, после которых получен новый кадр. Весам GGUF не приписывается обучение.</p><div class="chips">'+chip(trained?"ОБУЧЕНА · ПРОШЛА HOLDOUT":"НЕТ ПРИНЯТОЙ ПОЛИТИКИ",trained?"ok":"warn")+chip("ИМИТАЦИЯ, НЕ RL","blue")+'</div></div>'+
+ '<div class="row-stats"><span>Примеры из реального NES</span><b>'+examples+'</b></div>'+
+ '<div class="row-stats"><span>Весовой артефакт</span><b>'+(trained?E(String(im.sha256).slice(0,16))+'…':'Нет')+'</b></div>'+
+ '<div class="row-stats"><span>Holdout accuracy</span><b>'+(trained?(100*im.accuracy).toFixed(1)+'%':'Не оценивалась')+'</b></div>'+
+ '<div class="row-stats"><span>Baseline accuracy</span><b>'+(trained?(100*im.baseline).toFixed(1)+'%':'Не оценивалась')+'</b></div>'+
+ '<div class="row-stats"><span>Сохранённый непринятый кандидат</span>'+chip(im.candidate?"ЕСТЬ":"НЕТ",im.candidate?"warn":"")+'</div>'+
+ '<div class="callout">Для обучения нужны минимум 4 независимых реальных NES-эпизода и достаточно визуально проверенных действий. Holdout отделён по эпизодам. Кандидат продвигается только при улучшении точности имитации.</div>'+
+ '<div class="compact-row">'+button("⚙ Обучить Fast Policy","learn","","primary",!eligible)+button("▶ Назначить обученную NES","bindPolicy","","",!trained)+button("Экспортировать эпизоды","export")+'</div>'+
+ '</div>')+
  '</div><div class="stack">'+
- panel("Цикл обучения","Переходы между этапами контролирует Harness",'<div class="panel-body">'+[["01","Реальные игровые переходы",es.length?"СОБРАНЫ":"НЕТ ДАННЫХ"],["02","Проверяемая награда","НЕТ ПРОВАЙДЕРА"],["03","Обновление Fast Policy","БЛОКИРОВАНО"],["04","Тест на отложенных эпизодах","НЕ ПРОВОДИЛСЯ"],["05","Назначение новой политики","НЕ ПРОВОДИЛОСЬ"]].map(x=>'<div class="row-stats"><span>'+E(x[0])+' · '+E(x[1])+'</span>'+chip(x[2],x[0]==="01"&&es.length?"blue":"warn")+'</div>').join("")+'</div>')+
- panel("Модели и политика","Ничего не меняет веса GGUF без отдельного обучения",'<div class="panel-body muted">Файл GGUF используется для реального инференса. Replay-буфер с неизвестной наградой пока нельзя выдавать за обучение нейросети. Следующий этап: добавить reward provider для одной homebrew-игры и проверяемый policy-тренер.</div>')+'</div></div>';
+ panel("Источник данных и доказательства","Не использовать ACK или одну лишь анимацию как награду",'<div class="row-stats"><span>REAL_JSNES · записанные эпизоды</span><b>'+es.length+'</b></div><div class="row-stats"><span>EXAMPLE · модель + наблюдение + действие</span><b>'+examples+'</b></div><div class="row-stats"><span>PIXELS_DIFFER · доказана реакция</span><b>'+changed+'</b></div><div class="row-stats"><span>REWARD VERIFIED</span><b>0</b></div><div class="row-stats"><span>GGUF weights updated</span><b>0</b></div><div class="callout">В текущей версии нет проверенного игрового reward provider. Реальное имитационное обучение возможно, но наградный RL, утверждения о победах и автоматическое улучшение GGUF запрещены.</div>')+
+ panel("Что изменится после тренировки","Переиспользование в настоящем NES-агенте",'<div class="panel-body"><div class="row-stats"><span>Новая модель на телефоне</span>'+chip(trained?"FAST POLICY С SHA256":"НЕТ","blue")+'</div><div class="row-stats"><span>Решение без GGUF на каждом кадре</span>'+chip(trained?"ДОСТУПНО ДЛЯ NES":"ОЖИДАЕТ ОБУЧЕНИЯ",trained?"ok":"warn")+'</div><div class="row-stats"><span>Проверка кадров и STOP</span>'+chip("СОХРАНЕНЫ","ok")+'</div><p class="muted tiny">Обученная политика используется через тот же ConsoleAgentBridge и тот же строгий NES ActionGate. Это не доказательство роста игрового счёта.</p></div>')+
+ '</div></div>';
 }
 function statsFor(id){
  const rows=events().filter(x=>x.modelId===id);
