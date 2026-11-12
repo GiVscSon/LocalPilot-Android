@@ -27,6 +27,7 @@ import java.util.concurrent.Executors;
 import org.localpilot.shared.NesTrial;
 import org.localpilot.shared.NesFrameTransfer;
 import org.localpilot.shared.ConsoleAgentContract;
+import org.localpilot.shared.ConsoleExperienceMemory;
 
 /**
  * Independent on-device AI laboratory. No LocalPilot service/gestures are present.
@@ -188,13 +189,25 @@ public final class ModelLabActivity extends Activity {
        try{startActivity(move);}
        catch(RuntimeException error){nesStatus.setText("STOP: NES-контроллер недоступен");}
       };
+      // Consume only verified history for this exact model SHA. This gives
+      // successive proposals context, NOT a weight update or fabricated score.
+      final String prior;
+      try{
+       prior=ConsoleExperienceMemory.context(getFilesDir().toPath(),
+         selection.id,selection.modelSha);
+      }catch(java.io.IOException damaged){
+       consoleAgentTicket=null;
+       nesStatus.setText("STOP: история NES повреждена, модель не получает непроверенный опыт");
+       return;
+      }
       String agentObservation=(projector!=null?
-        "A real 128x120 RGB screenshot is attached. ":"TEXT-ONLY BLIND PROPOSAL: no image understanding. ")+instruction;
+        "A real 128x120 RGB screenshot is attached. ":"TEXT-ONLY BLIND PROPOSAL: no image understanding. ")+
+        instruction+" "+prior;
       engine.proposeNesButton(weights,projector,agentObservation,pixels,w,h,
         selectedGpuLayers(selection),callback);
       nesStatus.setText(projector!=null?
-        "Vision GGUF выбирает NES-кнопку по реальному кадру...":
-        "Text GGUF выбирает пробный ход БЕЗ зрения; не считать это распознаванием...");
+        "Vision GGUF анализирует NES и учитывает проверенную историю своей модели (без обучения весов)...":
+        "Text GGUF выбирает пробный ход без зрения и учитывает свою историю (без обучения весов)...");
      }catch(RuntimeException failure){
       consoleAgentTicket=null;
       nesStatus.setText("STOP: GGUF не запущен: "+failure.getClass().getSimpleName());
