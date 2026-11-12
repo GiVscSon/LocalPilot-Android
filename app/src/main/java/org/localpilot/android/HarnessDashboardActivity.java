@@ -137,7 +137,8 @@ public final class HarnessDashboardActivity extends Activity {
      JSONObject event=events.optJSONObject(i);
      if(event==null)continue;
      if("EXAMPLE".equals(event.optString("stage"))&&
-        "VISUAL_ONLY".equals(event.optString("status")))imitationExamples++;
+        "VISUAL_ONLY".equals(event.optString("status"))&&
+        !event.optString("modelId").startsWith("fast-policy:"))imitationExamples++;
      if("MODEL".equals(event.optString("stage"))&&
         "MODEL_USED".equals(event.optString("status")))used.add(event.optString("modelId"));
      if("VISUAL".equals(event.optString("stage"))&&
