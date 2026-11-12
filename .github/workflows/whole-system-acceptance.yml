@@ -22,9 +22,11 @@ on:
       - 'game-lab/src/main/java/org/localpilot/gamelab/NesSnapshotGate.java'
       - 'tests/NesFrameTransferVerify.java'
       - 'tests/NesExperimentPolicyVerify.java'
+      - 'tests/ConsoleAgentContract*.java'
       - 'tests/NesExperimentPolicyTest.java'
       - 'game-lab/src/main/java/org/localpilot/gamelab/NesExperimentPolicy.java'
       - 'tests/nes_controller_framehold.cjs'
+      - 'tests/nes_ai_action_smoke.cjs'
       - 'tests/ModelLabPolicyVerify.java'
       - 'tools/verify_modellab_cancel.py'
       - 'tests/ModelLabCatalogVerify.java'
@@ -85,6 +87,7 @@ jobs:
             tests/ExportHomebrewNes.java
           java -cp build/integration/rom ExportHomebrewNes build/integration/rom/homebrew.nes
           node tests/nes_controller_framehold.cjs
+          node tests/nes_ai_action_smoke.cjs
           node tests/jsnes_nes_smoke.cjs \
             build/integration/core/package/dist/jsnes.min.js \
             build/integration/rom/homebrew.nes
@@ -102,6 +105,7 @@ jobs:
           node tests/nes_session_frame_smoke.cjs
           java tests/NesBridgeVerify.java build/integration/rom/evidence.txt
           java tests/NesExperimentPolicyVerify.java
+          java tests/ConsoleAgentContractVerify.java
           java tests/ModelLabPolicyVerify.java
           python3 tools/verify_modellab_cancel.py
           java tests/ModelLabComputePolicyVerify.java

@@ -153,6 +153,19 @@ window.retroAgentTrial=function(name,holdFrames){
  agentTrial={name,code,started:frames,holdFrames};
  return true;
 };
+// Independent, explicitly owner-triggered one-step GGUF experiment.
+// The old CPU-baseline retroAgentTrial remains A-only for parity tests.
+window.retroAiTrial=function(name,holdFrames){
+ if(!nes||paused||!gamepadLatch||!homebrewRom||agentTrial||
+    !["A","B","UP","DOWN","LEFT","RIGHT"].includes(name)||
+    !Number.isInteger(holdFrames)||holdFrames!==16)return false;
+ const mapped=keyMap[name];
+ if(!mapped||!Object.prototype.hasOwnProperty.call(jsnes.Controller,mapped))return false;
+ const code=jsnes.Controller[mapped];
+ if(typeof code!=="number"||!gamepadLatch.change(name,code,true,frames))return false;
+ agentTrial={name,code,started:frames,holdFrames};
+ return true;
+};
 window.retroButton=function(name,down){
  if(!nes||!gamepadLatch||paused||!Object.prototype.hasOwnProperty.call(keyMap,name))return false;
  const value=jsnes.Controller[keyMap[name]];

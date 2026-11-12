@@ -40,10 +40,12 @@ check("private static native void nativeResetInterrupt();" in app_runtime,
       "embedded LocalPilot adapter missing native reset declaration")
 check("private void prepareNativeInference()" in app_runtime,
       "embedded LocalPilot adapter has no safe request start")
-# The unified APK adds exactly two manual-only entrypoints (text and VLM)
-# to the prior four embedded jobs. Each entrypoint must reset only at job
-# start, then re-check STOP so a cancellation cannot be silently cleared.
-check(app_runtime.count("prepareNativeInference();")==6,
+# The unified APK has four embedded jobs, two manual ModelLab jobs
+# and one bounded console-agent inference job. Every entrypoint must reset
+# only at job start and re-check STOP before entering JNI.
+check("public void proposeNesButton(" in app_runtime,
+      "bounded console-agent inference entrypoint missing")
+check(app_runtime.count("prepareNativeInference();")==7,
       "not every embedded or unified inference job resets stale cancellation")
 check("if(closed||cancelRequested.get()){\n   nativeInterrupt();" in app_runtime,
       "unified engine must re-interrupt when STOP races with JNI reset")

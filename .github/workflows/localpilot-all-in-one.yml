@@ -10,6 +10,7 @@ on:
       - 'tools/unified_in_app_smoke.py'
       - 'tests/test_unified_in_app_smoke.py'
       - 'tests/test_localpilot_all_in_one.py'
+      - 'tests/ConsoleAgentContract*.java'
       - '.github/workflows/localpilot-all-in-one.yml'
   workflow_dispatch:
 permissions:
@@ -40,6 +41,7 @@ jobs:
           set -euo pipefail
           python3 -m unittest discover -s tests -p 'test_localpilot_all_in_one.py' -v
           python3 -m unittest discover -s tests -p 'test_unified_in_app_smoke.py' -v
+          java tests/ConsoleAgentContractVerify.java
           java tests/ModelLabPolicyVerify.java
           java tests/ModelLabComputePolicyVerify.java
           java tests/ModelLabCatalogVerify.java
