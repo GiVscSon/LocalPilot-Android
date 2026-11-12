@@ -32,6 +32,11 @@ import org.localpilot.shared.NesFrameTransfer;
  * Only explicit user clicks import models, start evaluation or share an image.
  */
 public final class ModelLabActivity extends Activity {
+ // One process-local lab runtime shared by rotated unified-APK activities.
+ // The standalone ModelLab still uses ModelLabApp's own app-scoped objects.
+ private static EmbeddedGgufRuntime unifiedEngine;
+ private static ModelLabStore unifiedStore;
+ private boolean inUnifiedApk(){return getPackageName().startsWith("org.localpilot.android");}
  private static final int OPEN_MODEL=820,OPEN_PROJECTOR=821,OPEN_IMAGE=822;
  private ModelLabStore store;
  private EmbeddedGgufRuntime engine;
@@ -73,12 +78,21 @@ public final class ModelLabActivity extends Activity {
   });
   scroll.requestApplyInsets();
   title(col,"ModelLab · локальные нейросети");
-  line(col,"Отдельное приложение. Никаких игровых жестов или Accessibility. "+
-    "GGUF работает локально через llama.cpp. Новые модели могут быть несовместимы с движком.");
+  line(col,(inUnifiedApk()?"Встроенный ModelLab: один LocalPilot APK. ":"Независимый ModelLab. ")+
+    "Анализ не выдаёт игровых жестов и не получает разрешений ActionGate. "+
+    "GGUF работает локально через llama.cpp, модели скачиваются по выбору.");
   status=line(col,"Готовлю библиотеку моделей...");
   try {
-   ModelLabApp app=(ModelLabApp)getApplication();
-   store=app.store();engine=app.engine();
+   if(getApplication() instanceof ModelLabApp){
+    ModelLabApp app=(ModelLabApp)getApplication();
+    store=app.store();engine=app.engine();
+   }else if(inUnifiedApk()){
+    synchronized(ModelLabActivity.class){
+     if(unifiedStore==null)unifiedStore=new ModelLabStore(getApplicationContext());
+     if(unifiedEngine==null)unifiedEngine=new EmbeddedGgufRuntime(getApplicationContext());
+     store=unifiedStore;engine=unifiedEngine;
+    }
+   }else throw new IllegalStateException("Unknown ModelLab Application host");
   }catch(Exception failure){
    status.setText("Ошибка локального каталога: "+failure.getMessage());return;
   }
@@ -86,13 +100,15 @@ public final class ModelLabActivity extends Activity {
   button(col,"Вернуться в GameLab · настоящий NES",()->{
    try{
     Intent companion=new Intent(Intent.ACTION_MAIN)
-      .setClassName("org.localpilot.gamelab","org.localpilot.gamelab.TestDeviceActivity")
+      .setClassName(inUnifiedApk()?getPackageName():"org.localpilot.gamelab",
+        "org.localpilot.gamelab.TestDeviceActivity")
       .addCategory(Intent.CATEGORY_LAUNCHER)
       .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|
         Intent.FLAG_ACTIVITY_CLEAR_TOP|Intent.FLAG_ACTIVITY_SINGLE_TOP);
     startActivity(companion);
    }catch(android.content.ActivityNotFoundException|SecurityException missing){
-    status.setText("GameLab не установлен или недоступен. Установи GameLab APK рядом с ModelLab.");
+    status.setText(inUnifiedApk()?"Встроенный GameLab не найден: проверь целостность LocalPilot APK":
+      "GameLab не установлен или недоступен.");
    }
   });
   nesStatus=line(col,"Передай эпизод из GameLab NES: кнопка → кадры → реальное изменение пикселей. "+
