@@ -19,12 +19,14 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * Fully in-APK offline GGUF runtime. No Termux, HTTP, API key or file-picker.
+ * Offline GGUF JNI runtime. Supports both pre-bundled diagnostics and explicit
+ * ModelLab-on-demand GGUF imports inside the same Android package.
  * JNI model is loaded lazily. The only caller is the diagnostics screen;
  * model outputs have NO route into PilotService/gesture dispatch.
  */
 public final class EmbeddedGgufRuntime {
  public interface Callback { void complete(String result); }
+ public interface Result { void complete(String answer,long elapsedMs); }
  private static final String NAME="MNN-Pocket-0.3B-Instruct-Q4_1.gguf";
  private static final String ASSET="models/"+NAME;
  private static final int MAX_COPY_BYTES=900_000_000;
@@ -41,6 +43,7 @@ public final class EmbeddedGgufRuntime {
   t.setDaemon(true);return t;
  });
  private final AtomicBoolean busy=new AtomicBoolean();
+ private final AtomicBoolean cancelRequested=new AtomicBoolean();
  private volatile boolean closed;
  private final Map<String,File> validated=new HashMap<>();
  private volatile LocalModelCatalog.Model model=LocalModelCatalog.Model.POCKET;
@@ -59,11 +62,21 @@ public final class EmbeddedGgufRuntime {
  private static native void nativeRelease();
 
  public EmbeddedGgufRuntime(Context context){
-  if(!BuildConfig.EMBEDDED_GGUF)throw new IllegalStateException("This APK has no embedded model");
+  if(!BuildConfig.EMBEDDED_GGUF && !BuildConfig.UNIFIED_MODELLAB)
+   throw new IllegalStateException("This APK has no local GGUF runtime");
   application=context.getApplicationContext();
   LIVE_CLIENTS.incrementAndGet();
  }
  public boolean busy(){return busy.get()||NATIVE_JOB_ACTIVE.get();}
+ /** ModelLab requests cancellation; busy remains set until JNI actually completes. */
+ public synchronized boolean requestCancel(){
+  if(!busy.get()||closed)return false;
+  cancelRequested.set(true);
+  if(libraryLoaded)nativeInterrupt();
+  return true;
+ }
+ public int lastGpuLayers(){return 0;} // CPU-first unified build, no false Vulkan claims.
+
  /** Caller changes one model only when idle. One native model can be loaded at once. */
  public void select(LocalModelCatalog.Model choice){
   if(choice==null||busy()||closed)throw new IllegalStateException("Model switch unavailable");
@@ -88,9 +101,9 @@ public final class EmbeddedGgufRuntime {
   if(closed)throw new java.io.IOException("Model runtime closed");
   loadLibrary();
   nativeResetInterrupt();
-  if(closed){
+  if(closed||cancelRequested.get()){
    nativeInterrupt();
-   throw new java.io.IOException("Model runtime closed during JNI preparation");
+   throw new java.io.IOException("Model inference cancelled before starting");
   }
  }
  private static String sha(byte[] bytes){
@@ -191,11 +204,15 @@ public final class EmbeddedGgufRuntime {
    throw new IllegalStateException("Embedded model is busy or closed");
   if(!NATIVE_JOB_ACTIVE.compareAndSet(false,true)){
    busy.set(false);
-   throw new IllegalStateException("Other diagnostic screen already uses native GGUF");
+   throw new IllegalStateException("Another screen is using the native GGUF engine");
   }
+  cancelRequested.set(false);
   try { worker.execute(()->{
    String answer;
-   try{answer=job.run();}
+   try{
+    answer=job.run();
+    if(cancelRequested.get())answer="Анализ отменён пользователем.";
+   }
    catch(Exception|LinkageError failed){
     // User-visible diagnostics must not silently hide the actual failure stage.
     String reason=failed.getMessage();
@@ -205,6 +222,7 @@ public final class EmbeddedGgufRuntime {
     answer="Встроенная модель недоступна ["+failed.getClass().getSimpleName()+
       "]: "+reason+". Проверьте свободное место, ARM64 и целостность APK.";
    }finally{
+    cancelRequested.set(false);
     busy.set(false);
     NATIVE_JOB_ACTIVE.set(false);
    }
@@ -215,6 +233,59 @@ public final class EmbeddedGgufRuntime {
    NATIVE_JOB_ACTIVE.set(false);
    throw new IllegalStateException("Model worker closed",rejected);
   }
+ }
+
+ /** Explicit ModelLab workload: only verified on-device files can be supplied by
+  * ModelLabStore. No output can call PilotService or grant gesture authority. */
+ public void text(File model,String prompt,int requestedGpuLayers,Result callback){
+  if(!BuildConfig.UNIFIED_MODELLAB)throw new IllegalStateException("Use standalone ModelLab build");
+  if(model==null||!model.isFile())throw new IllegalArgumentException("GGUF missing");
+  if(prompt==null||prompt.isBlank()||prompt.length()>1000)
+   throw new IllegalArgumentException("Prompt must be 1..1000 characters");
+  if(requestedGpuLayers!=0)throw new IllegalArgumentException("Vulkan is not enabled in this APK");
+  long started=android.os.SystemClock.elapsedRealtime();
+  submit(answer->callback.complete(answer,
+    android.os.SystemClock.elapsedRealtime()-started),()->{
+    prepareNativeInference();
+    String result=nativeInfer(model.getAbsolutePath(),
+      "You are an offline diagnostic model. Describe uncertainty. "+
+      "Do not grant permissions or control Android inputs.",prompt,160,0.2f);
+    return LocalCoreContract.visibleAnswer(result);
+  });
+ }
+ public void text(File model,String prompt,Result callback){
+  text(model,prompt,0,callback);
+ }
+ /** Manually picked and bounded photo only; no Accessibility frame capture. */
+ public void image(File model,File projector,String prompt,byte[] rgb,int width,int height,
+                   int requestedGpuLayers,Result callback){
+  if(!BuildConfig.UNIFIED_MODELLAB)throw new IllegalStateException("Use standalone ModelLab build");
+  if(model==null||projector==null||!model.isFile()||!projector.isFile())
+   throw new IllegalArgumentException("GGUF and its projector are required");
+  if(prompt==null||prompt.isBlank()||prompt.length()>1000||
+     rgb==null||width<1||height<1||width>640||height>640||
+     (long)width*height*3!=rgb.length)
+   throw new IllegalArgumentException("Invalid bounded RGB photo or prompt");
+  if(requestedGpuLayers!=0)throw new IllegalArgumentException("Vulkan is not enabled in this APK");
+  final byte[] pixels=rgb.clone();
+  long started=android.os.SystemClock.elapsedRealtime();
+  submit(answer->callback.complete(answer,
+    android.os.SystemClock.elapsedRealtime()-started),()->{
+    prepareNativeInference();
+    return LocalCoreContract.visibleAnswer(nativeAnalyzeImage(
+      model.getAbsolutePath(),projector.getAbsolutePath(),
+      "Describe only visible image contents, and explicitly mention uncertainty. "+prompt,
+      pixels,width,height));
+  });
+ }
+ public void image(File model,File projector,String prompt,byte[] rgb,int width,int height,
+                   Result callback){
+  image(model,projector,prompt,rgb,width,height,0,callback);
+ }
+ public void probeGpu(Result callback){
+  if(callback==null)throw new IllegalArgumentException("Result callback required");
+  main.post(()->callback.complete(
+    "В едином APK доступен CPU backend. Экспериментальный Vulkan пока не включён.",0));
  }
 
  public void health(Callback cb){
