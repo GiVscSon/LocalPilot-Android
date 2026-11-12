@@ -124,8 +124,15 @@ tasks.register('writeSigningProvenance') {
   project.exec { workingDir rootProject.projectDir; commandLine 'git','rev-parse','HEAD'; standardOutput = gitOutput }
   def revision = gitOutput.toString('UTF-8').trim()
   if (!(revision ==~ /[0-9a-f]{40}/)) throw new GradleException('Invalid build source SHA')
-  def expected = System.getenv('GITHUB_SHA')
-  if (expected && expected.toLowerCase() != revision) throw new GradleException('CI source SHA differs from checkout')
+  // workflow_dispatch may run a trusted workflow from main while checking
+  // out a separately reviewed commit. GITHUB_SHA identifies that event,
+  // whereas the explicit pin identifies the actual app source to build.
+  def buildSourcePin = System.getenv('LOCALPILOT_BUILD_SOURCE_SHA')
+  def expected = buildSourcePin != null ? buildSourcePin : System.getenv('GITHUB_SHA')
+  if (expected != null && !(expected ==~ /[0-9a-fA-F]{40}/))
+   throw new GradleException('Invalid expected build source SHA')
+  if (expected != null && expected.toLowerCase() != revision)
+   throw new GradleException('CI source SHA differs from checkout')
   def output = signingProvenance.get().file('localpilot-source.json').asFile
   output.parentFile.mkdirs()
   output.text = groovy.json.JsonOutput.toJson([schema:'localpilot-source-v1', sourceSha:revision])
