@@ -120,35 +120,50 @@ public final class ModelLabActivity extends Activity {
    final int gpuLayers=selectedGpuLayers(choice);
    task("Проверяю GGUF для консольного агента",()->registerConsoleBrain(choice,gpuLayers),false);
   });
-  // A verified GGUF file is NOT proof that its native backend can infer.
-  // Call the real NES action runtime with deliberately absent game pixels.
+  // Hash-valid GGUF weights are NOT proof of real text or vision inference.
+  // The probe runs the exact native NES decision backend. Vision probes must
+  // use a previously transferred and verified real NES screenshot + mmproj.
   if(inUnifiedApk())button(col,"🧪 Проверить GGUF: настоящая генерация ACTION=STOP",()->{
    ModelLabStore.Entry choice=selected();
    if(choice==null){nesStatus.setText("Выбери скачанную или импортированную GGUF");return;}
    if(engine.busy()){nesStatus.setText("Движок уже занят");return;}
+   final boolean vision=choice.vision();
+   if(vision&&(!nesFrameLoaded||rgb==null||width<1||height<1)){
+    nesStatus.setText("Для проверки модели со зрением сначала передай реальный NES-кадр из GameLab.");
+    return;
+   }
+   final byte[] frameRgb=vision?rgb.clone():null;
+   final int frameWidth=width,frameHeight=height;
    final int offload=selectedGpuLayers(choice);
    task("Проверяю настоящий вывод NES-команды",()->{
     File weights=store.modelFile(choice);
+    File projector=vision?store.projectorFile(choice):null;
     runOnUiThread(()->{
      if(closed||selected()==null||!choice.id.equals(selected().id))return;
      try{
-      engine.consoleAction(weights,
-       "No NES framebuffer has been supplied. This is a model smoke test, not a game. "+
+      EmbeddedGgufRuntime.Result result=(answer,elapsed)->{
+       if(closed)return;
+       nesStatus.setText("ACTION=STOP".equals(answer)?
+        "GGUF inference PASS: "+choice.label+" · "+(vision?"реальный NES RGB + mmproj":"текст")+
+        " · ACTION=STOP · "+elapsed+" мс. Это ещё не доказательство победы в игре.":
+        "GGUF inference FAIL: "+choice.label+" · не получен строгий STOP. "+
+        "Неподтверждённая модель не получит права на NES-кнопку.");
+      };
+      if(vision)engine.consoleActionImage(weights,projector,
+       "A real NES screenshot is attached to this vision engine smoke test. "+
+       "Do not press a game button; return exactly ACTION=STOP.",
+       frameRgb,frameWidth,frameHeight,offload,result);
+      else engine.consoleAction(weights,
+       "No NES framebuffer has been supplied. This is a text model smoke test. "+
        "The only safe exact answer is ACTION=STOP.",
-       offload,(answer,elapsed)->{
-        if(closed)return;
-        nesStatus.setText("ACTION=STOP".equals(answer)?
-         "GGUF-генерация PASS: "+choice.label+" · ACTION=STOP · "+elapsed+
-         " мс. Это не подтверждение победы в NES или ускорения GPU.":
-         "GGUF-генерация FAIL: "+choice.label+" · модель не вернула строгий STOP. "+
-         "Несовместимая модель не будет действовать в NES.");
-       });
-      nesStatus.setText("Выполняется настоящий GGUF inference. Ожидаю ACTION=STOP...");
+       offload,result);
+      nesStatus.setText("Выполняется настоящий GGUF inference "+
+       (vision?"со снимком NES и mmproj":"по тексту")+". Ожидаю ACTION=STOP...");
      }catch(Exception|LinkageError failure){
       nesStatus.setText("GGUF не запущена: "+failure.getClass().getSimpleName());
      }
     });
-    return "Проверка настоящего inference запущена.";
+    return "Проверка нативного GGUF inference запущена.";
    },false);
   });
   button(col,"Объяснить последний NES-эпизод выбранной нейросетью",()->{
