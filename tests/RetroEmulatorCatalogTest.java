@@ -16,8 +16,8 @@ public final class RetroEmulatorCatalogTest {
     "Dendy timing is a distinct core mode");
   ok(nes.expectedFps==60&&dendy.expectedFps==50,"region clock distinction");
   ok(!dos.core.equals(nes.core)&&dos.coreOptionKey().isEmpty(),"DOSBox has separate core");
-  ok(dos.nativeLibraryName().equals("libdosbox_pure_libretro_android.so"),
-    "right DOS native core");
+  ok(dos.nativeLibraryName().isEmpty()&&"UNAVAILABLE_LOCALLY".equals(dos.availabilityCode()),
+    "absent DOSBox native core is never advertised as loadable");
   ok(nes.nativeLibraryName().isEmpty()&&nes.runnableInGameLab()&&dendy.runnableInGameLab(),
     "working NES runtime is not a missing native libretro core");
   ok(!dos.runnableInGameLab(),"DOS remains explicitly blocked before native core integration");
