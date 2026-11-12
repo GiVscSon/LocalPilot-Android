@@ -70,10 +70,39 @@ def target_bounds(xml_text: str, label: str) -> tuple[int, int] | None:
     return None
 
 
+def recover_system_ui_anr(xml_text: str) -> bool:
+    """Acknowledge only Android SYSTEM UI's transient Wait dialog.
+
+    Never dismiss an ANR of LocalPilot or any other application, and never
+    return a passing activity result merely because the dialog disappeared.
+    """
+    root = ET.fromstring(xml_text)
+    texts = [node.attrib.get("text", "").strip().casefold()
+             for node in root.iter("node")]
+    if not any(label in ("system ui isn't responding",
+                         "system ui is not responding") for label in texts):
+        return False
+    wait = None
+    for node in root.iter("node"):
+        if node.attrib.get("text", "").strip().casefold() != "wait":
+            continue
+        box = BOUNDS.fullmatch(node.attrib.get("bounds", ""))
+        if box is None:
+            continue
+        x1, y1, x2, y2 = (int(n) for n in box.groups())
+        if x1 < x2 and y1 < y2:
+            wait = ((x1 + x2) // 2, (y1 + y2) // 2)
+            break
+    if wait is None:
+        raise RuntimeError("System UI ANR detected; no safe Wait action")
+    adb("shell", "input", "tap", str(wait[0]), str(wait[1]), timeout=15)
+    return True
+
+
 def dump_ui() -> str:
     """Require a FRESH, real UiAutomator hierarchy; never accept cached XML."""
     failures = []
-    for compressed in (False, True, False):
+    for compressed in (False, True, False, True, False):
         try:
             # Removing only our own scratch dump prevents a stale false PASS.
             adb("shell", "rm", "-f", UI_PATH, timeout=12)
@@ -85,6 +114,10 @@ def dump_ui() -> str:
             root = ET.fromstring(value)
             if root.tag != "hierarchy" or not list(root.iter("node")):
                 raise RuntimeError("UiAutomator returned no accessible UI nodes")
+            if recover_system_ui_anr(value):
+                failures.append("System UI ANR dialog: selected Wait, must reverify app")
+                time.sleep(2)
+                continue
             return value
         except (ET.ParseError, RuntimeError, subprocess.TimeoutExpired) as error:
             failures.append(type(error).__name__ + ": " + str(error)[-550:])
