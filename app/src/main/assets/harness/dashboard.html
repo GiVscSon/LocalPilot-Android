@@ -144,6 +144,10 @@ function trainingPage(){
  const es=episodes(),changed=es.filter(e=>e.rows.some(x=>x.stage==="VISUAL"&&x.status==="PIXELS_DIFFER")).length;
  const im=snapshot.imitation||{},examples=Number(snapshot.learning.imitationExamples||0);
  const trained=im.active===true,eligible=examples>=12;
+ const usedEpisodes=trained?im.sourceEpisodes:(im.candidateSourceEpisodes||[]);
+ const holdoutEpisodes=im.candidateHoldoutEpisodes||[];
+ const sourceIds=Array.isArray(usedEpisodes)?usedEpisodes:[];
+ const evalIds=Array.isArray(holdoutEpisodes)?holdoutEpisodes:[];
  return '<div class="section-intro"><div><h2>Обучение и переиспользование</h2><p>Настоящая имитация действий GGUF → компактная CPU-политика. RL с наградой пока отдельно заблокирован.</p></div></div>'+
  '<div class="tiles">'+[["Реальных эпизодов",es.length,"≡"],["Визуальных переходов",changed,"◫"],["Примеров для имитации",examples,"✦"],["Принято Fast Policy",trained?1:0,"↯"]].map(x=>'<div class="tile"><div class="topline">'+E(x[0])+'<span>'+x[2]+'</span></div><div class="count">'+x[1]+'</div></div>').join("")+'</div>'+
  '<div class="layout"><div class="stack">'+
@@ -154,6 +158,9 @@ function trainingPage(){
  '<div class="row-stats"><span>Holdout accuracy</span><b>'+(trained?(100*im.accuracy).toFixed(1)+'%':'Не оценивалась')+'</b></div>'+
  '<div class="row-stats"><span>Baseline accuracy</span><b>'+(trained?(100*im.baseline).toFixed(1)+'%':'Не оценивалась')+'</b></div>'+
  '<div class="row-stats"><span>Сохранённый непринятый кандидат</span>'+chip(im.candidate?"ЕСТЬ":"НЕТ",im.candidate?"warn":"")+'</div>'+
+ '<div class="row-stats"><span>Эпизоды, использованные в обучении</span><b>'+sourceIds.length+'</b></div>'+
+ '<div class="panel-body tiny muted">Обучающие ID: '+(sourceIds.length?sourceIds.map(x=>E(String(x).slice(0,12))).join(", "):"Нет записей")+'</div>'+
+ '<div class="panel-body tiny muted">Holdout ID: '+(evalIds.length?evalIds.map(x=>E(String(x).slice(0,12))).join(", "):"Не проводился")+'</div>'+
  '<div class="callout">Для обучения нужны минимум 4 независимых реальных NES-эпизода и достаточно визуально проверенных действий. Holdout отделён по эпизодам. Кандидат продвигается только при улучшении точности имитации.</div>'+
  '<div class="compact-row">'+button("⚙ Обучить Fast Policy","learn","","primary",!eligible)+button("▶ Назначить обученную NES","bindPolicy","","",!trained)+button("Экспортировать эпизоды","export")+'</div>'+
  '</div>')+
