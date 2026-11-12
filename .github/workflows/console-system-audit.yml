@@ -1,0 +1,46 @@
+name: Console AI Lab · component links and actual capability audit
+on:
+  pull_request:
+    paths:
+      - 'app/**'
+      - 'model-lab/**'
+      - 'game-lab/**'
+      - 'shared/**'
+      - 'tools/console_system_audit.py'
+      - 'tests/test_console_system_audit.py'
+      - 'tests/ConsoleAgentContract*.java'
+      - 'tests/nes_ai_action_smoke.cjs'
+      - '.github/workflows/console-system-audit.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  console-contract-audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify compiled agent one-use token, TTL and whitelist
+        run: java tests/ConsoleAgentContractVerify.java
+      - name: Exercise actual NES WebView input function with safety cases
+        run: node tests/nes_ai_action_smoke.cjs
+      - name: Inspect real model to NES to episode connections and boundaries
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p 'test_console_system_audit.py' -v
+          python3 tools/console_system_audit.py --out build/console-audit/system.json
+      - name: Upload truth-labelled component report, not a release certificate
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: LocalPilot-Console-Components-${{ github.sha }}
+          retention-days: 14
+          if-no-files-found: warn
+          path: build/console-audit/system.json

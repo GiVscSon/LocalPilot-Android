@@ -99,7 +99,9 @@ public final class ModelLabActivity extends Activity {
   }catch(Exception failure){
    status.setText("Ошибка локального каталога: "+failure.getMessage());return;
   }
-  title(col,"NES · единый эксперимент GameLab → ModelLab");
+  title(col,"NES · общий агентный цикл: наблюдение → GGUF → ход → проверка");
+  line(col,"Проверенные NES-эпизоды той же модели используются как ограниченный "+
+    "контекст следующего решения. Это НЕ обучение весов GGUF и НЕ игровая награда.");
   button(col,"Вернуться к консольным эмуляторам · NES",()->{
    try{
     Intent companion=new Intent(Intent.ACTION_MAIN)
@@ -159,6 +161,10 @@ public final class ModelLabActivity extends Activity {
    task("Проверяю выбранный GGUF для NES",()->{
     File weights=store.modelFile(selection);
     File projector=(selection.vision()&&pixels!=null)?store.projectorFile(selection):null;
+    // Read the SAME model's previously verified NES episodes in the storage
+    // worker, never on the UI or native inference thread.
+    final String priorEvidence=ConsoleEpisodeContext.read(
+      getFilesDir(),selection.id,selection.modelSha);
     final String instruction=
       "You are selecting exactly ONE controller button in a sandbox NES homebrew. "+
       "Observation frame="+observedFrame+" pixelHash="+Integer.toUnsignedString(observedHash)+". "+
@@ -189,7 +195,8 @@ public final class ModelLabActivity extends Activity {
        catch(RuntimeException error){nesStatus.setText("STOP: NES-контроллер недоступен");}
       };
       String agentObservation=(projector!=null?
-        "A real 128x120 RGB screenshot is attached. ":"TEXT-ONLY BLIND PROPOSAL: no image understanding. ")+instruction;
+        "A real 128x120 RGB screenshot is attached. ":"TEXT-ONLY BLIND PROPOSAL: no image understanding. ")+
+        instruction+" "+priorEvidence;
       engine.proposeNesButton(weights,projector,agentObservation,pixels,w,h,
         selectedGpuLayers(selection),callback);
       nesStatus.setText(projector!=null?
