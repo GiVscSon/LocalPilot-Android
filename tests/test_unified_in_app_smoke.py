@@ -24,10 +24,10 @@ class UnifiedUiSmokeContract(unittest.TestCase):
         self.assertNotEqual(smoke.MODEL,smoke.GAMELAB)
         self.assertNotEqual(smoke.GAMELAB,smoke.NES)
     def test_companion_absence_is_exact_and_does_not_depend_on_pm_path(self):
-        with patch.object(smoke, "adb", return_value="package:org.localpilot.modellab.debug\\n") as fake:
+        with patch.object(smoke, "adb", return_value="package:org.localpilot.modellab.debug\n") as fake:
             self.assertTrue(smoke.companion_absent("org.localpilot.modellab"))
             fake.assert_called_once_with("shell", "pm", "list", "packages", "org.localpilot.modellab")
-        with patch.object(smoke, "adb", return_value="package:org.localpilot.modellab\\n"):
+        with patch.object(smoke, "adb", return_value="package:org.localpilot.modellab\n"):
             self.assertFalse(smoke.companion_absent("org.localpilot.modellab"))
         with patch.object(smoke, "adb", side_effect=RuntimeError("ADB disconnected")):
             with self.assertRaisesRegex(RuntimeError, "disconnected"):
