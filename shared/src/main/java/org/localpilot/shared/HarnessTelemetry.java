@@ -26,25 +26,31 @@ public final class HarnessTelemetry {
  private static volatile String modelId="";
  private static volatile String game="";
  private static volatile boolean active;
+ private static volatile boolean stopRequested;
  public static synchronized void install(Sink consumer){sink=consumer;}
  public static boolean healthy(){Sink current=sink;return current==null||current.healthy();}
  public static String episode(){return active?episode:"";}
  public static String modelId(){return active?modelId:"";}
  public static boolean active(){return active;}
+ public static boolean stopRequested(){return stopRequested;}
+ public static void requestStop(){
+  stopRequested=true;
+  emit("STOP","REQUESTED","user requested immediate cancel",0);
+ }
  public static synchronized String begin(String gameName,String model) {
   if(active)throw new IllegalStateException("Harness already owns an episode");
   if(!healthy())throw new IllegalStateException("Harness audit is unavailable");
   if(gameName==null||gameName.isBlank()||model==null||model.isBlank())
    throw new IllegalArgumentException("Real environment and selected model required");
   episode=UUID.randomUUID().toString();
-  game=gameName;modelId=model;active=true;
+  game=gameName;modelId=model;stopRequested=false;active=true;
   emit("SESSION","STARTED","real emulator; goal reward UNKNOWN",-1);
   return episode;
  }
  public static synchronized void end(String reason) {
   if(!active)return;
   emit("STOP","STOPPED",reason,-1);
-  active=false;episode="";modelId="";game="";
+  active=false;stopRequested=false;episode="";modelId="";game="";
  }
  public static void emit(String stage,String status,String detail,long latencyMs){
   Sink listener=sink;
