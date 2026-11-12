@@ -70,7 +70,8 @@ def ensure_llama() -> None:
 
 
 def local_candidate(keystore: Path, alias: str, pinned_cert: str,
-                    source_sha: str, sdk: Path, output: Path) -> Path:
+                    source_sha: str, sdk: Path, output: Path,
+                    previous: Path | None = None) -> Path:
     if os.environ.get("GITHUB_ACTIONS", "").lower() == "true":
         raise ValueError("Owner-local signing only; CI uses protected workflow")
     if not sys.stdin.isatty():
@@ -124,15 +125,22 @@ def local_candidate(keystore: Path, alias: str, pinned_cert: str,
     secret_env.pop("LOCALPILOT_RELEASE_STORE_PASS", None)
     secret_env.pop("LOCALPILOT_RELEASE_KEY_PASS", None)
     run([align, "-c", "-P", "16", "4", str(unverified)])
-    run([sys.executable, str(REPO / "tools/unified_signed_release_gate.py"),
-         "--apk", str(unverified), "--aapt", aapt, "--apksigner", signer,
-         "--cert", pinned_cert, "--source-sha", source_sha,
-         "--output", str(manifest)])
+    gate = [sys.executable, str(REPO / "tools/unified_signed_release_gate.py"),
+            "--apk", str(unverified), "--aapt", aapt, "--apksigner", signer,
+            "--cert", pinned_cert, "--source-sha", source_sha,
+            "--output", str(manifest)]
+    if previous is not None:
+        if not previous.is_file():
+            raise ValueError("Prior signed manifest not found")
+        gate += ["--previous", str(previous)]
+    run(gate)
     final = output / "LocalPilot-UNIFIED-SIGNED-CANDIDATE.apk"
     unverified.rename(final)
     checksum = hashlib.sha256(final.read_bytes()).hexdigest()
+    manifest_checksum = hashlib.sha256(manifest.read_bytes()).hexdigest()
     (output / "SHA256SUMS.txt").write_text(
-        f"{checksum}  {final.name}\n", encoding="utf-8")
+        f"{checksum}  {final.name}\n"
+        f"{manifest_checksum}  {manifest.name}\n", encoding="utf-8")
     print("SIGNED_CANDIDATE_VERIFIED; releaseReady=false; physical test NOT DONE")
     return final
 
@@ -144,13 +152,16 @@ def main() -> None:
     p.add_argument("--cert", required=True, help="Public 64-hex SHA-256 certificate pin")
     p.add_argument("--source-sha", required=True)
     p.add_argument("--sdk", type=Path, required=True, help="Existing Android SDK root")
+    p.add_argument("--previous-manifest", type=Path,
+                   help="Earlier signed candidate manifest: require same signer and higher version")
     p.add_argument("--output-dir", type=Path, required=True,
                    help="Fresh, trusted directory OUTSIDE this checkout")
     args = p.parse_args()
     try:
         local_candidate(args.keystore.resolve(), args.alias, args.cert,
                         args.source_sha, args.sdk.resolve(),
-                        args.output_dir.resolve())
+                        args.output_dir.resolve(),
+                        args.previous_manifest.resolve() if args.previous_manifest else None)
     except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as failure:
         raise SystemExit("LOCAL_SIGNED_CANDIDATE_STOP: " + str(failure))
 
