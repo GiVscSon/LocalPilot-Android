@@ -30,6 +30,7 @@ const jsnes={
   }
 };
 const window={
+  addEventListener:()=>{},
   GameLabBridge:{
     onStatus:()=>{},
     onFrame:()=>{},
