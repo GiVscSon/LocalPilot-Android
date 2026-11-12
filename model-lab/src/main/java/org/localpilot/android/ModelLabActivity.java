@@ -102,6 +102,9 @@ public final class ModelLabActivity extends Activity {
   }
   title(col,"NES · единый эксперимент GameLab → ModelLab");
   button(col,"Вернуться к консольным эмуляторам · NES",()->{
+   if(ConsoleAgentContract.tokenValid(consoleAgentTicket)){
+    cancelConsoleAgent();return; // return to the existing NES game and revoke token
+   }
    try{
     Intent companion=new Intent(Intent.ACTION_MAIN)
       .setClassName(inUnifiedApk()?getPackageName():"org.localpilot.gamelab",
@@ -158,8 +161,19 @@ public final class ModelLabActivity extends Activity {
    final int w=width,h=height;
    nesStatus.setText("ИИ анализирует наблюдение NES и предлагает один ограниченный ход...");
    task("Проверяю выбранный GGUF для NES",()->{
-    File weights=store.modelFile(selection);
-    File projector=(selection.vision()&&pixels!=null)?store.projectorFile(selection):null;
+    final File weights,projector;
+    try{
+     weights=store.modelFile(selection);
+     projector=(selection.vision()&&pixels!=null)?store.projectorFile(selection):null;
+    }catch(Exception badWeights){
+     runOnUiThread(()->{
+      if(!closed&&nonce.equals(consoleAgentTicket)){
+       nesStatus.setText("STOP: GGUF или проектор отсутствует либо повреждён");
+       cancelConsoleAgent();
+      }
+     });
+     return "STOP: не удалось проверить веса NES-агента";
+    }
     final String instruction=
       "You are selecting exactly ONE controller button in a sandbox NES homebrew. "+
       "Observation frame="+observedFrame+" pixelHash="+Integer.toUnsignedString(observedHash)+". "+
@@ -173,11 +187,10 @@ public final class ModelLabActivity extends Activity {
      try{
       EmbeddedGgufRuntime.Result callback=(answer,elapsed)->{
        if(closed||!revisions.currentNes(revision)||!nonce.equals(consoleAgentTicket))return;
-       consoleAgentTicket=null; // one request, one result, never replay
        String button=ConsoleAgentContract.parseButton(answer);
        if(button==null){
-        nesStatus.setText("STOP: модель не выдала строго BUTTON=...; действие запрещено. "+
-          "Время "+elapsed+" мс. Повтори наблюдение в NES.");return;
+        nesStatus.setText("STOP: модель не выдала ровно BUTTON=... ("+elapsed+" мс)");
+        cancelConsoleAgent();return;
        }
        Intent move=new Intent(ConsoleAgentContract.MOVE)
         .setClassName(getPackageName(),"org.localpilot.gamelab.NesEmulatorActivity")
@@ -186,8 +199,13 @@ public final class ModelLabActivity extends Activity {
         .putExtra(ConsoleAgentContract.BUTTON,button)
         .putExtra(ConsoleAgentContract.MODEL_ID,selection.id)
         .putExtra(ConsoleAgentContract.MODEL_SHA,selection.modelSha);
-       try{startActivity(move);}
-       catch(RuntimeException error){nesStatus.setText("STOP: NES-контроллер недоступен");}
+       try{
+        startActivity(move);
+        consoleAgentTicket=null; // the only requested action was sent
+       }catch(RuntimeException error){
+        nesStatus.setText("STOP: NES-контроллер недоступен");
+        cancelConsoleAgent();
+       }
       };
       // Consume only verified history for this exact model SHA. This gives
       // successive proposals context, NOT a weight update or fabricated score.
@@ -196,8 +214,8 @@ public final class ModelLabActivity extends Activity {
        prior=ConsoleExperienceMemory.context(getFilesDir().toPath(),
          selection.id,selection.modelSha);
       }catch(java.io.IOException damaged){
-       consoleAgentTicket=null;
        nesStatus.setText("STOP: история NES повреждена, модель не получает непроверенный опыт");
+       cancelConsoleAgent();
        return;
       }
       String agentObservation=(projector!=null?
@@ -209,17 +227,19 @@ public final class ModelLabActivity extends Activity {
         "Vision GGUF анализирует NES и учитывает проверенную историю своей модели (без обучения весов)...":
         "Text GGUF выбирает пробный ход без зрения и учитывает свою историю (без обучения весов)...");
      }catch(RuntimeException failure){
-      consoleAgentTicket=null;
       nesStatus.setText("STOP: GGUF не запущен: "+failure.getClass().getSimpleName());
+      cancelConsoleAgent();
      }
     });
     return "GGUF проверен; ожидается вывод и независимая проверка NES";
    },false);
   });
   button(col,"STOP · отменить локальную генерацию",()->{
-   if(engine.requestCancel())
-    status.setText("Отмена запрошена. Движок освободится после завершения нативного вызова.");
-   else status.setText("Сейчас нет активного анализа модели.");
+   boolean running=engine.requestCancel();
+   if(ConsoleAgentContract.tokenValid(consoleAgentTicket))cancelConsoleAgent();
+   if(running)
+    status.setText("STOP: генерация отменяется; NES-сеанс больше не ждёт ответ модели.");
+   else status.setText("STOP: активной генерации нет; ожидающий NES-запрос отозван.");
   });
   title(col,"Выбор модели");
   modelPicker=new Spinner(this);
@@ -458,6 +478,20 @@ public final class ModelLabActivity extends Activity {
   receiveNesIntent(getIntent());
  }
 
+ private void cancelConsoleAgent(){
+  String token=consoleAgentTicket;
+  consoleAgentTicket=null;
+  if(!inUnifiedApk()||!ConsoleAgentContract.tokenValid(token))return;
+  Intent cancel=new Intent(ConsoleAgentContract.CANCEL)
+    .setClassName(getPackageName(),"org.localpilot.gamelab.NesEmulatorActivity")
+    .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP|Intent.FLAG_ACTIVITY_SINGLE_TOP)
+    .putExtra(ConsoleAgentContract.TOKEN,token);
+  try{startActivity(cancel);}
+  catch(RuntimeException unavailable){
+   if(nesStatus!=null)nesStatus.setText(
+     "STOP: NES не открылся; токен недействителен, повторный ход не разрешён");
+  }
+ }
  private void receiveConsoleAgentObservation(Intent intent){
   revisions.newNes();revisions.newImage();
   consoleAgentTicket=null;nesTrial=null;
