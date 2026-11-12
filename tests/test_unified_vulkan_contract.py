@@ -89,6 +89,14 @@ class OneApkVulkanContract(unittest.TestCase):
         self.assertNotIn("PilotService",lab)
         self.assertNotIn("dispatchGesture",lab)
 
+    def test_standalone_runtime_cannot_obtain_nes_action_authority(self):
+        standalone=source("model-lab/src/main/java/org/localpilot/android/EmbeddedGgufRuntime.java")
+        self.assertIn("public void consoleAction(",standalone)
+        self.assertIn("public void consoleActionImage(",standalone)
+        self.assertEqual(standalone.count("NES agent inference requires the single unified APK"),2)
+        self.assertNotIn("ConsoleAgentBridge",standalone)
+        self.assertNotIn("PilotService",standalone)
+
     def test_ci_uses_exact_pins_and_never_publishes(self):
         workflow=source(".github/workflows/localpilot-console-vulkan.yml")
         for key in ("09913f088a1197aba4aefd300a876b2ebbaa3391",
