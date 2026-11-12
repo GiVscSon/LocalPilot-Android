@@ -117,7 +117,8 @@ public final class ModelLabActivity extends Activity {
   if(inUnifiedApk())button(col,"🧠 Назначить выбранную GGUF нейроагентом NES",()->{
    ModelLabStore.Entry choice=selected();
    if(choice==null){nesStatus.setText("Сначала загрузи или импортируй GGUF");return;}
-   task("Проверяю GGUF для консольного агента",()->registerConsoleBrain(choice),false);
+   final int gpuLayers=selectedGpuLayers(choice);
+   task("Проверяю GGUF для консольного агента",()->registerConsoleBrain(choice,gpuLayers),false);
   });
   button(col,"Объяснить последний NES-эпизод выбранной нейросетью",()->{
    NesTrial evidence=nesTrial;
@@ -476,7 +477,15 @@ public final class ModelLabActivity extends Activity {
   *  The runtime and checked GGUF files are app-scoped; no Activity is retained.
   */
  private String registerConsoleBrain(ModelLabStore.Entry choice)throws Exception{
+  return registerConsoleBrain(choice,0); // auto-binding stays CPU by default
+ }
+ private String registerConsoleBrain(ModelLabStore.Entry choice,int requestedGpuLayers)throws Exception{
   if(!inUnifiedApk())return "Нейроагент NES доступен только в едином APK";
+  if(requestedGpuLayers!=0&&requestedGpuLayers!=8&&requestedGpuLayers!=16)
+   throw new IllegalArgumentException("Invalid agent GPU layer count");
+  if(requestedGpuLayers>0&&!BuildConfig.VULKAN_COMPILED)
+   throw new IllegalStateException("Vulkan backend not compiled");
+  final int offload=requestedGpuLayers;
   final File weights=store.modelFile(choice);
   final File projector=choice.vision()?store.projectorFile(choice):null;
   final EmbeddedGgufRuntime runtime=engine;
@@ -487,7 +496,7 @@ public final class ModelLabActivity extends Activity {
    public void decide(String observation,byte[] png,ConsoleAgentBridge.Reply reply){
     try{
      if(runtime.busy())throw new IllegalStateException("GGUF engine busy");
-     if(projector==null)runtime.text(weights,observation,0,
+     if(projector==null)runtime.text(weights,observation,offload,
        (answer,elapsed)->reply.complete(answer));
      else{
       NesFrameTransfer.verify(png);
@@ -505,13 +514,14 @@ public final class ModelLabActivity extends Activity {
        rgb[3*i+1]=(byte)(pixels[i]>>>8);
        rgb[3*i+2]=(byte)pixels[i];
       }
-      runtime.image(weights,projector,observation,rgb,w,h,0,
+      runtime.image(weights,projector,observation,rgb,w,h,offload,
         (answer,elapsed)->reply.complete(answer));
      }
     }catch(Exception|LinkageError failure){reply.complete("");}
    }
   });
   return "Нейроагент готов: "+choice.label+
+    (offload==0?" · CPU":" · Vulkan GPU"+offload)+
     (projector==null?" · текстовое наблюдение":" · NES кадр + mmproj")+
     ". Открой NES, запусти встроенный homebrew и нажми «Нейроагент».";
  }
