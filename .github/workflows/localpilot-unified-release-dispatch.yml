@@ -9,6 +9,7 @@ on:
   pull_request:
     paths:
       - '.github/workflows/localpilot-unified-release-dispatch.yml'
+      - 'tests/test_release_dispatch_policy.py'
 permissions:
   contents: read
 jobs:
@@ -24,20 +25,25 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           content=Path(".github/workflows/localpilot-unified-release-dispatch.yml").read_text()
+          header=content.split("\njobs:\n", 1)[0]
+          assert "workflow_dispatch:" in header, "Manual dispatch trigger missing"
+          signing=content.split("\n  signed-candidate:\n", 1)[1]
           required=[
-              "workflow_dispatch:", "environment: android-signing",
+              "environment: android-signing",
               "if: github.event_name == 'workflow_dispatch'",
               "secrets.LOCALPILOT_RELEASE_KEYSTORE_B64",
               "vars.LOCALPILOT_RELEASE_CERT_SHA256",
               "tools/unified_signed_release_gate.py",
               "releaseReady=false",
+              "LOCALPILOT_BUILD_SOURCE_SHA:",
           ]
-          assert all(word in content for word in required)
-          signing=content.split("\n  signed-candidate:\n", 1)[1]
+          assert all(word in signing for word in required), "Protected signing job contract missing"
           assert "gh release create" not in signing
           assert "contents: write" not in signing
           print("SIGNING_DISPATCH_POLICY_PASS: no keys or signed artifacts")
           PY
+      - name: Reject missing protection in mutated workflow contracts
+        run: python3 -m unittest discover -s tests -p test_release_dispatch_policy.py -v
 
   signed-candidate:
     if: github.event_name == 'workflow_dispatch'
@@ -100,6 +106,10 @@ jobs:
           test "$(git rev-parse HEAD)" = 2b66bfbf7107e43f5cd2fe99802ff6e872e4c4d0
       - name: Build exactly one unsigned unified release APK
         shell: bash
+        env:
+          # GITHUB_SHA remains the workflow's event commit on main. The app
+          # provenance task must validate the separately reviewed checkout.
+          LOCALPILOT_BUILD_SOURCE_SHA: ${{ inputs.source_sha }}
         run: |
           set -euo pipefail
           ./gradlew --no-daemon --max-workers=2 --no-parallel \
