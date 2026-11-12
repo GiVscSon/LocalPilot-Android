@@ -484,7 +484,7 @@ public final class NesEmulatorActivity extends Activity {
   }
   final long serial=neuralSerial;
   final String token=neuralSnapshot.begin();
-  web.evaluateJavascript("window.retroSnapshot("+org.json.JSONObject.quote(token)+")",result->{
+  web.evaluateJavascript("window.retroAgentSnapshot("+org.json.JSONObject.quote(token)+")",result->{
    if(neuralSnapshot.current(token)&&!"true".equals(result))
     stopNeuralAgent("STOP: снимок NES не создан");
   });

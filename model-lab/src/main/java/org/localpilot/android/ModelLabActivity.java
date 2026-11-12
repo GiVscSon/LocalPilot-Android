@@ -117,7 +117,54 @@ public final class ModelLabActivity extends Activity {
   if(inUnifiedApk())button(col,"🧠 Назначить выбранную GGUF нейроагентом NES",()->{
    ModelLabStore.Entry choice=selected();
    if(choice==null){nesStatus.setText("Сначала загрузи или импортируй GGUF");return;}
-   task("Проверяю GGUF для консольного агента",()->registerConsoleBrain(choice),false);
+   final int gpuLayers=selectedGpuLayers(choice);
+   task("Проверяю GGUF для консольного агента",()->registerConsoleBrain(choice,gpuLayers),false);
+  });
+  // Hash-valid GGUF weights are NOT proof of real text or vision inference.
+  // The probe runs the exact native NES decision backend. Vision probes must
+  // use a previously transferred and verified real NES screenshot + mmproj.
+  if(inUnifiedApk())button(col,"🧪 Проверить GGUF: настоящая генерация ACTION=STOP",()->{
+   ModelLabStore.Entry choice=selected();
+   if(choice==null){nesStatus.setText("Выбери скачанную или импортированную GGUF");return;}
+   if(engine.busy()){nesStatus.setText("Движок уже занят");return;}
+   final boolean vision=choice.vision();
+   if(vision&&(!nesFrameLoaded||rgb==null||width<1||height<1)){
+    nesStatus.setText("Для проверки модели со зрением сначала передай реальный NES-кадр из GameLab.");
+    return;
+   }
+   final byte[] frameRgb=vision?rgb.clone():null;
+   final int frameWidth=width,frameHeight=height;
+   final int offload=selectedGpuLayers(choice);
+   task("Проверяю настоящий вывод NES-команды",()->{
+    File weights=store.modelFile(choice);
+    File projector=vision?store.projectorFile(choice):null;
+    runOnUiThread(()->{
+     if(closed||selected()==null||!choice.id.equals(selected().id))return;
+     try{
+      EmbeddedGgufRuntime.Result result=(answer,elapsed)->{
+       if(closed)return;
+       nesStatus.setText("ACTION=STOP".equals(answer)?
+        "GGUF inference PASS: "+choice.label+" · "+(vision?"реальный NES RGB + mmproj":"текст")+
+        " · ACTION=STOP · "+elapsed+" мс. Это ещё не доказательство победы в игре.":
+        "GGUF inference FAIL: "+choice.label+" · не получен строгий STOP. "+
+        "Ответ вне грамматики ACTION будет отклонён контроллером NES (STOP).");
+      };
+      if(vision)engine.consoleActionImage(weights,projector,
+       "A real NES screenshot is attached to this vision engine smoke test. "+
+       "Do not press a game button; return exactly ACTION=STOP.",
+       frameRgb,frameWidth,frameHeight,offload,result);
+      else engine.consoleAction(weights,
+       "No NES framebuffer has been supplied. This is a text model smoke test. "+
+       "The only safe exact answer is ACTION=STOP.",
+       offload,result);
+      nesStatus.setText("Выполняется настоящий GGUF inference "+
+       (vision?"со снимком NES и mmproj":"по тексту")+". Ожидаю ACTION=STOP...");
+     }catch(Exception|LinkageError failure){
+      nesStatus.setText("GGUF не запущена: "+failure.getClass().getSimpleName());
+     }
+    });
+    return "Проверка нативного GGUF inference запущена.";
+   },false);
   });
   button(col,"Объяснить последний NES-эпизод выбранной нейросетью",()->{
    NesTrial evidence=nesTrial;
@@ -476,10 +523,64 @@ public final class ModelLabActivity extends Activity {
   *  The runtime and checked GGUF files are app-scoped; no Activity is retained.
   */
  private String registerConsoleBrain(ModelLabStore.Entry choice)throws Exception{
+  return registerConsoleBrain(choice,0); // auto-binding stays CPU by default
+ }
+ private String registerConsoleBrain(ModelLabStore.Entry choice,int requestedGpuLayers)throws Exception{
   if(!inUnifiedApk())return "Нейроагент NES доступен только в едином APK";
+  if(requestedGpuLayers!=0&&requestedGpuLayers!=8&&requestedGpuLayers!=16)
+   throw new IllegalArgumentException("Invalid agent GPU layer count");
+  if(requestedGpuLayers>0&&!BuildConfig.VULKAN_COMPILED)
+   throw new IllegalStateException("Vulkan backend not compiled");
+  final int offload=requestedGpuLayers;
   final File weights=store.modelFile(choice);
   final File projector=choice.vision()?store.projectorFile(choice):null;
   final EmbeddedGgufRuntime runtime=engine;
+  installConsoleBrain(choice,weights,projector,runtime,offload);
+  // Persist the elected local role, not the GGUF bytes or any Android input rights.
+  getApplicationContext().getSharedPreferences("localpilot-console-assignment",MODE_PRIVATE)
+    .edit().putString("modelId",choice.id).apply();
+  return "GGUF назначена NES (генерация ещё не проверена): "+choice.label+
+    (offload==0?" · CPU":" · Vulkan GPU"+offload)+
+    (projector==null?" · текстовое наблюдение":" · NES кадр + mmproj")+
+    ". Открой NES, запусти встроенный homebrew и нажми «Нейроагент».";
+ }
+ /** Restore the last user-selected NES role after an Android process restart.
+  * This validates actual local GGUF/mmproj bytes off-main-thread. CPU is chosen
+  * after restart; GPU requires a fresh explicit opt-in.
+  */
+ public static void restoreConsoleBrain(android.content.Context context){
+  if(context==null||!context.getPackageName().startsWith("org.localpilot.android"))return;
+  final android.content.Context app=context.getApplicationContext();
+  final String wanted=app.getSharedPreferences("localpilot-console-assignment",0)
+   .getString("modelId",null);
+  if(wanted==null||wanted.isBlank())return;
+  Thread restore=new Thread(()->{
+   try{
+    final ModelLabStore catalog;
+    final EmbeddedGgufRuntime runtime;
+    synchronized(ModelLabActivity.class){
+     if(unifiedStore==null)unifiedStore=new ModelLabStore(app);
+     if(unifiedEngine==null)unifiedEngine=new EmbeddedGgufRuntime(app);
+     catalog=unifiedStore;
+     runtime=unifiedEngine;
+    }
+    ModelLabStore.Entry chosen=catalog.find(wanted);
+    if(chosen==null)return;
+    File weights=catalog.modelFile(chosen);
+    File projector=chosen.vision()?catalog.projectorFile(chosen):null;
+    if(!wanted.equals(app.getSharedPreferences("localpilot-console-assignment",0)
+                         .getString("modelId",null)))return;
+    installConsoleBrain(chosen,weights,projector,runtime,0);
+   }catch(Exception|LinkageError invalid){
+    // Broken or removed model must NEVER become a controller. No implicit
+    // download and no synthetic action or success is performed here.
+   }
+  },"LocalPilot-Console-Model-Restore");
+  restore.setDaemon(true);
+  restore.start();
+ }
+ private static void installConsoleBrain(ModelLabStore.Entry choice,File weights,
+                    File projector,EmbeddedGgufRuntime runtime,int offload){
   ConsoleAgentBridge.set(new ConsoleAgentBridge.Brain(){
    public String label(){return choice.label;}
    public boolean vision(){return projector!=null;}
@@ -487,7 +588,7 @@ public final class ModelLabActivity extends Activity {
    public void decide(String observation,byte[] png,ConsoleAgentBridge.Reply reply){
     try{
      if(runtime.busy())throw new IllegalStateException("GGUF engine busy");
-     if(projector==null)runtime.text(weights,observation,0,
+     if(projector==null)runtime.consoleAction(weights,observation,offload,
        (answer,elapsed)->reply.complete(answer));
      else{
       NesFrameTransfer.verify(png);
@@ -505,15 +606,12 @@ public final class ModelLabActivity extends Activity {
        rgb[3*i+1]=(byte)(pixels[i]>>>8);
        rgb[3*i+2]=(byte)pixels[i];
       }
-      runtime.image(weights,projector,observation,rgb,w,h,0,
+      runtime.consoleActionImage(weights,projector,observation,rgb,w,h,offload,
         (answer,elapsed)->reply.complete(answer));
      }
     }catch(Exception|LinkageError failure){reply.complete("");}
    }
   });
-  return "Нейроагент готов: "+choice.label+
-    (projector==null?" · текстовое наблюдение":" · NES кадр + mmproj")+
-    ". Открой NES, запусти встроенный homebrew и нажми «Нейроагент».";
  }
  private void refresh(){
   if(closed||modelPicker==null)return;

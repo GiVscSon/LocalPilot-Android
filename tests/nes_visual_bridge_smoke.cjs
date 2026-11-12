@@ -6,14 +6,14 @@ const assert=require("node:assert/strict");
 const fs=require("node:fs");
 const vm=require("node:vm");
 const source=fs.readFileSync("game-lab/src/main/assets/nes/index.html","utf8");
-const start=source.indexOf("window.retroSnapshot=function(token){");
+const start=source.indexOf("function captureSnapshot(token,lockForAgent){");
 const end=source.indexOf("window.retroMetrics=function()",start);
 assert(start>=0&&end>start,"NES snapshot implementation is missing");
 const snippet=source.slice(start,end);
 let frame="data:image/png;base64,"+Buffer.from("NES frame sentinel").toString("base64");
 let received=[];
 const ctx={
- nes:{},paused:false,canvas:{name:"game-frame"},
+ nes:{},paused:false,agentThinking:false,agentTrial:null,homebrewRom:true,canvas:{name:"game-frame"},
  window:{GameLabBridge:{onSnapshot(value,token){received.push([value,token]);}}},
  document:{createElement(type){
   assert.equal(type,"canvas");
@@ -46,4 +46,13 @@ assert.equal(ctx.window.retroSnapshot(),false,"non-PNG export must be rejected")
 assert.equal(received.length,1);
 ctx.window.GameLabBridge=null;
 assert.equal(ctx.window.retroSnapshot(),false,"absent Android bridge must be rejected");
-console.log("NES_VISUAL_JS_BRIDGE_PASS cases=8 dimensions=128x120 serial=42");
+ctx.window.GameLabBridge={onSnapshot(value,token){received.push([value,token]);}};
+frame="data:image/png;base64,"+Buffer.from("frozen homebrew NES frame").toString("base64");
+assert.equal(ctx.window.retroAgentSnapshot("43"),true,"Agent capture must succeed only on homebrew");
+assert.equal(ctx.agentThinking,true,"Agent snapshot must hold the framebuffer stable");
+assert.equal(ctx.window.retroSnapshot("44"),false,"Manual export cannot race with model");
+ctx.agentThinking=false;
+ctx.homebrewRom=false;
+assert.equal(ctx.window.retroAgentSnapshot("45"),false,"User ROMs cannot be assigned neural actions");
+
+console.log("NES_VISUAL_JS_BRIDGE_PASS cases=11 dimensions=128x120 serial=42");
