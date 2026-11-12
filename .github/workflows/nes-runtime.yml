@@ -9,6 +9,7 @@ on:
       - 'tests/jsnes_nes_smoke.cjs'
       - 'shared/src/main/java/org/localpilot/shared/HarnessCoordinator.java'
       - 'tests/HarnessCoordinator*.java'
+      - 'tests/PpoGaeMathVerify.java'
       - 'tests/nes_controller_framehold.cjs'
       - 'tests/nes_step_mode_smoke.cjs'
       - 'tests/ExportHomebrewNes.java'
@@ -34,6 +35,7 @@ on:
       - 'tests/jsnes_nes_smoke.cjs'
       - 'shared/src/main/java/org/localpilot/shared/HarnessCoordinator.java'
       - 'tests/HarnessCoordinator*.java'
+      - 'tests/PpoGaeMathVerify.java'
       - 'tests/nes_controller_framehold.cjs'
       - 'tests/nes_step_mode_smoke.cjs'
       - 'tests/ExportHomebrewNes.java'
@@ -75,6 +77,11 @@ jobs:
 
       - name: Verify single-writer Harness permits, STOP, TTL and ROM epoch
         run: java tests/HarnessCoordinatorVerify.java
+      - name: Verify PPO clipping and duration-aware GAE (synthetic math only)
+        run: |
+          mkdir -p build/ppo-gaetest
+          javac --release 17 -d build/ppo-gaetest tests/PpoGaeMathVerify.java
+          java -cp build/ppo-gaetest PpoGaeMathVerify
       - name: Verify controller press is observed by real emulated frames
         run: node tests/nes_controller_framehold.cjs
       - name: Execute real iNES homebrew under JavaScript CPU/PPU
