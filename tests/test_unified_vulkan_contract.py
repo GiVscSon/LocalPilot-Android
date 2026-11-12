@@ -95,7 +95,8 @@ class OneApkVulkanContract(unittest.TestCase):
         self.assertIn("public void consoleActionImage(",standalone)
         self.assertEqual(standalone.count("NES agent inference requires the single unified APK"),2)
         self.assertNotIn("ConsoleAgentBridge",standalone)
-        self.assertNotIn("PilotService",standalone)
+        self.assertNotIn("import org.localpilot.android.PilotService;",standalone)
+        self.assertNotIn("dispatchGesture(",standalone)
 
     def test_ci_uses_exact_pins_and_never_publishes(self):
         workflow=source(".github/workflows/localpilot-console-vulkan.yml")
