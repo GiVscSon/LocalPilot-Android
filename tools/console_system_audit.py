@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 import re
 import subprocess
+import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -30,12 +31,23 @@ def inspect() -> dict:
     training = source("app/src/main/java/org/localpilot/android/TrainingActivity.java")
     retro = source("game-lab/src/main/java/org/localpilot/gamelab/RetroEmulatorCatalog.java")
     smoke = source("tools/unified_in_app_smoke.py")
+    # Android <queries> may mention LAUNCHER but does not create a launcher.
+    # Verify actual activity intent-filters instead of counting the text.
+    root_xml=ET.fromstring(manifest)
+    android_name="{http://schemas.android.com/apk/res/android}name"
+    launcher_activities=[]
+    for activity in root_xml.findall("./application/activity"):
+        for intent in activity.findall("intent-filter"):
+            actions={a.get(android_name) for a in intent.findall("action")}
+            cats={a.get(android_name) for a in intent.findall("category")}
+            if "android.intent.action.MAIN" in actions and "android.intent.category.LAUNCHER" in cats:
+                launcher_activities.append(activity.get(android_name))
     checks = {
       "one_app_sources": ("../game-lab/src/main/java" in app and
           "generated/source/unified-model-lab" in app and
           "exclude '**/EmbeddedGgufRuntime.java'" in app),
       "one_launcher_internal_modules": (
-          manifest.count('android.intent.category.LAUNCHER') == 1 and
+          launcher_activities == [".MainActivity"] and
           '<activity android:name=".ModelLabActivity" android:exported="false"' in manifest and
           '<activity android:name="org.localpilot.gamelab.NesEmulatorActivity" android:exported="false"' in manifest),
       "console_navigation": ("new Intent(this,org.localpilot.gamelab.RetroLibraryActivity.class)" in main and
