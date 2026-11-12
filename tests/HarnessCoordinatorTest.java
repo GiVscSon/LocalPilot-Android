@@ -11,6 +11,8 @@ public final class HarnessCoordinatorTest {
   c.reset(epoch,HarnessCoordinator.Mode.REALTIME_MODE);
   HarnessCoordinator.Ticket t=c.begin(epoch,30,123,1000);
   check(t.nonce.length()==22&&c.hasPending(),"one-use ticket");
+  check(!c.changeMode(epoch,HarnessCoordinator.Mode.STEP_MODE),
+    "mode cannot change under a pending agent ticket");
   check(c.start(HarnessCoordinator.Actor.MANUAL,epoch,"A",30,123,0,1001)==null,
     "manual actor cannot steal observation");
   check(!c.consume(t.nonce,next,30,123,1002),"wrong ROM epoch rejected");
@@ -41,6 +43,10 @@ public final class HarnessCoordinatorTest {
   check(c.complete(action,epoch,76,345,true,true),
     "unchanged pixels do not invalidate verified frame transport");
   check(!c.actionInFlight(),"verified transport releases action");
+  check(c.changeMode(epoch,HarnessCoordinator.Mode.STEP_MODE),
+    "empty harness can enter frozen-time mode");
+  check(c.changeMode(epoch,HarnessCoordinator.Mode.REALTIME_MODE),
+    "empty harness can resume realtime mode");
   HarnessCoordinator.ActionPermit manual=c.start(
     HarnessCoordinator.Actor.MANUAL,epoch,"LEFT",80,345,0,6200);
   check(manual!=null&&manual.actor==HarnessCoordinator.Actor.MANUAL,

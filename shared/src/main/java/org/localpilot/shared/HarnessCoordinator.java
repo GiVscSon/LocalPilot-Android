@@ -63,6 +63,11 @@ public final class HarnessCoordinator {
     epoch,frame,hash,now,stopRevision);
   return waiting;
  }
+ public synchronized boolean changeMode(String expectedEpoch,Mode next){
+  if(!matches(expectedEpoch)||next==null||waiting!=null||
+     prepared!=null||active!=null)return false;
+  mode=next;return true;
+ }
  public synchronized boolean hasPending(){return waiting!=null||prepared!=null;}
  public synchronized boolean actionInFlight(){return active!=null;}
  public synchronized long stopRevision(){return stopRevision;}
