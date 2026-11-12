@@ -31,11 +31,11 @@ if(bundledCatalog) {
 // ModelLab is also an independent test APK. Copy its reviewed Java sources
 // into the unified build WITHOUT its competing EmbeddedGgufRuntime class.
 // The primary app owns the SINGLE JNI runtime and mediates the lab calls.
-def syncUnifiedModelLab = unifiedModelLab ? tasks.register('syncUnifiedModelLab', Sync) {
+def syncUnifiedModelLab = tasks.register('syncUnifiedModelLab', Sync) {
  from(rootProject.file('model-lab/src/main/java'))
  exclude '**/EmbeddedGgufRuntime.java'
  into(layout.buildDirectory.dir('generated/source/unified-model-lab'))
-} : null
+}
 
 android {
  // The same GameLab and NES sources are embedded into the PRIMARY APK.
@@ -45,7 +45,7 @@ android {
   java.srcDirs += ['../shared/src/main/java', '../game-lab/src/main/java']
   assets.srcDirs += ['../game-lab/src/main/assets', '../game-lab/build/generated/jsnes/assets']
   if (bundledGguf) assets.srcDirs += [rootProject.file('build/embedded-model-assets')]
-  if (unifiedModelLab) java.srcDirs += [layout.buildDirectory.dir('generated/source/unified-model-lab').get().asFile]
+  java.srcDirs += [layout.buildDirectory.dir('generated/source/unified-model-lab').get().asFile]
  } }
  namespace 'org.localpilot.android'
  buildFeatures { buildConfig true }
@@ -64,6 +64,7 @@ android {
   testInstrumentationRunner 'org.localpilot.android.PilotUiInstrumentation'
   buildConfigField 'boolean', 'EMBEDDED_GGUF', bundledGguf.toString()
   buildConfigField 'boolean', 'UNIFIED_MODELLAB', unifiedModelLab.toString()
+  manifestPlaceholders = [unifiedModelLabEnabled: unifiedModelLab.toString()]
   buildConfigField 'boolean', 'VULKAN_COMPILED', 'false'
   buildConfigField 'boolean', 'PRELOADED_MODELS', 'false'
   buildConfigField 'String', 'POCKET_SHA256', '\"\"'
@@ -98,12 +99,10 @@ android {
 // Share the already verified pinned JSNES assets; do not download a second core.
 tasks.named('preBuild').configure {
  dependsOn ':game-lab:bundleVerifiedNesEngine'
- if (unifiedModelLab) dependsOn syncUnifiedModelLab
+ dependsOn syncUnifiedModelLab
 }
 // Asset snapshot must wait for the pinned emulator bundle, not just preBuild.
-if (unifiedModelLab) {
- tasks.matching { it.name ==~ /compile.*JavaWithJavac/ }.configureEach { dependsOn syncUnifiedModelLab }
-}
+tasks.matching { it.name ==~ /compile.*JavaWithJavac/ }.configureEach { dependsOn syncUnifiedModelLab }
 tasks.matching { it.name == 'mergeDebugAssets' }.configureEach {
  dependsOn ':game-lab:bundleVerifiedNesEngine'
 }
