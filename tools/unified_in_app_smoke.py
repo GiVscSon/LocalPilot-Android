@@ -138,8 +138,12 @@ def one_process() -> str:
 
 
 def companion_absent(package: str) -> bool:
-    # pm path normally exits 0 even when there is no package.
-    return "package:" not in adb("shell", "pm", "path", package)
+    # Android may return exit code 1 with no output for 'pm path <absent>'.
+    # 'pm list packages <filter>' succeeds on absence. Require exact match,
+    # never treat a failed ADB invocation as proof of non-installation.
+    listing = adb("shell", "pm", "list", "packages", package)
+    return all(line.strip() != "package:" + package
+               for line in listing.splitlines())
 
 
 def verify(apk: Path, output: Path) -> dict:
