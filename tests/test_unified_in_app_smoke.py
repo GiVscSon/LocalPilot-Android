@@ -129,6 +129,14 @@ class UnifiedUiSmokeContract(unittest.TestCase):
         self.assertNotIn("-gpu swiftshader_indirect",workflow)
         self.assertLess(workflow.index("Verify KVM acceleration"),workflow.index("Exercise real Android navigation"))
     
+    def test_emulator_abi_guard_blocks_indirect_release_tasks(self):
+        gradle=(ROOT/"app/build.gradle").read_text(encoding="utf-8")
+        self.assertIn("gradle.taskGraph.whenReady", gradle)
+        self.assertIn("graph.allTasks.any", gradle)
+        self.assertIn("task.project == project", gradle)
+        self.assertIn("task.name.toLowerCase(java.util.Locale.ROOT).contains('release')", gradle)
+        self.assertIn("Emulator-only ABI may not execute any app release task", gradle)
+
     def test_ci_uses_only_compiled_single_candidate_artifact(self):
         workflow=(ROOT/".github/workflows/localpilot-all-in-one.yml").read_text(encoding="utf-8")
         self.assertIn("needs: all-in-one",workflow)

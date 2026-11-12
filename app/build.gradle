@@ -13,6 +13,15 @@ if (unifiedEmulatorAbi && !unifiedModelLab) throw new GradleException('unifiedEm
 if (unifiedEmulatorAbi && gradle.startParameter.taskNames.any { it.toLowerCase().contains('release') }) {
  throw new GradleException('x86_64 emulator-only variant must never be built as release')
 }
+// Also reject aggregate tasks (e.g. assemble/build) that resolve to a release
+// variant. CLI task-name checks alone are insufficient for Gradle aliases.
+if (unifiedEmulatorAbi) {
+ gradle.taskGraph.whenReady { graph ->
+  if (graph.allTasks.any { task ->
+   task.project == project && task.name.toLowerCase(java.util.Locale.ROOT).contains('release')
+  }) throw new GradleException('Emulator-only ABI may not execute any app release task')
+ }
+}
 def bundledMetadataFile = rootProject.file('build/reports/embedded-gguf.json')
 def bundledMetadata = null
 if (bundledGguf) {
