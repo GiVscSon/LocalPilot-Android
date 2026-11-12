@@ -142,7 +142,7 @@ class UnifiedUiSmokeContract(unittest.TestCase):
         self.assertIn("graph.allTasks.any", gradle)
         self.assertIn("task.project == project", gradle)
         self.assertIn("task.name.toLowerCase(java.util.Locale.ROOT).contains('release')", gradle)
-        self.assertIn("Emulator-only ABI may not execute any app release task", gradle)
+        self.assertIn("Experimental ABI/backend may not execute any app release task", gradle)
 
     def test_ci_uses_only_compiled_single_candidate_artifact(self):
         workflow=(ROOT/".github/workflows/localpilot-all-in-one.yml").read_text(encoding="utf-8")
