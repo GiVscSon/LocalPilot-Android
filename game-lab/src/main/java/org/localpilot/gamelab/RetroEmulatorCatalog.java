@@ -23,7 +23,9 @@ public final class RetroEmulatorCatalog {
   System(String label,String core,int fps,String region){
    this.label=label;this.core=core;expectedFps=fps;fceummRegion=region;
   }
-  public String nativeLibraryName(){return this==DOS?"libdosbox_pure_libretro_android.so":"";}
+  // A native DOSBox core is NOT packaged. Never claim a loadable JNI name.
+  public String nativeLibraryName(){return "";}
+  public String availabilityCode(){return this==DOS?"UNAVAILABLE_LOCALLY":"AVAILABLE";}
   public boolean runnableInGameLab(){return this!=DOS;}
   public String coreOptionKey(){return this==DOS?"":"jsnes_compatibility_mode";}
  }
@@ -73,6 +75,12 @@ public final class RetroEmulatorCatalog {
    default -> {recognized=false;note="Unsupported media";}
   }
   return new Inspection(system,ext,recognized,note);
+ }
+ /** Full-byte preflight is mandatory BEFORE passing a cartridge to JSNES. */
+ public static NesRomPreflight.Result preflight(System system,byte[] rom){
+  if(system!=System.NES&&system!=System.DENDY)
+   return new NesRomPreflight.Result(false,"UNAVAILABLE_LOCALLY",-1,false);
+  return NesRomPreflight.check(rom);
  }
  public static Inspection inspect(System system,String filename,InputStream in)throws IOException{
   if(in==null)throw new IllegalArgumentException("input");
