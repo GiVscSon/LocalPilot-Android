@@ -896,9 +896,13 @@ public final class PilotUiInstrumentation extends Instrumentation {
             // deadline before its first scroll (observed on API 36).
             boolean revealed=onMain(()->revealOwnActivityControl(text));
             if(revealed)traceClick("click label="+text+" path=own-view-reveal");
-            if(touchOwnControl(text))return true;
+            // Accessibility semantics must win over coordinate injection. A tap
+            // can be accepted by Android while STOP belongs to an overlay and
+            // no cancellation event reaches PilotService (API 30/35); API 36
+            // may reject the same injection. Keep geometry fallback only when
+            // the semantic target is absent, and never count a tap as STOP.
             AccessibilityNodeInfo node = findText(text);
-            if (node == null) { boolean scrolled=scrollForward();traceClick("click label="+text+" path=own-app-scroll result="+scrolled);return false; }
+            if (node == null) { if(touchOwnControl(text))return true;boolean scrolled=scrollForward();traceClick("click label="+text+" path=own-app-scroll result="+scrolled);return false; }
             try {
                 if(!node.refresh()||!node.isVisibleToUser()||!node.isEnabled()||!node.isClickable()){traceClick("click label="+text+" path=node refreshed-actionable=false");return false;}
                 Rect bounds=new Rect();node.getBoundsInScreen(bounds);
