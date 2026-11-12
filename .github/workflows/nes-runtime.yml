@@ -7,6 +7,7 @@ on:
     paths:
       - 'game-lab/**'
       - 'tests/jsnes_nes_smoke.cjs'
+      - 'tests/nes_jsnes_savestate_reuse.cjs'
       - 'shared/src/main/java/org/localpilot/shared/HarnessCoordinator.java'
       - 'tests/HarnessCoordinator*.java'
       - 'tests/nes_controller_framehold.cjs'
@@ -84,6 +85,9 @@ jobs:
             tests/ExportHomebrewNes.java
           java -cp build/nes-runtime ExportHomebrewNes build/nes-runtime/demo.nes
           node tests/jsnes_nes_smoke.cjs \
+            build/test-core/package/dist/jsnes.min.js \
+            build/nes-runtime/demo.nes
+          node tests/nes_jsnes_savestate_reuse.cjs \
             build/test-core/package/dist/jsnes.min.js \
             build/nes-runtime/demo.nes
       - name: E2E actual NES pixels to independent ModelLab evidence parser
