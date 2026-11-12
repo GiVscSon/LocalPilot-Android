@@ -42,6 +42,16 @@ class NesSnapshotGateVerify {
     require(!(Boolean)finish.invoke(gate,third),"old timeout cleared new request");
     require((Boolean)finish.invoke(gate,fourth),"new snapshot after cancellation rejected");
     require(!(Boolean)pending.invoke(gate),"pending was never released");
+    Object manual=type.getDeclaredConstructor(int.class,int.class).newInstance(1,2);
+    Object neural=type.getDeclaredConstructor(int.class,int.class).newInstance(2,2);
+    for(int i=0;i<20;i++){
+     String a=(String)begin.invoke(manual),b=(String)begin.invoke(neural);
+     require(!a.equals(b),"manual and neural snapshots collided");
+     require(!(Boolean)current.invoke(manual,b),"neural token accepted by manual export");
+     require(!(Boolean)current.invoke(neural,a),"manual token accepted by AI");
+     require((Boolean)finish.invoke(manual,a),"manual token did not clear");
+     require((Boolean)finish.invoke(neural,b),"AI token did not clear");
+    }
    }
    System.out.println("NES_SNAPSHOT_GATE_PASS cases=13");
   }finally{

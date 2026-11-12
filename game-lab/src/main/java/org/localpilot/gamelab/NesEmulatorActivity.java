@@ -58,8 +58,8 @@ public final class NesEmulatorActivity extends Activity {
  private boolean homebrewRom;
  private NesTrial readyTrial;
  private NesTrial exportTrial;
- private final NesSnapshotGate snapshotGate=new NesSnapshotGate();
- private final NesSnapshotGate neuralSnapshot=new NesSnapshotGate();
+ private final NesSnapshotGate snapshotGate=new NesSnapshotGate(1,2);
+ private final NesSnapshotGate neuralSnapshot=new NesSnapshotGate(2,2);
  private final ConsoleAgentPolicy neural=new ConsoleAgentPolicy();
  private ConsoleAgentBridge.Brain neuralBrain;
  private String neuralRomEpoch="";
