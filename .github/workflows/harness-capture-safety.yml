@@ -1,0 +1,50 @@
+name: Harness capture P0 safety
+on:
+  pull_request:
+    paths:
+      - 'app/src/main/java/org/localpilot/android/FrameBlackoutGate.java'
+      - 'app/src/main/java/org/localpilot/android/CaptureRetry.java'
+      - 'app/src/main/java/org/localpilot/android/PilotService.java'
+      - 'tests/FrameBlackoutGateTest.java'
+      - '.github/workflows/harness-capture-safety.yml'
+  push:
+    branches: [ 'fix/**', 'feature/**' ]
+    paths:
+      - 'app/src/main/java/org/localpilot/android/FrameBlackoutGate.java'
+      - 'app/src/main/java/org/localpilot/android/CaptureRetry.java'
+      - 'app/src/main/java/org/localpilot/android/PilotService.java'
+      - 'tests/FrameBlackoutGateTest.java'
+      - '.github/workflows/harness-capture-safety.yml'
+permissions:
+  contents: read
+jobs:
+  capture-safety-jvm:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Compile and run bounded screenshot anomaly regressions
+        run: |
+          set -euo pipefail
+          mkdir -p build/harness-capture-safety
+          javac --release 17 -d build/harness-capture-safety \
+            app/src/main/java/org/localpilot/android/FrameBlackoutGate.java \
+            app/src/main/java/org/localpilot/android/CaptureRetry.java \
+            tests/FrameBlackoutGateTest.java
+          java -cp build/harness-capture-safety org.localpilot.android.FrameBlackoutGateTest
+      - name: Verify application path actually applies the gate
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          pilot=Path("app/src/main/java/org/localpilot/android/PilotService.java").read_text()
+          retry=Path("app/src/main/java/org/localpilot/android/CaptureRetry.java").read_text()
+          assert "FrameBlackoutGate.nearBlack(" in pilot
+          assert 'retryCapture(epoch,result,"NEAR_BLACK_FRAME")' in pilot
+          assert '"NEAR_BLACK_FRAME".equals(reason)' in retry
+          print("CAPTURE_GATE_INTEGRATION_PASS")
+          PY
