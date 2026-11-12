@@ -43,6 +43,27 @@ class OneApkVulkanContract(unittest.TestCase):
         self.assertIn('nativeLoadedGpuLayers',verifier)
         self.assertIn('"vulkanPhysicalGpuConfirmed": False',verifier)
 
+    def test_real_gguf_used_for_nes_actions_not_diagnostic_caption(self):
+        runtime=source("app/src/main/java/org/localpilot/android/EmbeddedGgufRuntime.java")
+        model_lab=source("model-lab/src/main/java/org/localpilot/android/ModelLabActivity.java")
+        nes=source("game-lab/src/main/java/org/localpilot/gamelab/NesEmulatorActivity.java")
+        js=source("game-lab/src/main/assets/nes/index.html")
+        self.assertIn("public void consoleAction(",runtime)
+        self.assertIn("public void consoleActionImage(",runtime)
+        self.assertIn("CONSOLE_SYSTEM",runtime)
+        self.assertIn("nativeInfer(model.getAbsolutePath(),CONSOLE_SYSTEM,observation,96,0f)",runtime)
+        self.assertIn("nativeAnalyzeImage(model.getAbsolutePath(),projector.getAbsolutePath(),",runtime)
+        self.assertIn("runtime.consoleAction(weights,observation,offload",model_lab)
+        self.assertIn("runtime.consoleActionImage(weights,projector,observation,rgb,w,h,offload",model_lab)
+        self.assertNotIn("runtime.text(weights,observation,offload",model_lab)
+        self.assertIn("window.retroAgentSnapshot(",nes)
+        self.assertIn("agentThinking=true",js)
+        self.assertIn("if(!nes||paused||agentThinking)return;",js)
+        self.assertIn("agentThinking=false; // Resume emulator",js)
+        self.assertIn("agentThinking=false;homebrewRom=false",js)
+        self.assertIn("console_model_frame_vm.test.js",source(".github/workflows/localpilot-console-vulkan.yml"))
+        self.assertIn("console_model_frame_vm.test.js",source(".github/workflows/localpilot-all-in-one.yml"))
+
     def test_ci_uses_exact_pins_and_never_publishes(self):
         workflow=source(".github/workflows/localpilot-console-vulkan.yml")
         for key in ("09913f088a1197aba4aefd300a876b2ebbaa3391",
