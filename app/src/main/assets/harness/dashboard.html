@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<title>LocalPilot · Harness Console</title>
+<style>
+:root{--bg:#090e1a;--panel:#111b2b;--panel2:#142136;--stroke:#2a3850;--muted:#92a5bd;--text:#f0f5ff;--green:#51e2b7;--blue:#73a9ff;--yellow:#ffcb76;--red:#ff8c9b;--purple:#b1a1ff;--radius:15px}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at 72% -17%,#213459 0,transparent 52%),var(--bg);color:var(--text);font:14px/1.45 system-ui,-apple-system,"Segoe UI",Arial,sans-serif}button,input,select{font:inherit}button{cursor:pointer;color:inherit}button:disabled{opacity:.35;cursor:not-allowed}button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--blue);outline-offset:2px}a{color:var(--blue)}
+.shell{display:grid;grid-template-columns:242px minmax(0,1fr);min-height:100vh;min-height:100dvh}
+aside{background:#0c1422d9;border-right:1px solid #26364d;position:sticky;top:0;max-height:100vh;padding:26px 15px 18px;display:flex;flex-direction:column;gap:20px}
+.brand{display:flex;gap:12px;align-items:center;padding:3px 10px 15px}.mark{background:linear-gradient(130deg,#80c7ff,#9a8fff);color:#101b2c;border-radius:12px;font-size:25px;width:42px;height:42px;text-align:center;line-height:42px;font-weight:900}.brand b{font-size:17px;letter-spacing:.15px}.brand small{display:block;color:var(--muted);font-size:10px;letter-spacing:2px;margin-top:1px}
+nav{display:grid;gap:5px}.nav{border:0;background:transparent;text-align:left;color:#aabacf;border-radius:10px;padding:11px 13px;font-weight:600;display:flex;align-items:center;gap:12px}.nav:hover{background:#1b2940}.nav.active{color:#e6f0ff;background:#223653;box-shadow:inset 3px 0 var(--blue)}.nav .glyph{width:23px;font-size:18px;text-align:center}
+.aside-foot{margin-top:auto;padding:13px;border:1px solid var(--stroke);border-radius:12px;background:#111c2d}.aside-foot strong{display:block;margin:4px 0}.aside-foot small{color:var(--muted)}
+main{min-width:0;padding:20px clamp(18px,3.2vw,50px) 55px}.top{display:flex;justify-content:space-between;align-items:center;gap:16px;border-bottom:1px solid var(--stroke);padding:0 0 22px}.eyebrow{color:var(--muted);font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase}.top h1{margin:5px 0 2px;font-size:clamp(24px,2.8vw,34px);line-height:1.15;letter-spacing:-1.2px}.sub{color:var(--muted);margin:0}.top-actions{display:flex;gap:9px;align-items:center;flex-wrap:wrap}.btn{border:1px solid var(--stroke);background:#1c2b40;padding:10px 14px;border-radius:9px;font-weight:700;font-size:12px;display:inline-flex;justify-content:center;align-items:center;gap:7px;min-height:38px;transition:background .12s}.btn:hover:not(:disabled){background:#2c4060}.btn.primary{background:#547eff;color:#fff;border-color:#6489ff}.btn.primary:hover:not(:disabled){background:#658dff}.btn.danger{color:#ffb5bd;border-color:#a13f53;background:#512331}.btn.danger:hover:not(:disabled){background:#702b3d}.btn.ghost{background:transparent}.btn.small{min-height:30px;padding:6px 10px;font-size:11px}.btn.full{width:100%}
+.dot{width:8px;height:8px;display:inline-block;border-radius:50%;background:var(--muted);box-shadow:0 0 0 3px #8499b522}.dot.ok{background:var(--green);box-shadow:0 0 0 3px #51e2b720}.dot.warn{background:var(--yellow);box-shadow:0 0 0 3px #ffcb7620}
+.status{display:flex;align-items:center;gap:7px;white-space:nowrap;font-size:12px;font-weight:650;color:#cdd8e9;border:1px solid var(--stroke);border-radius:9px;padding:9px 11px}.notice{margin:19px 0;padding:13px 16px;background:#17263b;border:1px solid #365074;border-radius:10px;color:#cfdded;display:flex;gap:12px;align-items:flex-start}.notice.error{background:#341b2b;border-color:#843950;color:#ffd0da}.notice strong{color:var(--text)}
+.tiles{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin:22px 0}.tile{border:1px solid var(--stroke);background:linear-gradient(140deg,#17273b,#101a2b);border-radius:var(--radius);padding:17px 18px;min-width:0}.tile .count{font-size:29px;font-weight:800;letter-spacing:-1px;margin:5px 0}.tile small{color:var(--muted)}.tile .topline{display:flex;justify-content:space-between;align-items:center;color:#b0c0d5;font-size:12px}.tile .symbol{font-size:18px;color:var(--blue)}
+.layout{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(280px,1fr);gap:16px}.stack{display:grid;gap:16px;align-content:start}.panel{border:1px solid var(--stroke);border-radius:var(--radius);background:#111b2bdc;min-width:0;overflow:hidden}.panel-head{padding:17px 18px;display:flex;align-items:flex-start;justify-content:space-between;gap:12px;border-bottom:1px solid #223349}.panel-head h2{font-size:15px;margin:0}.panel-head p{color:var(--muted);font-size:12px;margin:4px 0 0}.panel-body{padding:18px}.list{display:grid}.entry{display:flex;align-items:center;gap:14px;padding:13px 18px;border-bottom:1px solid #223349;min-width:0}.entry:last-child{border:0}.entry-text{flex:1;min-width:0}.entry-text b{display:block;font-size:13px}.entry-text small{color:var(--muted);display:block;margin-top:3px;overflow-wrap:anywhere}.avatar{width:40px;height:40px;border:1px solid #425775;background:#243751;border-radius:11px;display:grid;place-items:center;font-size:18px;flex:none}.chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:7px}
+.chip{border:1px solid #3b4c63;border-radius:6px;color:#b7c8dc;font-size:10px;font-weight:750;padding:3px 6px;letter-spacing:.1px}.chip.ok{color:#9af8d8;background:#153f36;border-color:#216b57}.chip.blue{color:#afd0ff;background:#1b3253;border-color:#375f91}.chip.warn{color:#ffdcaa;background:#46361d;border-color:#775b2d}.chip.fail{color:#ffb5bc;background:#492734;border-color:#825063}.chip.purple{color:#cbbfff;background:#292345;border-color:#54477a}
+.section-intro{margin:20px 0 16px;display:flex;justify-content:space-between;gap:16px;align-items:center}.section-intro h2{font-size:19px;margin:0}.section-intro p{margin:4px 0 0;color:var(--muted);font-size:12px}
+.field{background:#111e30;border:1px solid var(--stroke);color:var(--text);border-radius:8px;padding:10px;min-width:0}.field:focus{border-color:var(--blue)}.model-row{display:grid;grid-template-columns:40px minmax(0,1fr) auto;align-items:center;gap:13px;padding:17px;border-bottom:1px solid #25364b}.model-row:last-child{border:0}.model-actions{display:flex;gap:7px;flex-wrap:wrap;justify-content:end}.tagline{font-size:12px;color:var(--muted);margin-top:5px;overflow-wrap:anywhere}
+.compact-row{display:flex;gap:9px;align-items:center;flex-wrap:wrap}.muted{color:var(--muted)}.tiny{font-size:11px}.empty{text-align:center;padding:34px 20px;color:var(--muted)}.empty .big{font-size:29px;margin-bottom:7px}.empty b{color:var(--text);display:block;margin-bottom:5px}
+.runtime{padding:15px;border-radius:11px;border:1px solid #334765;background:#17273b}.runtime h3{margin:0 0 8px;font-size:15px}.runtime p{margin:6px 0;color:var(--muted)}.runtime-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.kv{background:#142236;border:1px solid #304159;border-radius:9px;padding:12px}.kv span{color:var(--muted);font-size:11px;display:block}.kv b{font-size:14px;display:block;margin-top:5px;overflow-wrap:anywhere}
+.pipeline{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:6px;padding:14px}.pipe{border:1px solid #395071;border-radius:9px;padding:10px 5px;text-align:center;background:#16263b}.pipe strong{font-size:10px;display:block;overflow-wrap:anywhere}.pipe small{display:block;margin-top:6px;color:#a4b5ca;font-size:10px}.pipe.good{background:#12362f;border-color:#256650}.pipe.miss{opacity:.5;border-style:dashed}.pipe.bad{background:#402430;border-color:#895060}
+.timeline{max-height:500px;overflow:auto}.event{padding:11px 16px;display:grid;grid-template-columns:82px minmax(0,1fr) auto;align-items:start;gap:10px;border-bottom:1px solid #223247}.event time{color:var(--muted);font-size:11px;font-variant-numeric:tabular-nums}.event b{font-size:12px}.event small{color:var(--muted);display:block;margin-top:4px;overflow-wrap:anywhere}.event .ms{font-size:11px;color:var(--blue);white-space:nowrap}
+.row-stats{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;border-bottom:1px solid #223247;padding:12px 16px}.row-stats:last-child{border-bottom:0}
+.callout{border-left:3px solid var(--yellow);background:#27291f;padding:13px 15px;color:#ecdebf;border-radius:4px;margin:15px 0}.callout.error{border-color:var(--red);background:#35212c;color:#ffd0d8}
+.mini-bars{display:grid;gap:9px}.baritem{display:flex;align-items:center;gap:10px}.baritem span{color:var(--muted);width:110px;font-size:12px}.bar{height:8px;flex:1;border-radius:6px;background:#27364a;overflow:hidden}.bar>i{height:100%;background:var(--blue);display:block;border-radius:6px}.baritem em{font-size:12px;font-style:normal;width:62px;text-align:right}
+.footer{color:#70859e;font-size:11px;padding:30px 2px}.no-wrap{white-space:nowrap}
+@media(max-width:1050px){.shell{grid-template-columns:74px minmax(0,1fr)}aside{padding:17px 9px}.brand{justify-content:center;padding:3px 0 15px}.brand .brandtext,.nav .name,.aside-foot{display:none}.nav{justify-content:center;padding:11px}.layout{grid-template-columns:1fr}.tiles{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:620px){.shell{grid-template-columns:1fr}aside{position:sticky;top:0;z-index:5;max-height:none;flex-direction:row;padding:8px;background:#0c1524;border-bottom:1px solid var(--stroke);border-right:0;overflow:auto}.brand{padding:2px 8px 2px 0}.brand .mark{width:32px;height:32px;line-height:32px;font-size:18px}.brand .brandtext{display:none}nav{display:flex;gap:1px}.nav{padding:8px;flex:none}.nav .glyph{font-size:17px}main{padding:20px 14px 38px}.top{align-items:start;flex-direction:column;padding-bottom:16px}.top-actions{width:100%}.tiles{gap:9px}.tile{padding:13px}.tile .count{font-size:25px}.layout{gap:12px}.model-row{grid-template-columns:38px 1fr}.model-actions{grid-column:1/-1;justify-content:start}.pipeline{grid-template-columns:repeat(3,1fr)}.event{grid-template-columns:68px minmax(0,1fr) auto;padding:9px}.panel-body{padding:13px}.runtime-grid{grid-template-columns:1fr 1fr}.section-intro{align-items:flex-start;flex-direction:column}}
+</style></head><body>
+<div class="shell">
+<aside><div class="brand"><div class="mark">L</div><div class="brandtext"><b>LocalPilot</b><small>HARNESS CONSOLE</small></div></div>
+<nav id="nav"></nav><div class="aside-foot"><small>Единый контур</small><strong>ModelLab + GameLab</strong><small>STOP • TTL • один исполнитель</small></div></aside>
+<main><header class="top"><div><div class="eyebrow">Agent Operating Environment / Android</div><h1 id="heading">Обзор системы</h1><p class="sub" id="subtitle">Модели, игры, реальные прогоны и обучение в одном контуре</p></div>
+<div class="top-actions"><span class="status" id="connection"><i class="dot"></i> Проверка соединения</span><button class="btn ghost" data-action="refresh">↻ Обновить</button><button class="btn danger" data-action="stop">■ STOP</button></div></header>
+<div id="notice"></div><div id="page"></div>
+<footer class="footer">LocalPilot Harness · данные берутся только из установленного Android-приложения. ACK и изменение пикселей не равны победе или награде.</footer></main>
+</div>
+<script>
+"use strict";
+const N=[
+ ["overview","◫","Обзор системы","Единое состояние игрового окружения"],
+ ["models","◈","Каталог моделей","GGUF, импорт, проверка и назначение"],
+ ["games","▣","Консоли и агенты","Реальный NES и статус других эмуляторов"],
+ ["episodes","≡","Журнал эпизодов","Трасса кадров, решения, действия, остановки"],
+ ["training","✦","Обучение","Происхождение опыта, награды и политики"],
+ ["compare","▤","Сравнение моделей","Фактический инференс, задержки и результаты"],
+ ["device","⚙","Устройство и Vulkan","Аппаратная диагностика, CPU и GPU"]
+];
+const hasNative=typeof window.Harness!=="undefined"&&typeof window.Harness.snapshot==="function";
+let view="overview",snapshot=null,search="",compareA="",compareB="",expanded="",lastError="";
+const E=s=>String(s??"").replace(/[&<>"']/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch]));
+const fmtBytes=n=>n>1e9?(n/1e9).toFixed(2)+" ГБ":n>1e6?(n/1e6).toFixed(1)+" МБ":(n/1024).toFixed(0)+" КБ";
+const time=ms=>ms?new Date(ms).toLocaleTimeString("ru-RU"):"—";
+const chip=(s,c="")=>'<span class="chip '+c+'">'+E(s)+'</span>';
+const button=(label,action,arg="",c="",disabled=false)=>'<button class="btn '+c+'" data-action="'+E(action)+'" data-id="'+E(arg)+'" '+(disabled?'disabled title="Функция не подтверждена или нет подключения"':'')+'>'+E(label)+'</button>';
+const empty=(title,desc,emoji="◌")=>'<div class="empty"><div class="big">'+emoji+'</div><b>'+E(title)+'</b><div>'+E(desc)+'</div></div>';
+const panel=(title,sub,inner,action="")=>'<section class="panel"><div class="panel-head"><div><h2>'+title+'</h2><p>'+sub+'</p></div>'+action+'</div>'+inner+'</section>';
+const defaults=()=>({connected:false,models:[],presets:[],events:[],cores:[{id:"nes",name:"NES / Денди",status:"PREVIEW_ONLY",realCore:false},{id:"snes",name:"SNES",status:"NOT_INTEGRATED",realCore:false}],assignedModelId:"",device:{model:"Не подключено",sdk:"—"},gpu:{vulkanCompiled:false,probe:"Нет Android-данных",actuallyLoadedLayers:0},learning:{eligibleTransitions:0,trainedPolicies:0,rewardProvider:"UNKNOWN",reason:"Нет подтверждённого источника награды"},audit:{healthy:true,events:0,loaded:false},busy:false,operation:"Режим просмотра без Android",activeEpisode:""});
+function load(){
+ if(!hasNative){snapshot=defaults();render();return;}
+ try{const raw=window.Harness.snapshot();snapshot=JSON.parse(raw);lastError="";}
+ catch(err){lastError="Не удалось получить данные Android: "+String(err);if(!snapshot)snapshot=defaults();}
+ render();
+}
+function cmd(action,id=""){
+ if(!hasNative){lastError="Эта команда выполняется внутри APK LocalPilot. В автономном HTML доступен только просмотр интерфейса.";render();return;}
+ if(action==="delete"&&!confirm("Удалить импортированную модель? Активную модель сначала нужно отключить."))return;
+ if(action==="stop"&&!confirm("Запросить STOP текущего игрового агента?"))return;
+ if(action==="learn"){lastError="Обучение недоступно: для NES пока нет верифицированной награды. Эпизоды сохраняются, но не выдаются за обучающие примеры.";render();return;}
+ try{window.Harness.command(action,id);setTimeout(load,300);}
+ catch(err){lastError=String(err);render();}
+}
+const events=()=>Array.isArray(snapshot?.events)?snapshot.events:[];
+const models=()=>Array.isArray(snapshot?.models)?snapshot.models:[];
+function episodes(){
+ const group=new Map();
+ for(const x of events()){
+  const id=x.episodeId;if(!id)continue;
+  if(!group.has(id))group.set(id,{id,modelId:x.modelId,game:x.game,first:x.timestamp,latest:x.timestamp,rows:[]});
+  const one=group.get(id);one.rows.push(x);one.latest=Math.max(one.latest,x.timestamp);
+ }
+ return [...group.values()].sort((a,b)=>b.latest-a.latest);
+}
+function isRealUse(m){return events().some(x=>x.modelId===m.id&&x.stage==="MODEL"&&x.status==="MODEL_USED");}
+function modelCard(m,detailed=false){
+ const realUse=isRealUse(m),bound=m.bound===true,valid=m.test==="PASS";
+ return '<div class="model-row"><div class="avatar">'+(m.vision?"◉":"◇")+'</div><div class="entry-text"><b>'+E(m.label)+'</b><div class="tagline">'+fmtBytes(m.bytes)+' · SHA-256 '+E(String(m.sha256).slice(0,13))+'… '+(m.vision?"· mmproj":"· текст")+'</div><div class="chips">'+chip("ЗАГРУЖЕНА","blue")+(bound?chip("ПОДКЛЮЧЕНА","ok"):chip("НЕ ПОДКЛЮЧЕНА"))+(realUse?chip("ИСПОЛЬЗОВАНА","purple"):"")+(valid?chip("ИНФЕРЕНС PASS","ok"):m.test==="FAIL"?chip("ИНФЕРЕНС FAIL","fail"):"")+'</div></div><div class="model-actions">'+(bound?button("Отключить","unbind","","small"):button("Назначить NES","bind",m.id,"small primary"))+button("Проверить","probeModel",m.id,"small")+(!m.bundled?button("Удалить","delete",m.id,"small ghost"):"")+'</div></div>';
+}
+function overview(){
+ const ms=models(),ep=episodes(),used=new Set(ms.filter(isRealUse).map(m=>m.id));
+ const ok=ep.filter(e=>e.rows.some(x=>x.stage==="VISUAL"&&x.status==="PIXELS_DIFFER")).length;
+ const goals=ep.filter(e=>e.rows.some(x=>x.stage==="GOAL"&&x.status==="VERIFIED")).length;
+ const stat=[["Загружено моделей",ms.length,"◈"],["Подключено к агенту",ms.filter(m=>m.bound).length,"⌘"],["Использовано в игре",used.size,"↯"],["Цель подтверждена",goals,"✓"]];
+ return '<div class="tiles">'+stat.map(x=>'<div class="tile"><div class="topline"><span>'+x[0]+'</span><span class="symbol">'+x[2]+'</span></div><div class="count">'+x[1]+'</div><small>'+ (x[0]==="Цель подтверждена"?"Не путать с изменением пикселей":"По данным текущего APK")+'</small></div>').join("")+'</div><div class="layout"><div class="stack">'+
+ panel("Модели в едином окружении","Каждая запись связана с реальным ModelLabStore",ms.length?'<div class="list">'+ms.slice(0,5).map(m=>modelCard(m)).join("")+'</div>':empty("Пока нет GGUF","Открой каталог моделей и скачай проверенный файл","◈"),button("Каталог моделей","tab","models","small"))+
+ panel("Цепочка игрового агента","Последний настоящий NES-эпизод",renderPipeline(ep[0]),button("Все эпизоды","tab","episodes","small"))+
+ '</div><div class="stack">'+
+ panel("Контроль исполнения","Управление не передаётся модели напрямую",'<div class="panel-body"><div class="runtime"><h3>◉ '+(snapshot.activeEpisode?"Агент выполняет эпизод":"Нет активного эпизода")+'</h3><p>'+E(snapshot.activeEpisode?"Сеанс "+snapshot.activeEpisode:"Новый сеанс запускается только через NES и проверенный GGUF")+'</p><div class="chips">'+chip("ActionGate / TTL","blue")+chip("InputPermit","blue")+chip("Fail-Closed","ok")+'</div></div><div class="compact-row" style="margin-top:12px">'+button("▶ Запустить NES","openNES","","primary")+button("Назначить GGUF","tab","models")+'</div></div>')+
+ panel("Настоящие результаты","Никаких синтетических побед",'<div class="panel-body"><div class="row-stats"><span>Реакция экрана (PIXELS_DIFFER)</span><b>'+ok+'</b></div><div class="row-stats"><span>Награда подтверждена</span><b>'+goals+'</b></div><div class="row-stats"><span>Обученных политик</span><b>0</b></div><div class="callout">Пока нет проверенного провайдера игровых наград. Данные наблюдений сохраняются, но не считаются тренировкой.</div></div>')+
+ '</div></div>';
+}
+const STAGES=[["FRAME","Кадр"],["RECOGNITION","Распозн."],["STATE","Состояние"],["MODEL","Модель"],["ACTION","Действие"],["VISUAL","Проверка"]];
+function renderPipeline(ep){
+ if(!ep)return empty("Нет настоящих запусков","Запусти NES homebrew с назначенной GGUF, чтобы здесь появилась трасса","▣");
+ return '<div class="pipeline">'+STAGES.map(([k,label])=>{
+  const rows=ep.rows.filter(x=>x.stage===k),last=rows.at(-1),pass=last&&last.status!=="REJECTED"&&last.status!=="ERROR"&&last.status!=="NO_VISUAL_CHANGE";
+  return '<div class="pipe '+(!last?"miss":pass?"good":"bad")+'"><strong>'+label+'</strong><small>'+E(last?last.status:"НЕТ ДАННЫХ")+'</small></div>';
+ }).join("")+'</div><div class="row-stats"><span>Сеанс: '+E(ep.id.slice(0,14))+'… · '+E(ep.modelId)+'</span><span>'+chip("reward UNKNOWN","warn")+'</span></div>';
+}
+function modelsPage(){
+ const list=models().filter(m=>(m.label+" "+m.id).toLowerCase().includes(search.toLowerCase()));
+ return '<div class="section-intro"><div><h2>Каталог нейросетей</h2><p>GGUF загружаются отдельно от APK; назначение и реальное использование отслеживаются раздельно.</p></div><div class="compact-row">'+button("＋ Импорт GGUF","importModel","","primary")+button("Расширенный ModelLab","openModelLab")+'</div></div>'+
+ '<div class="panel"><div class="panel-head"><div><h2>Установленные модели</h2><p>'+models().length+' файлов в приватном каталоге</p></div><input class="field" id="modelsearch" placeholder="Поиск модели..." value="'+E(search)+'" aria-label="Поиск моделей"></div>'+
+ (list.length?list.map(m=>modelCard(m,true)).join(""):empty("Моделей нет","Скачай модель из каталога или импортируй файл GGUF"))+'</div>'+
+ '<div class="section-intro"><div><h2>Каталог проверенных загрузок</h2><p>Фиксированная ревизия, контроль размера и SHA-256.</p></div></div>'+
+ panel("Доступные пресеты","Скачивание выполняется нативным ModelLabStore",snapshot.presets.length?'<div class="list">'+snapshot.presets.map(p=>'<div class="entry"><div class="avatar">'+(p.vision?"◉":"◇")+'</div><div class="entry-text"><b>'+E(p.label)+'</b><small>'+fmtBytes(p.bytes)+' · '+(p.vision?"GGUF + mmproj":"GGUF")+'</small></div>'+button("↓ Загрузить","download",String(p.index),"small")+'</div>').join("")+'</div>':empty("Нет данных о пресетах","Открой страницу в установленном LocalPilot"),"");
+}
+function gamesPage(){
+ return '<div class="section-intro"><div><h2>Консольные среды</h2><p>Один Harness управляет эмулятором и журналом. Новые ядра добавляются после проверки.</p></div></div>'+
+ '<div class="layout"><div class="stack">'+(snapshot.cores||[]).map(g=>panel(E(g.name),g.realCore?"Нативно встроен в единый APK":"Интеграция в Android пока не завершена",'<div class="panel-body"><div class="compact-row">'+chip(g.status,g.realCore?"ok":"warn")+(g.agentHomebrewOnly?chip("Агент: только homebrew","blue"):"")+'</div><p class="muted tiny"> '+(g.realCore?"Доступна реальная NES-эмуляция. В игре агент выполняет ограниченную серию проверяемых действий; пользовательские ROM пока доступны для ручной игры.":"Нет проверенного ядра, игрового цикла и обучающей интеграции.")+'</p>'+button(g.realCore?"▶ Открыть NES":"Недоступно","openNES","","primary",!g.realCore)+'</div>')).join("")+'</div><div class="stack">'+
+ panel("Назначение агента","Сохраняется в ModelLab и восстанавливается после рестарта",'<div class="panel-body"><div class="runtime"><h3>Выбранная модель</h3><p>'+E(models().find(x=>x.bound)?.label||"Не назначена")+'</p><div class="chips">'+chip(models().some(x=>x.bound)?"BOUND":"UNBOUND",models().some(x=>x.bound)?"ok":"warn")+'</div></div><p class="muted tiny">GGUF предлагает кнопку. Единственным исполнителем остаётся контроллер NES.</p>'+button("Выбрать модель","tab","models")+'</div>')+
+ panel("Режимы работы","Состояние реализации",'<div class="row-stats"><span>Step-by-step NES · замороженный кадр</span>'+chip("ДО 4 ШАГОВ","ok")+'</div><div class="row-stats"><span>Real-time Fast Policy</span>'+chip("НЕ ИНТЕГРИРОВАНО","warn")+'</div><div class="row-stats"><span>Обучаемая политика</span>'+chip("НЕТ REWARD","warn")+'</div>')+'</div></div>';
+}
+function eventsFor(ep){return ep.rows.slice().sort((a,b)=>a.timestamp-b.timestamp);}
+function timeline(rows){
+ if(!rows.length)return empty("Трасса пуста","Сначала потребуется реальное действие агента","≡");
+ return '<div class="timeline">'+rows.slice().reverse().map(x=>'<div class="event"><time>'+time(x.timestamp)+'</time><div><b>'+E(x.stage)+' · '+E(x.status)+'</b><small>'+E(x.detail||"")+'</small></div><span class="ms">'+(x.latencyMs>=0?x.latencyMs+" ms":"—")+'</span></div>').join("")+'</div>';
+}
+function episodesPage(){
+ const es=episodes();
+ return '<div class="section-intro"><div><h2>Журнал использования моделей</h2><p>Реальные события, сгруппированные по сеансам. Журнал не содержит игровых побед без доказательств.</p></div>'+button("⇩ Экспорт JSONL","export")+'</div>'+
+ (es.length?'<div class="layout"><div class="stack">'+panel("Сеансы","Последние подтверждённые данные",'<div class="list">'+es.map(ep=>{
+ const count=ep.rows.filter(x=>x.stage==="MODEL"&&x.status==="MODEL_USED").length;
+ const visuals=ep.rows.filter(x=>x.stage==="VISUAL"&&x.status==="PIXELS_DIFFER").length;
+ return '<div class="entry"><div class="avatar">▣</div><div class="entry-text"><b>'+E(ep.game)+' · '+time(ep.latest)+'</b><small>Модель '+E(ep.modelId)+' · '+ep.rows.length+' событий</small><div class="chips">'+chip(count+" ответов модели",count?"purple":"warn")+chip(visuals+" изменений экрана",visuals?"blue":"warn")+chip("reward UNKNOWN","warn")+'</div></div>'+button("Открыть","episode",ep.id,"small")+'</div>';
+ }).join("")+'</div>')+'</div><div class="stack">'+panel("Доказательства эпизода","Кадр → модель → действие → кадр",renderPipeline(es.find(e=>e.id===expanded)||es[0]))+panel("Хронология","Фактические события и задержки",timeline(eventsFor(es.find(e=>e.id===expanded)||es[0])))+'</div></div>':
+ panel("История пока пустая","Журнал создаётся только реальными запусками",empty("Нет эпизодов","Назначь GGUF и запусти встроенную NES homebrew игру","▣")) );
+}
+function trainingPage(){
+ const es=episodes(),changed=es.filter(e=>e.rows.some(x=>x.stage==="VISUAL"&&x.status==="PIXELS_DIFFER")).length;
+ return '<div class="section-intro"><div><h2>Обучение и переиспользование</h2><p>Опыт → верифицированная награда → обновление политики → отложенная проверка → запуск</p></div></div>'+
+ '<div class="tiles">'+[["Эпизодов собрано",es.length,"≡"],["Реакций экрана",changed,"◫"],["Готово к RL",snapshot.learning.eligibleTransitions||0,"✦"],["Обучено политик",snapshot.learning.trainedPolicies||0,"↯"]].map(x=>'<div class="tile"><div class="topline">'+E(x[0])+'<span>'+x[2]+'</span></div><div class="count">'+x[1]+'</div></div>').join("")+'</div>'+
+ '<div class="layout"><div class="stack">'+
+ panel("Происхождение обучающих данных","Только реальные и отмеченные эпизоды",'<div class="row-stats"><span>REAL_JSNES · записанные эпизоды</span><b>'+es.length+'</b></div><div class="row-stats"><span>PIXELS_DIFFER · ещё не награда</span><b>'+changed+'</b></div><div class="row-stats"><span>REWARD VERIFIED · пригодно к обучению</span><b>0</b></div><div class="row-stats"><span>POLICY UPDATED · изменённые веса</span><b>0</b></div><div class="callout">Награда UNKNOWN. Обычный RL и продвижение новой модели заблокированы. Никакой фиктивной тренировки не выполняется.</div><div class="compact-row">'+button("Экспортировать опыт","export")+button("Обучить и сравнить","learn","","primary",true)+'</div></div>')+
+ '</div><div class="stack">'+
+ panel("Цикл обучения","Переходы между этапами контролирует Harness",'<div class="panel-body">'+[["01","Реальные игровые переходы",es.length?"СОБРАНЫ":"НЕТ ДАННЫХ"],["02","Проверяемая награда","НЕТ ПРОВАЙДЕРА"],["03","Обновление Fast Policy","БЛОКИРОВАНО"],["04","Тест на отложенных эпизодах","НЕ ПРОВОДИЛСЯ"],["05","Назначение новой политики","НЕ ПРОВОДИЛОСЬ"]].map(x=>'<div class="row-stats"><span>'+E(x[0])+' · '+E(x[1])+'</span>'+chip(x[2],x[0]==="01"&&es.length?"blue":"warn")+'</div>').join("")+'</div>')+
+ panel("Модели и политика","Ничего не меняет веса GGUF без отдельного обучения",'<div class="panel-body muted">Файл GGUF используется для реального инференса. Replay-буфер с неизвестной наградой пока нельзя выдавать за обучение нейросети. Следующий этап: добавить reward provider для одной homebrew-игры и проверяемый policy-тренер.</div>')+'</div></div>';
+}
+function statsFor(id){
+ const rows=events().filter(x=>x.modelId===id);
+ const used=rows.filter(x=>x.stage==="MODEL"&&x.status==="MODEL_USED");
+ const ms=used.map(x=>x.latencyMs).filter(x=>x>=0),avg=ms.length?ms.reduce((a,b)=>a+b,0)/ms.length:null;
+ return {inferences:used.length,avg,visual:rows.filter(x=>x.stage==="VISUAL"&&x.status==="PIXELS_DIFFER").length,goals:rows.filter(x=>x.stage==="GOAL"&&x.status==="VERIFIED").length,errors:rows.filter(x=>x.stage==="STOP").length};
+}
+function comparePage(){
+ const ms=models();if(!compareA&&ms[0])compareA=ms[0].id;if(!compareB&&ms[1])compareB=ms[1].id;
+ const field=(id,which)=>'<select class="field" data-compare="'+which+'" style="width:100%"><option value="">Выбери модель</option>'+ms.map(m=>'<option value="'+E(m.id)+'" '+(id===m.id?'selected':'')+'>'+E(m.label)+'</option>').join("")+'</select>';
+ let a=statsFor(compareA),b=statsFor(compareB);
+ return '<div class="section-intro"><div><h2>Сравнение моделей</h2><p>Только реально записанные ответы, задержки и последствия NES-ввода.</p></div></div>'+
+ panel("Выбор моделей","Показатели из единого журнала, не из тестовых макетов",'<div class="panel-body"><div class="runtime-grid"><div><div class="eyebrow">Модель A</div>'+field(compareA,"a")+'</div><div><div class="eyebrow">Модель B</div>'+field(compareB,"b")+'</div></div></div>')+
+ '<div class="layout" style="margin-top:16px">'+[["A",compareA,a],["B",compareB,b]].map(([label,id,stat])=>
+ panel("Модель "+label,ms.find(m=>m.id===id)?.label||"Не выбрана",'<div class="panel-body"><div class="runtime-grid"><div class="kv"><span>Реальные ответы</span><b>'+stat.inferences+'</b></div><div class="kv"><span>Средняя задержка</span><b>'+(stat.avg===null?"Нет данных":Math.round(stat.avg)+" мс")+'</b></div><div class="kv"><span>Пиксели изменились</span><b>'+stat.visual+'</b></div><div class="kv"><span>Игровая цель</span><b>'+stat.goals+'</b></div></div><div class="callout">Показатели нельзя интерпретировать как качество игры без общей проверенной награды и одинакового набора состояний.</div></div>')).join("")+'</div>';
+}
+function devicePage(){
+ const d=snapshot.device||{},g=snapshot.gpu||{},a=snapshot.audit||{};
+ return '<div class="section-intro"><div><h2>Android и Vulkan</h2><p>Диагностика именно устройства, на котором открыт LocalPilot.</p></div>'+button("↻ Проверить GPU JNI","probeGpu","","primary")+'</div>'+
+ '<div class="layout"><div class="stack">'+panel("Устройство","Информация Android, не геолокация",'<div class="panel-body"><div class="runtime-grid">'+[["Модель",d.model],["Производитель",d.manufacturer],["Android API",d.sdk],["ABI",d.abi],["CPU",d.cores+" потоков"],["Java Heap",d.maxHeapMb+" МБ"]].map(([k,v])=>'<div class="kv"><span>'+E(k)+'</span><b>'+E(v||"—")+'</b></div>').join("")+'</div></div>')+
+ panel("Аудит и хранилище","Все факты локальны для этого APK",'<div class="row-stats"><span>Журнал загружен</span>'+chip(a.loaded?"ДА":"ЧТЕНИЕ",a.loaded?"ok":"warn")+'</div><div class="row-stats"><span>Запись журнала</span>'+chip(a.healthy?"ДОСТУПНА":"FAIL-CLOSED",a.healthy?"ok":"fail")+'</div><div class="row-stats"><span>Событий в памяти</span><b>'+Number(a.events||0)+'</b></div><div class="row-stats"><span>Размер файла</span><b>'+fmtBytes(Number(a.fileBytes||0))+'</b></div>')+
+ '</div><div class="stack">'+panel("Нативный движок","GPU не считается используемым по одному флагу сборки",'<div class="panel-body"><div class="runtime"><h3>◉ Vulkan</h3><div class="chips">'+chip(g.vulkanCompiled?"СОБРАН В APK":"НЕ СОБРАН",g.vulkanCompiled?"blue":"warn")+chip(g.actuallyLoadedLayers>0?"GPU СЛОИ ЗАГРУЖЕНЫ":"CPU/НЕ ДОКАЗАНО",g.actuallyLoadedLayers>0?"ok":"warn")+'</div><p>'+E(g.probe||"Не проверен")+'</p></div><div class="row-stats"><span>Загружено GPU-слоёв</span><b>'+Number(g.actuallyLoadedLayers||0)+'</b></div><div class="row-stats"><span>Физический бенчмарк</span>'+chip("НЕ ПРОВЕРЕН","warn")+'</div><div class="row-stats"><span>Реальное ускорение</span>'+chip("НЕ ИЗМЕРЕНО","warn")+'</div></div>')+
+ panel("Внешние Android-устройства","Отдельное USB/ADB-соединение",'<div class="panel-body muted">Эта версия панели работает на том Android-устройстве, где установлен LocalPilot. Внешний удалённый ADB-исполнитель не подключён; никакие чужие устройства не показаны как доступные.</div>')+'</div></div>';
+}
+function render(){
+ const d=N.find(x=>x[0]===view)||N[0];
+ document.getElementById("heading").textContent=d[2];document.getElementById("subtitle").textContent=d[3];
+ document.getElementById("nav").innerHTML=N.map(x=>'<button class="nav '+(view===x[0]?"active":"")+'" data-action="tab" data-id="'+x[0]+'"><span class="glyph">'+x[1]+'</span><span class="name">'+x[2]+'</span></button>').join("");
+ const c=document.getElementById("connection");
+ c.innerHTML='<i class="dot '+(hasNative&&snapshot.connected?"ok":"warn")+'"></i> '+(hasNative&&snapshot.connected?"Android подключён":"Режим предпросмотра");
+ let notice="";
+ if(!hasNative)notice='<div class="notice"><b>◈</b><span><strong>Интерактивный предпросмотр.</strong> Для настоящего каталога, загрузок, игр и GPU открой эту страницу внутри единого APK LocalPilot. Демо-эпизоды не подставляются.</span></div>';
+ if(snapshot.busy||snapshot.operation)notice+='<div class="notice"><b>⏱</b><span><strong>Операция:</strong> '+E(snapshot.operation||"Готово")+(snapshot.busy?" · выполняется":"")+'</span></div>';
+ if(snapshot.error||lastError)notice+='<div class="notice error"><b>!</b><span>'+E(snapshot.error||lastError)+'</span></div>';
+ if(snapshot.audit?.healthy===false)notice+='<div class="notice error"><b>■</b><span>FAIL-CLOSED: журнал недоступен. Новые действия модели блокируются. '+E(snapshot.audit.error)+'</span></div>';
+ document.getElementById("notice").innerHTML=notice;
+ let content={overview:overview,models:modelsPage,games:gamesPage,episodes:episodesPage,training:trainingPage,compare:comparePage,device:devicePage}[view]();
+ document.getElementById("page").innerHTML=content;
+}
+document.addEventListener("click",e=>{
+ const target=e.target.closest("[data-action]");if(!target)return;
+ const action=target.dataset.action,id=target.dataset.id||"";
+ if(action==="tab"){view=id;render();window.scrollTo(0,0);}
+ else if(action==="episode"){expanded=id;render();}
+ else if(action==="refresh")load();
+ else cmd(action,id);
+});
+document.addEventListener("input",e=>{
+ if(e.target.id==="modelsearch"){search=e.target.value;let at=e.target.selectionStart;render();const input=document.getElementById("modelsearch");if(input){input.focus();input.setSelectionRange(at,at);}}
+});
+document.addEventListener("change",e=>{
+ if(e.target.dataset.compare==="a"){compareA=e.target.value;render();}
+ if(e.target.dataset.compare==="b"){compareB=e.target.value;render();}
+});
+load();
+if(hasNative)setInterval(()=>{if(!document.hidden)load();},2200);
+</script></body></html>
