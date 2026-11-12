@@ -6,6 +6,22 @@ def bundledCatalog = providers.gradleProperty('bundleLocalModelCatalog').orElse(
 def bundledGguf = bundledCatalog || providers.gradleProperty('bundleLocalModel').orElse('false').get().toBoolean()
 // Opt-in single APK with GameLab, NES, and import/download-on-demand ModelLab.
 def unifiedModelLab = providers.gradleProperty('unifiedModelLab').orElse('false').get().toBoolean()
+// CI-only x86_64 build of the same Java/JNI sources for a KVM emulator.
+// Never use this flag for a release APK or distribute this test derivative.
+def unifiedEmulatorAbi = providers.gradleProperty('unifiedEmulatorAbi').orElse('false').get().toBoolean()
+if (unifiedEmulatorAbi && !unifiedModelLab) throw new GradleException('unifiedEmulatorAbi requires unifiedModelLab=true')
+if (unifiedEmulatorAbi && gradle.startParameter.taskNames.any { it.toLowerCase().contains('release') }) {
+ throw new GradleException('x86_64 emulator-only variant must never be built as release')
+}
+// Also reject aggregate tasks (e.g. assemble/build) that resolve to a release
+// variant. CLI task-name checks alone are insufficient for Gradle aliases.
+if (unifiedEmulatorAbi) {
+ gradle.taskGraph.whenReady { graph ->
+  if (graph.allTasks.any { task ->
+   task.project == project && task.name.toLowerCase(java.util.Locale.ROOT).contains('release')
+  }) throw new GradleException('Emulator-only ABI may not execute any app release task')
+ }
+}
 def bundledMetadataFile = rootProject.file('build/reports/embedded-gguf.json')
 def bundledMetadata = null
 if (bundledGguf) {
@@ -74,7 +90,7 @@ android {
       bundledGguf ? ('"' + bundledMetadata.sha256 + '"') : '""'
   buildConfigField 'long', 'EMBEDDED_GGUF_BYTES', bundledGguf ? (bundledMetadata.bytes + 'L') : '0L'
   if (bundledGguf || unifiedModelLab) {
-    ndk { abiFilters 'arm64-v8a' }
+    ndk { abiFilters unifiedEmulatorAbi ? 'x86_64' : 'arm64-v8a' }
   }
  }
  buildTypes {
