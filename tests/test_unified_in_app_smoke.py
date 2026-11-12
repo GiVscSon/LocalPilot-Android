@@ -50,6 +50,36 @@ class UnifiedUiSmokeContract(unittest.TestCase):
         self.assertEqual(smoke.UI_PATH, "/data/local/tmp/localpilot-unified-smoke.xml")
         self.assertNotIn("/sdcard/", smoke.UI_PATH)
 
+    def test_only_system_ui_anr_wait_is_recoverable(self):
+        xml=('<hierarchy><node text="System UI isn\'t responding" bounds="[0,0][400,300]" />'
+             '<node text="Close app" bounds="[0,30][200,80]" />'
+             '<node text="Wait" bounds="[30,90][230,160]" /></hierarchy>')
+        with patch.object(smoke, "adb") as fake:
+            self.assertTrue(smoke.recover_system_ui_anr(xml))
+            fake.assert_called_once_with("shell", "input", "tap", "130", "125", timeout=15)
+        localpilot=xml.replace("System UI isn't responding", "LocalPilot isn't responding")
+        with patch.object(smoke, "adb") as fake:
+            self.assertFalse(smoke.recover_system_ui_anr(localpilot))
+            fake.assert_not_called()
+
+    def test_system_ui_anr_without_safe_wait_fails_closed(self):
+        xml='<hierarchy><node text="System UI isn\'t responding" bounds="[0,0][200,60]"/></hierarchy>'
+        with self.assertRaisesRegex(RuntimeError, "no safe Wait"):
+            smoke.recover_system_ui_anr(xml)
+
+    def test_dump_does_not_accept_dismissed_anr_as_navigation_success(self):
+        anr=('<hierarchy><node text="System UI isn\'t responding" bounds="[0,0][200,60]"/>'
+             '<node text="Wait" bounds="[0,60][200,120]"/></hierarchy>')
+        real='<hierarchy><node text="ModelLab · локальные нейросети" bounds="[0,0][200,60]"/></hierarchy>'
+        reads=iter((anr, real))
+        def device(*args, **kwargs):
+            if args[:2]==("shell","cat"):
+                return next(reads)
+            return ""
+        with patch.object(smoke,"adb",side_effect=device) as fake, patch.object(smoke.time,"sleep"):
+            self.assertEqual(smoke.dump_ui(),real)
+            self.assertEqual(sum(x.args[:3]==("shell","input","tap") for x in fake.call_args_list),1)
+
     def test_dump_requires_fresh_ui_and_tries_compressed_fallback(self):
         xml='<hierarchy><node text="ModelLab" bounds="[1,1][20,20]" /></hierarchy>'
         attempts=[]
