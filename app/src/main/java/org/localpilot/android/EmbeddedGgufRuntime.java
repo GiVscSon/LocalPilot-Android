@@ -311,6 +311,57 @@ public final class EmbeddedGgufRuntime {
                    Result callback){
   image(model,projector,prompt,rgb,width,height,0,callback);
  }
+ /** Real NES action inference, never the diagnostic caption/strategy prompt.
+  * The emulator validates the model's untrusted one-line suggestion separately.
+  */
+ private static final String CONSOLE_SYSTEM=
+   "You are a bounded controller for the built-in NES homebrew. "+
+   "Return exactly ONE line: ACTION=A, ACTION=B, ACTION=UP, "+
+   "ACTION=DOWN, ACTION=LEFT, ACTION=RIGHT or ACTION=STOP. "+
+   "If uncertain answer ACTION=STOP. No commentary, markdown or extra text. "+
+   "Never control Android inputs.";
+
+ public void consoleAction(File model,String observation,int requestedGpuLayers,Result callback){
+  if(!BuildConfig.UNIFIED_MODELLAB)throw new IllegalStateException("NES action needs unified ModelLab");
+  if(model==null||!model.isFile())throw new IllegalArgumentException("NES GGUF missing");
+  if(observation==null||observation.isBlank()||observation.length()>1000)
+   throw new IllegalArgumentException("Invalid NES observation");
+  if(requestedGpuLayers!=0&&!BuildConfig.VULKAN_COMPILED)
+   throw new IllegalArgumentException("Vulkan backend not compiled");
+  final long started=android.os.SystemClock.elapsedRealtime();
+  submit(answer->callback.complete(answer,android.os.SystemClock.elapsedRealtime()-started),()->{
+   prepareNativeInference();
+   chooseGpuLayers(requestedGpuLayers);
+   String raw=nativeInfer(model.getAbsolutePath(),CONSOLE_SYSTEM,observation,96,0f);
+   if(BuildConfig.VULKAN_COMPILED)gpuLayersLoaded=nativeLoadedGpuLayers();
+   return LocalCoreContract.visibleAnswer(raw);
+  });
+ }
+
+ public void consoleActionImage(File model,File projector,String observation,byte[] rgb,
+                                int width,int height,int requestedGpuLayers,Result callback){
+  if(!BuildConfig.UNIFIED_MODELLAB)throw new IllegalStateException("NES action needs unified ModelLab");
+  if(model==null||projector==null||!model.isFile()||!projector.isFile())
+   throw new IllegalArgumentException("NES vision GGUF and mmproj missing");
+  if(observation==null||observation.isBlank()||observation.length()>1000||
+     rgb==null||width<1||height<1||width>640||height>640||
+     (long)width*height*3!=rgb.length)
+   throw new IllegalArgumentException("Invalid bounded NES visual observation");
+  if(requestedGpuLayers!=0&&!BuildConfig.VULKAN_COMPILED)
+   throw new IllegalArgumentException("Vulkan backend not compiled");
+  final byte[] pixels=rgb.clone();
+  final long started=android.os.SystemClock.elapsedRealtime();
+  submit(answer->callback.complete(answer,android.os.SystemClock.elapsedRealtime()-started),()->{
+   prepareNativeInference();
+   chooseGpuLayers(requestedGpuLayers);
+   String raw=nativeAnalyzeImage(model.getAbsolutePath(),projector.getAbsolutePath(),
+     CONSOLE_SYSTEM+" Inspect the supplied real NES framebuffer. "+observation,
+     pixels,width,height);
+   if(BuildConfig.VULKAN_COMPILED)gpuLayersLoaded=nativeLoadedGpuLayers();
+   return LocalCoreContract.visibleAnswer(raw);
+  });
+ }
+
  public void probeGpu(Result callback){
   if(callback==null)throw new IllegalArgumentException("Result callback required");
   if(!BuildConfig.VULKAN_COMPILED){
