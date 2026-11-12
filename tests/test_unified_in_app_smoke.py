@@ -10,6 +10,14 @@ smoke=importlib.util.module_from_spec(spec)
 spec.loader.exec_module(smoke)
 
 class UnifiedUiSmokeContract(unittest.TestCase):
+    def test_harness_console_is_native_same_process_not_fake_widget(self):
+        smoke_code=(ROOT/"tools/unified_in_app_smoke.py").read_text(encoding="utf-8")
+        self.assertEqual(smoke.HARNESS,"org.localpilot.android.HarnessDashboardActivity")
+        self.assertIn('tap_text("Harness Console")',smoke_code)
+        self.assertIn('wait_activity(HARNESS)',smoke_code)
+        self.assertIn('in_app_harness_dashboard_webview',smoke_code)
+        self.assertIn('one_process() != process',smoke_code)
+
     def test_parse_visible_button_text(self):
         xml='<hierarchy><node text="🧠 ModelLab · GGUF, загрузка моделей и анализ фото" bounds="[12,100][312,180]" /></hierarchy>'
         self.assertEqual(smoke.target_bounds(xml,"ModelLab · GGUF"),(162,140))
