@@ -26,6 +26,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import org.localpilot.shared.NesTrial;
 import org.localpilot.shared.NesFrameTransfer;
+import org.localpilot.shared.ConsoleAgentContract;
 
 /**
  * Independent on-device AI laboratory. No LocalPilot service/gestures are present.
@@ -52,6 +53,8 @@ public final class ModelLabActivity extends Activity {
  private final List<ModelLabStore.Entry> displayed=new ArrayList<>();
  private TextView status,result,modelStatus,imageStatus,nesStatus;
  private NesTrial nesTrial;
+ private String consoleAgentTicket;
+ private int consoleAgentFrame,consoleAgentHash;
  // A callback from an earlier NES episode or screenshot is never displayed
  // as the result of a later one. UI-thread confined revision tracking.
  private final ModelLabResultGate revisions=new ModelLabResultGate();
@@ -137,6 +140,70 @@ public final class ModelLabActivity extends Activity {
      }
     });
     return "Только текстовая стратегия, без доступа к игровым кнопкам";
+   },false);
+  });
+  button(col,"ИИ-агент · выбрать и выполнить один ход в тестовой NES",()->{
+   final String nonce=consoleAgentTicket;
+   final long revision=revisions.nes();
+   final ModelLabStore.Entry selection=selected();
+   if(!inUnifiedApk()||!ConsoleAgentContract.tokenValid(nonce)){
+    nesStatus.setText("Сначала открой встроенную homebrew NES и нажми «ИИ-агент · получить кадр»");return;
+   }
+   if(selection==null||engine.busy()){
+    nesStatus.setText("Выбери загруженную GGUF-модель; движок должен быть свободен");return;
+   }
+   final int observedFrame=consoleAgentFrame,observedHash=consoleAgentHash;
+   final byte[] pixels=rgb==null?null:rgb.clone();
+   final int w=width,h=height;
+   nesStatus.setText("ИИ анализирует наблюдение NES и предлагает один ограниченный ход...");
+   task("Проверяю выбранный GGUF для NES",()->{
+    File weights=store.modelFile(selection);
+    File projector=(selection.vision()&&pixels!=null)?store.projectorFile(selection):null;
+    final String instruction=
+      "You are selecting exactly ONE controller button in a sandbox NES homebrew. "+
+      "Observation frame="+observedFrame+" pixelHash="+Integer.toUnsignedString(observedHash)+". "+
+      "Allowed outputs: BUTTON=A, BUTTON=B, BUTTON=UP, BUTTON=DOWN, BUTTON=LEFT, "+
+      "BUTTON=RIGHT, or BUTTON=NONE. Reply with exactly ONE of these strings; "+
+      "no explanation, formatting, code or additional words. "+
+      "A controller gate will verify the ROM, hold the button for 16 frames and "+
+      "check the next screenshot. Pixel differences are not a win or reward.";
+    runOnUiThread(()->{
+     if(closed||!revisions.currentNes(revision)||!nonce.equals(consoleAgentTicket))return;
+     try{
+      EmbeddedGgufRuntime.Result callback=(answer,elapsed)->{
+       if(closed||!revisions.currentNes(revision)||!nonce.equals(consoleAgentTicket))return;
+       consoleAgentTicket=null; // one request, one result, never replay
+       String button=ConsoleAgentContract.parseButton(answer);
+       if(button==null){
+        nesStatus.setText("STOP: модель не выдала строго BUTTON=...; действие запрещено. "+
+          "Время "+elapsed+" мс. Повтори наблюдение в NES.");return;
+       }
+       Intent move=new Intent(ConsoleAgentContract.MOVE)
+        .setClassName(getPackageName(),"org.localpilot.gamelab.NesEmulatorActivity")
+        .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP|Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        .putExtra(ConsoleAgentContract.TOKEN,nonce)
+        .putExtra(ConsoleAgentContract.BUTTON,button)
+        .putExtra(ConsoleAgentContract.MODEL_ID,selection.id)
+        .putExtra(ConsoleAgentContract.MODEL_SHA,selection.modelSha);
+       try{startActivity(move);}
+       catch(RuntimeException error){nesStatus.setText("STOP: NES-контроллер недоступен");}
+      };
+      if(projector!=null&&pixels!=null){
+       engine.image(weights,projector,instruction,pixels,w,h,selectedGpuLayers(selection),callback);
+       nesStatus.setText("Vision GGUF анализирует реальный 128×120 NES-кадр...");
+      }else{
+       engine.text(weights,
+         "Text-only policy: the screenshot cannot be seen by this model. "+
+         "This is a blind exploration move based only on the sampled frame/hash. "+
+         instruction,selectedGpuLayers(selection),callback);
+       nesStatus.setText("Text GGUF выбирает пробный ход БЕЗ зрения...");
+      }
+     }catch(RuntimeException failure){
+      consoleAgentTicket=null;
+      nesStatus.setText("STOP: GGUF не запущен: "+failure.getClass().getSimpleName());
+     }
+    });
+    return "GGUF проверен; ожидается вывод и независимая проверка NES";
    },false);
   });
   button(col,"STOP · отменить локальную генерацию",()->{
@@ -381,8 +448,44 @@ public final class ModelLabActivity extends Activity {
   receiveNesIntent(getIntent());
  }
 
+ private void receiveConsoleAgentObservation(Intent intent){
+  revisions.newNes();revisions.newImage();
+  consoleAgentTicket=null;nesTrial=null;
+  rgb=null;nesFrameLoaded=false;width=height=0;
+  if(preview!=null){preview.setImageDrawable(null);preview.setVisibility(View.GONE);}
+  if(previewBitmap!=null){previewBitmap.recycle();previewBitmap=null;}
+  if(intent==null||!inUnifiedApk())return;
+  String token=intent.getStringExtra(ConsoleAgentContract.TOKEN);
+  int frame=intent.getIntExtra(ConsoleAgentContract.FRAME,-1);
+  int hash=intent.getIntExtra(ConsoleAgentContract.HASH,0);
+  byte[] png=intent.getByteArrayExtra(NesFrameTransfer.EXTRA_PNG);
+  if(!ConsoleAgentContract.tokenValid(token)||frame<15||hash==0||png==null){
+   nesStatus.setText("STOP: неверное агентное наблюдение NES");return;
+  }
+  try{
+   NesFrameTransfer.verify(png);
+   Bitmap frameBitmap=BitmapFactory.decodeByteArray(png,0,png.length);
+   if(frameBitmap==null||frameBitmap.getWidth()!=NesFrameTransfer.WIDTH||
+      frameBitmap.getHeight()!=NesFrameTransfer.HEIGHT){
+    if(frameBitmap!=null)frameBitmap.recycle();
+    throw new IllegalArgumentException("Invalid NES agent PNG");
+   }
+   applyBitmap(frameBitmap,true);
+   consoleAgentTicket=token;consoleAgentFrame=frame;consoleAgentHash=hash;
+   nesStatus.setText("NES наблюдение #"+frame+" получено. Выбери GGUF и нажми "+
+     "«ИИ-агент · выбрать и выполнить один ход». STOP и TTL действуют.");
+   imageStatus.setText("Только свежий PNG-кадр из встроенной NES. "+
+     "Text GGUF не видит картинку; для зрения нужен mmproj.");
+  }catch(RuntimeException|OutOfMemoryError invalid){
+   nesStatus.setText("STOP: PNG-кадр NES не прошёл проверку");
+  }
+ }
  private void receiveNesIntent(Intent intent){
+  if(intent!=null&&ConsoleAgentContract.OBSERVE.equals(intent.getAction())){
+   receiveConsoleAgentObservation(intent);return;
+  }
   if(intent==null||!NesTrial.ACTION.equals(intent.getAction()))return;
+  consoleAgentTicket=null;
   // Even a malformed incoming trial invalidates old asynchronous results.
   revisions.newNes();
   revisions.newImage();
