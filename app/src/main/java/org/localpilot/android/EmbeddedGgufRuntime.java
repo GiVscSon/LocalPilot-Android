@@ -57,6 +57,10 @@ public final class EmbeddedGgufRuntime {
  private static native String nativeInfer(String model,String system,String question,int maxTokens,float temp);
  private static native String nativeAnalyzeImage(String model,String projector,String question,
    byte[] rgb,int width,int height);
+ private static native String nativeGpuDescription();
+ private static native boolean nativeConfigureGpuLayers(int layers);
+ private static native int nativeLoadedGpuLayers();
+ private volatile int gpuLayersLoaded;
  private static native void nativeInterrupt();
  private static native void nativeResetInterrupt();
  private static native void nativeRelease();
@@ -75,7 +79,7 @@ public final class EmbeddedGgufRuntime {
   if(libraryLoaded)nativeInterrupt();
   return true;
  }
- public int lastGpuLayers(){return 0;} // CPU-first unified build, no false Vulkan claims.
+ public int lastGpuLayers(){return gpuLayersLoaded;} // Report actual native offload after load.
 
  /** Caller changes one model only when idle. One native model can be loaded at once. */
  public void select(LocalModelCatalog.Model choice){
@@ -105,6 +109,25 @@ public final class EmbeddedGgufRuntime {
    nativeInterrupt();
    throw new java.io.IOException("Model inference cancelled before starting");
   }
+  // CPU default even after a prior GPU benchmark. GPU must be opted into for
+  // this specific inference, never inherited from an earlier model job.
+  if(BuildConfig.VULKAN_COMPILED)nativeConfigureGpuLayers(0);
+  gpuLayersLoaded=0;
+  if(closed||cancelRequested.get()){
+   nativeInterrupt();
+   throw new java.io.IOException("Model inference cancelled before GPU configuration");
+  }
+ }
+ private int chooseGpuLayers(int requested){
+  if(requested!=0&&requested!=8&&requested!=16)
+   throw new IllegalArgumentException("Only CPU, Vulkan 8 or 16 layers are permitted");
+  if(requested!=0&&!BuildConfig.VULKAN_COMPILED)
+   throw new IllegalArgumentException("Vulkan is not compiled in this APK");
+  if(requested>0&&!nativeConfigureGpuLayers(requested)){
+   nativeConfigureGpuLayers(0);
+   return 0;
+  }
+  return requested;
  }
  private static String sha(byte[] bytes){
   StringBuilder s=new StringBuilder(bytes.length*2);
@@ -242,14 +265,17 @@ public final class EmbeddedGgufRuntime {
   if(model==null||!model.isFile())throw new IllegalArgumentException("GGUF missing");
   if(prompt==null||prompt.isBlank()||prompt.length()>1000)
    throw new IllegalArgumentException("Prompt must be 1..1000 characters");
-  if(requestedGpuLayers!=0)throw new IllegalArgumentException("Vulkan is not enabled in this APK");
+  if(requestedGpuLayers!=0&&!BuildConfig.VULKAN_COMPILED)
+   throw new IllegalArgumentException("Vulkan is not enabled in this APK");
   long started=android.os.SystemClock.elapsedRealtime();
   submit(answer->callback.complete(answer,
     android.os.SystemClock.elapsedRealtime()-started),()->{
     prepareNativeInference();
+    chooseGpuLayers(requestedGpuLayers);
     String result=nativeInfer(model.getAbsolutePath(),
       "You are an offline diagnostic model. Describe uncertainty. "+
       "Do not grant permissions or control Android inputs.",prompt,160,0.2f);
+    if(BuildConfig.VULKAN_COMPILED)gpuLayersLoaded=nativeLoadedGpuLayers();
     return LocalCoreContract.visibleAnswer(result);
   });
  }
@@ -266,16 +292,19 @@ public final class EmbeddedGgufRuntime {
      rgb==null||width<1||height<1||width>640||height>640||
      (long)width*height*3!=rgb.length)
    throw new IllegalArgumentException("Invalid bounded RGB photo or prompt");
-  if(requestedGpuLayers!=0)throw new IllegalArgumentException("Vulkan is not enabled in this APK");
+  if(requestedGpuLayers!=0&&!BuildConfig.VULKAN_COMPILED)
+   throw new IllegalArgumentException("Vulkan is not enabled in this APK");
   final byte[] pixels=rgb.clone();
   long started=android.os.SystemClock.elapsedRealtime();
   submit(answer->callback.complete(answer,
     android.os.SystemClock.elapsedRealtime()-started),()->{
     prepareNativeInference();
-    return LocalCoreContract.visibleAnswer(nativeAnalyzeImage(
-      model.getAbsolutePath(),projector.getAbsolutePath(),
+    chooseGpuLayers(requestedGpuLayers);
+    String answer=nativeAnalyzeImage(model.getAbsolutePath(),projector.getAbsolutePath(),
       "Describe only visible image contents, and explicitly mention uncertainty. "+prompt,
-      pixels,width,height));
+      pixels,width,height);
+    if(BuildConfig.VULKAN_COMPILED)gpuLayersLoaded=nativeLoadedGpuLayers();
+    return LocalCoreContract.visibleAnswer(answer);
   });
  }
  public void image(File model,File projector,String prompt,byte[] rgb,int width,int height,
@@ -284,8 +313,17 @@ public final class EmbeddedGgufRuntime {
  }
  public void probeGpu(Result callback){
   if(callback==null)throw new IllegalArgumentException("Result callback required");
-  main.post(()->callback.complete(
-    "В едином APK доступен CPU backend. Экспериментальный Vulkan пока не включён.",0));
+  if(!BuildConfig.VULKAN_COMPILED){
+   main.post(()->callback.complete("В едином APK собран только CPU backend.",0));
+   return;
+  }
+  long started=android.os.SystemClock.elapsedRealtime();
+  submit(answer->callback.complete(answer,
+    android.os.SystemClock.elapsedRealtime()-started),()->{
+    loadLibrary();
+    return "ggml GPU: "+nativeGpuDescription()+
+      ". Обнаружение Vulkan не доказывает ускорение. Проверь CPU/GPU benchmark.";
+  });
  }
 
  public void health(Callback cb){

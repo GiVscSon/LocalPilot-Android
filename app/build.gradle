@@ -9,17 +9,23 @@ def unifiedModelLab = providers.gradleProperty('unifiedModelLab').orElse('false'
 // CI-only x86_64 build of the same Java/JNI sources for a KVM emulator.
 // Never use this flag for a release APK or distribute this test derivative.
 def unifiedEmulatorAbi = providers.gradleProperty('unifiedEmulatorAbi').orElse('false').get().toBoolean()
+// Opt-in experimental native Vulkan in the SAME unified Android package.
+def unifiedVulkan = providers.gradleProperty('unifiedVulkan').orElse('false').get().toBoolean()
+if (unifiedVulkan && (!unifiedModelLab || unifiedEmulatorAbi || bundledGguf))
+ throw new GradleException('Unified Vulkan requires ARM64 on-demand ModelLab without bundled weights')
 if (unifiedEmulatorAbi && !unifiedModelLab) throw new GradleException('unifiedEmulatorAbi requires unifiedModelLab=true')
 if (unifiedEmulatorAbi && gradle.startParameter.taskNames.any { it.toLowerCase().contains('release') }) {
  throw new GradleException('x86_64 emulator-only variant must never be built as release')
 }
+if (unifiedVulkan && gradle.startParameter.taskNames.any { it.toLowerCase(java.util.Locale.ROOT).contains('release') })
+ throw new GradleException('Experimental Vulkan cannot be built as stable release')
 // Also reject aggregate tasks (e.g. assemble/build) that resolve to a release
 // variant. CLI task-name checks alone are insufficient for Gradle aliases.
-if (unifiedEmulatorAbi) {
+if (unifiedEmulatorAbi || unifiedVulkan) {
  gradle.taskGraph.whenReady { graph ->
   if (graph.allTasks.any { task ->
    task.project == project && task.name.toLowerCase(java.util.Locale.ROOT).contains('release')
-  }) throw new GradleException('Emulator-only ABI may not execute any app release task')
+  }) throw new GradleException('Experimental ABI/backend may not execute any app release task')
  }
 }
 def bundledMetadataFile = rootProject.file('build/reports/embedded-gguf.json')
@@ -81,7 +87,16 @@ android {
   buildConfigField 'boolean', 'EMBEDDED_GGUF', bundledGguf.toString()
   buildConfigField 'boolean', 'UNIFIED_MODELLAB', unifiedModelLab.toString()
   manifestPlaceholders = [unifiedModelLabEnabled: unifiedModelLab.toString()]
-  buildConfigField 'boolean', 'VULKAN_COMPILED', 'false'
+  buildConfigField 'boolean', 'VULKAN_COMPILED', unifiedVulkan.toString()
+  if (unifiedVulkan) {
+   externalNativeBuild { cmake {
+    arguments '-DMODEL_LAB_VULKAN=ON',
+     '-DVulkan_GLSLC_EXECUTABLE=' + System.getenv('ANDROID_HOME') + '/ndk/27.2.12479018/shader-tools/linux-x86_64/glslc',
+     '-DSPIRV-Headers_DIR=' + rootProject.file('build/spirv-headers-install/share/cmake/SPIRV-Headers').absolutePath,
+     '-DMODEL_LAB_SPIRV_INCLUDE_DIR=' + rootProject.file('build/spirv-headers-install/include').absolutePath,
+     '-DMODEL_LAB_VULKAN_HEADERS_DIR=' + rootProject.file('third_party/Vulkan-Headers/include').absolutePath
+   } }
+  }
   buildConfigField 'boolean', 'PRELOADED_MODELS', 'false'
   buildConfigField 'String', 'POCKET_SHA256', '\"\"'
   buildConfigField 'long', 'POCKET_BYTES', '0L'
