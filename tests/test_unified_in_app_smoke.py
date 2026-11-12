@@ -2,6 +2,7 @@
 from pathlib import Path
 import importlib.util
 import unittest
+from unittest.mock import patch
 
 ROOT=Path(__file__).resolve().parents[1]
 spec=importlib.util.spec_from_file_location("unified_ui_smoke",ROOT/"tools/unified_in_app_smoke.py")
@@ -22,6 +23,16 @@ class UnifiedUiSmokeContract(unittest.TestCase):
         self.assertNotEqual(smoke.MAIN,smoke.MODEL)
         self.assertNotEqual(smoke.MODEL,smoke.GAMELAB)
         self.assertNotEqual(smoke.GAMELAB,smoke.NES)
+    def test_companion_absence_is_exact_and_does_not_depend_on_pm_path(self):
+        with patch.object(smoke, "adb", return_value="package:org.localpilot.modellab.debug\\n") as fake:
+            self.assertTrue(smoke.companion_absent("org.localpilot.modellab"))
+            fake.assert_called_once_with("shell", "pm", "list", "packages", "org.localpilot.modellab")
+        with patch.object(smoke, "adb", return_value="package:org.localpilot.modellab\\n"):
+            self.assertFalse(smoke.companion_absent("org.localpilot.modellab"))
+        with patch.object(smoke, "adb", side_effect=RuntimeError("ADB disconnected")):
+            with self.assertRaisesRegex(RuntimeError, "disconnected"):
+                smoke.companion_absent("org.localpilot.modellab")
+
     def test_requires_emulator_and_never_changes_secure_settings(self):
         source=(ROOT/"tools/unified_in_app_smoke.py").read_text(encoding="utf-8")
         self.assertIn("if not is_emulator()",source)
