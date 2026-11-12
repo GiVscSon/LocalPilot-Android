@@ -42,6 +42,11 @@ jobs:
           python3 -m unittest discover -s tests -p 'test_localpilot_all_in_one.py' -v
           python3 -m unittest discover -s tests -p 'test_unified_in_app_smoke.py' -v
           node tests/console_model_frame_vm.test.js
+          python3 -m unittest discover -s tests -p 'test_harness_dashboard_contract.py' -v
+          node tests/harness_dashboard_dom.test.js
+          mkdir -p build/harness-jvm
+          javac --release 17 -d build/harness-jvm shared/src/main/java/org/localpilot/shared/HarnessTelemetry.java tests/HarnessTelemetryTest.java
+          java -cp build/harness-jvm HarnessTelemetryTest
           java tests/ConsoleAgentPolicyVerify.java
           java tests/ModelLabPolicyVerify.java
           java tests/ModelLabComputePolicyVerify.java
