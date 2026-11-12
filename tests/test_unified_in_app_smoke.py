@@ -46,6 +46,46 @@ class UnifiedUiSmokeContract(unittest.TestCase):
         self.assertIn('"releaseReady": False',source)
         self.assertIn('"modelGeneration": "NOT_TESTED"',source)
         self.assertIn('"realGameMotion": "NOT_TESTED"',source)
+    def test_dump_requires_fresh_ui_and_tries_compressed_fallback(self):
+        xml='<hierarchy><node text="ModelLab" bounds="[1,1][20,20]" /></hierarchy>'
+        attempts=[]
+        def device(*args, **kwargs):
+            attempts.append(args)
+            if args[:3]==("shell","uiautomator","dump") and "--compressed" not in args:
+                if sum(x[:3]==("shell","uiautomator","dump") for x in attempts)==1:
+                    raise RuntimeError("UiAutomation not idle")
+            if args[:2]==("shell","cat"):
+                return xml
+            return ""
+        with patch.object(smoke,"adb",side_effect=device), patch.object(smoke.time,"sleep"):
+            self.assertEqual(smoke.dump_ui(),xml)
+        self.assertEqual(sum(x[:3]==("shell","rm","-f") for x in attempts),2)
+        self.assertTrue(any("--compressed" in x for x in attempts))
+
+    def test_dump_preserves_actual_device_failure_reason(self):
+        with patch.object(smoke,"adb",side_effect=RuntimeError("UiAutomation connection refused")), \
+             patch.object(smoke.time,"sleep"):
+            with self.assertRaisesRegex(RuntimeError, "UiAutomation connection refused"):
+                smoke.dump_ui()
+
+    def test_bad_or_empty_xml_fails_closed(self):
+        with patch.object(smoke,"adb",side_effect=lambda *args, **kwargs:
+                          '<hierarchy></hierarchy>' if args[:2]==("shell","cat") else ""), \
+             patch.object(smoke.time,"sleep"):
+            with self.assertRaisesRegex(RuntimeError, "no accessible UI nodes"):
+                smoke.dump_ui()
+
+    def test_failure_diagnostics_never_mark_release_ready(self):
+        import tempfile, json
+        with tempfile.TemporaryDirectory() as folder:
+            report=Path(folder)/"evidence.json"
+            with patch.object(smoke,"adb",return_value="emulator test state"), \
+                 patch.object(smoke.subprocess,"run",side_effect=OSError("no screenshot")):
+                smoke.write_failure_diagnostics(report,RuntimeError("specific failure"))
+            evidence=json.loads((report.parent/"failure-diagnostics.json").read_text())
+            self.assertIs(evidence["releaseReady"],False)
+            self.assertIn("specific failure",evidence["exception"])
+
     def test_ci_uses_only_compiled_single_candidate_artifact(self):
         workflow=(ROOT/".github/workflows/localpilot-all-in-one.yml").read_text(encoding="utf-8")
         self.assertIn("needs: all-in-one",workflow)
