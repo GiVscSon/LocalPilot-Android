@@ -102,6 +102,11 @@ public final class HarnessImitationPolicy {
    if(candidate!=null){
     validatedWeights(candidate);
     result.put("candidateSha256",candidate.getString("sha256"));
+    result.put("candidateExamples",candidate.getInt("trainingSamples"));
+    result.put("candidateAccuracy",candidate.getDouble("holdoutAccuracy"));
+    result.put("candidateBaseline",candidate.getDouble("baselineAccuracy"));
+    result.put("candidateSourceEpisodes",candidate.getJSONArray("trainingEpisodes"));
+    result.put("candidateHoldoutEpisodes",candidate.getJSONArray("holdoutEpisodes"));
    }
   }catch(Exception e){
    try{result.put("active",false).put("error",e.getClass().getSimpleName());}
