@@ -282,7 +282,34 @@ public final class EmbeddedGgufRuntime {
                    Result callback){
   image(model,projector,prompt,rgb,width,height,0,callback);
  }
- public void probeGpu(Result callback){
+ /** Sandboxed NES proposal, not an Android-input API. CPU until unified Vulkan is verified. */
+ public void proposeNesButton(File weights,File projector,String observation,
+    byte[] rgb,int width,int height,int requestedGpuLayers,Result callback){
+  if(!BuildConfig.UNIFIED_MODELLAB||requestedGpuLayers!=0)
+   throw new IllegalStateException("Unified NES agent requires a CPU model for now");
+  if(weights==null||!weights.isFile()||observation==null||observation.isBlank()||
+      observation.length()>900||callback==null)
+   throw new IllegalArgumentException("Missing verified GGUF or bounded observation");
+  if(projector!=null&&(rgb==null||!projector.isFile()||width<1||height<1||
+      width>640||height>640||(long)width*height*3!=rgb.length))
+   throw new IllegalArgumentException("Invalid visual model/projector or NES RGB");
+  final byte[] pixels=projector!=null?rgb.clone():null;
+  final String instructions="You are a one-step controller for the BUILT-IN "+
+   "NES homebrew sandbox. Reply with EXACTLY one of BUTTON=A, BUTTON=B, "+
+   "BUTTON=UP, BUTTON=DOWN, BUTTON=LEFT, BUTTON=RIGHT, BUTTON=NONE. "+
+   "Do not explain or issue Android commands. Do not claim success or reward. ";
+  final long started=android.os.SystemClock.elapsedRealtime();
+  submit(answer->callback.complete(answer,
+    android.os.SystemClock.elapsedRealtime()-started),()->{
+   prepareNativeInference();
+   String proposal=projector==null?
+     nativeInfer(weights.getAbsolutePath(),instructions,observation,48,0.0f):
+     nativeAnalyzeImage(weights.getAbsolutePath(),projector.getAbsolutePath(),
+       instructions+observation,pixels,width,height);
+   return LocalCoreContract.visibleAnswer(proposal);
+  });
+ }
+  public void probeGpu(Result callback){
   if(callback==null)throw new IllegalArgumentException("Result callback required");
   main.post(()->callback.complete(
     "В едином APK доступен CPU backend. Экспериментальный Vulkan пока не включён.",0));
