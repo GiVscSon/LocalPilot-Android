@@ -55,6 +55,18 @@ public final class EmbeddedGgufRuntime {
   }
  }
  /** Read-only ggml GPU discovery, only on explicit user click. */
+ /** Shared source compatibility only. The standalone laboratory has no NES
+  * controller; action authority exists exclusively in the unified APK.
+  * Ordinary standalone text/photo generation stays fully operational.
+  */
+ public void consoleAction(File model,String observation,int requestedGpuLayers,Result callback){
+  throw new IllegalStateException("NES agent inference requires the single unified APK");
+ }
+ public void consoleActionImage(File model,File projector,String observation,
+                                byte[] rgb,int width,int height,int requestedGpuLayers,
+                                Result callback){
+  throw new IllegalStateException("NES agent inference requires the single unified APK");
+ }
  public void probeGpu(Result callback){
   submit(callback,()->{
    if(!BuildConfig.VULKAN_COMPILED)
