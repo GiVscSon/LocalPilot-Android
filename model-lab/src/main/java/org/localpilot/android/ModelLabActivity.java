@@ -657,7 +657,12 @@ public final class ModelLabActivity extends Activity {
     try{
      if(runtime.busy())throw new IllegalStateException("GGUF engine busy");
      if(projector==null)runtime.consoleAction(weights,observation,offload,
-       (answer,elapsed)->reply.complete(answer));
+       (answer,elapsed)->{
+        boolean proposed=answer!=null&&answer.matches("ACTION=(?:A|B|UP|DOWN|LEFT|RIGHT|STOP)");
+        org.localpilot.shared.HarnessTelemetry.emit("MODEL",proposed?"MODEL_USED":"REJECTED",
+          proposed?answer:"No valid strict ACTION reply from native GGUF",elapsed);
+        reply.complete(answer);
+       });
      else{
       NesFrameTransfer.verify(png);
       Bitmap frame=BitmapFactory.decodeByteArray(png,0,png.length);
@@ -675,7 +680,12 @@ public final class ModelLabActivity extends Activity {
        rgb[3*i+2]=(byte)pixels[i];
       }
       runtime.consoleActionImage(weights,projector,observation,rgb,w,h,offload,
-        (answer,elapsed)->reply.complete(answer));
+        (answer,elapsed)->{
+        boolean proposed=answer!=null&&answer.matches("ACTION=(?:A|B|UP|DOWN|LEFT|RIGHT|STOP)");
+        org.localpilot.shared.HarnessTelemetry.emit("MODEL",proposed?"MODEL_USED":"REJECTED",
+          proposed?answer:"No valid strict ACTION reply from native GGUF",elapsed);
+        reply.complete(answer);
+       });
      }
     }catch(Exception|LinkageError failure){reply.complete("");}
    }
