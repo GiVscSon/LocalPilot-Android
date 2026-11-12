@@ -36,6 +36,9 @@ import org.localpilot.shared.NesTrial;
 import org.localpilot.shared.NesFrameTransfer;
 import org.localpilot.shared.ConsoleAgentBridge;
 import org.localpilot.shared.ConsoleAgentPolicy;
+import org.localpilot.shared.ConsoleObservation;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 
 /**
  * NES CPU/PPU emulation: JSNES 2.1.0 execution inside a
@@ -496,6 +499,20 @@ public final class NesEmulatorActivity extends Activity {
      !frameEpoch.current(neuralRomEpoch)||!resumed||pendingTrial!=null){
    stopNeuralAgent("STOP: сменился ROM или нейросеть");return;
   }
+  String view;
+  try{
+   Bitmap image=BitmapFactory.decodeByteArray(checkedPng,0,checkedPng.length);
+   if(image==null)throw new IllegalArgumentException("Cannot decode NES image");
+   int w=image.getWidth(),h=image.getHeight();
+   if(w!=ConsoleObservation.WIDTH||h!=ConsoleObservation.HEIGHT){
+    image.recycle();throw new IllegalArgumentException("NES image size mismatch");
+   }
+   int[] colors=new int[w*h];image.getPixels(colors,0,w,0,0,w,h);
+   image.recycle();
+   view=ConsoleObservation.luminance8x8(colors,w,h);
+  }catch(RuntimeException|OutOfMemoryError failure){
+   stopNeuralAgent("STOP: не удалось извлечь данные из кадра");return;
+  }
   neuralObservedFrame=frames;
   neuralObservedHash=hash;
   neuralObservedAt=SystemClock.elapsedRealtime();
@@ -504,9 +521,9 @@ public final class NesEmulatorActivity extends Activity {
   final String previous=readyTrial==null?"none":readyTrial.button+" "+readyTrial.status;
   final String prompt="You control an original built-in NES homebrew test. "+
     "Observed frame="+frames+", image fingerprint="+Integer.toHexString(hash)+
-    ", last verified button="+previous+". "+
+    ", last verified button="+previous+", real 8x8 luminance framebuffer="+view+". "+
     (model.vision()?"Inspect the attached NES screenshot. ":
-      "Only a text-based fingerprint is available; STOP if uncertain. ")+
+      "Use the real 8x8 NES pixel grid above. STOP if uncertain. ")+
     "Choose exactly ONE of A, B, UP, DOWN, LEFT, RIGHT, STOP. "+
     "Reply EXACTLY ACTION=A or ACTION=STOP, substituting one allowed button. "+
     "No commentary, markdown, punctuation or extra lines.";

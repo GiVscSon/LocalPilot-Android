@@ -185,6 +185,7 @@ public final class ModelLabActivity extends Activity {
      });
     });
     preferredModelId=installed.id;
+    if(inUnifiedApk())registerConsoleBrain(installed);
     runOnUiThread(()->{
      if(!closed)presetStatus.setText("Готово · "+installed.label+
       ". SHA-256 и точный размер подтверждены, модель доступна в списке.");
@@ -296,6 +297,7 @@ public final class ModelLabActivity extends Activity {
    String digest=sha256.getText().toString().trim();
    task("Скачиваю GGUF по HTTPS",()->{
     ModelLabStore.Entry added=store.download(link,filenameFromUrl(link),digest,null);
+    if(inUnifiedApk())registerConsoleBrain(added);
     return "Импортирован "+added.label+" · SHA256 "+added.modelSha;
    },true);
   });
@@ -306,6 +308,7 @@ public final class ModelLabActivity extends Activity {
    String digest=sha256.getText().toString().trim();
    task("Загружаю проектор",()->{
     ModelLabStore.Entry updated=store.download(link,"mmproj",digest,selected.id);
+    if(inUnifiedApk())registerConsoleBrain(updated);
     return "Проектор привязан к "+updated.label;
    },true);
   });
@@ -382,6 +385,10 @@ public final class ModelLabActivity extends Activity {
    },false);
   });
   refresh();
+  if(inUnifiedApk()&&selected()!=null){
+   final ModelLabStore.Entry active=selected();
+   task("Подключаю проверенную GGUF к NES",()->registerConsoleBrain(active),false);
+  }
   // Image picker and preview must exist before a received NES screenshot can
   // be decoded. onNewIntent also handles repeated exports in singleTop mode.
   receiveNesIntent(getIntent());
@@ -593,6 +600,7 @@ public final class ModelLabActivity extends Activity {
    task("Импортирую GGUF из файлов",()->{
     ModelLabStore.Entry entry=store.importFile(uri,name,sha,
        target==null?null:target.id);
+    if(inUnifiedApk())registerConsoleBrain(entry);
     return "Добавлено: "+entry.label+" · SHA256 "+entry.modelSha;
    },true);
   }
