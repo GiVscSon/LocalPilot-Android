@@ -59,6 +59,7 @@ public final class NesEmulatorActivity extends Activity {
  private final NesExperimentPolicy experiment=new NesExperimentPolicy();
  private long experimentGeneration;
  private boolean homebrewRom;
+ private String neuralFeatures; // real 8x8 luminance held until verified action
  private NesTrial readyTrial;
  private NesTrial exportTrial;
  private final NesSnapshotGate snapshotGate=new NesSnapshotGate(1,2);
@@ -229,6 +230,9 @@ public final class NesEmulatorActivity extends Activity {
    @JavascriptInterface public void onFrame(int count,int pixelsHash,String session){
     runOnUiThread(()->{
      if(!resumed||!frameEpoch.accept(session,count))return;
+     if(neural.running()&&org.localpilot.shared.HarnessTelemetry.stopRequested()){
+      stopNeuralAgent("STOP: запрос пользователя через Harness");return;
+     }
      frames=count;hash=pixelsHash;
      if((experiment.running()||neural.running())&&pendingTrial!=null&&
         count-pendingTrial.frame>180){
@@ -391,6 +395,16 @@ public final class NesEmulatorActivity extends Activity {
    readyTrial=NesTrial.create(homebrewRom?"HOMEBREW":"USER_ROM",
      current.button,current.frame,count,current.hash,pixelHash);
    if(shareTrial!=null)shareTrial.setEnabled(true);
+   if(neural.running()){
+    org.localpilot.shared.HarnessTelemetry.emit("VISUAL",readyTrial.status,
+      "fresh frame="+count+"; pixels changed != goal proven",0);
+    org.localpilot.shared.HarnessTelemetry.emit("REWARD","UNKNOWN",
+      "no independently verified score/goal; reward RL blocked",0);
+    if("PIXELS_DIFFER".equals(readyTrial.status)&&neuralFeatures!=null)
+     org.localpilot.shared.HarnessTelemetry.emit("EXAMPLE","VISUAL_ONLY",
+       "grid="+neuralFeatures+";action="+current.button,0);
+    neuralFeatures=null;
+   }
    state.setText(readyTrial.summary()+" · можно передать в ModelLab");
    if(neural.running()){
     boolean more;
@@ -450,7 +464,17 @@ public final class NesEmulatorActivity extends Activity {
    state.setText("В ModelLab загрузи GGUF и нажми «Назначить нейроагентом NES»");
    return;
   }
+  if(!org.localpilot.shared.HarnessTelemetry.healthy()){
+   state.setText("STOP: журнал аудита недоступен");return;
+  }
   neural.start(true,true);
+  try{
+   String assigned=getSharedPreferences("localpilot-console-assignment",MODE_PRIVATE)
+     .getString("modelId",model.label());
+   org.localpilot.shared.HarnessTelemetry.begin("NES · verified homebrew",assigned);
+  }catch(RuntimeException auditError){
+   neural.stop();state.setText("STOP: не удалось открыть журнал");return;
+  }
   neuralBrain=model;
   neuralRomEpoch=frameEpoch.token();
   ++neuralSerial;
@@ -467,6 +491,7 @@ public final class NesEmulatorActivity extends Activity {
   neuralSnapshot.cancel();
   if(neuralBrain!=null&&wasRunning)neuralBrain.cancel();
   neuralBrain=null;
+  neuralFeatures=null;
   neuralRomEpoch="";
   if(wasRunning&&pendingTrial!=null)pendingTrial=null;
   if(wasRunning&&web!=null&&pageLoaded)
@@ -474,9 +499,18 @@ public final class NesEmulatorActivity extends Activity {
   if(neuralButton!=null)neuralButton.setEnabled(homebrewRom&&pageLoaded&&resumed);
   if(cpuAgentButton!=null)cpuAgentButton.setEnabled(homebrewRom&&pageLoaded&&resumed);
   if(cpuBatchButton!=null)cpuBatchButton.setEnabled(homebrewRom&&pageLoaded&&resumed);
-  if(wasRunning&&state!=null)state.setText(reason);
+  if(wasRunning){
+   org.localpilot.shared.HarnessTelemetry.end(reason);
+   if(state!=null)state.setText(reason);
+  }
  }
  private void requestNeuralDecision(){
+  if(org.localpilot.shared.HarnessTelemetry.stopRequested()){
+   stopNeuralAgent("STOP: пользовательский запрос");return;
+  }
+  if(!org.localpilot.shared.HarnessTelemetry.healthy()){
+   stopNeuralAgent("STOP: аудит недоступен");return;
+  }
   if(!neural.running()||!resumed||!pageLoaded||!homebrewRom||
      !frameEpoch.current(neuralRomEpoch)||pendingTrial!=null||
      neuralSnapshot.pending()||snapshotGate.pending()){
@@ -513,6 +547,12 @@ public final class NesEmulatorActivity extends Activity {
   }catch(RuntimeException|OutOfMemoryError failure){
    stopNeuralAgent("STOP: не удалось извлечь данные из кадра");return;
   }
+  org.localpilot.shared.HarnessTelemetry.emit("FRAME","CAPTURED",
+    "frame="+frames+" hash="+Integer.toHexString(hash),0);
+  org.localpilot.shared.HarnessTelemetry.emit("RECOGNITION","FEATURES_READY",
+    "real 8x8 NES framebuffer",0);
+  org.localpilot.shared.HarnessTelemetry.emit("STATE","OBSERVED",
+    "frame="+frames+" observed hash="+Integer.toHexString(hash),0);
   neuralObservedFrame=frames;
   neuralObservedHash=hash;
   neuralObservedAt=SystemClock.elapsedRealtime();
@@ -529,6 +569,9 @@ public final class NesEmulatorActivity extends Activity {
     "No commentary, markdown, punctuation or extra lines.";
   try{
    model.decide(prompt,checkedPng,answer->runOnUiThread(()->{
+    if(org.localpilot.shared.HarnessTelemetry.stopRequested()){
+     stopNeuralAgent("STOP: пользовательский запрос");return;
+    }
     if(serial!=neuralSerial||!neural.running()||!resumed||closed||
       !homebrewRom||!pageLoaded||!frameEpoch.current(epoch)||model!=ConsoleAgentBridge.get())
      return;
@@ -542,7 +585,15 @@ public final class NesEmulatorActivity extends Activity {
      stopNeuralAgent("STOP: модель не выдала строгое ACTION=...");return;
     }
     if(action==null){stopNeuralAgent("STOP: модель остановила эксперимент");return;}
+    org.localpilot.shared.HarnessTelemetry.emit("DECISION","ACCEPTED",
+      "ACTION="+action,SystemClock.elapsedRealtime()-neuralObservedAt);
     if(pendingTrial!=null){stopNeuralAgent("STOP: другое действие уже выполняется");return;}
+    if(!org.localpilot.shared.HarnessTelemetry.healthy()){
+     stopNeuralAgent("STOP: аудит недоступен перед действием");return;
+    }
+    org.localpilot.shared.HarnessTelemetry.emit("ACTION","DISPATCHED",
+      action+" · 16 emulator frames",0);
+    neuralFeatures=view; // actual pre-action 8x8 NES observation
     beginTrial(action);
     web.evaluateJavascript("window.retroAgentTrial("+
       org.json.JSONObject.quote(action)+",16)",ok->{
@@ -552,6 +603,8 @@ public final class NesEmulatorActivity extends Activity {
         stopNeuralAgent("STOP: NES не подтвердил нажатие");return;
        }
        current.downAck=true;
+       org.localpilot.shared.HarnessTelemetry.emit("EMULATOR_ACK","ACCEPTED",
+         "NES button "+action+"; input ACK is not game progress",0);
     });
     state.setText("GGUF "+model.label()+" → "+action+" · ожидаем новый NES кадр");
    }));

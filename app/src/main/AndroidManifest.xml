@@ -17,6 +17,7 @@
   <activity android:name=".LocalCoreActivity" android:exported="false"/>
   <!-- Embedded ModelLab is internal only. The package has one launcher icon. -->
   <activity android:name=".ModelLabActivity" android:exported="false" android:enabled="${unifiedModelLabEnabled}" android:launchMode="singleTop"/>
+  <activity android:name=".HarnessDashboardActivity" android:exported="false" android:enabled="${unifiedModelLabEnabled}"/>
   <activity android:name=".WebLearningActivity" android:exported="false"/>
   <activity android:name=".TrainingActivity" android:exported="false"/>
   <!-- Embedded GameLab shares the LocalPilot APK, permissions and storage.

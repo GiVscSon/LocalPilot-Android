@@ -18,6 +18,7 @@ import xml.etree.ElementTree as ET
 PACKAGE = "org.localpilot.android.dev.unified"
 MAIN = "org.localpilot.android.MainActivity"
 MODEL = "org.localpilot.android.ModelLabActivity"
+HARNESS = "org.localpilot.android.HarnessDashboardActivity"
 GAMELAB = "org.localpilot.gamelab.TestDeviceActivity"
 NES = "org.localpilot.gamelab.NesEmulatorActivity"
 UI_PATH = "/data/local/tmp/localpilot-unified-smoke.xml"
@@ -233,6 +234,18 @@ def verify(apk: Path, output: Path) -> dict:
     wait_activity(MAIN)
     process = one_process()
     checks = [{"name": "single_installed_application", "status": "PASS"}]
+
+    tap_text("Harness Console")
+    wait_activity(HARNESS)
+    if one_process() != process:
+        raise RuntimeError("Harness Console launched in another process")
+    hierarchy = dump_ui()
+    if ("android.webkit.WebView" not in hierarchy and
+            "Обзор системы" not in hierarchy):
+        raise RuntimeError("Harness dashboard WebView not visible after launch")
+    checks.append({"name": "in_app_harness_dashboard_webview", "status": "PASS"})
+    adb("shell", "input", "keyevent", "KEYCODE_BACK")
+    wait_activity(MAIN)
 
     tap_text("ModelLab · GGUF")
     wait_activity(MODEL)

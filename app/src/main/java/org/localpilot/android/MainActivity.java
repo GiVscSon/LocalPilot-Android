@@ -25,6 +25,8 @@ public class MainActivity extends Activity {
   }
   section(box,"02 · Модели и обучение");
   if(BuildConfig.UNIFIED_MODELLAB) {
+   button(box,"◈ Harness Console · модели, NES, GPU, журнал и обучение",
+     ()->startActivity(new Intent(this,HarnessDashboardActivity.class)));
    button(box,"🧠 ModelLab · GGUF, загрузка моделей и анализ фото",
      ()->startActivity(new Intent(this,ModelLabActivity.class)));
   }else {
