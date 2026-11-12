@@ -70,7 +70,8 @@ public final class TestDeviceActivity extends Activity {
   addButton(realRow,"🧠 Локальные нейросети",()->{
    try{
     Intent models=new Intent(Intent.ACTION_MAIN)
-      .setClassName("org.localpilot.modellab","org.localpilot.android.ModelLabActivity")
+      .setClassName(getPackageName().startsWith("org.localpilot.android")?
+        getPackageName():"org.localpilot.modellab","org.localpilot.android.ModelLabActivity")
       .addCategory(Intent.CATEGORY_LAUNCHER)
       .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|
         Intent.FLAG_ACTIVITY_CLEAR_TOP|Intent.FLAG_ACTIVITY_SINGLE_TOP);
@@ -78,7 +79,9 @@ public final class TestDeviceActivity extends Activity {
    }catch(android.content.ActivityNotFoundException|SecurityException absent){
     new AlertDialog.Builder(this)
       .setTitle("Нужен ModelLab")
-      .setMessage("Установи отдельный компактный ModelLab APK. После установки выбор моделей будет доступен здесь.")
+      .setMessage(getPackageName().startsWith("org.localpilot.android")?
+        "Встроенный ModelLab недоступен. Проверь единую сборку LocalPilot.":
+        "Для отдельного GameLab установи компактный ModelLab APK.")
       .setPositiveButton("ОК",null).show();
    }
   });
@@ -86,7 +89,8 @@ public final class TestDeviceActivity extends Activity {
   realNote.setTextColor(HubContract.SECONDARY);
   root.addView(realNote);
   TextView warning=label(HubContract.Evidence.SIMULATED_GAME.label
-    +" • отдельное приложение • не испытание игр Маркета",12);
+    +(getPackageName().startsWith("org.localpilot.android")?" • встроенная лаборатория":
+       " • отдельное приложение")+" • не испытание игр Маркета",12);
   warning.setTextColor(HubContract.WARNING);root.addView(warning);
   games=new Spinner(this);
   String[] labels=new String[GameLabEngine.Game.values().length];
@@ -138,9 +142,11 @@ public final class TestDeviceActivity extends Activity {
   addButton(retroRow,"К LocalPilot",()->{
    // The tested standalone debug and the release package are separate choices.
    // No implicit app search or Accessibility authority is needed.
-   String[] candidates=HubContract.supportedPilotPackage(requestedPilot)
-     ?new String[]{requestedPilot}
-     :new String[]{"org.localpilot.android.dev.install1081","org.localpilot.android"};
+   String[] candidates=getPackageName().startsWith("org.localpilot.android")
+     ?new String[]{getPackageName()}
+     :HubContract.supportedPilotPackage(requestedPilot)
+       ?new String[]{requestedPilot}
+       :new String[]{"org.localpilot.android.dev.install1081","org.localpilot.android"};
    for(String pkg:candidates){
     try{
      Intent back=new Intent(Intent.ACTION_MAIN)
