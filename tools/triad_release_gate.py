@@ -115,7 +115,7 @@ def audit(apks, aapt, apksigner, expected, sha, previous=None):
             if not isinstance(item.get("versionCode"), int) or \
                results[name]["versionCode"] <= item["versionCode"]:
                 raise ValueError(f"{name} versionCode must increase for upgrade")
-    return {"schema": "localpilot-triad-candidate-v1", "sourceCommit": sha.lower(),
+    return {"schema": "localpilot-triad-candidate-v2", "sourceCommit": sha.lower(),
             "releaseReady": False, "physicalAndroidTest": "NOT_VERIFIED",
             "updateCompatibility": "NOT_VERIFIED_ON_DEVICE",
             "signingCertificateSha256ByPackage": pins, "packages": results}
