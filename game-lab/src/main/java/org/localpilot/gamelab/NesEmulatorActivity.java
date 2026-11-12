@@ -504,7 +504,9 @@ public final class NesEmulatorActivity extends Activity {
     (ConsoleAgentContract.playable(button)||"NONE".equals(button))&&
     modelId!=null&&modelId.matches("[A-Za-z0-9:_.-]{1,96}")&&
     modelSha!=null&&modelSha.matches("[a-f0-9]{64}")&&
-    aiGate.consume(nonce,frameEpoch.token(),hash,SystemClock.elapsedRealtime())&&aiEligible();
+    aiGate.consume(nonce,frameEpoch.token(),hash,SystemClock.elapsedRealtime())&&
+    getPackageName().startsWith("org.localpilot.android")&&homebrewRom&&
+    pageLoaded&&web!=null&&pendingTrial==null&&!experiment.running()&&!aiRunning;
   aiTicketNonce=null;
   if(!admissible){
    aiGate.stop();state.setText("STOP: ИИ-команда устарела, повреждена или ROM изменился");
