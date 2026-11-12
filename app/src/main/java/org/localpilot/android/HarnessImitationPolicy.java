@@ -121,7 +121,8 @@ public final class HarnessImitationPolicy {
    JSONObject row=events.optJSONObject(i);
    if(row==null||!"REAL_JSNES".equals(row.optString("provenance"))||
       !"EXAMPLE".equals(row.optString("stage"))||
-      !"VISUAL_ONLY".equals(row.optString("status")))continue;
+      !"VISUAL_ONLY".equals(row.optString("status"))||
+      row.optString("modelId").startsWith("fast-policy:"))continue;
    String detail=row.optString("detail");
    int at=detail.indexOf(";action=");
    if(!detail.startsWith("grid=")||at<5)continue;
