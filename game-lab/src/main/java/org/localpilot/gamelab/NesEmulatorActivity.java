@@ -164,7 +164,7 @@ public final class NesEmulatorActivity extends Activity {
   shareTrial.setOnClickListener(v->sendTrialToModelLab());
   root.addView(shareTrial);
   aiObserveButton=new Button(this);
-  aiObserveButton.setText("🧠 STEP_MODE · GGUF → ровно 16 кадров NES");
+  aiObserveButton.setText("🧠 ИИ-агент · STEP_MODE · GGUF → 16 кадров NES");
   aiObserveButton.setEnabled(false);
   aiObserveButton.setOnClickListener(v->requestAiObservation());
   root.addView(aiObserveButton);
