@@ -34,6 +34,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.localpilot.shared.HubContract;
 import org.localpilot.shared.NesTrial;
 import org.localpilot.shared.NesFrameTransfer;
+import org.localpilot.shared.ConsoleExperienceMemory;
 import org.localpilot.shared.ConsoleAgentContract;
 
 /**
@@ -334,6 +335,9 @@ public final class NesEmulatorActivity extends Activity {
  }
  private void stopCpuExperiment(String reason){
   aiGate.stop();aiTicketNonce=null;aiSnapshot=false;queuedAiButton=null;aiRunning=false;
+  snapshotGate.cancel();exportTrial=null;
+  if(aiObserveButton!=null)aiObserveButton.setEnabled(
+    resumed&&homebrewRom&&pageLoaded);
   ++experimentGeneration;
   experiment.stop();
   pendingTrial=null;
@@ -381,9 +385,11 @@ public final class NesEmulatorActivity extends Activity {
    state.setText(readyTrial.summary()+" · можно передать в ModelLab");
     if(aiRunning){
      aiRunning=false;
-     recordAiEpisode(readyTrial);
-     state.setText("ИИ-ход "+readyTrial.button+": "+readyTrial.status+
-       " · кадр проверен, это не доказательство победы");
+     boolean saved=recordAiEpisode(readyTrial);
+     state.setText(saved?
+       "ИИ-ход "+readyTrial.button+": "+readyTrial.status+
+         " · сохранён в общей памяти, награда неизвестна":
+       "STOP: кадр проверен, но общая память эпизодов недоступна; ход не записан");
     }
    if(experiment.running()){
     NesExperimentPolicy.Decision result=experiment.observe(readyTrial.status);
@@ -469,29 +475,14 @@ public final class NesEmulatorActivity extends Activity {
    aiGate.stop();aiTicketNonce=null;state.setText("STOP: ModelLab не открылся");
   }
  }
- private void recordAiEpisode(NesTrial episode){
+ private boolean recordAiEpisode(NesTrial episode){
   try{
-   org.json.JSONObject row=new org.json.JSONObject();
-   row.put("schema","console-ai-episode-v1");
-   row.put("modelId",aiModelId);row.put("modelSha256",aiModelSha);
-   row.put("rom","BUILTIN_HOMEBREW");row.put("button",episode.button);
-   row.put("frameBefore",episode.frameBefore);row.put("frameAfter",episode.frameAfter);
-   row.put("hashBefore",Integer.toUnsignedString(episode.hashBefore));
-   row.put("hashAfter",Integer.toUnsignedString(episode.hashAfter));
-   row.put("visualTransition",episode.status);
-   row.put("reward","UNKNOWN"); // changed pixels never imply scored success
-   byte[] line=(row.toString()+"\n").getBytes(java.nio.charset.StandardCharsets.UTF_8);
-   File log=new File(getFilesDir(),"console-ai-episodes.jsonl");
-   if(log.exists()&&log.length()>128*1024){
-    File previous=new File(getFilesDir(),"console-ai-episodes.previous.jsonl");
-    if(previous.exists()&&!previous.delete())throw new IOException("Previous log unavailable");
-    if(!log.renameTo(previous))throw new IOException("Log rotation failed");
-   }
-   try(FileOutputStream output=new FileOutputStream(log,true)){
-    output.write(line);output.getFD().sync();
-   }
-  }catch(Exception error){
-   state.setText("ИИ: кадр проверен, но журнал эпизода не записан");
+   // The SAME bounded, verified source is consumed by ModelLab and the main
+   // console status. Old JSONL is retained read-only as legacy diagnostics.
+   ConsoleExperienceMemory.append(getFilesDir().toPath(),aiModelId,aiModelSha,episode);
+   return true;
+  }catch(IOException|IllegalArgumentException invalid){
+   return false; // never claim that experience has been saved
   }
  }
  private void handleAiMove(Intent reply){
