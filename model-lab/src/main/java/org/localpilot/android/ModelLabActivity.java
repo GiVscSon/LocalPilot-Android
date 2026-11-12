@@ -489,6 +489,52 @@ public final class ModelLabActivity extends Activity {
   final File weights=store.modelFile(choice);
   final File projector=choice.vision()?store.projectorFile(choice):null;
   final EmbeddedGgufRuntime runtime=engine;
+  installConsoleBrain(choice,weights,projector,runtime,offload);
+  // Persist the elected local role, not the GGUF bytes or any Android input rights.
+  getApplicationContext().getSharedPreferences("localpilot-console-assignment",MODE_PRIVATE)
+    .edit().putString("modelId",choice.id).apply();
+  return "Нейроагент готов: "+choice.label+
+    (offload==0?" · CPU":" · Vulkan GPU"+offload)+
+    (projector==null?" · текстовое наблюдение":" · NES кадр + mmproj")+
+    ". Открой NES, запусти встроенный homebrew и нажми «Нейроагент».";
+ }
+ /** Restore the last user-selected NES role after an Android process restart.
+  * This validates actual local GGUF/mmproj bytes off-main-thread. CPU is chosen
+  * after restart; GPU requires a fresh explicit opt-in.
+  */
+ public static void restoreConsoleBrain(android.content.Context context){
+  if(context==null||!context.getPackageName().startsWith("org.localpilot.android"))return;
+  final android.content.Context app=context.getApplicationContext();
+  final String wanted=app.getSharedPreferences("localpilot-console-assignment",0)
+   .getString("modelId",null);
+  if(wanted==null||wanted.isBlank())return;
+  Thread restore=new Thread(()->{
+   try{
+    final ModelLabStore catalog;
+    final EmbeddedGgufRuntime runtime;
+    synchronized(ModelLabActivity.class){
+     if(unifiedStore==null)unifiedStore=new ModelLabStore(app);
+     if(unifiedEngine==null)unifiedEngine=new EmbeddedGgufRuntime(app);
+     catalog=unifiedStore;
+     runtime=unifiedEngine;
+    }
+    ModelLabStore.Entry chosen=catalog.find(wanted);
+    if(chosen==null)return;
+    File weights=catalog.modelFile(chosen);
+    File projector=chosen.vision()?catalog.projectorFile(chosen):null;
+    if(!wanted.equals(app.getSharedPreferences("localpilot-console-assignment",0)
+                         .getString("modelId",null)))return;
+    installConsoleBrain(chosen,weights,projector,runtime,0);
+   }catch(Exception|LinkageError invalid){
+    // Broken or removed model must NEVER become a controller. No implicit
+    // download and no synthetic action or success is performed here.
+   }
+  },"LocalPilot-Console-Model-Restore");
+  restore.setDaemon(true);
+  restore.start();
+ }
+ private static void installConsoleBrain(ModelLabStore.Entry choice,File weights,
+                    File projector,EmbeddedGgufRuntime runtime,int offload){
   ConsoleAgentBridge.set(new ConsoleAgentBridge.Brain(){
    public String label(){return choice.label;}
    public boolean vision(){return projector!=null;}
@@ -520,10 +566,6 @@ public final class ModelLabActivity extends Activity {
     }catch(Exception|LinkageError failure){reply.complete("");}
    }
   });
-  return "Нейроагент готов: "+choice.label+
-    (offload==0?" · CPU":" · Vulkan GPU"+offload)+
-    (projector==null?" · текстовое наблюдение":" · NES кадр + mmproj")+
-    ". Открой NES, запусти встроенный homebrew и нажми «Нейроагент».";
  }
  private void refresh(){
   if(closed||modelPicker==null)return;
