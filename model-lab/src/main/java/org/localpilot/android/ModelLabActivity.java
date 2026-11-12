@@ -97,11 +97,11 @@ public final class ModelLabActivity extends Activity {
    status.setText("Ошибка локального каталога: "+failure.getMessage());return;
   }
   title(col,"NES · единый эксперимент GameLab → ModelLab");
-  button(col,"Вернуться в GameLab · настоящий NES",()->{
+  button(col,"Вернуться к консольным эмуляторам · NES",()->{
    try{
     Intent companion=new Intent(Intent.ACTION_MAIN)
       .setClassName(inUnifiedApk()?getPackageName():"org.localpilot.gamelab",
-        "org.localpilot.gamelab.TestDeviceActivity")
+        "org.localpilot.gamelab.RetroLibraryActivity")
       .addCategory(Intent.CATEGORY_LAUNCHER)
       .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|
         Intent.FLAG_ACTIVITY_CLEAR_TOP|Intent.FLAG_ACTIVITY_SINGLE_TOP);
