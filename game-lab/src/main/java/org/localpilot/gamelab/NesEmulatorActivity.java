@@ -342,7 +342,7 @@ public final class NesEmulatorActivity extends Activity {
       gamepad(name,true,accepted->{
        if(pendingTrial!=null&&pendingTrial.button.equals(name)){
         pendingTrial.downAck=accepted;
-        if(!accepted)pendingTrial=null;
+        if(!accepted)stopCpuExperiment("STOP: NES отверг ручное нажатие");
        }
       });
       touches.incrementAndGet();lastInputAt=SystemClock.elapsedRealtime();
@@ -353,7 +353,7 @@ public final class NesEmulatorActivity extends Activity {
       gamepad(name,false,accepted->{
        if(pendingTrial!=null&&pendingTrial.button.equals(name)){
         pendingTrial.upAck=accepted;
-        if(!accepted)pendingTrial=null;
+        if(!accepted)stopCpuExperiment("STOP: NES отверг отпускание кнопки");
        }
       });
       return true;
@@ -419,13 +419,8 @@ public final class NesEmulatorActivity extends Activity {
    TrialPending current=pendingTrial;
    if(current==null)return;
    current.downAck="true".equals(result);
-   if(!current.downAck){
-    if(experiment.running())stopCpuExperiment("STOP: не подтверждён ввод NES");
-    else {
-     pendingTrial=null;
-     state.setText("CPU-агент не подтвердил начало эмулированного ввода");
-    }
-   }
+   if(!current.downAck)
+    stopCpuExperiment("STOP: NES не подтвердил начало CPU-ввода");
   });
  }
  private boolean beginTrial(String key,HarnessCoordinator.Actor actor){
@@ -443,11 +438,14 @@ public final class NesEmulatorActivity extends Activity {
  }
  private void completeTrialOnFreshFrame(int count,int pixelHash){
   TrialPending current=pendingTrial;
-  if(current==null||!current.downAck||!current.upAck)return;
+  if(current==null)return;
+  // A missing UP/ACK must not hold the unique permit forever.
   if(count-current.frame>600){
-   pendingTrial=null;pendingPermit=null;harness.stop("FRAME_TIMEOUT");return;
+   stopCpuExperiment("STOP: превышено 600 NES-кадров без полного подтверждения");
+   return;
   }
-  if(count-current.frame<15||pixelHash==0)return;
+  if(!current.downAck||!current.upAck||count-current.frame<15||pixelHash==0)
+   return;
   try{
    if(!harness.complete(pendingPermit,frameEpoch.token(),count,pixelHash,
        current.downAck,current.upAck)){
