@@ -28,8 +28,8 @@ class OneApkVulkanContract(unittest.TestCase):
         source_code=source("model-lab/src/main/java/org/localpilot/android/ModelLabActivity.java")
         self.assertIn("selectedGpuLayers(choice)",source_code)
         self.assertIn("registerConsoleBrain(choice,gpuLayers)",source_code)
-        self.assertIn("runtime.text(weights,observation,offload",source_code)
-        self.assertIn("runtime.image(weights,projector,observation,rgb,w,h,offload",source_code)
+        self.assertIn("runtime.consoleAction(weights,observation,offload",source_code)
+        self.assertIn("runtime.consoleActionImage(weights,projector,observation,rgb,w,h,offload",source_code)
     def test_vulkan_size_exception_is_explicit_and_binary_checked(self):
         verifier=source("tools/verify_all_in_one.py")
         vulkan_workflow=source(".github/workflows/localpilot-console-vulkan.yml")
@@ -63,6 +63,22 @@ class OneApkVulkanContract(unittest.TestCase):
         self.assertIn("agentThinking=false;homebrewRom=false",js)
         self.assertIn("console_model_frame_vm.test.js",source(".github/workflows/localpilot-console-vulkan.yml"))
         self.assertIn("console_model_frame_vm.test.js",source(".github/workflows/localpilot-all-in-one.yml"))
+
+    def test_downloaded_model_binding_is_rehydrated_across_process_restarts(self):
+        app=source("app/src/main/java/org/localpilot/android/PilotApplication.java")
+        lab=source("model-lab/src/main/java/org/localpilot/android/ModelLabActivity.java")
+        self.assertIn("ModelLabActivity.restoreConsoleBrain(this)",app)
+        self.assertIn("getSharedPreferences(\"localpilot-console-assignment\",MODE_PRIVATE)",lab)
+        self.assertIn('.putString("modelId",choice.id)',lab)
+        self.assertIn("public static void restoreConsoleBrain(",lab)
+        self.assertIn("ModelLabStore.Entry chosen=catalog.find(wanted)",lab)
+        self.assertIn("catalog.modelFile(chosen)",lab)
+        self.assertIn("catalog.projectorFile(chosen)",lab)
+        self.assertIn("installConsoleBrain(chosen,weights,projector,runtime,0)",lab)
+        self.assertIn("restore.setDaemon(true)",lab)
+        self.assertIn("private static void installConsoleBrain(",lab)
+        self.assertNotIn("PilotService",lab)
+        self.assertNotIn("dispatchGesture",lab)
 
     def test_ci_uses_exact_pins_and_never_publishes(self):
         workflow=source(".github/workflows/localpilot-console-vulkan.yml")
