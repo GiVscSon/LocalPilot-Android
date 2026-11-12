@@ -22,6 +22,7 @@ import android.widget.CheckBox;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
+import androidx.webkit.WebViewAssetLoader;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -48,7 +49,7 @@ public final class NesEmulatorActivity extends Activity {
  private final ExecutorService romDownloads=Executors.newSingleThreadExecutor();
  private boolean closed;
  private static final int MAX_ROM=3*1024*1024;
- private static final String START_URL="file:///android_asset/nes/index.html";
+ private static final String START_URL="https://appassets.androidplatform.net/assets/nes/index.html";
  private static final String[] GAMEPAD={"UP","LEFT","DOWN","RIGHT","SELECT","START","B","A"};
  private WebView web;
  private TextView state;
@@ -214,24 +215,32 @@ public final class NesEmulatorActivity extends Activity {
   web.setBackgroundColor(HubContract.BACKGROUND);
   web.getSettings().setJavaScriptEnabled(true);
   web.getSettings().setDomStorageEnabled(false);
-  web.getSettings().setAllowFileAccess(true); // only packaged asset file page
+  web.getSettings().setAllowFileAccess(false);
   web.getSettings().setAllowContentAccess(false);
   web.getSettings().setAllowFileAccessFromFileURLs(false);
   web.getSettings().setAllowUniversalAccessFromFileURLs(false);
   web.getSettings().setBlockNetworkLoads(true);
   web.getSettings().setMediaPlaybackRequiresUserGesture(false);
+  // Only the three bundled NES documents can be served, and only via HTTPS.
+  final WebViewAssetLoader assetLoader=new WebViewAssetLoader.Builder()
+    .addPathHandler("/assets/",new WebViewAssetLoader.AssetsPathHandler(this)).build();
   web.setWebViewClient(new WebViewClient(){
    @Override public boolean shouldOverrideUrlLoading(WebView view,WebResourceRequest request){
     return true; // Never navigate away from the bundled NES application.
    }
    @Override public WebResourceResponse shouldInterceptRequest(WebView view,WebResourceRequest request){
     Uri uri=request.getUrl();
-    if(uri==null||!"file".equals(uri.getScheme())||
-      !START_URL.equals(uri.toString())&&
-      !"file:///android_asset/nes/jsnes.min.js".equals(uri.toString())&&
-      !"file:///android_asset/nes/latched-buttons.js".equals(uri.toString()))return
-       new WebResourceResponse("text/plain","UTF-8",new java.io.ByteArrayInputStream(new byte[0]));
-    return super.shouldInterceptRequest(view,request);
+    if(uri==null||!"https".equals(uri.getScheme())||
+       !"appassets.androidplatform.net".equals(uri.getHost())||
+       uri.getPort()!=-1||uri.getQuery()!=null||uri.getFragment()!=null||
+       !("/assets/nes/index.html".equals(uri.getPath())||
+         "/assets/nes/jsnes.min.js".equals(uri.getPath())||
+         "/assets/nes/latched-buttons.js".equals(uri.getPath())))
+     return new WebResourceResponse("text/plain","UTF-8",
+       new java.io.ByteArrayInputStream(new byte[0]));
+    WebResourceResponse result=assetLoader.shouldInterceptRequest(uri);
+    return result!=null?result:new WebResourceResponse("text/plain","UTF-8",
+       new java.io.ByteArrayInputStream(new byte[0]));
    }
    @Override public void onPageFinished(WebView view,String url){
     pageLoaded=START_URL.equals(url);
