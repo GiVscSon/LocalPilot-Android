@@ -113,3 +113,22 @@ tasks.matching { it.name == 'mergeDebugAssets' }.configureEach {
  dependsOn ':game-lab:bundleVerifiedNesEngine'
 }
 
+
+// Bind candidate verification to the source actually compiled into the APK.
+def signingProvenance = layout.buildDirectory.dir('generated/signing-provenance')
+android.sourceSets.main.assets.srcDir(signingProvenance)
+tasks.register('writeSigningProvenance') {
+ outputs.upToDateWhen { false }
+ doLast {
+  def gitOutput = new ByteArrayOutputStream()
+  project.exec { workingDir rootProject.projectDir; commandLine 'git','rev-parse','HEAD'; standardOutput = gitOutput }
+  def revision = gitOutput.toString('UTF-8').trim()
+  if (!(revision ==~ /[0-9a-f]{40}/)) throw new GradleException('Invalid build source SHA')
+  def expected = System.getenv('GITHUB_SHA')
+  if (expected && expected.toLowerCase() != revision) throw new GradleException('CI source SHA differs from checkout')
+  def output = signingProvenance.get().file('localpilot-source.json').asFile
+  output.parentFile.mkdirs()
+  output.text = groovy.json.JsonOutput.toJson([schema:'localpilot-source-v1', sourceSha:revision])
+ }
+}
+tasks.named('preBuild').configure { dependsOn tasks.named('writeSigningProvenance') }
