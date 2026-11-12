@@ -40,8 +40,16 @@ check("private static native void nativeResetInterrupt();" in app_runtime,
       "embedded LocalPilot adapter missing native reset declaration")
 check("private void prepareNativeInference()" in app_runtime,
       "embedded LocalPilot adapter has no safe request start")
-check(app_runtime.count("prepareNativeInference();")==4,
-      "not every embedded inference job resets stale cancellation")
-check("if(closed){\n   nativeInterrupt();" in app_runtime,
-      "embedded runtime must re-interrupt if shutdown races with reset")
-print("EMBEDDED_GGUF_CANCEL_COMPAT_PASS checks=4")
+# The unified APK adds exactly two manual-only entrypoints (text and VLM)
+# to the prior four embedded jobs. Each entrypoint must reset only at job
+# start, then re-check STOP so a cancellation cannot be silently cleared.
+check(app_runtime.count("prepareNativeInference();")==6,
+      "not every embedded or unified inference job resets stale cancellation")
+check("if(closed||cancelRequested.get()){\n   nativeInterrupt();" in app_runtime,
+      "unified engine must re-interrupt when STOP races with JNI reset")
+check("public synchronized boolean requestCancel()" in app_runtime and
+      "cancelRequested.set(true);" in app_runtime,
+      "in-app ModelLab STOP must interrupt the active native worker")
+check("NATIVE_JOB_ACTIVE.compareAndSet(false,true)" in app_runtime,
+      "both embedded and unified jobs must share a process-global native lock")
+print("EMBEDDED_GGUF_CANCEL_COMPAT_PASS checks=6")
