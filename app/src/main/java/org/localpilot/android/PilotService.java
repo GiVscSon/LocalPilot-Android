@@ -2327,6 +2327,16 @@ public class PilotService extends AccessibilityService {
     try{if(epoch!=gate.epoch()||!captureEnabled()){metrics.cancelled(StageMetrics.Stage.CAPTURE);return;}if(boardRoi==null||!roi.equals(boardRoi)){failStage(StageMetrics.Stage.CAPTURE,"ROI_CHANGED","Область снимка изменилась");return;}if(!CaptureFreshness.valid(shot.getTimestamp(),requestedUptime,SystemClock.uptimeMillis(),lastShotTimestamp)){if(!retryCapture(epoch,result,"STALE_FRAME"))failStage(StageMetrics.Stage.CAPTURE,"STALE_FRAME","Снимок устарел/повторён после повторов");return;}long previousTimestamp=lastShotTimestamp;lastShotTimestamp=shot.getTimestamp();
      hardware=Bitmap.wrapHardwareBuffer(buffer,shot.getColorSpace());if(hardware==null)throw new IllegalArgumentException("Нет пикселей");bitmap=hardware.copy(Bitmap.Config.ARGB_8888,false);
      Point size=new Point();wm.getDefaultDisplay().getRealSize(size);if(bitmap.getWidth()!=size.x||bitmap.getHeight()!=size.y)throw new IllegalArgumentException("Масштаб снимка не подтверждён");
+     // A near-black ROI can be a protected/muted window, transition, or a real dark scene.
+     // It is UNKNOWN, never GAME_OVER, no game reward, and no input authority.
+     // Sampling is bounded and allocation-free; existing capture retries stay bounded.
+     if(FrameBlackoutGate.nearBlack(bitmap.getWidth(),bitmap.getHeight(),
+       roi.left,roi.top,roi.right,roi.bottom,bitmap::getPixel)){
+      if(retryCapture(epoch,result,"NEAR_BLACK_FRAME"))return;
+      failStage(StageMetrics.Stage.CAPTURE,"NEAR_BLACK_FRAME",
+        "Почти чёрный кадр: сцена не подтверждена, ввод остановлен");
+      return;
+     }
      final Bitmap pixels=bitmap;
      // One final window query after pixel conversion is sufficient; querying the
      // same Binder tree twice per callback can consume the entire frame budget.
