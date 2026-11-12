@@ -1,0 +1,431 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/GiVscSon/LocalPilot-Android/blob/design/harness-runtime-v1-20261112/docs/contracts/localpilot-transition-v1.schema.json",
+  "title": "LocalPilot real game transition v1",
+  "description": "Immutable transition evidence, distinct from proof of learning. Reward is nullable; pixel changes are never a reward.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "episodeId",
+    "sequence",
+    "provenance",
+    "romSha256",
+    "coreId",
+    "coreVersion",
+    "mode",
+    "modelId",
+    "policyVersion",
+    "observation",
+    "proposal",
+    "permit",
+    "execution",
+    "assessment",
+    "terminated",
+    "truncated",
+    "truncationReason",
+    "recordedAtElapsedMs"
+  ],
+  "properties": {
+    "schema": {
+      "const": "localpilot.transition.v1"
+    },
+    "episodeId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "sequence": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "provenance": {
+      "enum": [
+        "REAL_JSNES",
+        "REAL_LIBRETRO",
+        "MANUAL",
+        "SYNTHETIC"
+      ]
+    },
+    "romSha256": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{64}$"
+    },
+    "coreId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "coreVersion": {
+      "type": "string",
+      "minLength": 1
+    },
+    "mode": {
+      "enum": [
+        "STEP_MODE",
+        "REALTIME_MODE",
+        "MANUAL_MODE"
+      ]
+    },
+    "modelId": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "policyVersion": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "observation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "frame",
+        "epoch",
+        "imageRef",
+        "pixelHash",
+        "featuresVersion"
+      ],
+      "properties": {
+        "frame": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "epoch": {
+          "type": "string",
+          "minLength": 1
+        },
+        "imageRef": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "pixelHash": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{8}$"
+        },
+        "featuresVersion": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "proposal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "action",
+        "durationFrames",
+        "requestId"
+      ],
+      "properties": {
+        "action": {
+          "enum": [
+            "A",
+            "B",
+            "UP",
+            "DOWN",
+            "LEFT",
+            "RIGHT",
+            "STOP",
+            "NONE"
+          ]
+        },
+        "durationFrames": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 60
+        },
+        "requestId": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "permit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "accepted",
+        "ttlExpired",
+        "stopRevision"
+      ],
+      "properties": {
+        "accepted": {
+          "type": "boolean"
+        },
+        "ttlExpired": {
+          "type": "boolean"
+        },
+        "stopRevision": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "execution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "inputAck",
+        "newFrameSeen",
+        "pixelsDiffer"
+      ],
+      "properties": {
+        "inputAck": {
+          "type": "boolean"
+        },
+        "newFrameSeen": {
+          "type": "boolean"
+        },
+        "pixelsDiffer": {
+          "type": "boolean"
+        }
+      }
+    },
+    "assessment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "goalProgressConfirmed",
+        "reward",
+        "rewardSource",
+        "rewardConfidence",
+        "rewardEvidenceRef"
+      ],
+      "properties": {
+        "goalProgressConfirmed": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "reward": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "rewardSource": {
+          "enum": [
+            "UNKNOWN",
+            "VERIFIED_SCORE_DELTA",
+            "VERIFIED_LIVES_DELTA",
+            "VERIFIED_GOAL",
+            "USER_VERIFIED",
+            "SYNTHETIC"
+          ]
+        },
+        "rewardConfidence": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "rewardEvidenceRef": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "rewardSource": {
+                "const": "UNKNOWN"
+              }
+            },
+            "required": [
+              "rewardSource"
+            ]
+          },
+          "then": {
+            "properties": {
+              "reward": {
+                "type": "null"
+              },
+              "rewardConfidence": {
+                "type": "null"
+              },
+              "rewardEvidenceRef": {
+                "type": "null"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "reward": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "reward"
+            ]
+          },
+          "then": {
+            "properties": {
+              "rewardSource": {
+                "not": {
+                  "const": "UNKNOWN"
+                }
+              },
+              "rewardEvidenceRef": {
+                "type": "string",
+                "minLength": 1
+              },
+              "rewardConfidence": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              }
+            }
+          }
+        }
+      ]
+    },
+    "terminated": {
+      "type": "boolean"
+    },
+    "truncated": {
+      "type": "boolean"
+    },
+    "truncationReason": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "recordedAtElapsedMs": {
+      "type": "integer",
+      "minimum": 0
+    }
+  },
+  "allOf": [
+    {
+      "not": {
+        "properties": {
+          "terminated": {
+            "const": true
+          },
+          "truncated": {
+            "const": true
+          }
+        },
+        "required": [
+          "terminated",
+          "truncated"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "truncated": {
+            "const": true
+          }
+        },
+        "required": [
+          "truncated"
+        ]
+      },
+      "then": {
+        "properties": {
+          "truncationReason": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "truncated": {
+            "const": false
+          }
+        },
+        "required": [
+          "truncated"
+        ]
+      },
+      "then": {
+        "properties": {
+          "truncationReason": {
+            "type": "null"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "permit": {
+            "properties": {
+              "accepted": {
+                "const": false
+              }
+            },
+            "required": [
+              "accepted"
+            ]
+          }
+        },
+        "required": [
+          "permit"
+        ]
+      },
+      "then": {
+        "properties": {
+          "execution": {
+            "properties": {
+              "inputAck": {
+                "const": false
+              }
+            },
+            "required": [
+              "inputAck"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "proposal": {
+            "properties": {
+              "action": {
+                "const": "STOP"
+              }
+            },
+            "required": [
+              "action"
+            ]
+          }
+        },
+        "required": [
+          "proposal"
+        ]
+      },
+      "then": {
+        "properties": {
+          "proposal": {
+            "properties": {
+              "durationFrames": {
+                "const": 0
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}
