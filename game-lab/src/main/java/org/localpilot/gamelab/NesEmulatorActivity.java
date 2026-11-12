@@ -415,6 +415,137 @@ public final class NesEmulatorActivity extends Activity {
   }
   pendingTrial=null;
  }
+ private boolean aiEligible(){
+  return getPackageName().startsWith("org.localpilot.android")&&
+    resumed&&homebrewRom&&pageLoaded&&web!=null&&frames>=15&&hash!=0&&
+    !experiment.running()&&!aiRunning&&pendingTrial==null;
+ }
+ private void requestAiObservation(){
+  if(!aiEligible()||snapshotGate.pending()||aiGate.hasPending()){
+   state.setText("ИИ: необходима активная встроенная NES, без другого выполняющегося действия");
+   return;
+  }
+  try{
+   ConsoleAgentGate.Ticket ticket=aiGate.begin(
+     frameEpoch.token(),frames,hash,SystemClock.elapsedRealtime());
+   aiTicketNonce=ticket.nonce;
+   aiExpectedHash=ticket.hash;
+   String token=snapshotGate.begin();
+   aiSnapshot=true;
+   if(aiObserveButton!=null)aiObserveButton.setEnabled(false);
+   web.evaluateJavascript("window.retroSnapshot("+org.json.JSONObject.quote(token)+")",ack->{
+    if(snapshotGate.current(token)&&!"true".equals(ack))completeAiObservation(token,null);
+   });
+   web.postDelayed(()->{
+    if(snapshotGate.current(token))completeAiObservation(token,null);
+   },2500);
+  }catch(RuntimeException failure){
+   aiGate.stop();aiSnapshot=false;aiTicketNonce=null;
+   state.setText("ИИ: не удалось запросить наблюдение: "+
+     failure.getClass().getSimpleName());
+  }
+ }
+ private void completeAiObservation(String token,byte[] png){
+  if(!snapshotGate.finish(token))return;
+  aiSnapshot=false;
+  if(aiObserveButton!=null)aiObserveButton.setEnabled(aiEligible());
+  if(png==null||!aiGate.hasPending()||!aiEligible()||
+    hash!=aiExpectedHash){
+   aiGate.stop();aiTicketNonce=null;
+   state.setText("STOP: ИИ не получил достоверный свежий NES PNG-кадр");
+   return;
+  }
+  Intent intent=new Intent(ConsoleAgentContract.OBSERVE)
+    .setClassName(getPackageName(),"org.localpilot.android.ModelLabActivity")
+    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|Intent.FLAG_ACTIVITY_CLEAR_TOP|
+      Intent.FLAG_ACTIVITY_SINGLE_TOP);
+  // A nonce identifies only this one observation, not an Android gesture permit.
+  intent.putExtra(ConsoleAgentContract.TOKEN,aiTicketNonce);
+  intent.putExtra(ConsoleAgentContract.FRAME,frames);
+  intent.putExtra(ConsoleAgentContract.HASH,hash);
+  intent.putExtra(NesFrameTransfer.EXTRA_PNG,png);
+  try{startActivity(intent);}
+  catch(RuntimeException failure){
+   aiGate.stop();aiTicketNonce=null;state.setText("STOP: ModelLab не открылся");
+  }
+ }
+ private void recordAiEpisode(NesTrial episode){
+  try{
+   org.json.JSONObject row=new org.json.JSONObject();
+   row.put("schema","console-ai-episode-v1");
+   row.put("modelId",aiModelId);row.put("modelSha256",aiModelSha);
+   row.put("rom","BUILTIN_HOMEBREW");row.put("button",episode.button);
+   row.put("frameBefore",episode.frameBefore);row.put("frameAfter",episode.frameAfter);
+   row.put("hashBefore",Integer.toUnsignedString(episode.hashBefore));
+   row.put("hashAfter",Integer.toUnsignedString(episode.hashAfter));
+   row.put("visualTransition",episode.status);
+   row.put("reward","UNKNOWN"); // changed pixels never imply scored success
+   byte[] line=(row.toString()+"\n").getBytes(java.nio.charset.StandardCharsets.UTF_8);
+   File log=new File(getFilesDir(),"console-ai-episodes.jsonl");
+   if(log.exists()&&log.length()>128*1024){
+    File previous=new File(getFilesDir(),"console-ai-episodes.previous.jsonl");
+    if(previous.exists()&&!previous.delete())throw new IOException("Previous log unavailable");
+    if(!log.renameTo(previous))throw new IOException("Log rotation failed");
+   }
+   try(FileOutputStream output=new FileOutputStream(log,true)){
+    output.write(line);output.getFD().sync();
+   }
+  }catch(Exception error){
+   state.setText("ИИ: кадр проверен, но журнал эпизода не записан");
+  }
+ }
+ private void handleAiMove(Intent reply){
+  if(reply==null||!ConsoleAgentContract.MOVE.equals(reply.getAction()))return;
+  String button=reply.getStringExtra(ConsoleAgentContract.BUTTON);
+  String nonce=reply.getStringExtra(ConsoleAgentContract.TOKEN);
+  String modelId=reply.getStringExtra(ConsoleAgentContract.MODEL_ID);
+  String modelSha=reply.getStringExtra(ConsoleAgentContract.MODEL_SHA);
+  boolean admissible=button!=null&&
+    (ConsoleAgentContract.playable(button)||"NONE".equals(button))&&
+    modelId!=null&&modelId.matches("[A-Za-z0-9:_.-]{1,96}")&&
+    modelSha!=null&&modelSha.matches("[a-f0-9]{64}")&&
+    aiGate.consume(nonce,frameEpoch.token(),hash,SystemClock.elapsedRealtime())&&aiEligible();
+  aiTicketNonce=null;
+  if(!admissible){
+   aiGate.stop();state.setText("STOP: ИИ-команда устарела, повреждена или ROM изменился");
+   return;
+  }
+  aiModelId=modelId;aiModelSha=modelSha;
+  if("NONE".equals(button)){
+   state.setText("ИИ выбрал NONE: ввод не выполнялся");return;
+  }
+  queuedAiButton=button;aiEpoch=frameEpoch.token();aiExpectedHash=hash;
+  aiIssuedAt=SystemClock.elapsedRealtime();
+  if(resumed&&web!=null)web.postDelayed(this::executeAiMove,350);
+ }
+ private void executeAiMove(){
+  String button=queuedAiButton;
+  if(button==null||!resumed)return;
+  queuedAiButton=null;
+  if(!aiEligible()||!frameEpoch.current(aiEpoch)||hash!=aiExpectedHash||
+    SystemClock.elapsedRealtime()-aiIssuedAt>ConsoleAgentContract.TTL_MS){
+   state.setText("STOP: новый кадр не совпадает с наблюдением ИИ");
+   return;
+  }
+  beginTrial(button);
+  if(pendingTrial==null){
+   state.setText("STOP: исходное состояние NES не подтверждено");return;
+  }
+  aiRunning=true;
+  state.setText("ИИ "+aiModelId+" · кнопка "+button+" на 16 кадров; ожидаю проверку");
+  web.evaluateJavascript("window.retroAiTrial("+
+    org.json.JSONObject.quote(button)+","+ConsoleAgentContract.HOLD_FRAMES+")",ack->{
+     TrialPending pending=pendingTrial;
+     if(pending==null||!pending.button.equals(button))return;
+     pending.downAck="true".equals(ack);
+     if(!pending.downAck)stopCpuExperiment("STOP: NES отверг ИИ-действие");
+  });
+ }
+ @Override protected void onNewIntent(Intent next){
+  super.onNewIntent(next);
+  setIntent(next);
+  handleAiMove(next);
+ }
  private void sendTrialToModelLab(){
   if(readyTrial==null){state.setText("Для отчёта запусти NES и нажми кнопку");return;}
   if(snapshotGate.pending()||!resumed||!pageLoaded||web==null){
