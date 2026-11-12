@@ -18,7 +18,7 @@ import xml.etree.ElementTree as ET
 PACKAGE = "org.localpilot.android.dev.unified"
 MAIN = "org.localpilot.android.MainActivity"
 MODEL = "org.localpilot.android.ModelLabActivity"
-GAMELAB = "org.localpilot.gamelab.TestDeviceActivity"
+GAMELAB = "org.localpilot.gamelab.RetroLibraryActivity"
 NES = "org.localpilot.gamelab.NesEmulatorActivity"
 UI_PATH = "/data/local/tmp/localpilot-unified-smoke.xml"
 BOUNDS = re.compile(r"^\[(\d+),(\d+)\]\[(\d+),(\d+)\]$")
@@ -242,13 +242,13 @@ def verify(apk: Path, output: Path) -> dict:
         raise RuntimeError("Embedded ModelLab screen title not visible")
     checks.append({"name": "in_app_model_lab_screen", "status": "PASS"})
 
-    tap_text("Вернуться в GameLab")
+    tap_text("Вернуться к консольным эмуляторам")
     wait_activity(GAMELAB)
     if one_process() != process:
         raise RuntimeError("GameLab launched in a different process")
     checks.append({"name": "in_app_game_lab_navigation", "status": "PASS"})
 
-    tap_text("Настоящая NES")
+    tap_text("Играть в NES / Денди")
     wait_activity(NES)
     if one_process() != process:
         raise RuntimeError("NES launched in a different process")
