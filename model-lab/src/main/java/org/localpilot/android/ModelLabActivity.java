@@ -476,6 +476,7 @@ public final class ModelLabActivity extends Activity {
   ConsoleAgentBridge.set(new ConsoleAgentBridge.Brain(){
    public String label(){return choice.label;}
    public boolean vision(){return projector!=null;}
+   public void cancel(){runtime.requestCancel();}
    public void decide(String observation,byte[] png,ConsoleAgentBridge.Reply reply){
     try{
      if(runtime.busy())throw new IllegalStateException("GGUF engine busy");
@@ -489,7 +490,7 @@ public final class ModelLabActivity extends Activity {
       if(w!=NesFrameTransfer.WIDTH||h!=NesFrameTransfer.HEIGHT){
        frame.recycle();throw new IllegalArgumentException("Unexpected NES frame size");
       }
-      int[] pixels=new int[w*h];frame.getPixels(pixels,0,w,0,w,h);
+      int[] pixels=new int[w*h];frame.getPixels(pixels,0,w,0,0,w,h);
       frame.recycle();
       byte[] rgb=new byte[w*h*3];
       for(int i=0;i<pixels.length;i++){

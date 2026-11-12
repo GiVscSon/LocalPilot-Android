@@ -11,6 +11,7 @@ public final class ConsoleAgentBridge {
   String label();
   boolean vision();
   void decide(String observation,byte[] checkedPng,Reply reply);
+  void cancel();
  }
  private static volatile Brain selected;
  public static synchronized void set(Brain brain) {

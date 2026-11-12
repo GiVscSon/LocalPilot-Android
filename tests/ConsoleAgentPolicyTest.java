@@ -43,6 +43,7 @@ public final class ConsoleAgentPolicyTest {
   ConsoleAgentBridge.Brain brain=new ConsoleAgentBridge.Brain(){
    public String label(){return "offline GGUF";}
    public boolean vision(){return false;}
+   public void cancel(){}
    public void decide(String observation,byte[] png,ConsoleAgentBridge.Reply callback){
     callback.complete("ACTION=A");
    }
