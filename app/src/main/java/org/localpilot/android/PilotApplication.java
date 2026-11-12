@@ -5,6 +5,7 @@ public final class PilotApplication extends android.app.Application {
   if(BuildConfig.UNIFIED_MODELLAB){
    org.localpilot.shared.HarnessTelemetry.install(HarnessRunJournal.get(this));
    ModelLabActivity.restoreConsoleBrain(this);
+   HarnessImitationPolicy.restoreIfAssigned(this);
   }
  }
 }
