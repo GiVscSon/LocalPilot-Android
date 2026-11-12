@@ -30,6 +30,19 @@ class OneApkVulkanContract(unittest.TestCase):
         self.assertIn("registerConsoleBrain(choice,gpuLayers)",source_code)
         self.assertIn("runtime.text(weights,observation,offload",source_code)
         self.assertIn("runtime.image(weights,projector,observation,rgb,w,h,offload",source_code)
+    def test_vulkan_size_exception_is_explicit_and_binary_checked(self):
+        verifier=source("tools/verify_all_in_one.py")
+        vulkan_workflow=source(".github/workflows/localpilot-console-vulkan.yml")
+        normal_workflow=source(".github/workflows/localpilot-all-in-one.yml")
+        self.assertIn("experimental_vulkan: bool = False",verifier)
+        self.assertIn("(150 if experimental_vulkan else 45)",verifier)
+        self.assertIn("--experimental-vulkan",vulkan_workflow)
+        self.assertNotIn("--experimental-vulkan",normal_workflow)
+        self.assertIn('b"libvulkan.so"',verifier)
+        self.assertIn('nativeConfigureGpuLayers',verifier)
+        self.assertIn('nativeLoadedGpuLayers',verifier)
+        self.assertIn('"vulkanPhysicalGpuConfirmed": False',verifier)
+
     def test_ci_uses_exact_pins_and_never_publishes(self):
         workflow=source(".github/workflows/localpilot-console-vulkan.yml")
         for key in ("09913f088a1197aba4aefd300a876b2ebbaa3391",
