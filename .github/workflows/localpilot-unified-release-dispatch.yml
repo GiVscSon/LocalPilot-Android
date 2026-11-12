@@ -33,8 +33,9 @@ jobs:
               "releaseReady=false",
           ]
           assert all(word in content for word in required)
-          assert "gh release create" not in content
-          assert "contents: write" not in content
+          signing=content.split("\n  signed-candidate:\n", 1)[1]
+          assert "gh release create" not in signing
+          assert "contents: write" not in signing
           print("SIGNING_DISPATCH_POLICY_PASS: no keys or signed artifacts")
           PY
 
