@@ -496,7 +496,7 @@ public final class ModelLabActivity extends Activity {
    public void decide(String observation,byte[] png,ConsoleAgentBridge.Reply reply){
     try{
      if(runtime.busy())throw new IllegalStateException("GGUF engine busy");
-     if(projector==null)runtime.text(weights,observation,offload,
+     if(projector==null)runtime.consoleAction(weights,observation,offload,
        (answer,elapsed)->reply.complete(answer));
      else{
       NesFrameTransfer.verify(png);
@@ -514,7 +514,7 @@ public final class ModelLabActivity extends Activity {
        rgb[3*i+1]=(byte)(pixels[i]>>>8);
        rgb[3*i+2]=(byte)pixels[i];
       }
-      runtime.image(weights,projector,observation,rgb,w,h,offload,
+      runtime.consoleActionImage(weights,projector,observation,rgb,w,h,offload,
         (answer,elapsed)->reply.complete(answer));
      }
     }catch(Exception|LinkageError failure){reply.complete("");}
