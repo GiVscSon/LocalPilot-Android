@@ -91,6 +91,15 @@ jobs:
           node tests/nes_step_mode_smoke.cjs \
             build/test-core/package/dist/jsnes.min.js \
             build/nes-runtime/demo.nes
+      - name: Verify full iNES/NES2 ROM preflight and unsafe mapper rejection
+        run: |
+          set -euo pipefail
+          javac --release 17 -d build/nes-runtime \
+            game-lab/src/main/java/org/localpilot/gamelab/HomebrewNes.java \
+            game-lab/src/main/java/org/localpilot/gamelab/NesRomPreflight.java \
+            game-lab/src/main/java/org/localpilot/gamelab/RetroEmulatorCatalog.java \
+            tests/NesRomPreflightTest.java
+          java -cp build/nes-runtime NesRomPreflightTest
       - name: E2E actual NES pixels to independent ModelLab evidence parser
         run: |
           set -euo pipefail
