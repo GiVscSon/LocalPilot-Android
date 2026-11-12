@@ -117,7 +117,10 @@ public final class HarnessRunJournal implements HarnessTelemetry.Sink {
   // Do not trim or delete the recorded evidence during export.
   try(FileInputStream in=new FileInputStream(file)){
    if(file.length()>MAX_BYTES)throw new IllegalStateException("Journal exceeds quota");
-   return in.readAllBytes();
+   java.io.ByteArrayOutputStream out=new java.io.ByteArrayOutputStream();
+   byte[] block=new byte[16384];int count;
+   while((count=in.read(block))!=-1)out.write(block,0,count);
+   return out.toByteArray();
   }catch(java.io.FileNotFoundException missing){return new byte[0];}
   catch(Exception e){throw new IllegalStateException("Cannot export audit: "+e.getClass().getSimpleName());}
  }
