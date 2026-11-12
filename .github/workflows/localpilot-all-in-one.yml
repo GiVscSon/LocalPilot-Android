@@ -133,6 +133,22 @@ jobs:
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging \
             app/build/outputs/apk/debug/app-debug.apk \
             | grep "^package: name='org.localpilot.android.dev.unified' "
+      - name: Verify KVM acceleration before real UI acceptance
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! -e /dev/kvm ]]; then
+            echo '::error title=ANDROID_CI_INFRA_KVM_MISSING::This runner has no /dev/kvm; refuse slow software-emulation UI acceptance'
+            exit 1
+          fi
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          if [[ ! -r /dev/kvm || ! -w /dev/kvm ]]; then
+            echo '::error title=ANDROID_CI_INFRA_KVM_PERMISSIONS::KVM is not readable/writable by the CI runner'
+            exit 1
+          fi
+          "$ANDROID_HOME/emulator/emulator" -accel-check
       - name: Exercise real Android navigation in ONE installed APK
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -142,7 +158,7 @@ jobs:
           profile: pixel_2
           disable-animations: true
           emulator-boot-timeout: 600
-          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
+          emulator-options: -no-window -gpu software -no-snapshot -noaudio -no-boot-anim -camera-back none
           script: python3 tools/unified_in_app_smoke.py --apk app/build/outputs/apk/debug/app-debug.apk --output unified-device-evidence/one-package-navigation.json
       - name: Upload only synthetic/emulator navigation evidence
         uses: actions/upload-artifact@v4
