@@ -107,6 +107,9 @@ class LocalSignedCandidateContract(unittest.TestCase):
         self.assertIn("apksigner", SOURCE)
         self.assertIn("source_check(source_sha)", SOURCE)
         self.assertIn("output.exists()", SOURCE)
+        self.assertIn('args.previous_manifest.resolve()', SOURCE)
+        self.assertIn('"--previous"', SOURCE)
+        self.assertIn("manifest_checksum", SOURCE)
 
 
 if __name__ == "__main__":
