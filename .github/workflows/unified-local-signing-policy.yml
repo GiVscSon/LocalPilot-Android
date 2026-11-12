@@ -1,0 +1,20 @@
+name: LocalPilot unified owner-local signed-candidate policy
+on:
+  pull_request:
+    paths:
+      - 'tools/unified_local_signed_candidate.py'
+      - 'tests/test_unified_local_signed_candidate.py'
+      - '.github/workflows/unified-local-signing-policy.yml'
+permissions:
+  contents: read
+jobs:
+  no-secret-signing-policy:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify local signing can only prepare a fail-closed candidate
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p 'test_unified_local_signed_candidate.py' -v
+          python3 -O -m unittest discover -s tests -p 'test_unified_local_signed_candidate.py' -v
