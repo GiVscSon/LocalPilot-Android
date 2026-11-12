@@ -63,7 +63,7 @@ public final class NesEmulatorActivity extends Activity {
  // Process-wide permit owner shared by the one embedded NES instance.
  private final HarnessCoordinator harness=HarnessCoordinator.nes();
  private HarnessCoordinator.ActionPermit pendingPermit;
- private boolean aiSnapshot,aiRunning;
+ private boolean aiSnapshot,aiRunning,aiFrozen;
  private String aiTicketNonce,queuedAiButton,aiModelId="",aiModelSha="",aiEpoch="";
  private int aiExpectedHash;
  private long aiIssuedAt;
@@ -164,10 +164,27 @@ public final class NesEmulatorActivity extends Activity {
   shareTrial.setOnClickListener(v->sendTrialToModelLab());
   root.addView(shareTrial);
   aiObserveButton=new Button(this);
-  aiObserveButton.setText("🧠 ИИ-агент · получить кадр и выполнить один ход NES");
+  aiObserveButton.setText("🧠 STEP_MODE · GGUF → ровно 16 кадров NES");
   aiObserveButton.setEnabled(false);
   aiObserveButton.setOnClickListener(v->requestAiObservation());
   root.addView(aiObserveButton);
+  Button resumeRealtime=new Button(this);
+  resumeRealtime.setText("▶ REALTIME_MODE · продолжить ручную NES");
+  resumeRealtime.setOnClickListener(v->{
+   if(!aiFrozen||!resumed||!pageLoaded||web==null){
+    state.setText("NES уже выполняется в обычном режиме или не запущена");return;
+   }
+   stopCpuExperiment("STOP: переход STEP → REALTIME");
+   String currentEpoch=frameEpoch.token();
+   web.evaluateJavascript("window.retroExitStepMode()",reply->{
+    if("true".equals(reply)&&frameEpoch.current(currentEpoch)&&
+       harness.changeMode(currentEpoch,HarnessCoordinator.Mode.REALTIME_MODE)){
+     aiFrozen=false;
+     state.setText("REALTIME_MODE: автоматические шаги прекращены, ручное управление доступно");
+    }else state.setText("STOP: не удалось возобновить реальное время NES");
+   });
+  });
+  root.addView(resumeRealtime);
   cpuAgentButton=new Button(this);
   cpuAgentButton.setText("CPU NES-агент · тестовый ход A (16 кадров)");
   cpuAgentButton.setEnabled(false);
@@ -243,14 +260,39 @@ public final class NesEmulatorActivity extends Activity {
     runOnUiThread(()->{
      if(!resumed||!frameEpoch.current(session))return;
      TrialPending current=pendingTrial;
-     if(current!=null&&current.button.equals(name)&&current.downAck&&
-        started>=current.frame&&finished>=started+4&&finished<=started+60)
+     if(current!=null&&current.button.equals(name)&&
+        (current.downAck||(aiFrozen&&aiRunning))&&
+        started>=current.frame&&finished>=started+4&&finished<=started+60){
+      // In STEP_MODE JavaScript sends this bridge ACK only AFTER releasing
+      // the real held button. The evaluateJavascript callback can arrive later.
+      if(aiFrozen&&aiRunning)current.downAck=true;
       current.upAck=true;
+     }
      else if(experiment.running()||aiRunning)
       stopCpuExperiment("STOP: несогласованный ACK эмулятора");
      else {
       pendingTrial=null;pendingPermit=null;harness.stop("ACK_MISMATCH");
      }
+    });
+   }
+   @JavascriptInterface public void onStepReady(int count,int pixelsHash,String session){
+    runOnUiThread(()->{
+     if(closed||!resumed||!homebrewRom||!frameEpoch.current(session)||
+        count<15||pixelsHash==0||harness.actionInFlight()||harness.hasPending()){
+      stopCpuExperiment("STOP: неподтверждённый замороженный NES-кадр");
+      return;
+     }
+     if(count<frames||(count==frames&&pixelsHash!=hash)||
+        (count>frames&&!frameEpoch.accept(session,count))){
+      stopCpuExperiment("STOP: STEP epoch/frame/hash не совпадают");
+      return;
+     }
+     frames=count;hash=pixelsHash;
+     if(!harness.changeMode(session,HarnessCoordinator.Mode.STEP_MODE)){
+      stopCpuExperiment("STOP: другой владелец NES-ввода");return;
+     }
+     aiFrozen=true;
+     requestFrozenAiObservation();
     });
    }
    @JavascriptInterface public void onSnapshot(String encoded,String token){
@@ -286,6 +328,10 @@ public final class NesEmulatorActivity extends Activity {
     btn.setContentDescription("NES "+name+" button");
     btn.setOnTouchListener((view,event)->{
      int type=event.getActionMasked();
+     if(aiFrozen){
+      state.setText("STEP_MODE заморозил игру; нажми ▶ REALTIME_MODE для ручного управления");
+      return true;
+     }
      if(aiRunning||experiment.running()||harness.hasPending()){
       stopCpuExperiment("STOP: ручной ввод отозвал текущий агентский permit");return true;
      }
@@ -331,6 +377,7 @@ public final class NesEmulatorActivity extends Activity {
    GameLabEvidenceProvider.nes(dendy,frames,hash,touches.get(),demoButton,aButton,bButton);
  }
  private void startCpuExperiment(){
+  if(aiFrozen){state.setText("Сначала выйди из STEP_MODE");return;}
   if(experiment.running())return;
   if(!resumed||!homebrewRom||!pageLoaded||frames<15||hash==0){
    state.setText("Серия доступна только внутри запущенной тестовой NES-игры");
@@ -358,6 +405,7 @@ public final class NesEmulatorActivity extends Activity {
   if(state!=null)state.setText(reason);
  }
  private void runHomebrewCpuAgent(){
+  if(aiFrozen){state.setText("Сначала выйди из STEP_MODE");return;}
   if(!resumed||!homebrewRom||!pageLoaded||frames<15||hash==0||
      (pendingTrial!=null)){
    if(experiment.running())stopCpuExperiment("STOP: тестовая NES недоступна");
@@ -460,6 +508,20 @@ public final class NesEmulatorActivity extends Activity {
    state.setText("ИИ: необходима активная встроенная NES, без другого выполняющегося действия");
    return;
   }
+  if(aiFrozen){requestFrozenAiObservation();return;}
+  // JSNES confirms it has stopped the realtime timer and returns the
+  // authoritative last frame/hash through onStepReady before a ticket exists.
+  web.evaluateJavascript("window.retroEnterStepMode()",result->{
+   if(!"true".equals(result)&&!aiFrozen){
+    harness.stop("STEP_MODE_UNAVAILABLE");
+    state.setText("STOP: эмулятор не подтвердил переход в STEP_MODE");
+   }
+  });
+ }
+ private void requestFrozenAiObservation(){
+  if(!aiFrozen||!aiEligible()||snapshotGate.pending()||harness.hasPending()){
+   state.setText("STOP: нет единственного стабильного кадра STEP_MODE");return;
+  }
   try{
    HarnessCoordinator.Ticket ticket=harness.begin(
      frameEpoch.token(),frames,hash,SystemClock.elapsedRealtime());
@@ -484,7 +546,7 @@ public final class NesEmulatorActivity extends Activity {
   if(!snapshotGate.finish(token))return;
   aiSnapshot=false;
   if(aiObserveButton!=null)aiObserveButton.setEnabled(aiEligible());
-  if(png==null||!harness.hasPending()||!aiEligible()||
+  if(png==null||!aiFrozen||!harness.hasPending()||!aiEligible()||
     hash!=aiExpectedHash){
    harness.stop();aiTicketNonce=null;
    state.setText("STOP: ИИ не получил достоверный свежий NES PNG-кадр");
@@ -558,7 +620,7 @@ public final class NesEmulatorActivity extends Activity {
   String button=queuedAiButton;
   if(button==null||!resumed)return;
   queuedAiButton=null;
-  if(!aiEligible()||!frameEpoch.current(aiEpoch)||hash!=aiExpectedHash||
+  if(!aiFrozen||!aiEligible()||!frameEpoch.current(aiEpoch)||hash!=aiExpectedHash||
     SystemClock.elapsedRealtime()-aiIssuedAt>ConsoleAgentContract.TTL_MS){
    harness.stop("STALE_EMULATOR_FRAME");
    state.setText("STOP: новый кадр не совпадает с наблюдением ИИ");
@@ -569,13 +631,14 @@ public final class NesEmulatorActivity extends Activity {
    state.setText("STOP: Harness не выдал право на ввод NES");return;
   }
   aiRunning=true;
-  state.setText("ИИ "+aiModelId+" · кнопка "+button+" на 16 кадров; ожидаю проверку");
-  web.evaluateJavascript("window.retroAiTrial("+
+  state.setText("ИИ "+aiModelId+" · STEP_MODE "+button+" на 16 реальных кадров; проверяю");
+  web.evaluateJavascript("window.retroAiStep("+
     org.json.JSONObject.quote(button)+","+ConsoleAgentContract.HOLD_FRAMES+")",ack->{
      TrialPending pending=pendingTrial;
      if(pending==null||!pending.button.equals(button))return;
-     pending.downAck="true".equals(ack);
-     if(!pending.downAck)stopCpuExperiment("STOP: NES отверг ИИ-действие");
+     if(!"true".equals(ack))stopCpuExperiment("STOP: JSNES отказал в точном шаге");
+     // onAgentAction supplies the release ACK before the final fresh frame.
+     // Do not overwrite it with a delayed evaluateJavascript callback.
   });
  }
  @Override protected void onNewIntent(Intent next){
@@ -655,7 +718,7 @@ public final class NesEmulatorActivity extends Activity {
   String encoded=Base64.encodeToString(rom,Base64.NO_WRAP);
   String session=frameEpoch.begin();
   harness.reset(session,HarnessCoordinator.Mode.REALTIME_MODE);
-  pendingPermit=null;
+  pendingPermit=null;aiFrozen=false;
   frames=hash=0;touches.set(0);
   ++experimentGeneration;experiment.stop();
   snapshotGate.cancel();exportTrial=null;
@@ -734,7 +797,7 @@ public final class NesEmulatorActivity extends Activity {
   if(queuedAiButton!=null&&web!=null)web.postDelayed(this::executeAiMove,350);
  }
  @Override protected void onDestroy(){
-  closed=true;harness.stop("NES_DESTROYED");pendingPermit=null;
+  closed=true;harness.stop("NES_DESTROYED");pendingPermit=null;aiFrozen=false;
   queuedAiButton=null;aiRunning=false;
   frameEpoch.cancel();snapshotGate.cancel();exportTrial=null;
   romDownloads.shutdownNow();
