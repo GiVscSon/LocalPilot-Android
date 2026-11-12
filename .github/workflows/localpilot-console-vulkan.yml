@@ -34,6 +34,7 @@ jobs:
           set -euo pipefail
           python3 -m unittest discover -s tests -p 'test_unified_vulkan_contract.py' -v
           java tests/ConsoleAgentPolicyVerify.java
+          node tests/console_model_frame_vm.test.js
           java tests/ModelLabComputePolicyVerify.java
       - name: Install fixed Android SDK NDK shader compiler
         shell: bash
