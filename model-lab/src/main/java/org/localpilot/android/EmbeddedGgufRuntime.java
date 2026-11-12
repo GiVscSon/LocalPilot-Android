@@ -55,7 +55,12 @@ public final class EmbeddedGgufRuntime {
   }
  }
  /** Read-only ggml GPU discovery, only on explicit user click. */
- public void probeGpu(Result callback){
+ /** Standalone ModelLab has no console controller; one-APK only. */
+ public void proposeNesButton(File weights,File projector,String observation,
+    byte[] rgb,int width,int height,int requestedGpuLayers,Result callback){
+  throw new IllegalStateException("NES agent is available only in the unified LocalPilot APK");
+ }
+  public void probeGpu(Result callback){
   submit(callback,()->{
    if(!BuildConfig.VULKAN_COMPILED)
     return "Vulkan не собран в этом APK. CPU остаётся доступен.";
