@@ -59,6 +59,7 @@ public final class NesEmulatorActivity extends Activity {
  private final NesExperimentPolicy experiment=new NesExperimentPolicy();
  private long experimentGeneration;
  private boolean homebrewRom;
+ private String neuralFeatures; // real 8x8 luminance held until verified action
  private NesTrial readyTrial;
  private NesTrial exportTrial;
  private final NesSnapshotGate snapshotGate=new NesSnapshotGate(1,2);
@@ -398,7 +399,11 @@ public final class NesEmulatorActivity extends Activity {
     org.localpilot.shared.HarnessTelemetry.emit("VISUAL",readyTrial.status,
       "fresh frame="+count+"; pixels changed != goal proven",0);
     org.localpilot.shared.HarnessTelemetry.emit("REWARD","UNKNOWN",
-      "no independently verified score/goal; learning blocked",0);
+      "no independently verified score/goal; reward RL blocked",0);
+    if("PIXELS_DIFFER".equals(readyTrial.status)&&neuralFeatures!=null)
+     org.localpilot.shared.HarnessTelemetry.emit("EXAMPLE","VISUAL_ONLY",
+       "grid="+neuralFeatures+";action="+current.button,0);
+    neuralFeatures=null;
    }
    state.setText(readyTrial.summary()+" · можно передать в ModelLab");
    if(neural.running()){
@@ -486,6 +491,7 @@ public final class NesEmulatorActivity extends Activity {
   neuralSnapshot.cancel();
   if(neuralBrain!=null&&wasRunning)neuralBrain.cancel();
   neuralBrain=null;
+  neuralFeatures=null;
   neuralRomEpoch="";
   if(wasRunning&&pendingTrial!=null)pendingTrial=null;
   if(wasRunning&&web!=null&&pageLoaded)
@@ -587,6 +593,7 @@ public final class NesEmulatorActivity extends Activity {
     }
     org.localpilot.shared.HarnessTelemetry.emit("ACTION","DISPATCHED",
       action+" · 16 emulator frames",0);
+    neuralFeatures=view; // actual pre-action 8x8 NES observation
     beginTrial(action);
     web.evaluateJavascript("window.retroAgentTrial("+
       org.json.JSONObject.quote(action)+",16)",ok->{
