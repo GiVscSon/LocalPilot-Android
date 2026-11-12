@@ -105,6 +105,7 @@ jobs:
           python3 tools/verify_all_in_one.py \
             --apk "$APK" --aapt "$ANDROID_HOME/build-tools/35.0.0/aapt" \
             --apksigner "$ANDROID_HOME/build-tools/35.0.0/apksigner" \
+            --experimental-vulkan \
             --output build/console-vulkan/TEST-ONLY-MANIFEST.json
           echo 'VULKAN_NATIVE_LINK_PASS; physical Mali device, GPU offload and benchmark NOT YET VERIFIED'
       - name: Package ONE ARM64 APK, never a stable release
