@@ -1,0 +1,76 @@
+name: Harness Phase 1 window screenshot safety
+
+on:
+  pull_request:
+    paths:
+      - 'app/src/main/java/org/localpilot/android/WindowCaptureRoute.java'
+      - 'app/src/main/java/org/localpilot/android/WindowCaptureBridge.java'
+      - 'app/src/main/java/org/localpilot/android/PilotService.java'
+      - 'tests/WindowCaptureRouteTest.java'
+      - '.github/workflows/harness-window-capture.yml'
+  push:
+    branches: [ 'fix/harness-*', 'feat/harness-*' ]
+    paths:
+      - 'app/src/main/java/org/localpilot/android/WindowCaptureRoute.java'
+      - 'app/src/main/java/org/localpilot/android/WindowCaptureBridge.java'
+      - 'app/src/main/java/org/localpilot/android/PilotService.java'
+      - 'tests/WindowCaptureRouteTest.java'
+      - '.github/workflows/harness-window-capture.yml'
+permissions:
+  contents: read
+
+jobs:
+  route-and-invariants:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Verify API30-36 fullscreen-only window capture route
+        run: |
+          set -euo pipefail
+          mkdir -p build/window-capture-jvm
+          javac --release 17 -d build/window-capture-jvm \
+            app/src/main/java/org/localpilot/android/WindowCaptureRoute.java \
+            tests/WindowCaptureRouteTest.java
+          java -cp build/window-capture-jvm org.localpilot.android.WindowCaptureRouteTest
+      - name: Assert routing is actually wired into PilotService without relaxing STOP
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          pilot=Path('app/src/main/java/org/localpilot/android/PilotService.java').read_text()
+          bridge=Path('app/src/main/java/org/localpilot/android/WindowCaptureBridge.java').read_text()
+          assert pilot.index('panelOccludesCapture(roi)') < pilot.index('WindowCaptureBridge.request(')
+          assert 'WindowCaptureRoute.choose(' in pilot
+          assert 'WindowCaptureRoute.compatibleFrame(' in pilot
+          assert 'SCREENSHOT_SECURE_WINDOW' in pilot
+          assert 'takeScreenshotOfWindow(' in bridge
+          assert 'Build.VERSION.SDK_INT<34' in bridge
+          print('WINDOW_CAPTURE_INTEGRATION_PASS')
+          PY
+
+  android-compile:
+    needs: route-and-invariants
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      LOCALPILOT_BUILD_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Compile actual Android API35 service and API34 window invocation
+        run: |
+          set -euo pipefail
+          bash ./gradlew --no-daemon :app:compileDebugJavaWithJavac
+          echo "JAVA_COMPILE_ONLY: emulator API34/35/36 capture and on-device ROI proof still needed"
