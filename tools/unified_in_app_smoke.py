@@ -29,10 +29,11 @@ def adb(*argv: str, timeout: int = 45) -> str:
     result = subprocess.run(command, capture_output=True, text=True,
                             timeout=timeout, check=False)
     if result.returncode != 0:
-        # Keep bounded, non-sensitive SDK errors only.
-        raise RuntimeError("ADB failed: " + " ".join(argv[:3]) +
-                           " (" + str(result.returncode) + ") " +
-                           result.stderr.strip()[-500:])
+        # This is an isolated CI emulator. Preserve bounded actual ADB errors:
+        # the former exception type alone hid whether UiAutomator or the app failed.
+        detail = (result.stderr.strip() or result.stdout.strip())[-800:]
+        raise RuntimeError("ADB failed: " + " ".join(argv[:4]) +
+                           " (exit=" + str(result.returncode) + ") " + detail)
     return result.stdout
 
 
@@ -70,18 +71,55 @@ def target_bounds(xml_text: str, label: str) -> tuple[int, int] | None:
 
 
 def dump_ui() -> str:
-    # The UI hierarchy comes from the installed app, never a mock layout.
-    last_error = ""
-    for _ in range(3):
+    """Require a FRESH, real UiAutomator hierarchy; never accept cached XML."""
+    failures = []
+    for compressed in (False, True, False):
         try:
-            adb("shell", "uiautomator", "dump", UI_PATH, timeout=30)
+            # Removing only our own scratch dump prevents a stale false PASS.
+            adb("shell", "rm", "-f", UI_PATH, timeout=12)
+            command = ("shell", "uiautomator", "dump")
+            if compressed:
+                command += ("--compressed",)
+            adb(*command, UI_PATH, timeout=45)
             value = adb("shell", "cat", UI_PATH, timeout=15)
-            ET.fromstring(value)
+            root = ET.fromstring(value)
+            if root.tag != "hierarchy" or not list(root.iter("node")):
+                raise RuntimeError("UiAutomator returned no accessible UI nodes")
             return value
         except (ET.ParseError, RuntimeError, subprocess.TimeoutExpired) as error:
-            last_error = type(error).__name__
-            time.sleep(1)
-    raise RuntimeError("Unable to read on-device UI hierarchy: " + last_error)
+            failures.append(type(error).__name__ + ": " + str(error)[-550:])
+            time.sleep(2)
+    raise RuntimeError("Unable to read on-device UI hierarchy; attempts: " +
+                       " | ".join(failures)[-1700:])
+
+
+def write_failure_diagnostics(output: Path, error: Exception) -> None:
+    """Capture bounded emulator evidence without modifying system settings."""
+    directory = output.parent
+    directory.mkdir(parents=True, exist_ok=True)
+    evidence = {"result": "FAIL", "exception": str(error)[:1800],
+                "source": "isolated Android CI emulator", "releaseReady": False}
+    for name, args in (
+        ("focus", ("shell", "dumpsys", "window")),
+        ("activity", ("shell", "dumpsys", "activity", "activities")),
+        ("crashes", ("shell", "logcat", "-d", "-t", "250", "-s",
+                     "AndroidRuntime:E", "UiAutomator:E", "ActivityTaskManager:E")),
+    ):
+        try:
+            value = adb(*args, timeout=20)
+            evidence[name] = value[-3500:]
+        except (RuntimeError, subprocess.TimeoutExpired, OSError) as diagnostic:
+            evidence[name + "_error"] = str(diagnostic)[-350:]
+    (directory / "failure-diagnostics.json").write_text(
+        json.dumps(evidence, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    # Screenshots come only from the ephemeral test emulator, not a user phone.
+    try:
+        image = subprocess.run(["adb", "exec-out", "screencap", "-p"],
+                               capture_output=True, timeout=20, check=False)
+        if image.returncode == 0 and image.stdout.startswith(b"\\x89PNG\\r\\n\\x1a\\n"):
+            (directory / "failure-screen.png").write_bytes(image.stdout)
+    except (OSError, subprocess.TimeoutExpired):
+        pass
 
 
 def scroll_up() -> None:
@@ -226,6 +264,11 @@ def main() -> None:
         result = verify(args.apk, args.output)
     except (OSError, RuntimeError, ET.ParseError, subprocess.TimeoutExpired) as error:
         args.output.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            if is_emulator():
+                write_failure_diagnostics(args.output, error)
+        except (OSError, RuntimeError, subprocess.TimeoutExpired):
+            pass
         args.output.write_text(json.dumps({
             "schema": "localpilot-unified-device-ui-test-v1",
             "result": "FAIL", "reason": str(error)[:500],
