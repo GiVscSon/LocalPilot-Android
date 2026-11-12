@@ -77,3 +77,13 @@ G6: individual licensed Libretro cores after capability and physical tests, not 
 UPSTREAM_REVIEWED != DEPENDENCY_BUILT != ANDROID_CONNECTED != ACTION_VERIFIED != REWARD_CONFIRMED != TRAINING_CONFIRMED != DEVICE_PASS != RELEASE_READY.
 
 This file is an actionable choice record; it does NOT perform any of those integration steps by itself.
+
+## Complementary upstream tooling: discovery, test harness, desktop research
+
+- https://github.com/modelcontextprotocol/registry — official community MCP server catalog and metadata API. Reuse it for *discovery only*: registry entries and remotely supplied tool descriptions are untrusted. Never auto-install, auto-run, or auto-grant a discovered server. Show source repo, release, declared permissions and requested tools for review.
+- https://github.com/modelcontextprotocol/conformance — official protocol conformance tests. Reuse this suite in CI for the real selected MCP client; do not reinvent JSON-RPC conformance. Verify protocol-version negotiation separately for 2025-11-25 and newer releases as supported by the pinned client SDK.
+- https://github.com/modelcontextprotocol/inspector — reference MCP server Inspector with CLI/TUI/Web, helpful for development diagnostics on a PC/Termux. It is a *test tool*, not a library to embed into the APK.
+- https://github.com/Farama-Foundation/stable-retro — maintained Python Gymnasium/Retro training integrations, genuine game-variable reward descriptions, ROM hashes and holdout design. Reuse its **integration format and desktop test procedures** for game profiles where licensing allows; it targets Python/desktop, not plug-and-play Android. Do not ship its copyrighted game data or presume installed console cores.
+- https://github.com/google-ai-edge/litert-samples — Android examples of efficient inference/model benchmarking. Adapt only the tested component that actually connects to Harness and keep artifact version/license pinned; do not fork a second standalone ModelLab UI.
+
+Additional acceptance for MCP: authentic SDK client -> authorized HTTPS or approved loopback server -> discover tool schema -> user grant -> actual read-only tool call -> schema-validated return -> audit -> revoke grant -> call denied. Repeat on device and with a changed-schema poisoned tool. A catalog entry alone is NEVER a working connection.
