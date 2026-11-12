@@ -20,7 +20,7 @@ MAIN = "org.localpilot.android.MainActivity"
 MODEL = "org.localpilot.android.ModelLabActivity"
 GAMELAB = "org.localpilot.gamelab.TestDeviceActivity"
 NES = "org.localpilot.gamelab.NesEmulatorActivity"
-UI_PATH = "/sdcard/localpilot-unified-smoke.xml"
+UI_PATH = "/data/local/tmp/localpilot-unified-smoke.xml"
 BOUNDS = re.compile(r"^\[(\d+),(\d+)\]\[(\d+),(\d+)\]$")
 
 
