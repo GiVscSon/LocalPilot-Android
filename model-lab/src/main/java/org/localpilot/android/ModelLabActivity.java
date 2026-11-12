@@ -570,7 +570,11 @@ public final class ModelLabActivity extends Activity {
     File projector=chosen.vision()?catalog.projectorFile(chosen):null;
     if(!wanted.equals(app.getSharedPreferences("localpilot-console-assignment",0)
                          .getString("modelId",null)))return;
-    installConsoleBrain(chosen,weights,projector,runtime,0);
+    synchronized(ModelLabActivity.class){
+     if(!wanted.equals(app.getSharedPreferences("localpilot-console-assignment",0)
+                         .getString("modelId",null)))return;
+     installConsoleBrain(chosen,weights,projector,runtime,0);
+    }
    }catch(Exception|LinkageError invalid){
     // Broken or removed model must NEVER become a controller. No implicit
     // download and no synthetic action or success is performed here.
@@ -578,6 +582,70 @@ public final class ModelLabActivity extends Activity {
   },"LocalPilot-Console-Model-Restore");
   restore.setDaemon(true);
   restore.start();
+ }
+ /** Dashboard and ModelLab reuse exactly ONE verified store/runtime. */
+ public static ModelLabStore harnessStore(android.content.Context context){
+  if(context==null||!context.getPackageName().startsWith("org.localpilot.android"))
+   throw new IllegalStateException("Unified app required");
+  synchronized(ModelLabActivity.class){
+   if(unifiedStore==null)unifiedStore=new ModelLabStore(context.getApplicationContext());
+   return unifiedStore;
+  }
+ }
+ public static EmbeddedGgufRuntime harnessEngine(android.content.Context context){
+  if(context==null||!context.getPackageName().startsWith("org.localpilot.android"))
+   throw new IllegalStateException("Unified app required");
+  synchronized(ModelLabActivity.class){
+   if(unifiedEngine==null)unifiedEngine=new EmbeddedGgufRuntime(context.getApplicationContext());
+   return unifiedEngine;
+  }
+ }
+ public static String harnessBind(android.content.Context context,String id,int layers)throws Exception{
+  if(org.localpilot.shared.HarnessTelemetry.active())
+   throw new IllegalStateException("STOP current NES episode before changing agent");
+  if(id==null||id.isBlank()||(layers!=0&&layers!=8&&layers!=16))
+   throw new IllegalArgumentException("Invalid model or GPU layers");
+  if(layers>0&&!BuildConfig.VULKAN_COMPILED)
+   throw new IllegalStateException("Vulkan not compiled");
+  ModelLabStore catalog=harnessStore(context);
+  ModelLabStore.Entry choice=catalog.find(id);
+  if(choice==null)throw new IllegalArgumentException("Model not installed");
+  File weights=catalog.modelFile(choice);
+  File projector=choice.vision()?catalog.projectorFile(choice):null;
+  EmbeddedGgufRuntime runtime=harnessEngine(context);
+  if(runtime.busy())throw new IllegalStateException("JNI model inference is busy");
+  synchronized(ModelLabActivity.class){
+   if(org.localpilot.shared.HarnessTelemetry.active())
+    throw new IllegalStateException("STOP before reassignment");
+   boolean saved=context.getApplicationContext().getSharedPreferences(
+    "localpilot-console-assignment",0).edit().putString("modelId",choice.id).commit();
+   if(!saved)throw new java.io.IOException("Assignment could not be saved");
+   installConsoleBrain(choice,weights,projector,runtime,layers);
+  }
+  return "BOUND: "+choice.label+(layers==0?" · CPU":" · Vulkan requested "+layers);
+ }
+ public static void harnessUnbind(android.content.Context context){
+  synchronized(ModelLabActivity.class){
+   if(org.localpilot.shared.HarnessTelemetry.active())
+    throw new IllegalStateException("STOP current episode before unbinding");
+   ConsoleAgentBridge.clear();
+   context.getApplicationContext().getSharedPreferences("localpilot-console-assignment",0)
+    .edit().remove("modelId").commit();
+  }
+ }
+ public static void harnessDelete(android.content.Context context,String id)throws Exception{
+  if(id==null||id.isBlank())throw new IllegalArgumentException("Model ID required");
+  ModelLabStore catalog=harnessStore(context);
+  synchronized(ModelLabActivity.class){
+   if(org.localpilot.shared.HarnessTelemetry.active())
+    throw new IllegalStateException("STOP current episode before deleting");
+   String current=context.getApplicationContext().getSharedPreferences(
+    "localpilot-console-assignment",0).getString("modelId","");
+   if(id.equals(current))throw new IllegalStateException("Unbind selected model first");
+   ModelLabStore.Entry item=catalog.find(id);
+   if(item==null||item.bundled)throw new IllegalArgumentException("Model cannot be removed");
+   catalog.remove(item);
+  }
  }
  private static void installConsoleBrain(ModelLabStore.Entry choice,File weights,
                     File projector,EmbeddedGgufRuntime runtime,int offload){
