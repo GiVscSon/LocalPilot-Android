@@ -26,6 +26,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import org.localpilot.shared.NesTrial;
 import org.localpilot.shared.NesFrameTransfer;
+import org.localpilot.shared.ConsoleAgentBridge;
 
 /**
  * Independent on-device AI laboratory. No LocalPilot service/gestures are present.
@@ -79,7 +80,7 @@ public final class ModelLabActivity extends Activity {
   scroll.requestApplyInsets();
   title(col,"ModelLab · локальные нейросети");
   line(col,(inUnifiedApk()?"Встроенный ModelLab: один LocalPilot APK. ":"Независимый ModelLab. ")+
-    "Анализ не выдаёт игровых жестов и не получает разрешений ActionGate. "+
+    "ИИ может выбирать кнопки только внутри NES homebrew через отдельный проверяемый контроллер; внешние Android-жесты и ActionGate не выдаются. "+
     "GGUF работает локально через llama.cpp, модели скачиваются по выбору.");
   status=line(col,"Готовлю библиотеку моделей...");
   try {
@@ -113,6 +114,11 @@ public final class ModelLabActivity extends Activity {
   });
   nesStatus=line(col,"Передай эпизод из GameLab NES: кнопка → кадры → реальное изменение пикселей. "+
     "Это НЕ оценка победы, награда или доказательство причинности.");
+  if(inUnifiedApk())button(col,"🧠 Назначить выбранную GGUF нейроагентом NES",()->{
+   ModelLabStore.Entry choice=selected();
+   if(choice==null){nesStatus.setText("Сначала загрузи или импортируй GGUF");return;}
+   task("Проверяю GGUF для консольного агента",()->registerConsoleBrain(choice),false);
+  });
   button(col,"Объяснить последний NES-эпизод выбранной нейросетью",()->{
    NesTrial evidence=nesTrial;
    ModelLabStore.Entry selection=selected();
@@ -458,6 +464,48 @@ public final class ModelLabActivity extends Activity {
   if(position<0||position>=ModelLabComputePolicy.Mode.values().length)return 0;
   return compute.layers(ModelLabComputePolicy.Mode.values()[position],
     entry.id,BuildConfig.VULKAN_COMPILED);
+ }
+ /** Models are registered as decision providers, never as Android input owners.
+  *  The runtime and checked GGUF files are app-scoped; no Activity is retained.
+  */
+ private String registerConsoleBrain(ModelLabStore.Entry choice)throws Exception{
+  if(!inUnifiedApk())return "Нейроагент NES доступен только в едином APK";
+  final File weights=store.modelFile(choice);
+  final File projector=choice.vision()?store.projectorFile(choice):null;
+  final EmbeddedGgufRuntime runtime=engine;
+  ConsoleAgentBridge.set(new ConsoleAgentBridge.Brain(){
+   public String label(){return choice.label;}
+   public boolean vision(){return projector!=null;}
+   public void decide(String observation,byte[] png,ConsoleAgentBridge.Reply reply){
+    try{
+     if(runtime.busy())throw new IllegalStateException("GGUF engine busy");
+     if(projector==null)runtime.text(weights,observation,0,
+       (answer,elapsed)->reply.complete(answer));
+     else{
+      NesFrameTransfer.verify(png);
+      Bitmap frame=BitmapFactory.decodeByteArray(png,0,png.length);
+      if(frame==null)throw new IllegalArgumentException("NES PNG decode rejected");
+      int w=frame.getWidth(),h=frame.getHeight();
+      if(w!=NesFrameTransfer.WIDTH||h!=NesFrameTransfer.HEIGHT){
+       frame.recycle();throw new IllegalArgumentException("Unexpected NES frame size");
+      }
+      int[] pixels=new int[w*h];frame.getPixels(pixels,0,w,0,w,h);
+      frame.recycle();
+      byte[] rgb=new byte[w*h*3];
+      for(int i=0;i<pixels.length;i++){
+       rgb[3*i]=(byte)(pixels[i]>>>16);
+       rgb[3*i+1]=(byte)(pixels[i]>>>8);
+       rgb[3*i+2]=(byte)pixels[i];
+      }
+      runtime.image(weights,projector,observation,rgb,w,h,0,
+        (answer,elapsed)->reply.complete(answer));
+     }
+    }catch(Exception|LinkageError failure){reply.complete("");}
+   }
+  });
+  return "Нейроагент готов: "+choice.label+
+    (projector==null?" · текстовое наблюдение":" · NES кадр + mmproj")+
+    ". Открой NES, запусти встроенный homebrew и нажми «Нейроагент».";
  }
  private void refresh(){
   if(closed||modelPicker==null)return;

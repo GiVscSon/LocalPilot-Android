@@ -11,7 +11,7 @@ public final class ConsoleAgentPolicy {
  public void start(boolean builtInHomebrew,boolean modelReady){
   if(!builtInHomebrew||!modelReady)
    throw new IllegalStateException("Verified homebrew ROM and GGUF model required");
-  stop();running=true;
+  stop();verified=0;running=true;
  }
  public boolean running(){return running;}
  public int verified(){return verified;}
