@@ -120,6 +120,15 @@ class UnifiedUiSmokeContract(unittest.TestCase):
             self.assertIs(evidence["releaseReady"],False)
             self.assertIn("specific failure",evidence["exception"])
 
+    def test_ci_requires_hardware_virtualization_for_real_ui(self):
+        workflow=(ROOT/".github/workflows/localpilot-all-in-one.yml").read_text(encoding="utf-8")
+        self.assertIn("ANDROID_CI_INFRA_KVM_MISSING",workflow)
+        self.assertIn("ANDROID_CI_INFRA_KVM_PERMISSIONS",workflow)
+        self.assertIn("emulator\" -accel-check",workflow)
+        self.assertIn("emulator-options: -no-window -gpu software",workflow)
+        self.assertNotIn("-gpu swiftshader_indirect",workflow)
+        self.assertLess(workflow.index("Verify KVM acceleration"),workflow.index("Exercise real Android navigation"))
+    
     def test_ci_uses_only_compiled_single_candidate_artifact(self):
         workflow=(ROOT/".github/workflows/localpilot-all-in-one.yml").read_text(encoding="utf-8")
         self.assertIn("needs: all-in-one",workflow)
