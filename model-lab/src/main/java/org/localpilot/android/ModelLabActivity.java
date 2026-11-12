@@ -147,7 +147,7 @@ public final class ModelLabActivity extends Activity {
         "GGUF inference PASS: "+choice.label+" · "+(vision?"реальный NES RGB + mmproj":"текст")+
         " · ACTION=STOP · "+elapsed+" мс. Это ещё не доказательство победы в игре.":
         "GGUF inference FAIL: "+choice.label+" · не получен строгий STOP. "+
-        "Неподтверждённая модель не получит права на NES-кнопку.");
+        "Ответ вне грамматики ACTION будет отклонён контроллером NES (STOP).");
       };
       if(vision)engine.consoleActionImage(weights,projector,
        "A real NES screenshot is attached to this vision engine smoke test. "+
