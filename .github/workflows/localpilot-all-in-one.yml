@@ -41,6 +41,7 @@ jobs:
           set -euo pipefail
           python3 -m unittest discover -s tests -p 'test_localpilot_all_in_one.py' -v
           python3 -m unittest discover -s tests -p 'test_unified_in_app_smoke.py' -v
+          node tests/console_model_frame_vm.test.js
           java tests/ConsoleAgentPolicyVerify.java
           java tests/ModelLabPolicyVerify.java
           java tests/ModelLabComputePolicyVerify.java
