@@ -4,6 +4,8 @@ plugins { id 'com.android.application' }
 
 def bundledCatalog = providers.gradleProperty('bundleLocalModelCatalog').orElse('false').get().toBoolean()
 def bundledGguf = bundledCatalog || providers.gradleProperty('bundleLocalModel').orElse('false').get().toBoolean()
+// Opt-in single APK with GameLab, NES, and import/download-on-demand ModelLab.
+def unifiedModelLab = providers.gradleProperty('unifiedModelLab').orElse('false').get().toBoolean()
 def bundledMetadataFile = rootProject.file('build/reports/embedded-gguf.json')
 def bundledMetadata = null
 if (bundledGguf) {
@@ -26,6 +28,15 @@ if(bundledCatalog) {
    throw new GradleException('Missing bundled model: '+item.filename)
 }
 
+// ModelLab is also an independent test APK. Copy its reviewed Java sources
+// into the unified build WITHOUT its competing EmbeddedGgufRuntime class.
+// The primary app owns the SINGLE JNI runtime and mediates the lab calls.
+def syncUnifiedModelLab = tasks.register('syncUnifiedModelLab', Sync) {
+ from(rootProject.file('model-lab/src/main/java'))
+ exclude '**/EmbeddedGgufRuntime.java'
+ into(layout.buildDirectory.dir('generated/source/unified-model-lab'))
+}
+
 android {
  // The same GameLab and NES sources are embedded into the PRIMARY APK.
  // :game-lab remains an optional standalone test target for external
@@ -34,11 +45,12 @@ android {
   java.srcDirs += ['../shared/src/main/java', '../game-lab/src/main/java']
   assets.srcDirs += ['../game-lab/src/main/assets', '../game-lab/build/generated/jsnes/assets']
   if (bundledGguf) assets.srcDirs += [rootProject.file('build/embedded-model-assets')]
+  java.srcDirs += [layout.buildDirectory.dir('generated/source/unified-model-lab').get().asFile]
  } }
  namespace 'org.localpilot.android'
  buildFeatures { buildConfig true }
  androidResources { noCompress += ['gguf'] }
- if (bundledGguf) {
+ if (bundledGguf || unifiedModelLab) {
   ndkVersion '27.2.12479018'
   externalNativeBuild { cmake { path file('src/main/cpp/CMakeLists.txt'); version '3.22.1' } }
  }
@@ -51,20 +63,32 @@ android {
   versionName '0.8.1'
   testInstrumentationRunner 'org.localpilot.android.PilotUiInstrumentation'
   buildConfigField 'boolean', 'EMBEDDED_GGUF', bundledGguf.toString()
+  buildConfigField 'boolean', 'UNIFIED_MODELLAB', unifiedModelLab.toString()
+  manifestPlaceholders = [unifiedModelLabEnabled: unifiedModelLab.toString()]
+  buildConfigField 'boolean', 'VULKAN_COMPILED', 'false'
+  buildConfigField 'boolean', 'PRELOADED_MODELS', 'false'
+  buildConfigField 'String', 'POCKET_SHA256', '\"\"'
+  buildConfigField 'long', 'POCKET_BYTES', '0L'
   buildConfigField 'boolean', 'MULTI_MODEL_CATALOG', bundledCatalog.toString()
   buildConfigField 'String', 'EMBEDDED_GGUF_SHA256',
       bundledGguf ? ('"' + bundledMetadata.sha256 + '"') : '""'
   buildConfigField 'long', 'EMBEDDED_GGUF_BYTES', bundledGguf ? (bundledMetadata.bytes + 'L') : '0L'
-  if (bundledGguf) {
+  if (bundledGguf || unifiedModelLab) {
     ndk { abiFilters 'arm64-v8a' }
   }
  }
  buildTypes {
   debug {
+   // Keep literal legacy identity for deterministic release-tooling metadata.
    applicationIdSuffix '.dev.install1081'
    versionNameSuffix '-dev-install1081'
    debuggable false
   }
+ }
+ // Alternative debug install identity is test-only, never a stable update.
+ if (unifiedModelLab) {
+   buildTypes.debug.applicationIdSuffix = '.dev.unified'
+   buildTypes.debug.versionNameSuffix = '-unified-test-only'
  }
  // Keep legacy dev package literals intact for strict release tooling.
  // Only the dedicated embedded APK uses its own install identity.
@@ -79,8 +103,12 @@ android {
 }
 
 // Share the already verified pinned JSNES assets; do not download a second core.
-tasks.named('preBuild').configure { dependsOn ':game-lab:bundleVerifiedNesEngine' }
+tasks.named('preBuild').configure {
+ dependsOn ':game-lab:bundleVerifiedNesEngine'
+ dependsOn syncUnifiedModelLab
+}
 // Asset snapshot must wait for the pinned emulator bundle, not just preBuild.
+tasks.matching { it.name ==~ /compile.*JavaWithJavac/ }.configureEach { dependsOn syncUnifiedModelLab }
 tasks.matching { it.name == 'mergeDebugAssets' }.configureEach {
  dependsOn ':game-lab:bundleVerifiedNesEngine'
 }

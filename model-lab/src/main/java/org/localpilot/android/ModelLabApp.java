@@ -7,7 +7,7 @@ public final class ModelLabApp extends Application {
  private EmbeddedGgufRuntime engine;
  private ModelLabStore store;
  public synchronized EmbeddedGgufRuntime engine(){
-  if(engine==null)engine=new EmbeddedGgufRuntime();
+  if(engine==null)engine=new EmbeddedGgufRuntime(this);
   return engine;
  }
  public synchronized ModelLabStore store(){

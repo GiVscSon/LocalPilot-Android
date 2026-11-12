@@ -24,6 +24,7 @@ public final class EmbeddedGgufRuntime {
  private static native void nativeInterrupt();
  private static native void nativeResetInterrupt();
  private static native void nativeRelease();
+ public EmbeddedGgufRuntime(android.content.Context context) { /* Standalone uses its own Application; unified APK shares a context-backed engine. */ }
  private static volatile boolean loaded;
  private static synchronized void load(){
   if(!loaded){System.loadLibrary("localpilot_embedded");loaded=true;}
