@@ -46,6 +46,17 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
+      - name: Fetch pinned reviewed llama.cpp (same revision as All-in-One CI)
+        run: |
+          set -euo pipefail
+          mkdir -p third_party/llama.cpp
+          cd third_party/llama.cpp
+          git init -q
+          git remote add origin https://github.com/ggml-org/llama.cpp.git
+          git fetch --depth 1 origin 2b66bfbf7107e43f5cd2fe99802ff6e872e4c4d0
+          git checkout --detach FETCH_HEAD
+          test "$(git rev-parse HEAD)" = 2b66bfbf7107e43f5cd2fe99802ff6e872e4c4d0
+          test -f include/llama.h
       - name: Build one APK with GameLab, NES and ModelLab
         run: |
           set -euo pipefail
