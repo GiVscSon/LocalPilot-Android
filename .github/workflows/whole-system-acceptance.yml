@@ -29,6 +29,7 @@ on:
       - 'game-lab/src/main/java/org/localpilot/gamelab/NesExperimentPolicy.java'
       - 'tests/nes_controller_framehold.cjs'
       - 'tests/nes_ai_action_smoke.cjs'
+      - 'tests/nes_step_mode_smoke.cjs'
       - 'tests/ModelLabPolicyVerify.java'
       - 'tools/verify_modellab_cancel.py'
       - 'tests/ModelLabCatalogVerify.java'
@@ -91,6 +92,9 @@ jobs:
           node tests/nes_controller_framehold.cjs
           node tests/nes_ai_action_smoke.cjs
           node tests/jsnes_nes_smoke.cjs \
+            build/integration/core/package/dist/jsnes.min.js \
+            build/integration/rom/homebrew.nes
+          node tests/nes_step_mode_smoke.cjs \
             build/integration/core/package/dist/jsnes.min.js \
             build/integration/rom/homebrew.nes
           # A REAL author-published ROM from a pinned MIT release, not the test cartridge.
