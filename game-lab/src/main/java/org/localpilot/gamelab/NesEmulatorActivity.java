@@ -722,6 +722,14 @@ public final class NesEmulatorActivity extends Activity {
   if(!pageLoaded||web==null||rom==null||rom.length>MAX_ROM){
    state.setText("NES-ядро ещё не загружено или ROM недоступен");return;
   }
+  NesRomPreflight.Result preflight=RetroEmulatorCatalog.preflight(
+    dendy?RetroEmulatorCatalog.System.DENDY:RetroEmulatorCatalog.System.NES,rom);
+  if(!preflight.runnable()){
+   harness.stop("NES_PREFLIGHT_"+preflight.code());
+   state.setText("ROM не запущен: "+preflight.code()+
+      (preflight.mapper()>=0?" · mapper "+preflight.mapper():""));
+   return;
+  }
   String encoded=Base64.encodeToString(rom,Base64.NO_WRAP);
   String session=frameEpoch.begin();
   harness.reset(session,HarnessCoordinator.Mode.REALTIME_MODE);
