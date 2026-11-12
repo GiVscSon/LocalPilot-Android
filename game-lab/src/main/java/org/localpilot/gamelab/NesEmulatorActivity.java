@@ -486,7 +486,20 @@ public final class NesEmulatorActivity extends Activity {
   }
  }
  private void handleAiMove(Intent reply){
-  if(reply==null||!ConsoleAgentContract.MOVE.equals(reply.getAction()))return;
+  if(reply==null)return;
+  if(ConsoleAgentContract.CANCEL.equals(reply.getAction())){
+   // Cancellation can only revoke a current local one-time capability; it
+   // never authorizes a button. No response from stale ModelLab is replayed.
+   String cancelNonce=reply.getStringExtra(ConsoleAgentContract.TOKEN);
+   if(ConsoleAgentContract.tokenValid(cancelNonce)&&
+      cancelNonce.equals(aiTicketNonce)){
+    aiGate.stop();aiTicketNonce=null;queuedAiButton=null;aiSnapshot=false;
+    if(aiObserveButton!=null)aiObserveButton.setEnabled(homebrewRom&&pageLoaded);
+    state.setText("STOP: ModelLab отменил запрос; NES-контроллер освобождён");
+   }
+   return;
+  }
+  if(!ConsoleAgentContract.MOVE.equals(reply.getAction()))return;
   String button=reply.getStringExtra(ConsoleAgentContract.BUTTON);
   String nonce=reply.getStringExtra(ConsoleAgentContract.TOKEN);
   String modelId=reply.getStringExtra(ConsoleAgentContract.MODEL_ID);
