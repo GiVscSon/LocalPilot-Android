@@ -24,6 +24,7 @@ on:
       - 'tests/NesExperimentPolicyVerify.java'
       - 'tests/ConsoleAgentContract*.java'
       - 'tests/ConsoleExperienceMemory*.java'
+      - 'tests/HarnessCoordinator*.java'
       - 'tests/NesExperimentPolicyTest.java'
       - 'game-lab/src/main/java/org/localpilot/gamelab/NesExperimentPolicy.java'
       - 'tests/nes_controller_framehold.cjs'
@@ -108,6 +109,7 @@ jobs:
           java tests/NesExperimentPolicyVerify.java
           java tests/ConsoleAgentContractVerify.java
           java tests/ConsoleExperienceMemoryVerify.java
+          java tests/HarnessCoordinatorVerify.java
           java tests/ModelLabPolicyVerify.java
           python3 tools/verify_modellab_cancel.py
           java tests/ModelLabComputePolicyVerify.java

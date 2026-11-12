@@ -6,7 +6,7 @@ Design source: PR #116, `design/harness-runtime-v1-20261112`, `3dc5d67747efdddb9
 
 ## Evidence gates
 - P0: RFC and machine-readable transition contract imported unmodified from PR #116 onto the existing NES+GGUF+shared-memory integration branch.
-- P1: NOT YET COMPLETE (shared coordinator must be wired to the actual emulator/inputs).
+- P1 IN PROGRESS: `HarnessCoordinator` is wired to the actual Android NES activity for GGUF, manual and scripted controller permits, STOP, TTL/epoch and transport-vs-reward discipline. A pure JVM regression suite is added. Full P1 still requires a true frozen-time JSNES STEP_MODE adapter and Android device evidence; the current loop is REALTIME_MODE.
 - P2: NOT COMPLETE (model router with capability probes/active binding).
 - P3: NOT COMPLETE (trusted task-profile reward, proper real-transition store).
 - P4: NOT COMPLETE (trainable policy, independent holdout, promotion, rollback).
