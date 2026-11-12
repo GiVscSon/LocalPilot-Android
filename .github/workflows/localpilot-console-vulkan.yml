@@ -1,0 +1,133 @@
+name: LocalPilot ONE APK · Console GGUF Vulkan (experimental)
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'app/**'
+      - 'model-lab/**'
+      - 'game-lab/**'
+      - 'shared/**'
+      - 'tests/ConsoleAgentPolicy*.java'
+      - 'tests/ConsoleObservationTest.java'
+      - 'tests/test_unified_vulkan_contract.py'
+      - '.github/workflows/localpilot-console-vulkan.yml'
+permissions:
+  contents: read
+concurrency:
+  group: unified-console-vulkan-${{ github.event.pull_request.number || github.ref_name }}
+  cancel-in-progress: true
+jobs:
+  arm64-vulkan:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 100
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Verify one-APK Vulkan contract and model-to-NES policy
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p 'test_unified_vulkan_contract.py' -v
+          java tests/ConsoleAgentPolicyVerify.java
+          java tests/ModelLabComputePolicyVerify.java
+      - name: Install fixed Android SDK NDK shader compiler
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
+            'platforms;android-35' 'build-tools;35.0.0' 'cmake;3.22.1' 'ndk;27.2.12479018'
+          NDK="$ANDROID_HOME/ndk/27.2.12479018"
+          test -x "$NDK/shader-tools/linux-x86_64/glslc"
+          "$NDK/shader-tools/linux-x86_64/glslc" --version
+          test -f "$NDK/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/24/libvulkan.so"
+      - name: Fetch immutable Khronos SPIR-V headers
+        run: |
+          set -euo pipefail
+          mkdir -p third_party/SPIRV-Headers
+          cd third_party/SPIRV-Headers
+          git init
+          git remote add origin https://github.com/KhronosGroup/SPIRV-Headers.git
+          git fetch --depth 1 origin 09913f088a1197aba4aefd300a876b2ebbaa3391
+          git checkout --detach FETCH_HEAD
+          test "$(git rev-parse HEAD)" = 09913f088a1197aba4aefd300a876b2ebbaa3391
+          cd ../..
+          cmake -S third_party/SPIRV-Headers -B build/spirv-header-host \
+            -DSPIRV_HEADERS_ENABLE_TESTS=OFF -DSPIRV_HEADERS_ENABLE_INSTALL=ON \
+            -DCMAKE_INSTALL_PREFIX="$PWD/build/spirv-headers-install"
+          cmake --install build/spirv-header-host
+          test -f build/spirv-headers-install/include/spirv/unified1/spirv.hpp
+      - name: Fetch immutable Vulkan C++ headers
+        run: |
+          set -euo pipefail
+          mkdir -p third_party/Vulkan-Headers
+          cd third_party/Vulkan-Headers
+          git init
+          git remote add origin https://github.com/KhronosGroup/Vulkan-Headers.git
+          git fetch --depth 1 origin 952f776f6573aafbb62ea717d871cd1d6816c387
+          git checkout --detach FETCH_HEAD
+          test "$(git rev-parse HEAD)" = 952f776f6573aafbb62ea717d871cd1d6816c387
+          cd ../..
+          test -f third_party/Vulkan-Headers/include/vulkan/vulkan.hpp
+      - name: Fetch pinned llama.cpp native inference implementation
+        run: |
+          set -euo pipefail
+          mkdir -p third_party/llama.cpp
+          cd third_party/llama.cpp
+          git init
+          git remote add origin https://github.com/ggml-org/llama.cpp.git
+          git fetch --depth 1 origin 2b66bfbf7107e43f5cd2fe99802ff6e872e4c4d0
+          git checkout --detach FETCH_HEAD
+          test "$(git rev-parse HEAD)" = 2b66bfbf7107e43f5cd2fe99802ff6e872e4c4d0
+      - name: Build ONE installed Android package with experimental Vulkan JNI
+        run: |
+          set -euo pipefail
+          ./gradlew --no-daemon --max-workers=2 --no-parallel \
+            -Dorg.gradle.jvmargs='-Xmx4608m -XX:MaxMetaspaceSize=768m -Dfile.encoding=UTF-8' \
+            -PunifiedModelLab=true -PunifiedVulkan=true \
+            :app:assembleDebug :app:lintDebug
+      - name: Check real Vulkan linkage, all-in-one screens and APK signature
+        run: |
+          set -euo pipefail
+          APK=app/build/outputs/apk/debug/app-debug.apk
+          test -s "$APK"
+          mkdir -p build/console-vulkan
+          unzip -p "$APK" lib/arm64-v8a/liblocalpilot_embedded.so > build/console-vulkan/liblocalpilot_embedded.so
+          readelf -h build/console-vulkan/liblocalpilot_embedded.so | grep -q 'Machine:.*AArch64'
+          readelf -d build/console-vulkan/liblocalpilot_embedded.so | grep -q 'NEEDED.*libvulkan.so'
+          readelf -Ws build/console-vulkan/liblocalpilot_embedded.so | grep -q 'Java_org_localpilot_android_EmbeddedGgufRuntime_nativeGpuDescription'
+          readelf -Ws build/console-vulkan/liblocalpilot_embedded.so | grep -q 'Java_org_localpilot_android_EmbeddedGgufRuntime_nativeConfigureGpuLayers'
+          readelf -Ws build/console-vulkan/liblocalpilot_embedded.so | grep -q 'Java_org_localpilot_android_EmbeddedGgufRuntime_nativeLoadedGpuLayers'
+          python3 tools/verify_all_in_one.py \
+            --apk "$APK" --aapt "$ANDROID_HOME/build-tools/35.0.0/aapt" \
+            --apksigner "$ANDROID_HOME/build-tools/35.0.0/apksigner" \
+            --output build/console-vulkan/TEST-ONLY-MANIFEST.json
+          echo 'VULKAN_NATIVE_LINK_PASS; physical Mali device, GPU offload and benchmark NOT YET VERIFIED'
+      - name: Package ONE ARM64 APK, never a stable release
+        run: |
+          set -euo pipefail
+          mkdir -p dist/console-vulkan
+          cp app/build/outputs/apk/debug/app-debug.apk dist/console-vulkan/LocalPilot-Console-Vulkan-TEST-ONLY.apk
+          cp build/console-vulkan/TEST-ONLY-MANIFEST.json dist/console-vulkan/
+          python3 - <<'PY'
+          import json,pathlib
+          p=pathlib.Path('dist/console-vulkan/TEST-ONLY-MANIFEST.json')
+          j=json.loads(p.read_text())
+          j['vulkanNativeCompiled']=True
+          j['vulkanPhysicalGpuConfirmed']=False
+          j['agentGameplayVerified']=False
+          j['releaseReady']=False
+          p.write_text(json.dumps(j,ensure_ascii=False,indent=2)+'\n')
+          PY
+          (cd dist/console-vulkan && sha256sum LocalPilot-Console-Vulkan-TEST-ONLY.apk TEST-ONLY-MANIFEST.json > SHA256SUMS.txt)
+      - uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: LocalPilot-ONE-Console-Vulkan-ARM64-TEST-ONLY-${{ github.sha }}
+          retention-days: 14
+          if-no-files-found: error
+          path: dist/console-vulkan/
