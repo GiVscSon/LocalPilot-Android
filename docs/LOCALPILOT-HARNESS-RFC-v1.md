@@ -90,7 +90,7 @@ Not every core supports savestates or deterministic playback. Capability probing
   "episodeId": "unique-session-id",
   "sequence": 3,
   "provenance": "REAL_JSNES",
-  "romSha256": "64-hex-rom-id",
+  "romSha256": "0000000000000000000000000000000000000000000000000000000000000000",
   "coreId": "jsnes",
   "coreVersion": "2.1.0",
   "mode": "STEP_MODE",
@@ -110,7 +110,8 @@ Not every core supports savestates or deterministic playback. Capability probing
     "goalProgressConfirmed":false,
     "reward":null,
     "rewardSource":"UNKNOWN",
-    "rewardConfidence":null
+    "rewardConfidence":null,
+    "rewardEvidenceRef":null
   },
   "terminated":false,
   "truncated":false,
@@ -118,6 +119,8 @@ Not every core supports savestates or deterministic playback. Capability probing
   "recordedAtElapsedMs":1234567
 }
 ```
+
+The machine-readable draft is at `docs/contracts/localpilot-transition-v1.schema.json`. The zero-filled ROM SHA in this example is a **placeholder**, not a real validated ROM identity. Never attach actual training provenance to this illustrative record.
 
 Fields may be versioned before implementation, but reward must remain nullable/UNKNOWN. PixelsDiffer=true does not mean reward>0. Gymnasium export is permitted ONLY for transitions with a validated numeric reward; exported step returns (observation, reward, terminated, truncated, info). Terminated means actual MDP/game ending; truncated means budget, deadline, thermal cutoff, forced STOP, or manual session stop.
 
