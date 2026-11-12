@@ -116,7 +116,7 @@ def write_failure_diagnostics(output: Path, error: Exception) -> None:
     try:
         image = subprocess.run(["adb", "exec-out", "screencap", "-p"],
                                capture_output=True, timeout=20, check=False)
-        if image.returncode == 0 and image.stdout.startswith(b"\\x89PNG\\r\\n\\x1a\\n"):
+        if image.returncode == 0 and image.stdout.startswith(b"\x89PNG\r\n\x1a\n"):
             (directory / "failure-screen.png").write_bytes(image.stdout)
     except (OSError, subprocess.TimeoutExpired):
         pass
