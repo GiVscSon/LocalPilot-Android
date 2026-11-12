@@ -141,7 +141,7 @@ jobs:
           target: default
           profile: pixel_2
           disable-animations: true
-          emulator-boot-timeout: 300
+          emulator-boot-timeout: 600
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
           script: python3 tools/unified_in_app_smoke.py --apk app/build/outputs/apk/debug/app-debug.apk --output unified-device-evidence/one-package-navigation.json
       - name: Upload only synthetic/emulator navigation evidence
