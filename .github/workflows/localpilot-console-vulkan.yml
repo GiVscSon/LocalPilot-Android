@@ -40,6 +40,8 @@ jobs:
           mkdir -p build/harness-jvm
           javac --release 17 -d build/harness-jvm shared/src/main/java/org/localpilot/shared/HarnessTelemetry.java tests/HarnessTelemetryTest.java
           java -cp build/harness-jvm HarnessTelemetryTest
+          javac --release 17 -d build/harness-jvm shared/src/main/java/org/localpilot/shared/HarnessImitationMath.java tests/HarnessImitationMathTest.java
+          java -cp build/harness-jvm HarnessImitationMathTest
           java tests/ModelLabComputePolicyVerify.java
       - name: Install fixed Android SDK NDK shader compiler
         shell: bash
