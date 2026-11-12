@@ -18,3 +18,65 @@ jobs:
           set -euo pipefail
           python3 -m unittest discover -s tests -p 'test_unified_local_signed_candidate.py' -v
           python3 -O -m unittest discover -s tests -p 'test_unified_local_signed_candidate.py' -v
+  unsigned-release-preflight:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 80
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Install pinned SDK and NDK
+        run: |
+          set -euo pipefail
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
+            'platforms;android-35' 'build-tools;35.0.0' 'cmake;3.22.1' 'ndk;27.2.12479018'
+      - name: Fetch reviewed JNI source
+        run: |
+          set -euo pipefail
+          mkdir -p third_party/llama.cpp
+          cd third_party/llama.cpp
+          git init
+          git remote add origin https://github.com/ggml-org/llama.cpp.git
+          git fetch --depth 1 origin 2b66bfbf7107e43f5cd2fe99802ff6e872e4c4d0
+          git checkout --detach FETCH_HEAD
+          test "$(git rev-parse HEAD)" = 2b66bfbf7107e43f5cd2fe99802ff6e872e4c4d0
+      - name: Assemble unsigned ARM64 release variant from unified source
+        run: |
+          set -euo pipefail
+          ./gradlew --no-daemon --max-workers=2 --no-parallel \
+            -Dorg.gradle.jvmargs='-Xmx4096m -XX:MaxMetaspaceSize=768m -Dfile.encoding=UTF-8' \
+            -PunifiedModelLab=true :app:assembleRelease :app:lintRelease
+      - name: Audit single unsigned release (no keys or uploads)
+        run: |
+          set -euo pipefail
+          FOLDER=app/build/outputs/apk/release
+          test "$(find "$FOLDER" -maxdepth 1 -type f -name '*-release-unsigned.apk' | wc -l)" -eq 1
+          APK="$(find "$FOLDER" -maxdepth 1 -type f -name '*-release-unsigned.apk' -print -quit)"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" \
+            | grep "^package: name='org.localpilot.android' "
+          if "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify "$APK" >/dev/null 2>&1; then
+            echo 'Expected unsigned test artifact; refusing to use unexpected signer'
+            exit 1
+          fi
+          python3 - "$APK" <<'PY'
+          from pathlib import Path
+          import sys, zipfile
+          path=Path(sys.argv[1])
+          if path.stat().st_size>45*1024*1024:
+              raise SystemExit("Unexpectedly large import-only release APK")
+          with zipfile.ZipFile(path) as archive:
+              names=set(archive.namelist())
+              required={"AndroidManifest.xml", "classes.dex",
+                  "assets/nes/jsnes.min.js", "assets/nes/latched-buttons.js",
+                  "lib/arm64-v8a/liblocalpilot_embedded.so"}
+              if required-names or archive.testzip() is not None:
+                  raise SystemExit("Required ARM64 release assets absent or bad CRC")
+              if any(x.startswith("assets/models/") and x.endswith(".gguf") for x in names):
+                  raise SystemExit("Embedded model weights are forbidden")
+          print("UNSIGNED_RELEASE_PRECHECK_PASS; non-installable; not a stable release")
+          PY
