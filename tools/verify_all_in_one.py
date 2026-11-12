@@ -46,13 +46,13 @@ def validate(apk: Path, aapt: str, apksigner: str):
         if any(n.startswith("assets/models/") and n.endswith(".gguf") for n in names):
             raise ValueError("Model weights must be downloaded by user, never prebundled")
         dex = b"".join(archive.read(n) for n in sorted(names)
-                       if re.fullmatch(r"classes(?:[2-9][0-9]*)?\\.dex", n))
+                       if re.fullmatch(r"classes(?:[2-9][0-9]*)?\.dex", n))
         if b"org/localpilot/android/ModelLabActivity" not in dex:
             raise ValueError("ModelLabActivity bytecode absent from APK")
         if b"org/localpilot/gamelab/TestDeviceActivity" not in dex:
             raise ValueError("GameLab bytecode absent from APK")
     badging = command(aapt, "dump", "badging", str(apk))
-    match = re.search(r"^package: name='([^']+)' versionCode='(\\d+)' versionName='([^']+)'",badging,re.M)
+    match = re.search(r"^package: name='([^']+)' versionCode='(\d+)' versionName='([^']+)'",badging,re.M)
     if not match or match.group(1) != EXPECTED_PACKAGE:
         raise ValueError("Unexpected package identity: expected isolated unified test suffix")
     if "-unified-test-only" not in match.group(3):
@@ -67,7 +67,7 @@ def validate(apk: Path, aapt: str, apksigner: str):
         if activity not in manifest_tree:
             raise ValueError(f"Unified manifest is missing {activity}")
     signed = command(apksigner,"verify","--verbose","--print-certs",str(apk))
-    certs = re.findall(r"^Signer #\\d+ certificate SHA-256 digest: ([0-9a-fA-F]{64})$",signed,re.M)
+    certs = re.findall(r"^Signer #\d+ certificate SHA-256 digest: ([0-9a-fA-F]{64})$",signed,re.M)
     if len(certs)!=1 or not re.search(r"^Verified using v[23] scheme .*: true$",signed,re.M):
         raise ValueError("APK signature verification failed")
     sha = hashlib.sha256(apk.read_bytes()).hexdigest()
