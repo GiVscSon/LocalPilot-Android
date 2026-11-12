@@ -52,6 +52,10 @@ ok(html.includes('window.retroCancelAgent=function()')&&
  "manual STOP always clears held simulated buttons");
 const activity=fs.readFileSync(path.join(root,
  "game-lab/src/main/java/org/localpilot/gamelab/NesEmulatorActivity.java"),"utf8");
-ok(activity.includes('file:///android_asset/nes/latched-buttons.js'),
- "WebView only allows locally packaged controller implementation");
+ok(activity.includes('https://appassets.androidplatform.net/assets/nes/index.html') &&
+   activity.includes('"/assets/nes/latched-buttons.js"') &&
+   activity.includes('assetLoader.shouldInterceptRequest(uri)') &&
+   activity.includes('setAllowFileAccess(false)') &&
+   !activity.includes('file:///android_asset/'),
+ "WebView loads only approved packaged HTTPS assets, never local file pages");
 console.log("NES_CONTROLLER_FRAMEHOLD_PASS checks="+checks);

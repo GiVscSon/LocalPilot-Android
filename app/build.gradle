@@ -65,7 +65,11 @@ android {
  } }
  namespace 'org.localpilot.android'
  buildFeatures { buildConfig true }
- androidResources { noCompress += ['gguf'] }
+ androidResources {
+  noCompress += ['gguf']
+  // Drop backup archives and editor temp files from the installed APK.
+  ignoreAssetsPattern = '!.svn:!.git:!.bak:!*.bak:!*~:!.*'
+ }
  if (bundledGguf || unifiedModelLab) {
   ndkVersion '27.2.12479018'
   externalNativeBuild { cmake { path file('src/main/cpp/CMakeLists.txt'); version '3.22.1' } }
@@ -155,3 +159,6 @@ tasks.register('writeSigningProvenance') {
  }
 }
 tasks.named('preBuild').configure { dependsOn tasks.named('writeSigningProvenance') }
+
+// NES WebView uses a virtual HTTPS origin for packaged assets.
+dependencies { implementation 'androidx.webkit:webkit:1.18.0' }
