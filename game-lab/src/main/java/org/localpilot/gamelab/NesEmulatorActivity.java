@@ -229,6 +229,9 @@ public final class NesEmulatorActivity extends Activity {
    @JavascriptInterface public void onFrame(int count,int pixelsHash,String session){
     runOnUiThread(()->{
      if(!resumed||!frameEpoch.accept(session,count))return;
+     if(neural.running()&&org.localpilot.shared.HarnessTelemetry.stopRequested()){
+      stopNeuralAgent("STOP: запрос пользователя через Harness");return;
+     }
      frames=count;hash=pixelsHash;
      if((experiment.running()||neural.running())&&pendingTrial!=null&&
         count-pendingTrial.frame>180){
@@ -496,6 +499,9 @@ public final class NesEmulatorActivity extends Activity {
   }
  }
  private void requestNeuralDecision(){
+  if(org.localpilot.shared.HarnessTelemetry.stopRequested()){
+   stopNeuralAgent("STOP: пользовательский запрос");return;
+  }
   if(!org.localpilot.shared.HarnessTelemetry.healthy()){
    stopNeuralAgent("STOP: аудит недоступен");return;
   }
@@ -557,6 +563,9 @@ public final class NesEmulatorActivity extends Activity {
     "No commentary, markdown, punctuation or extra lines.";
   try{
    model.decide(prompt,checkedPng,answer->runOnUiThread(()->{
+    if(org.localpilot.shared.HarnessTelemetry.stopRequested()){
+     stopNeuralAgent("STOP: пользовательский запрос");return;
+    }
     if(serial!=neuralSerial||!neural.running()||!resumed||closed||
       !homebrewRom||!pageLoaded||!frameEpoch.current(epoch)||model!=ConsoleAgentBridge.get())
      return;
