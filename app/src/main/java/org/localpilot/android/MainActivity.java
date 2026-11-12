@@ -1,9 +1,10 @@
 package org.localpilot.android;
 import org.localpilot.shared.HubContract;
+import org.localpilot.shared.ConsoleExperienceMemory;
 import android.app.*;import android.os.*;import android.content.*;import android.provider.Settings;import android.widget.*;
 public class MainActivity extends Activity {
  public static final String PREF="pilot";
- private TextView status;private Switch automatic;private DiagnosticRequest diagnosticRequest;
+ private TextView status,consoleExperience;private Switch automatic;private DiagnosticRequest diagnosticRequest;
  private static final int REPORT=14;
  private static final class DiagnosticRequest {
   final String session;final android.graphics.Bitmap frame;
@@ -28,7 +29,7 @@ public class MainActivity extends Activity {
   }else {
   button(box,"Локальное ИИ-ядро · MNN-Pocket (English)",()->startActivity(new Intent(this,LocalCoreActivity.class)));
   }
-  button(box,"Игровые модели · обучение и экспорт",()->startActivity(new Intent(this,TrainingActivity.class)));
+
   button(box,"Внешние учителя · дополнительный API",()->startActivity(new Intent(this,WebLearningActivity.class)));
   automatic=new Switch(this);automatic.setText("Автоуправление выбранной игрой");automatic.setChecked(getSharedPreferences(PREF,MODE_PRIVATE).getBoolean("auto_control",true));automatic.setOnCheckedChangeListener((v,on)->{getSharedPreferences(PREF,MODE_PRIVATE).edit().putBoolean("auto_control",on).apply();if(PilotService.instance!=null)PilotService.instance.setAutomatic(on);});box.addView(automatic);
   button(box,"Выбрать игру или браузер",()->startActivity(new Intent(this,GamePickerActivity.class)));
@@ -38,6 +39,10 @@ public class MainActivity extends Activity {
   labCaption.setText("Единый APK: NES/Денди и ModelLab. NES работает локально; модель пока анализирует кадры и эпизоды, но не управляет игрой. DOS пока только проверяет образы. Симуляторы мини-игр Яндекс Маркета выведены из основного интерфейса.");
   labCaption.setTextColor(HubContract.SECONDARY);box.addView(labCaption);
   button(box,"Открыть консольную лабораторию · NES / Денди",this::openGameLab);
+  consoleExperience=new TextView(this);
+  consoleExperience.setTextColor(HubContract.SECONDARY);
+  consoleExperience.setText("NES: проверяю общий журнал агента...");
+  box.addView(consoleExperience);
   section(box,"04 · Диагностика и контроль");
   button(box,"Отчёт с кадром игры",this::beginDiagnosticReport);
   button(box,"Экспорт задержек",()->{if(PilotService.instance==null){toast("Сначала включите службу");return;}PilotService.instance.exportMetrics();startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT).setType("text/plain").addCategory(Intent.CATEGORY_OPENABLE).putExtra(Intent.EXTRA_TITLE,"localpilot-latency.txt"),10);});
@@ -47,6 +52,8 @@ public class MainActivity extends Activity {
     advanced.getVisibility()==android.view.View.VISIBLE?android.view.View.GONE:android.view.View.VISIBLE));
   box.addView(advanced);
   button(advanced,"Внешний GameLab · только тест Accessibility",this::openExternalGameLab);
+  button(advanced,"Архив прежнего обучения · DQN симуляторов (не NES)",
+    ()->startActivity(new Intent(this,TrainingActivity.class)));
   button(advanced,"Включить сбор примеров",()->{if(PilotService.instance==null){toast("Сначала включите службу");return;}new AlertDialog.Builder(this).setTitle("Сохранять игровые примеры?").setMessage("В памяти приложения останутся только распознанные поля до/после и проверенное действие, без снимков. До 256 примеров / 256 КиБ. Это не обучение. При заполнении сбор выключается, игра продолжается. При ошибке записи управление остановится.").setPositiveButton("Включить",(d,w)->{if(PilotService.instance!=null)PilotService.instance.enableExamples();else toast("Служба отключена");}).setNegativeButton("Отмена",null).show();});
   button(advanced,"Выключить сбор примеров",()->{if(PilotService.instance!=null)PilotService.instance.disableExamples();});
   button(advanced,"Экспорт примеров",()->{if(PilotService.instance==null){toast("Сначала включите службу");return;}try{PilotService.instance.exportExamples();startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT).setType("text/plain").addCategory(Intent.CATEGORY_OPENABLE).putExtra(Intent.EXTRA_TITLE,"localpilot-experience-v1.log"),11);}catch(java.io.IOException e){toast("Хранилище недоступно; исходник сохранён");}});
@@ -79,7 +86,14 @@ public class MainActivity extends Activity {
   PilotService pilot=PilotService.instance;
   if(pilot!=null)pilot.selectInstalledTarget(pkg,"GameLab · тестовые игры");
  }
- @Override public void onResume(){super.onResume();if(automatic!=null)automatic.setChecked(getSharedPreferences(PREF,MODE_PRIVATE).getBoolean("auto_control",true));if(status!=null)status.setText(CrashDiagnostics.connectionHint(this));}
+ @Override public void onResume(){super.onResume();if(automatic!=null)automatic.setChecked(getSharedPreferences(PREF,MODE_PRIVATE).getBoolean("auto_control",true));if(status!=null)status.setText(CrashDiagnostics.connectionHint(this));
+  if(consoleExperience!=null){
+   try{consoleExperience.setText(ConsoleExperienceMemory.summary(getFilesDir().toPath()));}
+   catch(java.io.IOException invalid){
+    consoleExperience.setText("STOP: общий журнал NES повреждён; автоматические выводы по опыту запрещены");
+   }
+  }
+ }
  private void beginDiagnosticReport(){
   if(diagnosticRequest!=null)diagnosticRequest.close();
   PilotService pilot=PilotService.instance;android.graphics.Bitmap frame=pilot==null?null:pilot.copyDiagnosticFrame();
