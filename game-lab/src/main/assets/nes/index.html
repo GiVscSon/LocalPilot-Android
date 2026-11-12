@@ -20,6 +20,7 @@ const keyMap={LEFT:"BUTTON_LEFT",RIGHT:"BUTTON_RIGHT",UP:"BUTTON_UP",DOWN:"BUTTO
  A:"BUTTON_A",B:"BUTTON_B",START:"BUTTON_START",SELECT:"BUTTON_SELECT"};
 let nes=null,timer=null,frames=0,validFrame=0,paused=false,sampleRate=44100;
 let activeRomSession=null;
+let stepMode=false;
 let gamepadLatch=null,agentTrial=null,homebrewRom=false;
 let audioContext=null,audioNode=null;
 const SIZE=32768,ringL=new Float32Array(SIZE),ringR=new Float32Array(SIZE);
@@ -64,10 +65,13 @@ function sendFrame(rgb){
   data[at+2]=value&255;data[at+3]=255;
  }
  ctx.putImageData(image,0,0);frames++;
- if(frames%15===0){
-  let hash=2166136261>>>0;
-  for(let i=0;i<256*240;i+=241)hash=Math.imul(hash^rgb[i],16777619)>>>0;
-  validFrame=hash;
+ // Latest fingerprint belongs to the rendered frame, even while frozen.
+ let hash=2166136261>>>0;
+ for(let i=0;i<256*240;i+=241)hash=Math.imul(hash^rgb[i],16777619)>>>0;
+ validFrame=hash;
+ // In STEP_MODE, only publish AFTER the action release ACK so Android can
+ // verify a coherent transition, never an intermediate frame.
+ if(frames%15===0&&!stepMode){
   try{if(window.GameLabBridge)window.GameLabBridge.onFrame(frames,hash|0,activeRomSession);}catch(error){}
  }
 }
@@ -91,7 +95,7 @@ function tick(){
 function stop(){
  if(timer!==null){clearInterval(timer);timer=null;}
  if(gamepadLatch){gamepadLatch.clear();gamepadLatch=null;}
- agentTrial=null;homebrewRom=false;activeRomSession=null;
+ agentTrial=null;homebrewRom=false;activeRomSession=null;stepMode=false;
  nes=null;paused=true;audioStop();
 }
 window.retroStop=function(){stop();status("Игра остановлена");};
@@ -110,6 +114,7 @@ window.retroPause=function(){
 };
 window.retroResume=function(){
  if(!nes||!paused)return false;
+ if(stepMode)return true; // Never restart the realtime interval in STEP_MODE.
  paused=false;
  if(audioContext)audioContext.resume().catch(()=>{});
  timer=setInterval(tick,window.retroDendy?20:1000/60);
@@ -166,6 +171,53 @@ window.retroAiTrial=function(name,holdFrames){
  agentTrial={name,code,started:frames,holdFrames};
  return true;
 };
+// Frozen-time mode: real JSNES executes exactly the approved frame budget.
+// No timer runs while a slow GGUF is deciding. Only the bundled homebrew
+// supports this agent entry point until a verified task profile exists.
+window.retroEnterStepMode=function(){
+ if(!nes||!homebrewRom||!gamepadLatch||agentTrial||!activeRomSession)return false;
+ if(!stepMode){
+  stepMode=true;window.retroPause();
+ }
+ if(!paused)return false;
+ try{
+  if(window.GameLabBridge&&typeof window.GameLabBridge.onStepReady==="function")
+   window.GameLabBridge.onStepReady(frames,validFrame|0,activeRomSession);
+ }catch(error){return false;}
+ return true;
+};
+window.retroExitStepMode=function(){
+ if(!nes||!stepMode||!paused)return false;
+ stepMode=false;
+ return window.retroResume();
+};
+window.retroAiStep=function(name,holdFrames){
+ if(!nes||!stepMode||!paused||!homebrewRom||!gamepadLatch||agentTrial||
+    !["A","B","UP","DOWN","LEFT","RIGHT"].includes(name)||
+    !Number.isInteger(holdFrames)||holdFrames!==16)return false;
+ const mapped=keyMap[name];
+ if(!mapped||!Object.prototype.hasOwnProperty.call(jsnes.Controller,mapped))return false;
+ const code=jsnes.Controller[mapped],started=frames;
+ if(typeof code!=="number"||!gamepadLatch.change(name,code,true,frames))return false;
+ try{
+  for(let i=0;i<holdFrames;i++){
+   nes.frame(); // PPU framebuffer + real CPU side-effects, not a timer guess.
+   gamepadLatch.flush(frames);
+  }
+  if(!gamepadLatch.change(name,code,false,frames))throw Error("Button release failed");
+  gamepadLatch.flush(frames);
+  if(frames-started!==holdFrames)throw Error("Frame budget violated");
+  if(window.GameLabBridge){
+   window.GameLabBridge.onAgentAction(name,started,frames,activeRomSession);
+   window.GameLabBridge.onFrame(frames,validFrame|0,activeRomSession);
+  }
+  return true;
+ }catch(error){
+  if(gamepadLatch)gamepadLatch.clear();
+  stop();status("STOP: ошибка пошаговой эмуляции");
+  return false;
+ }
+};
 window.retroButton=function(name,down){
  if(!nes||!gamepadLatch||paused||!Object.prototype.hasOwnProperty.call(keyMap,name))return false;
  const value=jsnes.Controller[keyMap[name]];
@@ -177,7 +229,7 @@ window.retroButton=function(name,down){
 window.retroSnapshot=function(token){
  // Token is chosen by Android for this exact request, not by the ROM.
  if(typeof token!=="string"||!(/^[1-9][0-9]{0,18}$/).test(token)||
-    !nes||paused||!window.GameLabBridge)return false;
+    !nes||(paused&&!stepMode)||!window.GameLabBridge)return false;
  try{
   const small=document.createElement("canvas");
   small.width=128;small.height=120;
