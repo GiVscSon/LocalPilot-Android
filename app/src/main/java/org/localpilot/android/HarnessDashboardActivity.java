@@ -130,10 +130,14 @@ public final class HarnessDashboardActivity extends Activity {
     root.put("audit",journal.summary());
     JSONArray events=journal.recent();
     root.put("events",events);
+    root.put("imitation",HarnessImitationPolicy.status(HarnessDashboardActivity.this));
     Set<String> used=new HashSet<>(),visual=new HashSet<>(),goal=new HashSet<>();
+    int imitationExamples=0;
     for(int i=0;i<events.length();i++){
      JSONObject event=events.optJSONObject(i);
      if(event==null)continue;
+     if("EXAMPLE".equals(event.optString("stage"))&&
+        "VISUAL_ONLY".equals(event.optString("status")))imitationExamples++;
      if("MODEL".equals(event.optString("stage"))&&
         "MODEL_USED".equals(event.optString("status")))used.add(event.optString("modelId"));
      if("VISUAL".equals(event.optString("stage"))&&
@@ -164,7 +168,8 @@ public final class HarnessDashboardActivity extends Activity {
     }
     root.put("presets",presets);
     root.put("assignedModelId",assigned);
-    root.put("learning",new JSONObject().put("eligibleTransitions",0)
+    root.put("learning",new JSONObject().put("imitationExamples",imitationExamples)
+      .put("eligibleTransitions",0)
       .put("trainedPolicies",0).put("rewardProvider","UNKNOWN")
       .put("reason","Нет проверенного источника награды для NES. Изменение пикселей не является наградой.")
       .put("successConfirmedEpisodes",goal.size()).put("visuallyChangedEpisodes",visual.size()));
@@ -264,8 +269,11 @@ public final class HarnessDashboardActivity extends Activity {
       startActivityForResult(save,EXPORT_EVENTS);
      });break;
     case "learn":
-     error="Fail-Closed: пока нет проверенных игровых reward и trainable policy. Записи эпизодов не являются обучением.";
-     break;
+     async("Обучаю реальную CPU Fast Policy",()->HarnessImitationPolicy.train(
+       HarnessDashboardActivity.this,journal.recent()));break;
+    case "bindPolicy":
+     async("Назначение обученной Fast Policy",()->HarnessImitationPolicy.bind(
+       HarnessDashboardActivity.this));break;
     default:error="Недопустимая команда Harness";
    }
   }
