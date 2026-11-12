@@ -188,16 +188,13 @@ public final class ModelLabActivity extends Activity {
        try{startActivity(move);}
        catch(RuntimeException error){nesStatus.setText("STOP: NES-контроллер недоступен");}
       };
-      if(projector!=null&&pixels!=null){
-       engine.image(weights,projector,instruction,pixels,w,h,selectedGpuLayers(selection),callback);
-       nesStatus.setText("Vision GGUF анализирует реальный 128×120 NES-кадр...");
-      }else{
-       engine.text(weights,
-         "Text-only policy: the screenshot cannot be seen by this model. "+
-         "This is a blind exploration move based only on the sampled frame/hash. "+
-         instruction,selectedGpuLayers(selection),callback);
-       nesStatus.setText("Text GGUF выбирает пробный ход БЕЗ зрения...");
-      }
+      String agentObservation=(projector!=null?
+        "A real 128x120 RGB screenshot is attached. ":"TEXT-ONLY BLIND PROPOSAL: no image understanding. ")+instruction;
+      engine.proposeNesButton(weights,projector,agentObservation,pixels,w,h,
+        selectedGpuLayers(selection),callback);
+      nesStatus.setText(projector!=null?
+        "Vision GGUF выбирает NES-кнопку по реальному кадру...":
+        "Text GGUF выбирает пробный ход БЕЗ зрения; не считать это распознаванием...");
      }catch(RuntimeException failure){
       consoleAgentTicket=null;
       nesStatus.setText("STOP: GGUF не запущен: "+failure.getClass().getSimpleName());
