@@ -22,6 +22,13 @@ class UnifiedAppContracts(unittest.TestCase):
         self.assertIn("org.localpilot.gamelab.RetroLibraryActivity.class", main)
         self.assertIn("private void openExternalGameLab()", main)
         self.assertIn("ИИ-агент", source("game-lab/src/main/java/org/localpilot/gamelab/NesEmulatorActivity.java"))
+        memory = source("shared/src/main/java/org/localpilot/shared/ConsoleExperienceMemory.java")
+        nes = source("game-lab/src/main/java/org/localpilot/gamelab/NesEmulatorActivity.java")
+        model = source("model-lab/src/main/java/org/localpilot/android/ModelLabActivity.java")
+        self.assertIn("ConsoleExperienceMemory.append(", nes)
+        self.assertIn("ConsoleExperienceMemory.context(", model)
+        self.assertIn("reward", memory.lower())
+        self.assertIn("ConsoleExperienceMemory.summary(", main)
         self.assertNotIn("pilot.selectInstalledTarget(getPackageName()", main)
         manifest = source("app/src/main/AndroidManifest.xml")
         for activity in ("TestDeviceActivity", "RetroLibraryActivity",
