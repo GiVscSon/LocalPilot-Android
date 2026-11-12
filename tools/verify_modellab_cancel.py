@@ -40,10 +40,12 @@ check("private static native void nativeResetInterrupt();" in app_runtime,
       "embedded LocalPilot adapter missing native reset declaration")
 check("private void prepareNativeInference()" in app_runtime,
       "embedded LocalPilot adapter has no safe request start")
-# The unified APK adds exactly two manual-only entrypoints (text and VLM)
-# to the prior four embedded jobs. Each entrypoint must reset only at job
-# start, then re-check STOP so a cancellation cannot be silently cleared.
-check(app_runtime.count("prepareNativeInference();")==6,
+# The unified APK has six existing inference paths plus TWO real NES action
+# paths (text and vision). Every JNI call must reset only once at request
+# start and re-check STOP so cancellation cannot be silently cleared.
+for name in ("public void consoleAction(", "public void consoleActionImage("):
+    check(name in app_runtime, "real NES GGUF entrypoint missing: " + name)
+check(app_runtime.count("prepareNativeInference();")==8,
       "not every embedded or unified inference job resets stale cancellation")
 check("if(closed||cancelRequested.get()){\n   nativeInterrupt();" in app_runtime,
       "unified engine must re-interrupt when STOP races with JNI reset")
