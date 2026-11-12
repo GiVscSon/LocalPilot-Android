@@ -13,7 +13,7 @@ const snippet=source.slice(start,end);
 let frame="data:image/png;base64,"+Buffer.from("NES frame sentinel").toString("base64");
 let received=[];
 const ctx={
- nes:{},paused:false,canvas:{name:"game-frame"},
+ nes:{},paused:false,stepMode:false,canvas:{name:"game-frame"},
  window:{GameLabBridge:{onSnapshot(value,token){received.push([value,token]);}}},
  document:{createElement(type){
   assert.equal(type,"canvas");
