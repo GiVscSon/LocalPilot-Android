@@ -46,6 +46,10 @@ class UnifiedUiSmokeContract(unittest.TestCase):
         self.assertIn('"releaseReady": False',source)
         self.assertIn('"modelGeneration": "NOT_TESTED"',source)
         self.assertIn('"realGameMotion": "NOT_TESTED"',source)
+    def test_ui_dump_does_not_depend_on_sdcard_mount(self):
+        self.assertEqual(smoke.UI_PATH, "/data/local/tmp/localpilot-unified-smoke.xml")
+        self.assertNotIn("/sdcard/", smoke.UI_PATH)
+
     def test_dump_requires_fresh_ui_and_tries_compressed_fallback(self):
         xml='<hierarchy><node text="ModelLab" bounds="[1,1][20,20]" /></hierarchy>'
         attempts=[]
