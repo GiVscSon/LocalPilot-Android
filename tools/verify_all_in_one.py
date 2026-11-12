@@ -31,11 +31,14 @@ def command(*argv):
         raise ValueError(f"Android SDK tool failed: {Path(argv[0]).name} exit {run.returncode}")
     return run.stdout
 
-def validate(apk: Path, aapt: str, apksigner: str):
+def validate(apk: Path, aapt: str, apksigner: str, experimental_vulkan: bool = False):
     if not apk.is_file():
         raise ValueError("Unified APK is missing")
-    if apk.stat().st_size > 45 * 1024 * 1024:
-        raise ValueError("Compact import-only unified APK is unexpectedly large")
+    # Vulkan packs compiled shaders and extra native kernels. Keep the compact
+    # CPU cap unless the caller EXPLICITLY selects the experimental GPU variant.
+    max_bytes = (150 if experimental_vulkan else 45) * 1024 * 1024
+    if apk.stat().st_size > max_bytes:
+        raise ValueError("Unified APK unexpectedly large for selected CPU/Vulkan variant")
     with zipfile.ZipFile(apk) as archive:
         names = set(archive.namelist())
         missing = REQUIRED_ENTRIES - names
@@ -51,6 +54,19 @@ def validate(apk: Path, aapt: str, apksigner: str):
             raise ValueError("ModelLabActivity bytecode absent from APK")
         if b"org/localpilot/gamelab/TestDeviceActivity" not in dex:
             raise ValueError("GameLab bytecode absent from APK")
+        if experimental_vulkan:
+            # Check that the same in-app shared object genuinely links Vulkan
+            # and exports the three JNI GPU entry points. The CI additionally
+            # verifies the binary with readelf before publication.
+            native = archive.read("lib/arm64-v8a/liblocalpilot_embedded.so")
+            for marker in (
+                b"libvulkan.so",
+                b"Java_org_localpilot_android_EmbeddedGgufRuntime_nativeGpuDescription",
+                b"Java_org_localpilot_android_EmbeddedGgufRuntime_nativeConfigureGpuLayers",
+                b"Java_org_localpilot_android_EmbeddedGgufRuntime_nativeLoadedGpuLayers",
+            ):
+                if marker not in native:
+                    raise ValueError("Experimental Vulkan JNI/linkage marker missing")
     badging = command(aapt, "dump", "badging", str(apk))
     match = re.search(r"^package: name='([^']+)' versionCode='(\d+)' versionName='([^']+)'",badging,re.M)
     if not match or match.group(1) != EXPECTED_PACKAGE:
@@ -80,6 +96,8 @@ def validate(apk: Path, aapt: str, apksigner: str):
         "sha256": sha,
         "bytes": apk.stat().st_size,
         "debugSignerSha256": certs[0].lower(),
+        "vulkanNativeCompiled": experimental_vulkan,
+        "vulkanPhysicalGpuConfirmed": False,
         "contains": {"LocalPilot": True, "GameLabNES": True,
                      "ModelLabGGUFImport": True, "NativeCpuRuntime": True},
         "signedRelease": False,
@@ -94,8 +112,10 @@ def main():
     p.add_argument("--aapt",required=True)
     p.add_argument("--apksigner",required=True)
     p.add_argument("--output",type=Path,required=True)
+    p.add_argument("--experimental-vulkan",action="store_true",
+                   help="Audit larger opt-in Vulkan ARM64 test-only APK; no GPU performance claims")
     a=p.parse_args()
-    result=validate(a.apk,a.aapt,a.apksigner)
+    result=validate(a.apk,a.aapt,a.apksigner,a.experimental_vulkan)
     a.output.parent.mkdir(parents=True,exist_ok=True)
     a.output.write_text(json.dumps(result,ensure_ascii=False,indent=2)+"\n",encoding="utf-8")
     print("UNIFIED_APK_TEST_ONLY_PASS sha256="+result["sha256"]+
