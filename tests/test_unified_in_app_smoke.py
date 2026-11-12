@@ -19,6 +19,13 @@ class UnifiedUiSmokeContract(unittest.TestCase):
     def test_missing_or_invalid_bounds_never_becomes_tap(self):
         xml='<hierarchy><node text="ModelLab · GGUF" bounds="[20,20][20,20]" /></hierarchy>'
         self.assertIsNone(smoke.target_bounds(xml,"ModelLab · GGUF"))
+    def test_unified_console_hub_is_not_market_mock_ui(self):
+        code=(ROOT/"game-lab/src/main/java/org/localpilot/gamelab/TestDeviceActivity.java").read_text(encoding="utf-8")
+        self.assertIn('if(getPackageName().startsWith("org.localpilot.android")){showConsoleHub();return;}',code)
+        self.assertIn('addButton(consoles,"🎮 NES"',code)
+        self.assertIn('tap_text("🎮 NES")',(ROOT/"tools/unified_in_app_smoke.py").read_text(encoding="utf-8"))
+        self.assertIn('java tests/ConsoleAgentPolicyVerify.java',
+          (ROOT/".github/workflows/localpilot-all-in-one.yml").read_text(encoding="utf-8"))
     def test_unrelated_activity_not_accepted(self):
         self.assertNotEqual(smoke.MAIN,smoke.MODEL)
         self.assertNotEqual(smoke.MODEL,smoke.GAMELAB)
