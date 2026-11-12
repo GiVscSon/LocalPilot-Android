@@ -147,7 +147,7 @@ jobs:
             echo '::error title=ANDROID_CI_INFRA_KVM_PERMISSIONS::KVM is not readable/writable by the CI runner'
             exit 1
           fi
-          "$ANDROID_HOME/emulator/emulator" -accel-check
+          echo 'CI_KVM_READY: /dev/kvm is accessible; emulator-runner installs the binary in its next step'
       - name: Exercise real Android navigation in ONE installed APK
         uses: reactivecircus/android-emulator-runner@v2
         with:
