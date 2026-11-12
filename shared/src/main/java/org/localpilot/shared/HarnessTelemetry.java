@@ -8,7 +8,10 @@ import java.util.UUID;
  */
 public final class HarnessTelemetry {
  private HarnessTelemetry(){}
- public interface Sink { void accept(Event event); }
+ public interface Sink {
+  void accept(Event event);
+  default boolean healthy(){return true;}
+ }
  public static final class Event {
   public final String episodeId,modelId,game,stage,status,detail;
   public final long timeMs,latencyMs;
@@ -24,11 +27,13 @@ public final class HarnessTelemetry {
  private static volatile String game="";
  private static volatile boolean active;
  public static synchronized void install(Sink consumer){sink=consumer;}
+ public static boolean healthy(){Sink current=sink;return current==null||current.healthy();}
  public static String episode(){return active?episode:"";}
  public static String modelId(){return active?modelId:"";}
  public static boolean active(){return active;}
  public static synchronized String begin(String gameName,String model) {
   if(active)throw new IllegalStateException("Harness already owns an episode");
+  if(!healthy())throw new IllegalStateException("Harness audit is unavailable");
   if(gameName==null||gameName.isBlank()||model==null||model.isBlank())
    throw new IllegalArgumentException("Real environment and selected model required");
   episode=UUID.randomUUID().toString();
