@@ -7,7 +7,10 @@ on:
     paths:
       - 'game-lab/**'
       - 'tests/jsnes_nes_smoke.cjs'
+      - 'shared/src/main/java/org/localpilot/shared/HarnessCoordinator.java'
+      - 'tests/HarnessCoordinator*.java'
       - 'tests/nes_controller_framehold.cjs'
+      - 'tests/nes_step_mode_smoke.cjs'
       - 'tests/ExportHomebrewNes.java'
       - '.github/workflows/nes-runtime.yml'
       - 'model-lab/**'
@@ -29,7 +32,10 @@ on:
     paths:
       - 'game-lab/**'
       - 'tests/jsnes_nes_smoke.cjs'
+      - 'shared/src/main/java/org/localpilot/shared/HarnessCoordinator.java'
+      - 'tests/HarnessCoordinator*.java'
       - 'tests/nes_controller_framehold.cjs'
+      - 'tests/nes_step_mode_smoke.cjs'
       - 'tests/ExportHomebrewNes.java'
       - '.github/workflows/nes-runtime.yml'
       - 'model-lab/**'
@@ -67,6 +73,8 @@ jobs:
           mkdir -p build/test-core
           tar -xzf jsnes-2.1.0.tgz -C build/test-core package/dist/jsnes.min.js
 
+      - name: Verify single-writer Harness permits, STOP, TTL and ROM epoch
+        run: java tests/HarnessCoordinatorVerify.java
       - name: Verify controller press is observed by real emulated frames
         run: node tests/nes_controller_framehold.cjs
       - name: Execute real iNES homebrew under JavaScript CPU/PPU
@@ -78,6 +86,9 @@ jobs:
             tests/ExportHomebrewNes.java
           java -cp build/nes-runtime ExportHomebrewNes build/nes-runtime/demo.nes
           node tests/jsnes_nes_smoke.cjs \
+            build/test-core/package/dist/jsnes.min.js \
+            build/nes-runtime/demo.nes
+          node tests/nes_step_mode_smoke.cjs \
             build/test-core/package/dist/jsnes.min.js \
             build/nes-runtime/demo.nes
       - name: E2E actual NES pixels to independent ModelLab evidence parser

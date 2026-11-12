@@ -10,7 +10,7 @@ const end=text.indexOf("function tick(){",begin);
 assert(begin>=0&&end>begin,"sendFrame source absent");
 const events=[];
 const scope={
- frames:0,activeRomSession:"7",validFrame:0,
+ frames:0,activeRomSession:"7",validFrame:0,stepMode:false,
  image:{data:new Uint8ClampedArray(256*240*4)},
  ctx:{putImageData(){}},
  window:{GameLabBridge:{onFrame(...args){events.push(args);}}},
