@@ -34,6 +34,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.localpilot.shared.HubContract;
 import org.localpilot.shared.NesTrial;
 import org.localpilot.shared.NesFrameTransfer;
+import org.localpilot.shared.ConsoleAgentBridge;
+import org.localpilot.shared.ConsoleAgentPolicy;
 
 /**
  * NES CPU/PPU emulation: JSNES 2.1.0 execution inside a
@@ -49,7 +51,7 @@ public final class NesEmulatorActivity extends Activity {
  private static final String[] GAMEPAD={"UP","LEFT","DOWN","RIGHT","SELECT","START","B","A"};
  private WebView web;
  private TextView state;
- private Button demoButton,aButton,bButton,shareTrial,cpuAgentButton,cpuBatchButton,stopCpuButton;
+ private Button demoButton,aButton,bButton,shareTrial,cpuAgentButton,cpuBatchButton,stopCpuButton,neuralButton;
  private CheckBox exploratoryStopSwitch;
  private final NesExperimentPolicy experiment=new NesExperimentPolicy();
  private long experimentGeneration;
@@ -57,6 +59,12 @@ public final class NesEmulatorActivity extends Activity {
  private NesTrial readyTrial;
  private NesTrial exportTrial;
  private final NesSnapshotGate snapshotGate=new NesSnapshotGate();
+ private final NesSnapshotGate neuralSnapshot=new NesSnapshotGate();
+ private final ConsoleAgentPolicy neural=new ConsoleAgentPolicy();
+ private ConsoleAgentBridge.Brain neuralBrain;
+ private String neuralRomEpoch="";
+ private long neuralSerial,neuralObservedAt;
+ private int neuralObservedFrame,neuralObservedHash;
  // Unlike snapshot tokens, frame epochs also fence delayed onFrame/onAgentAction
  // after a ROM switch, failed load, or Android WebView replay.
  private final NesFrameEpoch frameEpoch=new NesFrameEpoch();
@@ -174,9 +182,17 @@ public final class NesEmulatorActivity extends Activity {
   cpuBatchButton.setEnabled(false);
   cpuBatchButton.setOnClickListener(v->startCpuExperiment());
   root.addView(cpuBatchButton);
+  neuralButton=new Button(this);
+  neuralButton.setText("🧠 GGUF нейроагент · до 4 подтверждённых ходов NES");
+  neuralButton.setEnabled(false);
+  neuralButton.setOnClickListener(v->startNeuralAgent());
+  root.addView(neuralButton);
   stopCpuButton=new Button(this);
   stopCpuButton.setText("STOP · немедленно остановить CPU-агента");
-  stopCpuButton.setOnClickListener(v->stopCpuExperiment("STOP: агент остановлен пользователем"));
+  stopCpuButton.setOnClickListener(v->{
+   stopNeuralAgent("STOP: нейроагент остановлен пользователем");
+   stopCpuExperiment("STOP: CPU-агент остановлен пользователем");
+  });
   root.addView(stopCpuButton);
   web=new WebView(this);
   web.setBackgroundColor(HubContract.BACKGROUND);
@@ -211,13 +227,14 @@ public final class NesEmulatorActivity extends Activity {
     runOnUiThread(()->{
      if(!resumed||!frameEpoch.accept(session,count))return;
      frames=count;hash=pixelsHash;
-     if(experiment.running()&&pendingTrial!=null&&
+     if((experiment.running()||neural.running())&&pendingTrial!=null&&
         count-pendingTrial.frame>180){
-      stopCpuExperiment("STOP: не получено подтверждение хода в пределах 180 кадров");
+      if(neural.running())stopNeuralAgent("STOP: нет свежего кадра после ввода");
+      else stopCpuExperiment("STOP: не получено подтверждение хода в пределах 180 кадров");
      }
      completeTrialOnFreshFrame(count,pixelsHash);
      publishEvidence();
-     if(count%60==0)
+     if(count%60==0&&!neural.running())
       state.setText("Кадров "+frames+" · экран CRC="+Integer.toHexString(hash)
        +" · касаний "+touches.get()+" · только эмуляция (не результат Маркета)");
     });
@@ -229,6 +246,8 @@ public final class NesEmulatorActivity extends Activity {
      if(current!=null&&current.button.equals(name)&&current.downAck&&
         started>=current.frame&&finished>=started+4&&finished<=started+60)
       current.upAck=true;
+     else if(neural.running())
+      stopNeuralAgent("STOP: несогласованный ACK эмулятора");
      else if(experiment.running())
       stopCpuExperiment("STOP: несогласованный ACK эмулятора");
      else pendingTrial=null;
@@ -247,12 +266,16 @@ public final class NesEmulatorActivity extends Activity {
     }
     final byte[] accepted=png;
     runOnUiThread(()->{
-     if(closed||!resumed||!snapshotGate.current(token))return;
-     completeExport(token,accepted);
+     if(closed||!resumed)return;
+     if(neuralSnapshot.current(token)){
+      neuralSnapshot.finish(token);
+      if(accepted==null)stopNeuralAgent("STOP: не получен действительный NES кадр");
+      else decideNeuralMove(accepted);
+     }else if(snapshotGate.current(token))completeExport(token,accepted);
     });
    }
    @JavascriptInterface public void onStatus(String message){
-    runOnUiThread(()->state.setText(message));
+    runOnUiThread(()->{if(!neural.running())state.setText(message);});
    }
   },"GameLabBridge");
   root.addView(web,new LinearLayout.LayoutParams(-1,0,1));
@@ -267,6 +290,7 @@ public final class NesEmulatorActivity extends Activity {
     btn.setOnTouchListener((view,event)->{
      int type=event.getActionMasked();
      if(type==MotionEvent.ACTION_DOWN){
+      if(neural.running())stopNeuralAgent("STOP: пользователь нажал кнопку");
       beginTrial(name);
       gamepad(name,true,accepted->{
        if(pendingTrial!=null&&pendingTrial.button.equals(name)){
@@ -306,7 +330,7 @@ public final class NesEmulatorActivity extends Activity {
    GameLabEvidenceProvider.nes(dendy,frames,hash,touches.get(),demoButton,aButton,bButton);
  }
  private void startCpuExperiment(){
-  if(experiment.running())return;
+  if(experiment.running()||neural.running())return;
   if(!resumed||!homebrewRom||!pageLoaded||frames<15||hash==0){
    state.setText("Серия доступна только внутри запущенной тестовой NES-игры");
    return;
@@ -325,9 +349,11 @@ public final class NesEmulatorActivity extends Activity {
    web.evaluateJavascript("window.retroCancelAgent()",null);
   if(cpuBatchButton!=null)cpuBatchButton.setEnabled(homebrewRom&&pageLoaded&&resumed);
   if(cpuAgentButton!=null)cpuAgentButton.setEnabled(homebrewRom&&pageLoaded&&resumed);
+  if(neuralButton!=null)neuralButton.setEnabled(homebrewRom&&pageLoaded&&resumed);
   if(state!=null)state.setText(reason);
  }
  private void runHomebrewCpuAgent(){
+  if(neural.running())return;
   if(!resumed||!homebrewRom||!pageLoaded||frames<15||hash==0||
      (pendingTrial!=null)){
    if(experiment.running())stopCpuExperiment("STOP: тестовая NES недоступна");
@@ -363,6 +389,22 @@ public final class NesEmulatorActivity extends Activity {
      current.button,current.frame,count,current.hash,pixelHash);
    if(shareTrial!=null)shareTrial.setEnabled(true);
    state.setText(readyTrial.summary()+" · можно передать в ModelLab");
+   if(neural.running()){
+    boolean more;
+    try{more=neural.confirmed(current.button,readyTrial.status);}
+    catch(RuntimeException invalid){stopNeuralAgent("STOP: неверный ответ NES");return;}
+    if(!more){
+     stopNeuralAgent("STOP: "+readyTrial.status+" · подтверждено "+neural.verified()+" ходов");
+    }else{
+     final long serial=neuralSerial;
+     state.setText("Нейроагент проверил "+neural.verified()+"/"+
+       ConsoleAgentPolicy.MAX_STEPS+" ходов. Получаю новое наблюдение...");
+     web.post(()->{
+      if(neural.running()&&serial==neuralSerial&&resumed&&pendingTrial==null)
+       requestNeuralDecision();
+     });
+    }
+   }
    if(experiment.running()){
     NesExperimentPolicy.Decision result=experiment.observe(readyTrial.status);
     if(result==NesExperimentPolicy.Decision.CONTINUE){
@@ -389,11 +431,119 @@ public final class NesEmulatorActivity extends Activity {
    }
   }catch(IllegalArgumentException invalid){
    readyTrial=null;
+   if(neural.running())stopNeuralAgent("STOP: неверный кадр после нейроагента");
    if(experiment.running())stopCpuExperiment("STOP: несогласованные кадры NES");
   }
   pendingTrial=null;
  }
+ private void startNeuralAgent(){
+  if(neural.running()||experiment.running()||!resumed||!homebrewRom||
+     !pageLoaded||frames<15||hash==0||pendingTrial!=null||snapshotGate.pending()){
+   state.setText("Для нейроагента нужен активный встроенный homebrew без другого ввода");
+   return;
+  }
+  ConsoleAgentBridge.Brain model=ConsoleAgentBridge.get();
+  if(model==null){
+   state.setText("В ModelLab загрузи GGUF и нажми «Назначить нейроагентом NES»");
+   return;
+  }
+  neural.start(true,true);
+  neuralBrain=model;
+  neuralRomEpoch=frameEpoch.token();
+  ++neuralSerial;
+  if(cpuAgentButton!=null)cpuAgentButton.setEnabled(false);
+  if(cpuBatchButton!=null)cpuBatchButton.setEnabled(false);
+  if(neuralButton!=null)neuralButton.setEnabled(false);
+  state.setText("GGUF нейроагент: "+model.label()+" · считываю NES-кадр");
+  requestNeuralDecision();
+ }
+ private void stopNeuralAgent(String reason){
+  ++neuralSerial;
+  boolean wasRunning=neural.running()||neuralSnapshot.pending();
+  neural.stop();
+  neuralSnapshot.cancel();
+  if(neuralBrain!=null&&wasRunning)neuralBrain.cancel();
+  neuralBrain=null;
+  neuralRomEpoch="";
+  if(wasRunning&&pendingTrial!=null)pendingTrial=null;
+  if(wasRunning&&web!=null&&pageLoaded)
+   web.evaluateJavascript("window.retroCancelAgent()",null);
+  if(neuralButton!=null)neuralButton.setEnabled(homebrewRom&&pageLoaded&&resumed);
+  if(cpuAgentButton!=null)cpuAgentButton.setEnabled(homebrewRom&&pageLoaded&&resumed);
+  if(cpuBatchButton!=null)cpuBatchButton.setEnabled(homebrewRom&&pageLoaded&&resumed);
+  if(wasRunning&&state!=null)state.setText(reason);
+ }
+ private void requestNeuralDecision(){
+  if(!neural.running()||!resumed||!pageLoaded||!homebrewRom||
+     !frameEpoch.current(neuralRomEpoch)||pendingTrial!=null||
+     neuralSnapshot.pending()||snapshotGate.pending()){
+   stopNeuralAgent("STOP: состояние NES изменилось");return;
+  }
+  final long serial=neuralSerial;
+  final String token=neuralSnapshot.begin();
+  web.evaluateJavascript("window.retroSnapshot("+org.json.JSONObject.quote(token)+")",result->{
+   if(neuralSnapshot.current(token)&&!"true".equals(result))
+    stopNeuralAgent("STOP: снимок NES не создан");
+  });
+  web.postDelayed(()->{
+   if(serial==neuralSerial&&neuralSnapshot.current(token))
+    stopNeuralAgent("STOP: ожидание снимка NES истекло");
+  },3000);
+ }
+ private void decideNeuralMove(byte[] checkedPng){
+  ConsoleAgentBridge.Brain model=neuralBrain;
+  if(!neural.running()||model==null||model!=ConsoleAgentBridge.get()||
+     !frameEpoch.current(neuralRomEpoch)||!resumed||pendingTrial!=null){
+   stopNeuralAgent("STOP: сменился ROM или нейросеть");return;
+  }
+  neuralObservedFrame=frames;
+  neuralObservedHash=hash;
+  neuralObservedAt=SystemClock.elapsedRealtime();
+  final long serial=neuralSerial;
+  final String epoch=neuralRomEpoch;
+  final String previous=readyTrial==null?"none":readyTrial.button+" "+readyTrial.status;
+  final String prompt="You control an original built-in NES homebrew test. "+
+    "Observed frame="+frames+", image fingerprint="+Integer.toHexString(hash)+
+    ", last verified button="+previous+". "+
+    (model.vision()?"Inspect the attached NES screenshot. ":
+      "Only a text-based fingerprint is available; STOP if uncertain. ")+
+    "Choose exactly ONE of A, B, UP, DOWN, LEFT, RIGHT, STOP. "+
+    "Reply EXACTLY ACTION=A or ACTION=STOP, substituting one allowed button. "+
+    "No commentary, markdown, punctuation or extra lines.";
+  try{
+   model.decide(prompt,checkedPng,answer->runOnUiThread(()->{
+    if(serial!=neuralSerial||!neural.running()||!resumed||closed||
+      !homebrewRom||!pageLoaded||!frameEpoch.current(epoch)||model!=ConsoleAgentBridge.get())
+     return;
+    if(SystemClock.elapsedRealtime()-neuralObservedAt>30000||
+       frames-neuralObservedFrame>600||hash!=neuralObservedHash){
+     stopNeuralAgent("STOP: кадр устарел во время вывода модели");return;
+    }
+    String action;
+    try{action=neural.choose(answer);}
+    catch(RuntimeException invalid){
+     stopNeuralAgent("STOP: модель не выдала строгое ACTION=...");return;
+    }
+    if(action==null){stopNeuralAgent("STOP: модель остановила эксперимент");return;}
+    if(pendingTrial!=null){stopNeuralAgent("STOP: другое действие уже выполняется");return;}
+    beginTrial(action);
+    web.evaluateJavascript("window.retroAgentTrial("+
+      org.json.JSONObject.quote(action)+",16)",ok->{
+       if(!neural.running())return;
+       TrialPending current=pendingTrial;
+       if(current==null||!current.button.equals(action)||!"true".equals(ok)){
+        stopNeuralAgent("STOP: NES не подтвердил нажатие");return;
+       }
+       current.downAck=true;
+    });
+    state.setText("GGUF "+model.label()+" → "+action+" · ожидаем новый NES кадр");
+   }));
+  }catch(RuntimeException failure){
+   stopNeuralAgent("STOP: ошибка модели "+failure.getClass().getSimpleName());
+  }
+ }
  private void sendTrialToModelLab(){
+  if(neural.running())stopNeuralAgent("STOP: экспорт NES эпизода");
   if(readyTrial==null){state.setText("Для отчёта запусти NES и нажми кнопку");return;}
   if(snapshotGate.pending()||!resumed||!pageLoaded||web==null){
    state.setText("Сначала открой работающий NES-эмулятор");return;
@@ -465,6 +615,7 @@ public final class NesEmulatorActivity extends Activity {
   String encoded=Base64.encodeToString(rom,Base64.NO_WRAP);
   String session=frameEpoch.begin();
   frames=hash=0;touches.set(0);
+  stopNeuralAgent("STOP: сменился NES картридж");
   ++experimentGeneration;experiment.stop();
   snapshotGate.cancel();exportTrial=null;
   homebrewRom=homebrew;pendingTrial=null;readyTrial=null;
@@ -479,6 +630,7 @@ public final class NesEmulatorActivity extends Activity {
    if(!launched)frameEpoch.cancel();
    if(cpuAgentButton!=null)cpuAgentButton.setEnabled(launched&&homebrew);
    if(cpuBatchButton!=null)cpuBatchButton.setEnabled(launched&&homebrew);
+   if(neuralButton!=null)neuralButton.setEnabled(launched&&homebrew);
    if(!launched)state.setText("NES ROM не запущен. Проверьте mapper и ядро.");
   });
  }
@@ -520,6 +672,7 @@ public final class NesEmulatorActivity extends Activity {
   }
  }
  @Override protected void onPause(){
+  stopNeuralAgent("STOP: NES ушла в фон");
   resumed=false;snapshotGate.cancel();exportTrial=null;
   if(shareTrial!=null)shareTrial.setEnabled(readyTrial!=null);
   GameLabEvidenceProvider.clear("nes");
@@ -537,6 +690,7 @@ public final class NesEmulatorActivity extends Activity {
   }
  }
  @Override protected void onDestroy(){
+  stopNeuralAgent("STOP: NES закрыта");
   closed=true;frameEpoch.cancel();snapshotGate.cancel();exportTrial=null;
   romDownloads.shutdownNow();
   ++experimentGeneration;experiment.stop();
