@@ -419,7 +419,10 @@ public final class NesEmulatorActivity extends Activity {
   if(shareTrial!=null)shareTrial.setEnabled(readyTrial!=null);
   if(evidence==null||closed||!resumed)return;
   Intent intent=new Intent(NesTrial.ACTION);
-  intent.setClassName("org.localpilot.modellab","org.localpilot.android.ModelLabActivity");
+  // Same APK if GameLab is hosted within LocalPilot; separate standalone lab otherwise.
+  final String modelPackage=getPackageName().startsWith("org.localpilot.android")
+    ?getPackageName():"org.localpilot.modellab";
+  intent.setClassName(modelPackage,"org.localpilot.android.ModelLabActivity");
   // Reuse the existing ModelLab task/session (and its in-RAM inference engine)
   // rather than creating a second separate, competing model instance.
   intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK|
