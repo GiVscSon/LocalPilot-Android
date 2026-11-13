@@ -28,6 +28,7 @@ on:
       - 'tests/NesExperimentPolicyVerify.java'
       - 'tests/NesExperimentPolicyTest.java'
       - 'game-lab/src/main/java/org/localpilot/gamelab/NesExperimentPolicy.java'
+      - 'tests/HomebrewRamRewardTest.java'
   pull_request:
     paths:
       - 'game-lab/**'
@@ -91,6 +92,14 @@ jobs:
           node tests/nes_step_mode_smoke.cjs \
             build/test-core/package/dist/jsnes.min.js \
             build/nes-runtime/demo.nes
+      - name: Verify homebrew ROM RAM goal semantics (synthetic Java contract)
+        run: |
+          set -euo pipefail
+          mkdir -p build/nes-runtime
+          javac --release 17 -d build/nes-runtime \
+            game-lab/src/main/java/org/localpilot/gamelab/HomebrewRamReward.java \
+            tests/HomebrewRamRewardTest.java
+          java -cp build/nes-runtime org.localpilot.gamelab.HomebrewRamRewardTest
       - name: Verify full iNES/NES2 ROM preflight and unsafe mapper rejection
         run: |
           set -euo pipefail

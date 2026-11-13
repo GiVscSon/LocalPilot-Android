@@ -18,6 +18,7 @@ function snippet(name){
 const events=[];
 const env={window:{GameLabBridge:{
  onStepReady(...args){events.push(["ready",...args]);},
+ onHomebrewRamProgress(...args){events.push(["ram",...args]);},
  onAgentAction(...args){events.push(["ack",...args]);},
  onFrame(...args){events.push(["frame",...args]);}
 }},jsnes,stepMode:false,paused:false,agentTrial:null,homebrewRom:true,
@@ -35,8 +36,8 @@ machine.loadROM(fs.readFileSync(args[1]).toString("latin1"));
 env.nes=machine;
 env.gamepadLatch=new FrameHeldButtons(machine,4);
 for(let i=0;i<45;i++)machine.frame();
-for(const name of ["retroPause","retroResume","retroEnterStepMode",
-                    "retroExitStepMode","retroAiStep"]){
+for(const name of ["retroPause","retroResume","retroHomebrewRamX",
+                    "retroEnterStepMode","retroExitStepMode","retroAiStep"]){
  vm.runInNewContext(snippet(name),env,{timeout:2000});
 }
 assert.equal(env.window.retroEnterStepMode(),true);
@@ -48,6 +49,11 @@ assert.equal(env.window.retroResume(),true);
 assert.equal(env.frames,first,"resume must not advance frozen game");
 assert.equal(env.window.retroAiStep("A",16),true);
 assert.equal(env.frames,first+16,"true JSNES must execute exactly 16 frames");
+assert.equal(events.at(-3)[0],"ram","RAM observation happens only after stepping");
+assert.equal(events.at(-3)[1],"A","A probe button identity");
+assert.equal(events.at(-3)[4],events.at(-3)[5],
+  "A action changes palette but not homebrew sprite X");
+assert.equal(events.at(-3)[6],"4242","RAM probe has current ROM session");
 assert.equal(events.at(-2)[0],"ack","button release precedes final frame");
 assert.equal(events.at(-1)[0],"frame");
 assert.equal(events.at(-1)[1],env.frames);
@@ -57,6 +63,16 @@ assert.equal(env.window.retroAiStep("START",16),false);
 const second=env.frames;
 assert.equal(env.window.retroAiStep("RIGHT",16),true);
 assert.equal(env.frames,second+16,"second step also exactly 16 frames");
+const ramRight=events.at(-3);
+assert.equal(ramRight[0],"ram","RIGHT has RAM goal evidence");
+assert.equal(ramRight[1],"RIGHT","RIGHT action identity");
+assert.equal(ramRight[2],second,"RAM action starts at the frozen frame");
+assert.equal(ramRight[3],second+16,"RAM action ends at the verified frame");
+assert.ok(ramRight[5]>ramRight[4],"real 6502 ROM increments sprite X for RIGHT");
+assert.ok(ramRight[5]-ramRight[4]<=16,"ROM X cannot jump faster than 1/frame");
+assert.equal(env.nes.cpu.mem[1],ramRight[5],"RAM evidence matches actual JSNES CPU memory");
+console.log("NES_REAL_ROM_RAM_REWARD_SOURCE_PASS delta="+(ramRight[5]-ramRight[4])+
+  " frameStart="+second+" frameEnd="+env.frames);
 assert.equal(env.window.retroExitStepMode(),true);
 assert.equal(env.stepMode,false);
 assert.equal(env.paused,false);
