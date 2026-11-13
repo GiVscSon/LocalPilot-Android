@@ -19,7 +19,7 @@ ACTIVITIES=(
   "org.localpilot.gamelab.NesEmulatorActivity",
 )
 ASSETS={
-  "AndroidManifest.xml", "classes.dex",
+  "AndroidManifest.xml", "classes.dex", "assets/localpilot-source.json",
   "assets/nes/jsnes.min.js","assets/nes/latched-buttons.js",
   "lib/arm64-v8a/liblocalpilot_embedded.so",
 }
@@ -44,6 +44,11 @@ def verify(apk,aapt,apksigner,pinned_cert,source_sha,previous=None):
             raise ValueError("Missing unified app assets or invalid ZIP CRC")
         if any(n.startswith("assets/models/") and n.endswith(".gguf") for n in names):
             raise ValueError("On-demand GGUF weights must not be bundled")
+        if z.getinfo("assets/localpilot-source.json").file_size > 4096:
+            raise ValueError("Source provenance oversized")
+        provenance=json.loads(z.read("assets/localpilot-source.json"))
+        if not isinstance(provenance,dict) or provenance.get("schema")!="localpilot-source-v1" or provenance.get("sourceSha")!=source_sha.lower():
+            raise ValueError("APK embedded source SHA differs from requested source SHA")
         dex=b"".join(z.read(n) for n in names
                      if re.fullmatch(r"classes(?:[2-9][0-9]*)?\.dex",n))
         for symbol in (b"org/localpilot/android/ModelLabActivity",

@@ -1,6 +1,7 @@
 """Offline, negative-case tests: one signing identity, no automatic release."""
 import importlib.util
 from pathlib import Path
+import json
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -32,7 +33,7 @@ class SignedSingleApk(unittest.TestCase):
         self.apk=Path(self.temp.name)/"one.apk"
         with zipfile.ZipFile(self.apk,"w") as z:
             for name in gate.ASSETS:
-                z.writestr(name,b"unit test")
+                z.writestr(name,json.dumps({"schema":"localpilot-source-v1","sourceSha":SHA}) if name=="assets/localpilot-source.json" else b"unit test")
             z.writestr("classes.dex", b"org/localpilot/android/ModelLabActivity"+
                        b"org/localpilot/gamelab/NesEmulatorActivity")
         self.patch=patch.object(gate,"sdk",side_effect=sdk)
@@ -52,6 +53,9 @@ class SignedSingleApk(unittest.TestCase):
     def test_mismatched_signer_rejected(self):
         with self.assertRaisesRegex(ValueError,"signing identity mismatch"):
             self.checked(cert="f"*64)
+    def test_different_embedded_source_rejected(self):
+        with self.assertRaisesRegex(ValueError,"embedded source SHA"):
+            self.checked(sha="c"*40)
     def test_invalid_git_sha_rejected(self):
         with self.assertRaisesRegex(ValueError,"source SHA"):
             self.checked(sha="short")

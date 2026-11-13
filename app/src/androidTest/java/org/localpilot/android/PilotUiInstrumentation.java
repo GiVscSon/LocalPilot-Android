@@ -889,6 +889,14 @@ public final class PilotUiInstrumentation extends Instrumentation {
     private void click(String text) throws Exception {
         traceClick("click begin label="+text+" "+onMain(this::activitySummary));
         await(() -> {
+            // A scrollable own View can be laid out before its off-screen
+            // accessibility node is published. Reveal it on the UI thread
+            // before the lookup. Keep accessibility action priority, notably
+            // for overlay STOP while an agent gesture is in flight.
+            // Starting with a remote tree lookup could consume this entire
+            // deadline before its first scroll (observed on API 36).
+            boolean revealed=onMain(()->revealOwnActivityControl(text));
+            if(revealed)traceClick("click label="+text+" path=own-view-reveal");
             AccessibilityNodeInfo node = findText(text);
             if (node == null) { if(touchOwnControl(text))return true;boolean scrolled=scrollForward();traceClick("click label="+text+" path=own-app-scroll result="+scrolled);return false; }
             try {
@@ -905,6 +913,31 @@ public final class PilotUiInstrumentation extends Instrumentation {
             }
             finally { node.recycle(); }
         }, 6_000, "Visible clickable UI control not found: " + text);
+    }
+
+    /** Scroll only our focused Activity; never inject a scroll into another app. */
+    private boolean revealOwnActivityControl(String text){
+        Activity activity=launchedActivity;
+        if(activity==null||activity.isFinishing()||activity.isDestroyed())return false;
+        View decor=activity.getWindow().getDecorView();
+        if(!decor.isAttachedToWindow()||decor.getWindowVisibility()!=View.VISIBLE||!decor.hasWindowFocus())return false;
+        return revealOwnActivityControl(decor,text);
+    }
+    private boolean revealOwnActivityControl(View view,String text){
+        if(view==null||!view.isAttachedToWindow()||!view.isShown()||!view.isEnabled())return false;
+        if(view instanceof TextView label&&matchesText(String.valueOf(label.getText()),text)
+                &&(view.isClickable()||view.getParent() instanceof android.widget.AbsListView)){
+            Rect visible=new Rect();
+            ControlTarget target=view.getLocalVisibleRect(visible)&&!visible.isEmpty()?new ControlTarget(view,visible):null;
+            if(target!=null&&target.canTap())return false;
+            return view.requestRectangleOnScreen(new Rect(0,0,view.getWidth(),view.getHeight()),true);
+        }
+        if(view instanceof ViewGroup group){
+            for(int i=0;i<group.getChildCount();i++){
+                if(revealOwnActivityControl(group.getChildAt(i),text))return true;
+            }
+        }
+        return false;
     }
 
     private boolean scrollForward() {
