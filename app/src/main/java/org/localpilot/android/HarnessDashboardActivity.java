@@ -250,7 +250,21 @@ public final class HarnessDashboardActivity extends Activity {
    row(train,"PPO-допуск старого журнала: "+(legacy.eligible()?all.size():0)
      +" · "+legacy.reason()+". Нет доверенных наград.");
   }catch(IOException error){row(train,"STOP: журнал повреждён, обучение невозможно.");}
-  row(train,"Достоверных игровых наград NES: 0");
+  try{
+   List<ConsoleExperienceMemory.HomebrewGoal> goals=
+     ConsoleExperienceMemory.readHomebrewGoals(getFilesDir().toPath());
+   row(train,"ROM RAM-цель homebrew, сохранённых шагов: "+goals.size());
+   row(train,"Допущено из RAM-журнала к PPO: 0 · нет obs64 и oldLogProb.");
+   if(!goals.isEmpty()){
+    ConsoleExperienceMemory.HomebrewGoal last=goals.get(goals.size()-1);
+    row(train,"Последняя RAM-награда: "+last.reward()+
+      " · модель SHA "+last.modelSha().substring(0,12)+
+      " · кадры "+last.frameBefore()+"→"+last.frameAfter());
+   }
+  }catch(IOException damaged){
+   row(train,"STOP: RAM-журнал повреждён или недоступен, обучение заблокировано.");
+  }
+  row(train,"Общих игровых побед/счётов NES: НЕ ПОДТВЕРЖДЕНО");
   row(train,"PPO / DQN для NES: НЕ ПОДКЛЮЧЕНЫ");
   row(train,"Обученная политика с независимой оценкой: НЕ ПОДТВЕРЖДЕНА");
   row(train,"Для настоящего обучения нужны наблюдения, достоверная цель/награда и проверка весов на отдельных эпизодах.");
