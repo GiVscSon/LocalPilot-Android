@@ -674,6 +674,7 @@ public final class NesEmulatorActivity extends Activity {
        "ИИ-ход "+readyTrial.button+": "+readyTrial.status+
          " · визуальный журнал reward=UNKNOWN"+ramGoal:
        "STOP: проверенный кадр / RAM-цель не удалось сохранить; ввод отозван");
+     if(studentRemaining>0)appendStudentBatchStep(current,goal,count,saved&&goalSaved);
     }
    if(experiment.running()){
     NesExperimentPolicy.Decision result=experiment.observe(readyTrial.status);
@@ -705,10 +706,106 @@ public final class NesEmulatorActivity extends Activity {
   }
   pendingTrial=null;
  }
+
+ /**
+  * This is the only producer of PPO-eligible on-policy NES data.
+  * The actor's sampled oldLogProb/value/weight hash are captured BEFORE action.
+  * Real JSNES CPU RAM and the completed ActionPermit are checked AFTER it.
+  */
+ private void appendStudentBatchStep(TrialPending t,
+    HomebrewRamReward.Evidence goal,int afterFrame,boolean journalSaved){
+  if(studentRemaining<=0)return;
+  try{
+   if(!frameEpoch.current(studentBatchEpoch)||
+      harness.stopRevision()!=studentBatchStopRevision||
+      !journalSaved||!goal.verified()||t.studentState64==null||
+      t.studentPolicySha==null||t.studentActionId!=HomebrewObs64.id(t.button)||
+      !java.util.Arrays.equals(t.studentState64,
+         HomebrewObs64.encode(t.xBefore,t.yBefore))||
+      !Float.isFinite(t.studentValue)||!Float.isFinite(t.studentOldLogProb)||
+      afterFrame-t.frame!=ConsoleAgentContract.HOLD_FRAMES)
+    throw new IllegalStateException("NES_STUDENT_ROLLOUT_NOT_VERIFIED");
+   float[] next=HomebrewObs64.encode(t.xAfter,t.yAfter);
+   int seq=studentRollout.size();
+   if(seq>=VerifiedReplayFilter.MIN_STEPS)
+    throw new IllegalStateException("NES_STUDENT_ROLLOUT_OVERFLOW");
+   boolean batchEnd=studentRemaining==1;
+   VerifiedReplayFilter.Step step=new VerifiedReplayFilter.Step(
+     "student-homebrew-"+studentBatchEpoch,studentBatchEpoch,
+     VerifiedReplayFilter.Provenance.RETRO_EMULATED,
+     pinnedHomebrewRomSha,t.studentPolicySha,HomebrewObs64.SCHEMA,
+     seq,t.frame,afterFrame,ConsoleAgentContract.HOLD_FRAMES,
+     t.studentState64,next,t.studentActionId,HomebrewObs64.ACTIONS,
+     HomebrewObs64.LEGAL_MASK,t.studentOldLogProb,t.studentValue,
+     goal.reward(),VerifiedReplayFilter.RewardSource.VERIFIED_ROM_RAM,
+     t.downAck&&t.upAck,true,t.ramProbeSeen,false,batchEnd,false);
+   studentRollout.add(step);
+   studentRemaining--;
+   if(studentRemaining>0){
+    final String epoch=studentBatchEpoch;
+    final long revision=studentBatchStopRevision;
+    state.setText("StudentPolicy: реальных NES-шагов "+seq+1+
+      "/"+VerifiedReplayFilter.MIN_STEPS+" · текущая награда "+goal.reward());
+    web.postDelayed(()->{
+     if(closed||!resumed||!frameEpoch.current(epoch)||
+        harness.stopRevision()!=revision||studentRemaining<=0){
+      stopCpuExperiment("STOP: студенческая серия прервана");return;
+     }
+     requestStudentAction(true);
+    },40);
+   }else {
+    VerifiedReplayFilter.Verdict verdict=VerifiedReplayFilter.inspect(studentRollout);
+    if(!verdict.eligible())throw new IllegalStateException("REPLAY_BLOCKED_"+verdict.reason());
+    submitStudentTraining(List.copyOf(studentRollout));
+   }
+  }catch(RuntimeException failed){
+   stopCpuExperiment("STOP: Student PPO-опыт недостоверен: "+failed.getClass().getSimpleName());
+  }
+ }
+ private void submitStudentTraining(List<VerifiedReplayFilter.Step> records){
+  try{
+   if(!frameEpoch.current(studentBatchEpoch)||
+      harness.stopRevision()!=studentBatchStopRevision||
+      records.size()!=VerifiedReplayFilter.MIN_STEPS||
+      studentTraining!=null&&!studentTraining.isDone())
+    throw new IllegalStateException("NO_VERIFIED_STUDENT_BATCH");
+   StudentPolicyNet active=activeStudent().candidateCopy();
+   final String epoch=studentBatchEpoch;
+   final long revision=studentBatchStopRevision;
+   final Path vault=new File(getFilesDir(),"localpilot_vault").toPath();
+   studentTraining=studentTrainer.submit(()->{
+    try{
+     if(Thread.currentThread().isInterrupted()||harness.stopRevision()!=revision)
+      throw new IllegalStateException("PPO_STOP_BEFORE_TRAIN");
+     LearningCoordinator.Candidate candidate=
+       LearningCoordinator.prepare(active,records,vault);
+     runOnUiThread(()->{
+      if(closed||!resumed||!frameEpoch.current(epoch)||
+         harness.stopRevision()!=revision)return;
+      studentRollout.clear();
+      state.setText("PPO: веса КАНДИДАТА изменились "+candidate.update().changedParameters()+
+        " параметров · SHA "+candidate.update().shaAfter().substring(0,16)+
+        " · ОЦЕНКА НЕ ПРОЙДЕНА · активная политика НЕ ЗАМЕНЕНА");
+     });
+    }catch(IOException|RuntimeException failed){
+     runOnUiThread(()->{
+      if(closed||!resumed||!frameEpoch.current(epoch)||
+         harness.stopRevision()!=revision)return;
+      stopCpuExperiment("STOP: PPO-кандидат отклонён: "+failed.getClass().getSimpleName());
+     });
+    }
+   });
+   state.setText("StudentPolicy: 16 реальных шагов подтверждены; PPO обучает только кандидата");
+  }catch(IOException|RuntimeException failed){
+   stopCpuExperiment("STOP: PPO не запущено: "+failed.getClass().getSimpleName());
+  }
+ }
+
  private boolean aiEligible(){
   return getPackageName().startsWith("org.localpilot.android")&&
     resumed&&homebrewRom&&pageLoaded&&web!=null&&frames>=15&&hash!=0&&
-    !experiment.running()&&!aiRunning&&pendingTrial==null;
+    !experiment.running()&&!aiRunning&&pendingTrial==null&&
+    studentRemaining==0&&(studentTraining==null||studentTraining.isDone());
  }
  private void requestAiObservation(){
   if(!aiEligible()||snapshotGate.pending()||harness.hasPending()){
