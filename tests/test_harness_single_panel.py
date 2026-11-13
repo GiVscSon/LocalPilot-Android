@@ -36,6 +36,10 @@ class SingleNativeHarnessConsole(unittest.TestCase):
   self.assertIn("engine.proposeNesButton(",self.model)
   self.assertIn("modelSha",binding)
   self.assertIn("commit()",binding)
+  self.assertIn('ConsoleAgentContract.OBSERVE.equals(next.getAction())',self.model)
+  self.assertIn('if(!currentNesModel(selection))',self.model)
+  self.assertEqual(self.model.count('if(!currentNesModel(selection))'),2)
+  self.assertIn('Открыть NES для StudentPolicy',self.dash)
  def test_real_episode_journal_never_becomes_fake_reward(self):
   self.assertIn("ConsoleExperienceMemory.summary(",self.dash)
   self.assertIn("ConsoleExperienceMemory.read(",self.dash)
