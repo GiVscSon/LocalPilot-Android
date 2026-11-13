@@ -736,7 +736,24 @@ public class PilotService extends AccessibilityService {
   if(state!=null)state.setText((strictVision?"Строго":"Мягко")+" · "+profileLabel()+" · "+(manualVisualRoi?"область вручную":visualRoi!=null?"боковые поля убраны":"область авто")+"\n"+note+"\n"+(gate.armed()?targetLabel+" · "+(inputReady?"ввод включён":"наблюдение"):"Нажмите Старт или выберите Окно")+(captureSession>0||playingGrid?"\n"+captureCounters():"")+(collecting?"\nСбор примеров включён":""));
  }
  private AccessibilityNodeInfo windowRoot(AccessibilityWindowInfo window){return Build.VERSION.SDK_INT>=33?window.getRoot(0):window.getRoot();}
- private AccessibilityNodeInfo appRoot(){for(AccessibilityWindowInfo w:getWindows())if(w.getType()==AccessibilityWindowInfo.TYPE_APPLICATION&&w.isFocused()){AccessibilityNodeInfo r=windowRoot(w);if(r!=null){if(r.getWindowId()==w.getId())return r;r.recycle();}}return null;}
+ private AccessibilityNodeInfo appRoot(){
+  AccessibilityNodeInfo root=focusedAppRoot();
+  if(root==null&&android.os.Build.VERSION.SDK_INT>=34){
+   // Read-only recovery of Android's interaction cache. Never broaden focus,
+   // owner, geometry or TTL; a still-unavailable root remains UNKNOWN.
+   try{if(clearCache())root=focusedAppRoot();}catch(RuntimeException unavailable){return null;}
+  }
+  return root;
+ }
+ private AccessibilityNodeInfo focusedAppRoot(){
+  try{for(AccessibilityWindowInfo w:getWindows())
+   if(w.getType()==AccessibilityWindowInfo.TYPE_APPLICATION&&w.isFocused()){
+    AccessibilityNodeInfo r=windowRoot(w);
+    if(r!=null){if(r.getWindowId()==w.getId())return r;r.recycle();}
+   }
+  }catch(RuntimeException unavailable){return null;}
+  return null;
+ }
  private boolean unlocked(){return ((PowerManager)getSystemService(POWER_SERVICE)).isInteractive()&&!((KeyguardManager)getSystemService(KEYGUARD_SERVICE)).isKeyguardLocked();}
  private void arm(){stop("Привязка");if(busy){note="Дождитесь завершения жеста";update();return;}AccessibilityNodeInfo r=appRoot();try{if(r==null||!unlocked()){note="Нет активного приложения";update();return;}target=String.valueOf(r.getPackageName());targetLabel=applicationLabel(target);targetIsBrowser=browserTarget();armedBounds=windowBounds(r);if(armedBounds.isEmpty()){note="Нет границ окна";update();return;}retainVisualScope(r);gate.arm(target,r.getWindowId(),armedBounds.width(),armedBounds.height());if(automatic())permit.grantSession(gate.epoch(),SystemClock.elapsedRealtime());note=automatic()?"Окно выбрано · нажмите Старт":"Только наблюдение";update();}finally{if(r!=null)r.recycle();}}
  private String applicationLabel(String packageName){try{return String.valueOf(getPackageManager().getApplicationLabel(getPackageManager().getApplicationInfo(packageName,0)));}catch(Exception e){return packageName;}}

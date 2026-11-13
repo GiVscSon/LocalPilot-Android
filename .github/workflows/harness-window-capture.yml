@@ -1,5 +1,9 @@
 name: Harness Phase 1 window screenshot safety
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
 on:
   workflow_dispatch:
   pull_request:
@@ -43,7 +47,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ github.sha }}
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -79,11 +83,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
-      LOCALPILOT_BUILD_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      LOCALPILOT_BUILD_SOURCE_SHA: ${{ github.sha }}
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ github.sha }}
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -111,12 +115,12 @@ jobs:
           - api: 36
             target: google_apis
     env:
-      LOCALPILOT_BUILD_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      LOCALPILOT_BUILD_SOURCE_SHA: ${{ github.sha }}
       LOCALPILOT_EXPECTED_API: ${{ matrix.api }}
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ github.sha }}
       - uses: actions/setup-java@v4
         with:
           distribution: temurin

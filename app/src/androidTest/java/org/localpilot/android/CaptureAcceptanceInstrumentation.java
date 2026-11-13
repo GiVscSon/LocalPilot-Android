@@ -77,7 +77,7 @@ public final class CaptureAcceptanceInstrumentation extends Instrumentation {
    Throwable cause=error;while(cause.getCause()!=null&&cause.getCause()!=cause)cause=cause.getCause();
    try{evidence.put("failure",cause.toString()).put("failure_wrapper",error.toString())
     .put("failed_at_ms",SystemClock.uptimeMillis()-started);
-    if(service!=null)evidence.put("capture_timing",service.captureTimingReport()).put("last_stop",String.valueOf(field("lastStopReason")));}
+    if(service!=null)evidence.put("windows_before_finish",main(this::windowSummary)).put("capture_timing",service.captureTimingReport()).put("last_stop",String.valueOf(field("lastStopReason")));}
    catch(Throwable ignored){/* Preserve primary failure. */}
   }finally{
    try{if(service!=null)main(()->{service.hidePanel();return null;});}catch(Exception ignored){}
@@ -192,6 +192,33 @@ public final class CaptureAcceptanceInstrumentation extends Instrumentation {
  }
  private Owner owner(boolean secure)throws Exception{
   return main(()->{
+   Owner found=findOwner(secure);if(found!=null)return found;
+   String before=windowSummary();
+   if(Build.VERSION.SDK_INT>=34&&service.clearCache()){
+    found=findOwner(secure);
+    if(found!=null){evidence.put("read_only_cache_recovery",new JSONObject()
+      .put("before",before).put("after",windowSummary()).put("authority_relaxed",false));return found;}
+   }
+   throw new AssertionError("No verified focused fixture owner: "+before+" after="+windowSummary());
+  });
+ }
+ private String windowSummary(){
+  StringBuilder out=new StringBuilder();
+  for(AccessibilityWindowInfo w:service.getWindows()){
+   if(out.length()>2500)break;
+   Rect bounds=new Rect();w.getBoundsInScreen(bounds);
+   out.append("id=").append(w.getId()).append(" type=").append(w.getType())
+    .append(" focused=").append(w.isFocused()).append(" active=").append(w.isActive())
+    .append(" bounds=").append(bounds.toShortString());
+   AccessibilityNodeInfo root=w.getRoot();
+   try{out.append(" root=").append(root==null?"null":root.getPackageName());
+    if(root!=null)out.append(" rootWindow=").append(root.getWindowId());}
+   finally{if(root!=null)root.recycle();}
+   out.append(';');
+  }
+  return out.toString();
+ }
+ private Owner findOwner(boolean secure)throws Exception{
    Point screen=new Point();((WindowManager)service.getSystemService(PilotService.WINDOW_SERVICE))
     .getDefaultDisplay().getRealSize(screen);
    for(AccessibilityWindowInfo window:service.getWindows()){
@@ -206,8 +233,7 @@ public final class CaptureAcceptanceInstrumentation extends Instrumentation {
      return new Owner(window.getId(),bounds,screen);
     }finally{root.recycle();}
    }
-   throw new AssertionError("No verified focused fixture owner");
-  });
+   return null;
  }
  private boolean marker(AccessibilityNodeInfo node,String expected,int depth){
   if(depth>15)return false;if(expected.equals(String.valueOf(node.getContentDescription())))return true;
