@@ -120,6 +120,16 @@ def main():
         command(['adb', 'shell', 'input', 'keyevent', 'KEYCODE_WAKEUP'])
         command(['adb', 'shell', 'wm', 'dismiss-keyguard'])
         command(['adb', 'shell', 'settings', 'put', 'system', 'screen_off_timeout', '600000'])
+        # The fresh AVD's first-use immersive tutorial steals real window focus
+        # after a delay. This is SystemUI navigation onboarding, not screenshot
+        # consent or a security permission. Configure only this guarded emulator.
+        command(['adb', 'shell', 'settings', 'put', 'secure', 'immersive_mode_confirmations', 'confirmed'])
+        immersive = command(['adb', 'shell', 'settings', 'get', 'secure', 'immersive_mode_confirmations']).strip()
+        if immersive != 'confirmed':
+            raise RuntimeError('Isolated fullscreen fixture onboarding setup failed')
+        (OUT / 'fixture-setup.json').write_text(json.dumps(dict(
+            immersive_tutorial=immersive, permission_bypass=False,
+            scope='isolated emulator navigation tutorial only')), encoding='utf-8')
         command(['adb', 'shell', 'settings', 'delete', 'secure', 'enabled_accessibility_services'])
         command(['adb', 'shell', 'settings', 'put', 'secure', 'accessibility_enabled', '0'])
         with (OUT / 'instrumentation.txt').open('w', encoding='utf-8') as log:

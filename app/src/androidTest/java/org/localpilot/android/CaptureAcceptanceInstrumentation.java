@@ -77,7 +77,7 @@ public final class CaptureAcceptanceInstrumentation extends Instrumentation {
    Throwable cause=error;while(cause.getCause()!=null&&cause.getCause()!=cause)cause=cause.getCause();
    try{evidence.put("failure",cause.toString()).put("failure_wrapper",error.toString())
     .put("failed_at_ms",SystemClock.uptimeMillis()-started);
-    if(service!=null)evidence.put("capture_timing",service.captureTimingReport()).put("last_stop",String.valueOf(field("lastStopReason")));}
+    if(service!=null)evidence.put("windows_before_finish",main(this::windowSummary)).put("capture_timing",service.captureTimingReport()).put("last_stop",String.valueOf(field("lastStopReason")));}
    catch(Throwable ignored){/* Preserve primary failure. */}
   }finally{
    try{if(service!=null)main(()->{service.hidePanel();return null;});}catch(Exception ignored){}
@@ -192,6 +192,41 @@ public final class CaptureAcceptanceInstrumentation extends Instrumentation {
  }
  private Owner owner(boolean secure)throws Exception{
   return main(()->{
+   Owner found=findOwner(secure);if(found!=null)return found;
+   String before=windowSummary();
+   throw new AssertionError("No verified focused fixture owner: "+before+" after="+windowSummary());
+  });
+ }
+ private String windowSummary(){
+  StringBuilder out=new StringBuilder();
+  for(AccessibilityWindowInfo w:service.getWindows()){
+   if(out.length()>2500)break;
+   Rect bounds=new Rect();w.getBoundsInScreen(bounds);
+   out.append("id=").append(w.getId()).append(" type=").append(w.getType())
+    .append(" focused=").append(w.isFocused()).append(" active=").append(w.isActive())
+    .append(" bounds=").append(bounds.toShortString());
+   AccessibilityNodeInfo root=w.getRoot();
+   try{out.append(" root=").append(root==null?"null":root.getPackageName());
+    if(root!=null){out.append(" rootWindow=").append(root.getWindowId());
+     if(w.getType()==AccessibilityWindowInfo.TYPE_SYSTEM)systemLabels(root,out,0);}}
+   finally{if(root!=null)root.recycle();}
+   out.append(';');
+  }
+  return out.toString();
+ }
+ // Test-only system labels explain unexpected permission/disclosure windows.
+ // This fixture is isolated; production never records arbitrary UI text.
+ private void systemLabels(AccessibilityNodeInfo node,StringBuilder out,int depth){
+  if(depth>8||out.length()>2500)return;
+  CharSequence text=node.getText();
+  if(text!=null)out.append(" text=").append(text.toString().replace('\n',' ').substring(0,Math.min(240,text.length())));
+  String resource=node.getViewIdResourceName();if(resource!=null)out.append(" resource=").append(resource);
+  for(int i=0;i<Math.min(20,node.getChildCount());i++){
+   AccessibilityNodeInfo child=node.getChild(i);if(child==null)continue;
+   try{systemLabels(child,out,depth+1);}finally{child.recycle();}
+  }
+ }
+ private Owner findOwner(boolean secure)throws Exception{
    Point screen=new Point();((WindowManager)service.getSystemService(PilotService.WINDOW_SERVICE))
     .getDefaultDisplay().getRealSize(screen);
    for(AccessibilityWindowInfo window:service.getWindows()){
@@ -206,8 +241,7 @@ public final class CaptureAcceptanceInstrumentation extends Instrumentation {
      return new Owner(window.getId(),bounds,screen);
     }finally{root.recycle();}
    }
-   throw new AssertionError("No verified focused fixture owner");
-  });
+   return null;
  }
  private boolean marker(AccessibilityNodeInfo node,String expected,int depth){
   if(depth>15)return false;if(expected.equals(String.valueOf(node.getContentDescription())))return true;

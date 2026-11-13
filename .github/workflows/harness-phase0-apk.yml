@@ -1,5 +1,9 @@
 name: Harness Phase 0 APK integrity gates
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
 on:
   pull_request:
     paths:
@@ -33,7 +37,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ github.sha }}
       - name: Inspect malformed and valid synthetic APK ZIP fixtures
         run: |
           set -euo pipefail
@@ -44,11 +48,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 35
     env:
-      LOCALPILOT_BUILD_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      LOCALPILOT_BUILD_SOURCE_SHA: ${{ github.sha }}
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ github.sha }}
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -87,7 +91,7 @@ jobs:
       - name: Archive the exact audited test APK
         uses: actions/upload-artifact@v4
         with:
-          name: harness-unified-debug-${{ github.event.pull_request.head.sha || github.sha }}
+          name: harness-unified-debug-${{ github.sha }}
           retention-days: 14
           if-no-files-found: error
           path: |
@@ -99,7 +103,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: harness-phase0-packaging-${{ github.event.pull_request.head.sha || github.sha }}
+          name: harness-phase0-packaging-${{ github.sha }}
           retention-days: 14
           if-no-files-found: ignore
           path: |
