@@ -40,7 +40,7 @@ public final class ModelLabActivity extends Activity {
  private static ModelLabStore unifiedStore;
  /** One shared catalog instance; panel and ModelLab use the same registry. */
  static synchronized ModelLabStore harnessStore(android.content.Context ctx){
-  if(!BuildConfig.UNIFIED_MODELLAB)
+  if(!ctx.getPackageName().startsWith("org.localpilot.android"))
    throw new IllegalStateException("Unified model catalog unavailable");
   if(unifiedStore==null)unifiedStore=new ModelLabStore(ctx.getApplicationContext());
   return unifiedStore;
@@ -618,7 +618,7 @@ public final class ModelLabActivity extends Activity {
  }
  private void refresh(){
   if(closed||modelPicker==null)return;
-  ModelLabStore.Entry bound=BuildConfig.UNIFIED_MODELLAB?
+  ModelLabStore.Entry bound=inUnifiedApk()?
     HarnessModelBinding.resolve(this,store.list()):null;
   String selectedId=preferredModelId!=null?preferredModelId:
     bound!=null?bound.id:selected()==null?getPreferences(MODE_PRIVATE)
