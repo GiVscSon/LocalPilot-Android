@@ -256,9 +256,16 @@ public final class PpoGaeTrainer {
    for(int j=0;j<limit;j++)if(original[i+j]!=modified[i+j])different=true;
    if(different)changed++;
   }
-  // Critical: writes only a candidate path. NEVER writes active/ here.
-  if(candidateWeights.toString().contains("/models/active/"))
-   throw new IOException("PPO_CANNOT_OVERWRITE_ACTIVE_POLICY");
+  // Critical: only app-private models/candidates can be supplied, never
+  // models/active, rollback, an unverified arbitrary directory or a symlink.
+  Path destination=candidateWeights.toAbsolutePath().normalize();
+  Path parent=destination.getParent();
+  if(parent==null||!"candidates".equals(parent.getFileName().toString())||
+     parent.getParent()==null||
+     !"models".equals(parent.getParent().getFileName().toString())||
+     java.nio.file.Files.isSymbolicLink(parent)||
+     java.nio.file.Files.isSymbolicLink(destination))
+   throw new IOException("PPO_CANDIDATE_DESTINATION_REQUIRED");
   candidate.saveAtomically(candidateWeights);
   if(!after.equals(StudentPolicyNet.load(candidateWeights).sha256()))
    throw new IOException("PPO_CANDIDATE_CHECKSUM_MISMATCH");
