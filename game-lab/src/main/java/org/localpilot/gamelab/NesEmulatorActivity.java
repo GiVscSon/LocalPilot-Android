@@ -492,7 +492,36 @@ public final class NesEmulatorActivity extends Activity {
    throw new IOException("StudentPolicy action vocabulary mismatch");
   return studentNet;
  }
- private void requestStudentAction(){
+ private void startStudentBatch(){
+  if(studentRemaining>0||studentTraining!=null&&!studentTraining.isDone()||
+     studentStepRequested||aiRunning||pendingTrial!=null||harness.hasPending()||
+     harness.actionInFlight()||experiment.running()||
+     !resumed||!homebrewRom||!pageLoaded||frames<15||hash==0){
+   state.setText("STOP: обучение ожидает свободную NES и неподвижный контроллер");return;
+  }
+  try{
+   activeStudent(); // Fail closed if active Student weights are corrupted.
+   studentRollout.clear();
+   studentRemaining=VerifiedReplayFilter.MIN_STEPS;
+   studentBatchEpoch=frameEpoch.token();
+   studentBatchStopRevision=harness.stopRevision();
+   requestStudentAction(true);
+  }catch(IOException|RuntimeException invalid){
+   stopCpuExperiment("STOP: нельзя начать Student batch: "+invalid.getClass().getSimpleName());
+  }
+ }
+ private void requestStudentAction(){requestStudentAction(false);}
+ private void requestStudentAction(boolean fromBatch){
+  if(fromBatch&&(studentRemaining<=0||!studentBatchEpoch.equals(frameEpoch.token())||
+     studentBatchStopRevision!=harness.stopRevision())){
+   stopCpuExperiment("STOP: Student batch потерял эпоху или разрешение");return;
+  }
+  if(!fromBatch&&studentRemaining>0){
+   state.setText("StudentPolicy: серия из 16 шагов уже идёт");return;
+  }
+  if(studentTraining!=null&&!studentTraining.isDone()){
+   state.setText("STOP: PPO сохраняет кандидат, новый ввод запрещён");return;
+  }
   if(closed||!resumed||!homebrewRom||!pageLoaded||web==null||
      frames<15||hash==0||pendingTrial!=null||aiRunning||
      experiment.running()||harness.hasPending()||harness.actionInFlight()||
