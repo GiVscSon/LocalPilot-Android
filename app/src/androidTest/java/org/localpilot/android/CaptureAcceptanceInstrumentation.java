@@ -194,11 +194,6 @@ public final class CaptureAcceptanceInstrumentation extends Instrumentation {
   return main(()->{
    Owner found=findOwner(secure);if(found!=null)return found;
    String before=windowSummary();
-   if(Build.VERSION.SDK_INT>=34&&service.clearCache()){
-    found=findOwner(secure);
-    if(found!=null){evidence.put("read_only_cache_recovery",new JSONObject()
-      .put("before",before).put("after",windowSummary()).put("authority_relaxed",false));return found;}
-   }
    throw new AssertionError("No verified focused fixture owner: "+before+" after="+windowSummary());
   });
  }
