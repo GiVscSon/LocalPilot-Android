@@ -73,11 +73,11 @@ public final class HomebrewStudentNetwork {
   for(double v:output(w,e.afterX(),e.afterY()))next=Math.max(v,next);
   return clamp(r+0.8*next,4.0);
  }
- private static void learn(double[] w,ConsoleExperienceMemory.GoalEpisode e,double eta){
+ private static void learn(double[] w,double[] targetWeights,ConsoleExperienceMemory.GoalEpisode e,double eta){
   int a=action(e.button());
   double[] x=features(e.beforeX(),e.beforeY()),hidden=new double[HIDDEN];
   double[] q=output(w,x,hidden);
-  double error=clamp(target(w,e)-q[a],4.0);
+  double error=clamp(target(targetWeights,e)-q[a],4.0);
   double[] upstream=new double[HIDDEN];
   for(int h=0;h<HIDDEN;h++)upstream[h]=
     error*w[W2+a*HIDDEN+h]*(1.0-hidden[h]*hidden[h]);
@@ -129,11 +129,15 @@ public final class HomebrewStudentNetwork {
   Random seed=new Random(13072026);
   double[] w=new double[WEIGHTS];
   for(int i=0;i<w.length;i++)w[i]=(seed.nextDouble()-.5)*.045;
+  // Stable TD labels: this snapshot never receives gradients. Periodic hard
+  // synchronization follows the DQN target-network mechanism, not online max-Q.
+  double[] targetWeights=w.clone();
   List<ConsoleExperienceMemory.GoalEpisode> order=new ArrayList<>(train);
   for(int epoch=0;epoch<110;epoch++){
    Collections.shuffle(order,new Random(1517+epoch));
    double eta=0.03/(1+epoch*.014);
-   for(var e:order)learn(w,e,eta);
+   for(var e:order)learn(w,targetWeights,e,eta);
+   if((epoch+1)%10==0)System.arraycopy(w,0,targetWeights,0,w.length);
   }
   for(double v:w)if(!Double.isFinite(v))throw new IllegalStateException("Unstable student weights");
   double zero=0;

@@ -1,3 +1,12 @@
+# План после исследования аналогов · 13.11.2026
+
+[Проверенные источники, схема и критерии следующих шагов](docs/HARNESS-LEARNING-STRATEGY-20261113.ru.md).
+Изучены AgentEmu, CleanRL DQN, Gymnasium и Stable-Retro, ссылки закреплены SHA.
+В существующий Student добавлена target-сеть, выполнен реальный JSNES benchmark.
+Return остался -73 на всех трёх условиях: улучшение игры не подтверждено,
+кандидат отклонён. Дальше: разнообразные train состояния/все действия,
+проверенный teacher → BC → DAgger, независимый final test. PPO после baseline.
+
 # Current Student continuation · 2026-11-13
 
 PR #134 base ba0140e has ten green PR workflows. Behavioral release evidence is still insufficient. The revised real-JSNES evaluation finds a sustained Student regression despite a useful first action; candidate must not be promoted. See [on-policy review](docs/HARNESS-STUDENT-ONPOLICY-REVIEW-20261113.md). Current work branch: fix/harness-student-release-gates-20261113. Physical-device acceptance and permanent release signing remain unverified. Old capture/NES worktree is preserved separately, not overwritten.
