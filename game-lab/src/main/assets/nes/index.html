@@ -255,6 +255,15 @@ window.retroSnapshot=function(token){
   const image=small.toDataURL("image/png");
   const prefix="data:image/png;base64,";
   if(!image.startsWith(prefix)||image.length-prefix.length>200000)return false;
+  // The frozen emulator has not advanced since the screenshot. CPU RAM is
+  // read from the same original homebrew state, never guessed from pixels.
+  if(homebrewRom&&stepMode&&nes.cpu&&nes.cpu.mem&&
+     typeof window.GameLabBridge.onHomebrewObservation==="function"){
+   const x=nes.cpu.mem[1],y=nes.cpu.mem[2];
+   if(!Number.isInteger(x)||!Number.isInteger(y)||
+      x<0||x>255||y<0||y>255)return false;
+   window.GameLabBridge.onHomebrewObservation(x,y,token,activeRomSession);
+  }
   window.GameLabBridge.onSnapshot(image.substring(prefix.length),token);
   return true;
  }catch(error){return false;}
