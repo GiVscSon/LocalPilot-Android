@@ -121,8 +121,17 @@ public final class NesEmulatorActivity extends Activity {
   state=new TextView(this);state.setTextColor(HubContract.WARNING);
   state.setText("Загрузи свой .nes или скачай проверенный homebrew. Эмуляция работает офлайн, сеть нужна только для загрузки файла.");
   root.addView(state);
+  // Fixed-height scrolling controls preserve the real NES viewport on API
+  // 30/35/36, while leaving the STOP button and physical controller visible.
+  android.widget.ScrollView actionScroll=new android.widget.ScrollView(this);
+  actionScroll.setFillViewport(false);
+  LinearLayout actionPanel=new LinearLayout(this);
+  actionPanel.setOrientation(LinearLayout.VERTICAL);
+  actionScroll.addView(actionPanel);
+  root.addView(actionScroll,new LinearLayout.LayoutParams(-1,
+    (int)(160*getResources().getDisplayMetrics().density)));
   Button open=new Button(this);open.setText("Выбрать картридж (.nes)");
-  root.addView(open);
+  actionPanel.addView(open);
   open.setOnClickListener(v->{
    Intent pick=new Intent(Intent.ACTION_OPEN_DOCUMENT).setType("*/*")
      .addCategory(Intent.CATEGORY_OPENABLE);
@@ -130,7 +139,7 @@ public final class NesEmulatorActivity extends Activity {
   });
   Button curated=new Button(this);
   curated.setText("Каталог бесплатных homebrew NES-ROM");
-  root.addView(curated);
+  actionPanel.addView(curated);
   curated.setOnClickListener(v->{
    try{
     Intent browser=new Intent(Intent.ACTION_VIEW,
@@ -143,7 +152,7 @@ public final class NesEmulatorActivity extends Activity {
   });
   Button download=new Button(this);
   download.setText("Скачать и запустить VOID LANCER · MIT · 41 КБ");
-  root.addView(download);
+  actionPanel.addView(download);
   download.setOnClickListener(v->{
    if(closed)return;
    download.setEnabled(false);
@@ -180,28 +189,28 @@ public final class NesEmulatorActivity extends Activity {
   });
   demoButton=new Button(this);Button demo=demoButton;
   demo.setText("Запустить тестовую NES-игру");
-  root.addView(demo);
+  actionPanel.addView(demo);
   demo.setOnClickListener(v->launchRom(HomebrewNes.cartridge(),true));
   shareTrial=new Button(this);
   shareTrial.setText("NES → ModelLab · передать проверенный эпизод");
   shareTrial.setEnabled(false);
   shareTrial.setOnClickListener(v->sendTrialToModelLab());
-  root.addView(shareTrial);
+  actionPanel.addView(shareTrial);
   aiObserveButton=new Button(this);
   aiObserveButton.setText("🧠 ИИ-агент · STEP_MODE · GGUF → 16 кадров NES");
   aiObserveButton.setEnabled(false);
   aiObserveButton.setOnClickListener(v->requestAiObservation());
-  root.addView(aiObserveButton);
+  actionPanel.addView(aiObserveButton);
   studentStepButton=new Button(this);
   studentStepButton.setText("🧠 StudentPolicy · 1 ход NES (64→64→64→кнопка)");
   studentStepButton.setEnabled(false);
   studentStepButton.setOnClickListener(v->requestStudentAction());
-  root.addView(studentStepButton);
+  actionPanel.addView(studentStepButton);
   studentBatchButton=new Button(this);
   studentBatchButton.setText("🧪 StudentPolicy · 16 реальных NES-шагов → PPO-кандидат");
   studentBatchButton.setEnabled(false);
   studentBatchButton.setOnClickListener(v->startStudentBatch());
-  root.addView(studentBatchButton);
+  actionPanel.addView(studentBatchButton);
   Button resumeRealtime=new Button(this);
   resumeRealtime.setText("▶ REALTIME_MODE · продолжить ручную NES");
   resumeRealtime.setOnClickListener(v->{
@@ -218,7 +227,7 @@ public final class NesEmulatorActivity extends Activity {
     }else state.setText("STOP: не удалось возобновить реальное время NES");
    });
   });
-  root.addView(resumeRealtime);
+  actionPanel.addView(resumeRealtime);
   cpuAgentButton=new Button(this);
   cpuAgentButton.setText("CPU NES-агент · тестовый ход A (16 кадров)");
   cpuAgentButton.setEnabled(false);
@@ -226,7 +235,7 @@ public final class NesEmulatorActivity extends Activity {
    if(experiment.running())return;
    runHomebrewCpuAgent();
   });
-  root.addView(cpuAgentButton);
+  actionPanel.addView(cpuAgentButton);
   exploratoryStopSwitch=new CheckBox(this);
   exploratoryStopSwitch.setText(
     "Лаборатория NES: игнорировать авто-STOP при неизменном кадре (только тестовый ROM)");
@@ -234,16 +243,16 @@ public final class NesEmulatorActivity extends Activity {
   exploratoryStopSwitch.setOnCheckedChangeListener((view,checked)->{
    if(experiment.running())stopCpuExperiment("Режим изменён: серия остановлена");
   });
-  root.addView(exploratoryStopSwitch);
+  actionPanel.addView(exploratoryStopSwitch);
   cpuBatchButton=new Button(this);
   cpuBatchButton.setText("Серия CPU-агента · до "+NesExperimentPolicy.MAX_STEPS+" ходов");
   cpuBatchButton.setEnabled(false);
   cpuBatchButton.setOnClickListener(v->startCpuExperiment());
-  root.addView(cpuBatchButton);
+  actionPanel.addView(cpuBatchButton);
   stopCpuButton=new Button(this);
   stopCpuButton.setText("STOP · немедленно остановить CPU-агента");
   stopCpuButton.setOnClickListener(v->stopCpuExperiment("STOP: агент остановлен пользователем"));
-  root.addView(stopCpuButton);
+  root.addView(stopCpuButton); // Always visible, never hidden by scrolling
   web=new WebView(this);
   web.setBackgroundColor(HubContract.BACKGROUND);
   web.getSettings().setJavaScriptEnabled(true);
