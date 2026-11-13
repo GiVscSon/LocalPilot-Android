@@ -278,7 +278,18 @@ public final class HarnessDashboardActivity extends Activity {
   }catch(IOException broken) {
    row(train,"STOP: StudentPolicy weights.bin повреждены; не используем модель.");
   }
-  row(train,"PPO / DQN для NES: НЕ ПОДКЛЮЧЕНЫ");
+  try{
+   java.nio.file.Path candidate=new java.io.File(getFilesDir(),
+     "localpilot_vault/models/candidates/student-homebrew-v1.weights.bin").toPath();
+   if(java.nio.file.Files.isRegularFile(candidate)){
+    StudentPolicyNet pending=StudentPolicyNet.load(candidate);
+    row(train,"PPO-кандидат на диске: SHA "+pending.sha256().substring(0,16));
+    row(train,"EvaluationGate: НЕ ПРОЙДЕН · активные веса не заменены.");
+   }else row(train,"PPO-кандидат: ещё не создан из 16 реальных StudentPolicy шагов.");
+  }catch(IOException invalid){
+   row(train,"STOP: PPO-кандидат повреждён; активация невозможна.");
+  }
+  row(train,"PPO/GAE: доступен в NES после 16 on-policy ходов; автоматическая активация ЗАПРЕЩЕНА");
   row(train,"Обученная политика с независимой оценкой: НЕ ПОДТВЕРЖДЕНА");
   row(train,"Для настоящего обучения нужны наблюдения, достоверная цель/награда и проверка весов на отдельных эпизодах.");
   card("Старые симуляторы","Архивное обучение не применяется к NES. Нет автоматического переноса весов.");
