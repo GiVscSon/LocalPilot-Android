@@ -1,6 +1,7 @@
 package org.localpilot.shared;
 
 import org.localpilot.gamelab.HomebrewRamReward;
+import org.localpilot.gamelab.HomebrewNes;
 
 import java.io.FileOutputStream;
 import java.nio.charset.StandardCharsets;
@@ -62,6 +63,8 @@ public final class StudentHoldoutRealNesVerify {
   byte[] before=Files.readAllBytes(activePath);
   byte[] candidateBytes=Files.readAllBytes(candidatePath);
   String pinnedRom=sha(Files.readAllBytes(rom));
+  if(!pinnedRom.equals(sha(HomebrewNes.cartridge())))
+   throw new IllegalArgumentException("Holdout ROM is not exact built-in 6502 homebrew");
   StudentPolicyNet active=StudentPolicyNet.fromBytes(before),
                    candidate=StudentPolicyNet.fromBytes(candidateBytes);
   Set<Integer> trainingX=new HashSet<>();
