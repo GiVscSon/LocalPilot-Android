@@ -139,6 +139,9 @@ public final class StudentEvaluationGate {
                            row.yBefore()!=previous.yAfter())))
       return reject(Reason.INVALID_SEQUENCE,scenarios.size(),0,0,0,
                     activeSha,candidateSha,scenarios);
+     if(trainingX.contains(row.xBefore())||trainingX.contains(row.xAfter()))
+      return reject(Reason.TRAINING_OVERLAP,scenarios.size(),0,0,0,
+                    activeSha,candidateSha,scenarios);
      if(row.actionId()<0||row.actionId()>=HomebrewObs64.ACTIONS||
         net.argmax(HomebrewObs64.encode(row.xBefore(),row.yBefore()),
                    HomebrewObs64.LEGAL_MASK)!=row.actionId())
