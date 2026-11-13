@@ -77,6 +77,9 @@ assert.equal(ramRight[3],second+16,"RAM action ends at the verified frame");
 assert.ok(ramRight[5]>ramRight[4],"real 6502 ROM increments sprite X for RIGHT");
 assert.ok(ramRight[5]-ramRight[4]<=16,"ROM X cannot jump faster than 1/frame");
 assert.equal(env.nes.cpu.mem[1],ramRight[5],"RAM evidence matches actual JSNES CPU memory");
+assert.equal(env.nes.cpu.mem[2],ramRight[8],"RAM Y matches real CPU after STEP");
+assert.ok(ramRight[7]>=0&&ramRight[7]<=255,"RAM Y before STEP is valid");
+assert.ok(ramRight[8]>=0&&ramRight[8]<=255,"RAM Y after STEP is valid");
 console.log("NES_REAL_ROM_RAM_REWARD_SOURCE_PASS delta="+(ramRight[5]-ramRight[4])+
   " frameStart="+second+" frameEnd="+env.frames);
 assert.equal(env.window.retroExitStepMode(),true);
