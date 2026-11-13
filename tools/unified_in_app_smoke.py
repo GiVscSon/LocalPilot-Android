@@ -18,6 +18,7 @@ import xml.etree.ElementTree as ET
 PACKAGE = "org.localpilot.android.dev.unified"
 MAIN = "org.localpilot.android.MainActivity"
 MODEL = "org.localpilot.android.ModelLabActivity"
+DASH = "org.localpilot.android.HarnessDashboardActivity"
 GAMELAB = "org.localpilot.gamelab.RetroLibraryActivity"
 NES = "org.localpilot.gamelab.NesEmulatorActivity"
 UI_PATH = "/data/local/tmp/localpilot-unified-smoke.xml"
@@ -234,7 +235,15 @@ def verify(apk: Path, output: Path) -> dict:
     process = one_process()
     checks = [{"name": "single_installed_application", "status": "PASS"}]
 
-    tap_text("ModelLab · GGUF")
+    tap_text("Harness Console")
+    wait_activity(DASH)
+    if one_process() != process:
+        raise RuntimeError("Harness panel started a second Android process")
+    if target_bounds(dump_ui(), "LocalPilot · Harness Console") is None:
+        raise RuntimeError("Native unified Harness console did not render")
+    checks.append({"name": "native_harness_console_screen", "status": "PASS"})
+
+    tap_text("Открыть ModelLab")
     wait_activity(MODEL)
     if one_process() != process:
         raise RuntimeError("ModelLab launched in a different process")
@@ -258,6 +267,8 @@ def verify(apk: Path, output: Path) -> dict:
     wait_activity(GAMELAB)
     adb("shell", "input", "keyevent", "KEYCODE_BACK")
     wait_activity(MODEL)
+    adb("shell", "input", "keyevent", "KEYCODE_BACK")
+    wait_activity(DASH)
     adb("shell", "input", "keyevent", "KEYCODE_BACK")
     wait_activity(MAIN)
     checks.append({"name": "back_stack_single_package", "status": "PASS"})
