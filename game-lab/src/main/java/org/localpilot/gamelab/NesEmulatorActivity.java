@@ -711,7 +711,9 @@ public final class NesEmulatorActivity extends Activity {
    state.setText("STOP: новый кадр не совпадает с наблюдением ИИ");
    return;
   }
-  if(!beginTrial(button,HarnessCoordinator.Actor.GGUF)){
+  HarnessCoordinator.Actor owner=aiModelId.startsWith("student:")?
+    HarnessCoordinator.Actor.STUDENT:HarnessCoordinator.Actor.GGUF;
+  if(!beginTrial(button,owner)){
    harness.stop("PERMIT_DENIED");
    state.setText("STOP: Harness не выдал право на ввод NES");return;
   }
