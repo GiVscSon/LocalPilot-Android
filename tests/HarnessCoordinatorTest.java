@@ -9,8 +9,13 @@ public final class HarnessCoordinatorTest {
   HarnessCoordinator c=new HarnessCoordinator();
   String epoch="1042", next="1043";
   c.reset(epoch,HarnessCoordinator.Mode.REALTIME_MODE);
+  check(c.snapshot().mode().equals("REALTIME_MODE")&&
+    c.snapshot().owner().equals("NONE")&&!c.snapshot().waiting(),
+    "dashboard snapshot reads existing singleton state");
   HarnessCoordinator.Ticket t=c.begin(epoch,30,123,1000);
   check(t.nonce.length()==22&&c.hasPending(),"one-use ticket");
+  check(c.snapshot().waiting()&&!c.snapshot().actionInFlight(),
+    "dashboard reports waiting observation without claiming action");
   check(!c.changeMode(epoch,HarnessCoordinator.Mode.STEP_MODE),
     "mode cannot change under a pending agent ticket");
   check(c.start(HarnessCoordinator.Actor.MANUAL,epoch,"A",30,123,0,1001)==null,
@@ -32,6 +37,8 @@ public final class HarnessCoordinatorTest {
   HarnessCoordinator.ActionPermit action=c.start(
     HarnessCoordinator.Actor.GGUF,epoch,"RIGHT",30,123,16,4003);
   check(action!=null&&c.actionInFlight(),"GGUF now owns one input");
+  check(c.snapshot().owner().equals("GGUF")&&c.snapshot().actionInFlight(),
+    "dashboard reports real GGUF ownership");
   check(c.start(HarnessCoordinator.Actor.MANUAL,epoch,"B",30,123,0,4004)==null,
     "manual input cannot interleave with in-flight model");
   check(!c.complete(action,epoch,44,456,true,true),
@@ -54,6 +61,9 @@ public final class HarnessCoordinatorTest {
   c.stop("USER_STOP");
   check(c.stopRevision()>0&&c.lastStopReason().equals("USER_STOP"),
     "STOP creates revision and reason");
+  check(c.snapshot().owner().equals("NONE")&&
+    c.snapshot().lastStopReason().equals("USER_STOP"),
+    "dashboard displays final STOP state");
   check(!c.complete(manual,epoch,96,789,true,true),
     "STOP invalidates old action even with later ACK");
   t=c.begin(epoch,90,345,7000);
