@@ -1,3 +1,23 @@
+# Захват: API 30/34/35/36 подтверждены · 13.11.2026
+
+PR #140, HEAD ee03b48: [все 6 jobs PASS](https://github.com/GiVscSon/LocalPilot-Android/actions/runs/43458665012).
+Это отдельная проверка реального Accessibility capture, а не физический телефон.
+Доказанная причина предыдущего FAIL: системная immersive-подсказка
+«Viewing full screen / GOT IT» забирала фокус у тестовой Activity.
+Подготовлен только изолированный AVD; screenshot consent, owner/focus/TTL,
+FLAG_SECURE и isAccessibilityTool=false не ослаблялись. Гипотеза кеша опровергнута;
+пробный production clearCache удалён. Уменьшен diagnostic preview, проверены
+поздний callback после STOP и запрет восстановления diagnosticFrame из reader.
+Следующая единая точка интеграции: PR #141; его SHA требует собственной матрицы.
+release_ready=false: постоянная подпись и физические телефон/планшет отсутствуют.
+
+# Capture-интеграция PR #131 · 13.11.2026
+
+В эту же ветку перенесены диагностические лимиты/STOP-проверки из #131.
+История и исходники сохранены. API30 screenshot acceptance проходил, API34–36
+ранее выявили ошибку; её причина расследуется до объявления PASS нового SHA.
+[Исходные capture-проверки](docs/HARNESS_CAPTURE_STEP_VALIDATION_2026-11-13.ru.md).
+
 # Точный Student и безопасный STEP: текущая точка · 13.11.2026
 
 Ветка fix/harness-precision-imitation-20261113 от PR #135/ba6cbd9.

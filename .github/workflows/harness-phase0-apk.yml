@@ -1,5 +1,9 @@
 name: Harness Phase 0 APK integrity gates
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
 on:
   pull_request:
     paths:
@@ -7,12 +11,19 @@ on:
       - 'tools/verify_harness_apk.py'
       - 'tests/test_verify_harness_apk.py'
       - 'app/build.gradle'
+      - 'app/src/**'
+      - 'game-lab/src/**'
+      - 'shared/src/**'
       - '.github/workflows/harness-phase0-apk.yml'
   push:
     branches:
       - 'feat/harness-*'
       - 'fix/harness-*'
     paths:
+      - 'app/build.gradle'
+      - 'app/src/**'
+      - 'game-lab/src/**'
+      - 'shared/src/**'
       - 'tools/verify_harness_apk.py'
       - 'tests/test_verify_harness_apk.py'
       - '.github/workflows/harness-phase0-apk.yml'
@@ -26,7 +37,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ github.sha }}
       - name: Inspect malformed and valid synthetic APK ZIP fixtures
         run: |
           set -euo pipefail
@@ -37,11 +48,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 35
     env:
-      LOCALPILOT_BUILD_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      LOCALPILOT_BUILD_SOURCE_SHA: ${{ github.sha }}
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ github.sha }}
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -74,13 +85,28 @@ jobs:
           set -euo pipefail
           apksigner="$(find "$ANDROID_HOME/build-tools" -maxdepth 2 -type f -name apksigner | sort -V | tail -1)"
           test -n "$apksigner"
-          "$apksigner" verify --print-certs app/build/outputs/apk/debug/app-debug.apk
+          "$apksigner" verify --verbose --print-certs app/build/outputs/apk/debug/app-debug.apk | tee build/reports/harness-phase0-signature.txt
+          sha256sum app/build/outputs/apk/debug/app-debug.apk > build/reports/harness-phase0-apk.sha256
           echo "DEBUG_SIGNATURE_ONLY: not a release signing provenance"
+      - name: Archive the exact audited test APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: harness-unified-debug-${{ github.sha }}
+          retention-days: 14
+          if-no-files-found: error
+          path: |
+            app/build/outputs/apk/debug/app-debug.apk
+            build/reports/harness-apk-phase0.json
+            build/reports/harness-phase0-signature.txt
+            build/reports/harness-phase0-apk.sha256
       - name: Archive packaging facts (never as a release)
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: harness-phase0-packaging-${{ github.event.pull_request.head.sha || github.sha }}
+          name: harness-phase0-packaging-${{ github.sha }}
           retention-days: 14
           if-no-files-found: ignore
-          path: build/reports/harness-apk-phase0.json
+          path: |
+            build/reports/harness-apk-phase0.json
+            build/reports/harness-phase0-signature.txt
+            build/reports/harness-phase0-apk.sha256
