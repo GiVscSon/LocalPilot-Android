@@ -49,6 +49,7 @@ jobs:
           set -euo pipefail
           python3 -m unittest discover -s tests -p 'test_localpilot_all_in_one.py' -v
           python3 -m unittest discover -s tests -p 'test_unified_in_app_smoke.py' -v
+          python3 -m unittest discover -s tests -p 'test_harness_student_device_acceptance.py' -v
           python3 -m unittest discover -s tests -p 'test_harness_single_panel.py' -v
           java tests/HarnessCoordinatorVerify.java
           java tests/ConsoleAgentContractVerify.java

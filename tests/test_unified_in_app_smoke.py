@@ -160,7 +160,8 @@ class UnifiedUiSmokeContract(unittest.TestCase):
         workflow=(ROOT/".github/workflows/localpilot-all-in-one.yml").read_text(encoding="utf-8")
         self.assertIn("needs: all-in-one",workflow)
         self.assertIn("actions/download-artifact@v4",workflow)
-        self.assertIn("script: python3 tools/unified_in_app_smoke.py --apk app/build/outputs/apk/debug/app-debug.apk --output unified-device-evidence/one-package-navigation.json",workflow)
+        self.assertIn("python3 tools/unified_in_app_smoke.py --apk app/build/outputs/apk/debug/app-debug.apk --output unified-device-evidence/one-package-navigation.json",workflow)
+        self.assertIn("python3 tools/harness_student_device_acceptance.py --apk app/build/outputs/apk/debug/app-debug.apk --output unified-device-evidence/nes-student-ppo.json",workflow)
         self.assertNotIn("script: |\\n            python3 tools/unified_in_app_smoke.py",workflow)
         self.assertIn("reactivecircus/android-emulator-runner@v2",workflow)
 
