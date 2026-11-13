@@ -124,6 +124,7 @@ public final class HarnessImitationPolicy {
   Map<String,List<HarnessImitationMath.Example>> groups=new TreeMap<>();
   Map<String,Integer> phase=new java.util.HashMap<>();
   Map<String,String> actionByEpisode=new java.util.HashMap<>();
+  Map<String,String> proposedByModel=new java.util.HashMap<>();
   for(int i=0;i<events.length();i++){
    JSONObject row=events.optJSONObject(i);
    if(row==null||!"REAL_JSNES".equals(row.optString("provenance")))continue;
@@ -134,12 +135,17 @@ public final class HarnessImitationPolicy {
    String key=ep+"|"+id;
    int step=phase.getOrDefault(key,0);
    if("MODEL".equals(stage)&&"MODEL_USED".equals(status)){
-    phase.put(key,1);actionByEpisode.remove(key);continue;
+    phase.put(key,1);actionByEpisode.remove(key);
+    proposedByModel.put(key,detail);continue;
    }
    if("DECISION".equals(stage)&&"ACCEPTED".equals(status)&&step==1&&
        detail.startsWith("ACTION=")){
     String act=detail.substring(7);
-    try{HarnessImitationMath.index(act);actionByEpisode.put(key,act);phase.put(key,2);}
+    try{
+     HarnessImitationMath.index(act);
+     if(!detail.equals(proposedByModel.get(key)))throw new IllegalArgumentException("Decision differs from model");
+     actionByEpisode.put(key,act);phase.put(key,2);
+    }
     catch(IllegalArgumentException invalid){phase.remove(key);}
     continue;
    }
