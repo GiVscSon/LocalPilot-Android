@@ -197,7 +197,7 @@ public final class HarnessDashboardActivity extends Activity {
   ModelLabStore.Entry assigned=HarnessModelBinding.resolve(this,list);
   if(stored!=null&&assigned==null)
    row(intro,"STOP: назначенная модель отсутствует или её SHA изменился.");
-  if(list.isEmpty()){row(intro,"Нет GGUF. Скачай или импортируй модель в ModelLab.");return;}
+  if(list.isEmpty())row(intro,"Нет GGUF. Можно загрузить GGUF или использовать обученный CPU student.");
   for(ModelLabStore.Entry e:list){
    LinearLayout model=card(e.label,e.vision()?"Мультимодальная · требуется совместимый mmproj":
      "Текстовая · без зрения кадра NES");
