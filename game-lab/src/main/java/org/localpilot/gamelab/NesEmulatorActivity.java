@@ -75,7 +75,8 @@ public final class NesEmulatorActivity extends Activity {
  private static final class TrialPending{
   final String button;
   final int frame,hash;
-  boolean downAck,upAck;
+  boolean downAck,upAck,ramProbeSeen;
+  int xBefore=-1,xAfter=-1;
   TrialPending(String button,int frame,int hash){
    this.button=button;this.frame=frame;this.hash=hash;
   }
@@ -263,6 +264,23 @@ public final class NesEmulatorActivity extends Activity {
      if(count%60==0)
       state.setText("Кадров "+frames+" · экран CRC="+Integer.toHexString(hash)
        +" · касаний "+touches.get()+" · только эмуляция (не результат Маркета)");
+    });
+   }
+   @JavascriptInterface public void onHomebrewRamProgress(String name,int started,
+        int finished,int xBefore,int xAfter,String session){
+    runOnUiThread(()->{
+     // The WebView bridge is not self-authenticating. Stage RAM only while
+     // the exact built-in ROM and a single in-flight GGUF permit are active.
+     if(closed||!resumed||!frameEpoch.current(session)||!homebrewRom||
+        !aiFrozen||!aiRunning)return;
+     TrialPending current=pendingTrial;
+     if(current==null||current.ramProbeSeen||!current.button.equals(name)||
+        current.frame!=started||finished-started!=HomebrewRamReward.HOLD_FRAMES||
+        xBefore<0||xBefore>255||xAfter<0||xAfter>255){
+      stopCpuExperiment("STOP: NES RAM evidence mismatch");return;
+     }
+     current.ramProbeSeen=true;
+     current.xBefore=xBefore;current.xAfter=xAfter;
     });
    }
    @JavascriptInterface public void onAgentAction(String name,int started,int finished,String session){
@@ -463,6 +481,12 @@ public final class NesEmulatorActivity extends Activity {
     return;
    }
    pendingPermit=null;
+   // This goal has a verifiable ROM-RAM signal, unlike visual hash changes.
+   // Only after core input ACK and a fresh final frame does it become evidence.
+   // It is NOT yet a PPO rollout: no obs64/oldLogProb was sampled by StudentPolicy.
+   HomebrewRamReward.Evidence goal=HomebrewRamReward.evaluate(
+     homebrewRom,aiFrozen&&aiRunning&&current.ramProbeSeen,
+     current.button,current.frame,count,current.xBefore,current.xAfter);
    readyTrial=NesTrial.create(homebrewRom?"HOMEBREW":"USER_ROM",
      current.button,current.frame,count,current.hash,pixelHash);
    if(shareTrial!=null)shareTrial.setEnabled(true);
@@ -470,9 +494,13 @@ public final class NesEmulatorActivity extends Activity {
     if(aiRunning){
      aiRunning=false;
      boolean saved=recordAiEpisode(readyTrial);
+     String ramGoal=goal.verified()?
+       " · ROM RAM-цель "+HomebrewRamReward.GOAL+
+         " = "+goal.reward()+"; PPO ещё BLOCKED (нет obs64 / oldLogProb)":
+       " · ROM RAM-награда UNKNOWN ["+goal.reason()+"]";
      state.setText(saved?
        "ИИ-ход "+readyTrial.button+": "+readyTrial.status+
-         " · сохранён в общей памяти, награда неизвестна":
+         " · визуальный журнал reward=UNKNOWN"+ramGoal:
        "STOP: кадр проверен, но общая память эпизодов недоступна; ход не записан");
     }
    if(experiment.running()){
@@ -742,6 +770,12 @@ public final class NesEmulatorActivity extends Activity {
   ++experimentGeneration;experiment.stop();
   snapshotGate.cancel();exportTrial=null;
   harness.stop();aiTicketNonce=null;queuedAiButton=null;aiRunning=false;aiSnapshot=false;
+  // A caller-provided boolean is not ROM provenance: require byte-for-byte
+  // identity with the audited built-in 6502 cartridge before enabling RAM reward.
+  if(homebrew&&!java.util.Arrays.equals(rom,HomebrewNes.cartridge())){
+   frameEpoch.cancel();harness.stop("HOME_BREW_ROM_IDENTITY_MISMATCH");
+   state.setText("STOP: тестовый ROM не совпадает с эталоном");return;
+  }
   homebrewRom=homebrew;pendingTrial=null;readyTrial=null;
   if(shareTrial!=null)shareTrial.setEnabled(false);
   if(cpuAgentButton!=null)cpuAgentButton.setEnabled(false);
