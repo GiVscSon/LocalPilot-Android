@@ -15,6 +15,10 @@ public final class RealNesStudentAcceptance {
   if(args.length!=3)throw new IllegalArgumentException(
     "Usage: RealNesStudentAcceptance TRAIN verified-steps.tsv weights.bin");
   if(!"TRAIN".equals(args[0]))throw new IllegalArgumentException("Only TRAIN");
+  byte[] datasetBytes=Files.readAllBytes(Path.of(args[1]));
+  byte[] digest=java.security.MessageDigest.getInstance("SHA-256").digest(datasetBytes);
+  StringBuilder sourceHash=new StringBuilder();
+  for(byte b:digest)sourceHash.append(String.format(Locale.ROOT,"%02x",b&255));
   List<ConsoleExperienceMemory.GoalEpisode> rows=new ArrayList<>();
   for(String line:Files.readAllLines(Path.of(args[1]))){
    String[] p=line.split("\\|",-1);
@@ -28,8 +32,8 @@ public final class RealNesStudentAcceptance {
    NesTrial proof=NesTrial.create("HOMEBREW",button,start,end,before,after);
    HomebrewGoalReward.Result checked=HomebrewGoalReward.verify(
      button,start,end,bx,by,ax,ay);
-   rows.add(new ConsoleExperienceMemory.GoalEpisode(epoch,"import:ci-teacher",
-     "a".repeat(64),button,start,end,before,after,proof.status,bx,by,ax,ay,
+   rows.add(new ConsoleExperienceMemory.GoalEpisode(epoch,"import:ci-rollout",
+     sourceHash.toString(),button,start,end,before,after,proof.status,bx,by,ax,ay,
      checked.reward(),checked.reached()));
   }
   var learner=HomebrewStudentNetwork.train(rows);

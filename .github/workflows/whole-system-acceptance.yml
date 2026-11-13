@@ -135,6 +135,12 @@ jobs:
             build/integration/core/package/dist/jsnes.min.js \
             build/integration/rom/homebrew.nes \
             build/integration/student build/integration/student/evidence
+          # Second dataset protocol: all-action, diverse real CPU states. Keep
+          # the legacy negative-control rollout above and report failures honestly.
+          node tests/nes_student_real_onpolicy.cjs \
+            build/integration/core/package/dist/jsnes.min.js \
+            build/integration/rom/homebrew.nes \
+            build/integration/student build/integration/student/diverse-evidence diverse-v1
           python3 -m unittest discover -s tests -p 'test_harness_student_contract.py' -v
           java tests/HarnessCoordinatorVerify.java
           python3 -m unittest discover -s tests -p 'test_harness_single_panel.py' -v
@@ -208,4 +214,5 @@ jobs:
           path: |
             build/integration/rom/evidence.txt
             build/integration/student/evidence/onpolicy-evaluation.json
+            build/integration/student/diverse-evidence/onpolicy-evaluation.json
             build/reports/unified-script-engine/selfplay/model-gate.md
