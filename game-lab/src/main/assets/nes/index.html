@@ -216,6 +216,7 @@ window.retroAiStep=function(name,holdFrames){
  if(!mapped||!Object.prototype.hasOwnProperty.call(jsnes.Controller,mapped))return false;
  const code=jsnes.Controller[mapped],started=frames;
  const xBefore=window.retroHomebrewRamX();
+ const yBefore=nes.cpu&&nes.cpu.mem?nes.cpu.mem[2]:-1;
  if(typeof code!=="number"||!gamepadLatch.change(name,code,true,frames))return false;
  try{
   for(let i=0;i<holdFrames;i++){
@@ -230,9 +231,10 @@ window.retroAiStep=function(name,holdFrames){
    // 16 real CPU/PPU frames advanced. Android validates the pinned ROM,
    // permit and fresh frame independently before accepting a goal reward.
    const xAfter=window.retroHomebrewRamX();
+   const yAfter=nes.cpu&&nes.cpu.mem?nes.cpu.mem[2]:-1;
    if(typeof window.GameLabBridge.onHomebrewRamProgress==="function")
     window.GameLabBridge.onHomebrewRamProgress(
-      name,started,frames,xBefore,xAfter,activeRomSession);
+      name,started,frames,xBefore,xAfter,activeRomSession,yBefore,yAfter);
    window.GameLabBridge.onAgentAction(name,started,frames,activeRomSession);
    window.GameLabBridge.onFrame(frames,validFrame|0,activeRomSession);
   }
