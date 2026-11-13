@@ -1,0 +1,61 @@
+import groovy.json.JsonSlurper
+plugins { id 'com.android.application' }
+
+// A single, permanently separate package: NO applicationIdSuffix variants.
+def preloaded = providers.gradleProperty('modelLabPreloaded').orElse('false').get().toBoolean()
+def enableVulkan = providers.gradleProperty('modelLabVulkan').orElse('false').get().toBoolean()
+def pocket = null
+if (preloaded) {
+ def report = rootProject.file('build/reports/embedded-gguf.json')
+ def catalog = rootProject.file('build/reports/embedded-extra-models.json')
+ if (!report.isFile() || !catalog.isFile())
+  throw new GradleException('Run both verified GGUF bundlers before the full ModelLab build')
+ pocket = new JsonSlurper().parse(report)
+ def extra = new JsonSlurper().parse(catalog)
+ if (extra.schema != 'localpilot-extra-models-v1' || extra.files.size() != 4)
+  throw new GradleException('Full model catalogue is incomplete')
+ for (def row : extra.files) {
+  if (!rootProject.file('build/embedded-model-assets/models/' + row.filename).isFile())
+   throw new GradleException('Missing verified GGUF: ' + row.filename)
+ }
+}
+android {
+ sourceSets { main { java.srcDirs += ['../shared/src/main/java'] } }
+ namespace 'org.localpilot.android'
+ compileSdk 35
+ if (preloaded) sourceSets { main { assets.srcDirs += [rootProject.file('build/embedded-model-assets')] } }
+ buildFeatures { buildConfig true }
+ androidResources { noCompress += ['gguf'] }
+ ndkVersion '27.2.12479018'
+ externalNativeBuild {
+  cmake { path file('../app/src/main/cpp/CMakeLists.txt'); version '3.22.1' }
+ }
+ defaultConfig {
+  applicationId 'org.localpilot.modellab'
+  minSdk 30
+  targetSdk 35
+  versionCode 1
+  versionName enableVulkan ? '1.0.0-vulkan-experimental' : '1.0.0-candidate'
+  externalNativeBuild { cmake { 
+   if (enableVulkan) {
+    arguments '-DMODEL_LAB_VULKAN=ON',
+      '-DVulkan_GLSLC_EXECUTABLE=' + System.getenv('ANDROID_HOME') + '/ndk/27.2.12479018/shader-tools/linux-x86_64/glslc',
+      '-DSPIRV-Headers_DIR=' + rootProject.file('build/spirv-headers-install/share/cmake/SPIRV-Headers').absolutePath,
+      '-DMODEL_LAB_SPIRV_INCLUDE_DIR=' + rootProject.file('build/spirv-headers-install/include').absolutePath,
+      '-DMODEL_LAB_VULKAN_HEADERS_DIR=' + rootProject.file('third_party/Vulkan-Headers/include').absolutePath
+   } else {
+    arguments '-DMODEL_LAB_VULKAN=OFF'
+   }
+  } }
+  buildConfigField 'boolean', 'VULKAN_COMPILED', enableVulkan.toString()
+  buildConfigField 'boolean', 'PRELOADED_MODELS', preloaded.toString()
+  buildConfigField 'String', 'POCKET_SHA256',
+    preloaded ? ('"' + pocket.sha256 + '"') : '""'
+  buildConfigField 'long', 'POCKET_BYTES',
+    preloaded ? (pocket.bytes + 'L') : '0L'
+  ndk { abiFilters 'arm64-v8a' }
+ }
+ compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
+ buildTypes { debug { debuggable false } }
+ lint { checkTestSources true }
+}

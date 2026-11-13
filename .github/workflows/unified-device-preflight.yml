@@ -1,0 +1,24 @@
+name: LocalPilot single-APK upgrade safety preflight
+on:
+  pull_request:
+    paths:
+      - 'tools/unified_device_preflight.py'
+      - 'tests/test_unified_device_preflight.py'
+      - '.github/workflows/unified-device-preflight.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  read-only-preflight-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Test signer pin, version, package and no destructive commands
+        run: |
+          python -m unittest discover -s tests -p 'test_unified_device_preflight.py' -v
+          python -O -m unittest discover -s tests -p 'test_unified_device_preflight.py' -v
+          python -m compileall -q tools/unified_device_preflight.py

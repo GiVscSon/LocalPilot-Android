@@ -67,6 +67,38 @@ public final class GameLabContractTest {
   ok(HubContract.supportedLabPackage("org.localpilot.gamelab"),"supported lab package");
   ok(!HubContract.supportedLabPackage("org.localpilot.android"),
     "Pilot cannot target itself as lab");
+  // Gemini handoff selectively reviewed: only 2048 random spawn semantics,
+  // not overwrite of JNI, signing identity, NES, or saved model assets.
+  var noMove=new GameLabEngine(GameLabEngine.Game.BOARD2048,19);
+  int[] immobile={2,4,8,16,4,8,16,2,8,16,2,4,16,2,4,8};
+  System.arraycopy(immobile,0,noMove.cells,0,16);
+  int unchanged2048=noMove.fingerprint();
+  ok(noMove.gesture(.8f,.5f,.2f,.5f,125)==GameLabEngine.Result.NO_CHANGE
+    &&noMove.fingerprint()==unchanged2048&&noMove.score==0,
+    "2048 blocked move neither spawns nor rewards");
+  int fourSpawns=0;
+  boolean[] spawnLocations=new boolean[16];
+  for(int seed=0;seed<64;seed++){
+   var puzzle=new GameLabEngine(GameLabEngine.Game.BOARD2048,seed);
+   java.util.Arrays.fill(puzzle.cells,0);
+   puzzle.cells[0]=2;puzzle.cells[1]=2;puzzle.cells[2]=4;puzzle.cells[3]=4;
+   ok(puzzle.gesture(.8f,.5f,.2f,.5f,125)==GameLabEngine.Result.CHANGED,
+     "2048 accepted left swipe seed="+seed);
+   ok(puzzle.cells[0]==4&&puzzle.cells[1]==8&&puzzle.score==12,
+     "2048 two authentic merges seed="+seed);
+   int seen=0,spawnIndex=-1,spawnValue=0;
+   for(int index=2;index<16;index++)if(puzzle.cells[index]!=0){
+    seen++;spawnIndex=index;spawnValue=puzzle.cells[index];
+   }
+   ok(seen==1&&(spawnValue==2||spawnValue==4),
+     "2048 exactly one 2/4 spawn after valid move seed="+seed);
+   spawnLocations[spawnIndex]=true;
+   if(spawnValue==4)fourSpawns++;
+  }
+  int uniqueLocations=0;
+  for(boolean used:spawnLocations)if(used)uniqueLocations++;
+  ok(uniqueLocations>1,"2048 random spawn cannot always choose first empty cell");
+  ok(fourSpawns>0&&fourSpawns<64,"2048 seeded tests exercise both tile values");
   System.out.println("GAMELAB_REAL_INPUT_CONTRACT_PASS checks="+checks);
  }
 }

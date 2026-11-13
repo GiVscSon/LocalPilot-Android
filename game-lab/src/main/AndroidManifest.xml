@@ -1,4 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+ <!-- Only explicit SHA-256-pinned MIT homebrew ROM download uses this permission. -->
+ <uses-permission android:name="android.permission.INTERNET"/>
  <application android:label="LocalPilot GameLab" android:theme="@android:style/Theme.Material.NoActionBar"
   android:allowBackup="false" android:usesCleartextTraffic="false" android:supportsRtl="true">
   <!-- No permissions, no mutation: shell-only bounded synthetic-state diagnostic. -->

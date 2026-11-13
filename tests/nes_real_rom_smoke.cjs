@@ -1,0 +1,30 @@
+"use strict";
+/** Proves a downloaded MIT homebrew is executable by the REAL JSNES CPU/PPU. */
+const assert=require("node:assert/strict");
+const fs=require("node:fs");
+const crypto=require("node:crypto");
+const path=require("node:path");
+const [core,romPath]=process.argv.slice(2);
+if(!core||!romPath)throw Error("Usage: node nes_real_rom_smoke.cjs CORE ROM");
+const bytes=fs.readFileSync(romPath);
+assert.equal(bytes.length,40976);
+assert.equal(crypto.createHash("sha256").update(bytes).digest("hex"),
+ "5eb801aca68131a3d17fa82d8901d46f6098b878d1e00cd1c47d00c001c2405a");
+const jsnes=require(path.resolve(core));
+let frames=0, pixels;
+const nes=new jsnes.NES({emulateSound:false,onFrame:f=>{frames++;pixels=Uint32Array.from(f);}});
+nes.loadROM(bytes.toString("latin1"));
+for(let i=0;i<180;i++)nes.frame();
+assert(frames>=180&&pixels&&pixels.length===256*240,"real PPU frames");
+const checksum=(arr)=>arr.reduce((a,v)=>Math.imul((a^v)>>>0,16777619)>>>0,2166136261);
+const first=checksum(pixels);
+nes.buttonDown(1,jsnes.Controller.BUTTON_START);
+for(let i=0;i<20;i++)nes.frame();
+nes.buttonUp(1,jsnes.Controller.BUTTON_START);
+for(let i=0;i<90;i++)nes.frame();
+nes.buttonDown(1,jsnes.Controller.BUTTON_A);
+for(let i=0;i<20;i++)nes.frame();
+nes.buttonUp(1,jsnes.Controller.BUTTON_A);
+for(let i=0;i<20;i++)nes.frame();
+assert(frames>=330&&pixels.length===61440,"actual NES frame execution");
+console.log("NES_REAL_USER_ROM_CPU_PPU_PASS",JSON.stringify({frames,initialFrameHash:first,finalFrameHash:checksum(pixels)}));

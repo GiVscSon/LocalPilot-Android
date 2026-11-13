@@ -19,8 +19,16 @@ class UnifiedAppContracts(unittest.TestCase):
 
     def test_game_lab_local_entry_does_not_impersonate_external_target(self):
         main = source("app/src/main/java/org/localpilot/android/MainActivity.java")
-        self.assertIn("org.localpilot.gamelab.TestDeviceActivity.class", main)
+        self.assertIn("org.localpilot.gamelab.RetroLibraryActivity.class", main)
         self.assertIn("private void openExternalGameLab()", main)
+        self.assertIn("ИИ-агент", source("game-lab/src/main/java/org/localpilot/gamelab/NesEmulatorActivity.java"))
+        memory = source("shared/src/main/java/org/localpilot/shared/ConsoleExperienceMemory.java")
+        nes = source("game-lab/src/main/java/org/localpilot/gamelab/NesEmulatorActivity.java")
+        model = source("model-lab/src/main/java/org/localpilot/android/ModelLabActivity.java")
+        self.assertIn("ConsoleExperienceMemory.append(", nes)
+        self.assertIn("ConsoleExperienceMemory.context(", model)
+        self.assertIn("reward", memory.lower())
+        self.assertIn("ConsoleExperienceMemory.summary(", main)
         self.assertNotIn("pilot.selectInstalledTarget(getPackageName()", main)
         manifest = source("app/src/main/AndroidManifest.xml")
         for activity in ("TestDeviceActivity", "RetroLibraryActivity",

@@ -178,8 +178,16 @@ public final class GameLabEngine {
     cells[row*4+col]=merged[i];
    }
   }
+  // Real 2048 semantics for this SIM_ONLY lab: a tile spawns only if the
+  // board actually moved; select a random empty cell, then 2 (90%) / 4 (10%).
+  // Never call this a measured Market-game outcome.
   if(!Arrays.equals(before,cells)){
-   for(int i=0;i<16;i++)if(cells[i]==0){cells[i]=2;break;}
+   int[] empty=new int[16];int free=0;
+   for(int i=0;i<16;i++)if(cells[i]==0)empty[free++]=i;
+   if(free>0){
+    int at=empty[random.nextInt(free)];
+    cells[at]=(random.nextInt(10)==0)?4:2;
+   }
   }
  }
  private static boolean finite(float... v){for(float x:v)if(!Float.isFinite(x))return false;return true;}
