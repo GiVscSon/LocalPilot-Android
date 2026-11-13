@@ -25,6 +25,8 @@ on:
       - 'tests/ConsoleAgentContract*.java'
       - 'tests/ConsoleExperienceMemory*.java'
       - 'tests/HomebrewGoalReward*.java'
+      - 'tests/HomebrewStudentNetwork*.java'
+      - 'tests/test_harness_student_contract.py'
       - 'tests/HarnessCoordinator*.java'
       - 'tests/test_harness_single_panel.py'
       - 'tests/NesExperimentPolicyTest.java'
@@ -116,6 +118,8 @@ jobs:
           java tests/ConsoleAgentContractVerify.java
           java tests/ConsoleExperienceMemoryVerify.java
           java tests/HomebrewGoalRewardVerify.java
+          java tests/HomebrewStudentNetworkVerify.java
+          python3 -m unittest discover -s tests -p 'test_harness_student_contract.py' -v
           java tests/HarnessCoordinatorVerify.java
           python3 -m unittest discover -s tests -p 'test_harness_single_panel.py' -v
           java tests/ModelLabPolicyVerify.java
