@@ -12,6 +12,7 @@ on:
       - 'tests/DiagnosticFrameSizeTest.java'
       - 'tests/DiagnosticFrameSizeVerify.java'
       - 'app/src/androidTest/AndroidManifest.xml'
+      - 'app/build.gradle'
       - 'app/src/androidTest/java/org/localpilot/android/CaptureAcceptance*.java'
       - 'tools/run_capture_acceptance.py'
       - 'tests/test_capture_acceptance_contract.py'
@@ -27,6 +28,7 @@ on:
       - 'tests/DiagnosticFrameSizeTest.java'
       - 'tests/DiagnosticFrameSizeVerify.java'
       - 'app/src/androidTest/AndroidManifest.xml'
+      - 'app/build.gradle'
       - 'app/src/androidTest/java/org/localpilot/android/CaptureAcceptance*.java'
       - 'tools/run_capture_acceptance.py'
       - 'tests/test_capture_acceptance_contract.py'
@@ -130,7 +132,7 @@ jobs:
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-35' 'build-tools;35.0.0'
           # No native backend is needed to test the Java capture path. This is
           # not an ARM64 user-release or a native GGUF inference verification.
-          bash ./gradlew --no-daemon :app:assembleDebug :app:assembleDebugAndroidTest \
+          bash ./gradlew --no-daemon -PcaptureAcceptance=true :app:assembleDebug :app:assembleDebugAndroidTest \
             2>&1 | tee capture-evidence/gradle-build.log
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs \
             app/build/outputs/apk/debug/app-debug.apk > capture-evidence/app-signature.txt
