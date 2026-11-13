@@ -43,6 +43,5 @@ jobs:
           from pathlib import Path
           dashboard=Path("app/src/main/java/org/localpilot/android/HarnessDashboardActivity.java").read_text()
           assert "VerifiedReplayFilter.inspectLegacyVisualMemory(all)" in dashboard
-          assert "reward" not in Path("shared/src/main/java/org/localpilot/shared/VerifiedReplayFilter.java").name.lower() or True
           print("LEGACY_REPLAY_UI_BLOCK_PASS")
           PY
