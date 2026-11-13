@@ -114,30 +114,86 @@ public final class HarnessImitationPolicy {
   }
   return result;
  }
+ /**
+  * Reject uncorroborated examples: same episode, same action and an ordered
+  * chain of real model inference -> accepted decision -> dispatch -> emulator
+  * ACK -> fresh visual transition -> captured pre-action grid.
+  * A self-play policy never becomes its own independent teacher.
+  */
+ private static Map<String,List<HarnessImitationMath.Example>> verifiedDemonstrations(JSONArray events){
+  Map<String,List<HarnessImitationMath.Example>> groups=new TreeMap<>();
+  Map<String,Integer> phase=new java.util.HashMap<>();
+  Map<String,String> actionByEpisode=new java.util.HashMap<>();
+  for(int i=0;i<events.length();i++){
+   JSONObject row=events.optJSONObject(i);
+   if(row==null||!"REAL_JSNES".equals(row.optString("provenance")))continue;
+   String ep=row.optString("episodeId"),id=row.optString("modelId");
+   if(ep.isEmpty()||id.isEmpty()||id.startsWith("fast-policy:"))continue;
+   String stage=row.optString("stage"),status=row.optString("status");
+   String detail=row.optString("detail");
+   String key=ep+"|"+id;
+   int step=phase.getOrDefault(key,0);
+   if("MODEL".equals(stage)&&"MODEL_USED".equals(status)){
+    phase.put(key,1);actionByEpisode.remove(key);continue;
+   }
+   if("DECISION".equals(stage)&&"ACCEPTED".equals(status)&&step==1&&
+       detail.startsWith("ACTION=")){
+    String act=detail.substring(7);
+    try{HarnessImitationMath.index(act);actionByEpisode.put(key,act);phase.put(key,2);}
+    catch(IllegalArgumentException invalid){phase.remove(key);}
+    continue;
+   }
+   String action=actionByEpisode.get(key);
+   if(action==null)continue;
+   if("ACTION".equals(stage)&&"DISPATCHED".equals(status)&&step==2&&
+       detail.startsWith(action+" · ")){phase.put(key,3);continue;}
+   if("EMULATOR_ACK".equals(stage)&&"ACCEPTED".equals(status)&&step==3&&
+       detail.startsWith("NES button "+action+";")){phase.put(key,4);continue;}
+   if("VISUAL".equals(stage)&&"PIXELS_DIFFER".equals(status)&&step==4){
+    phase.put(key,5);continue;
+   }
+   if("EXAMPLE".equals(stage)&&"VISUAL_ONLY".equals(status)&&step==5){
+    int at=detail.indexOf(";action=");
+    if(detail.startsWith("grid=")&&at>5&&
+       action.equals(detail.substring(at+8))){
+     try{
+      HarnessImitationMath.Example ex=new HarnessImitationMath.Example(
+        ep,detail.substring(5,at),action);
+      groups.computeIfAbsent(ep,k->new ArrayList<>()).add(ex);
+     }catch(IllegalArgumentException ignored){}
+    }
+    phase.remove(key);actionByEpisode.remove(key);
+   }
+   if("STOP".equals(stage)||"REJECTED".equals(status)||"ERROR".equals(status)){
+    phase.remove(key);actionByEpisode.remove(key);
+   }
+  }
+  return groups;
+ }
+ public static JSONObject evidenceStatus(JSONArray events){
+  JSONObject result=new JSONObject();
+  Map<String,List<HarnessImitationMath.Example>> groups=verifiedDemonstrations(events);
+  int count=0;for(List<HarnessImitationMath.Example> one:groups.values())count+=one.size();
+  try{result.put("examples",count).put("episodes",groups.size())
+    .put("eligible",groups.size()>=4&&count>=10)
+    .put("source","MODEL→DECISION→ACTION→ACK→VISUAL→EXAMPLE");}
+  catch(Exception ignored){}
+  return result;
+ }
  /** Explicit training. Each example must come from an actual NES frame
   * AND a fresh visual transition; no reward is manufactured.
   * Split by whole episode, never by individual frame from same episode.
   */
  public static String train(Context ctx,JSONArray events)throws Exception{
   if(HarnessTelemetry.active())throw new IllegalStateException("STOP game before training");
-  Map<String,List<HarnessImitationMath.Example>> groups=new TreeMap<>();
+  Map<String,List<HarnessImitationMath.Example>> groups=verifiedDemonstrations(events);
   Set<String> teacherIds=new HashSet<>();
   for(int i=0;i<events.length();i++){
    JSONObject row=events.optJSONObject(i);
-   if(row==null||!"REAL_JSNES".equals(row.optString("provenance"))||
-      !"EXAMPLE".equals(row.optString("stage"))||
-      !"VISUAL_ONLY".equals(row.optString("status"))||
-      row.optString("modelId").startsWith("fast-policy:"))continue;
-   String detail=row.optString("detail");
-   int at=detail.indexOf(";action=");
-   if(!detail.startsWith("grid=")||at<5)continue;
-   String grid=detail.substring(5,at),action=detail.substring(at+8);
-   try{
-    HarnessImitationMath.Example example=new HarnessImitationMath.Example(
-      row.getString("episodeId"),grid,action);
-    groups.computeIfAbsent(example.episode,k->new ArrayList<>()).add(example);
-    teacherIds.add(row.optString("modelId","UNKNOWN"));
-   }catch(IllegalArgumentException ignored){}
+   if(row!=null&&"MODEL".equals(row.optString("stage"))&&
+      "MODEL_USED".equals(row.optString("status"))&&
+      !row.optString("modelId").startsWith("fast-policy:"))
+    teacherIds.add(row.optString("modelId"));
   }
   if(groups.size()<4)throw new IllegalStateException(
     "Нужно >=4 независимых реальных NES-эпизода с проверенными визуальными переходами");
