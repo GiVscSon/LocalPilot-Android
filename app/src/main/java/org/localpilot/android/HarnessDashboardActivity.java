@@ -13,6 +13,7 @@ import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import org.localpilot.shared.ConsoleExperienceMemory;
+import org.localpilot.shared.VerifiedReplayFilter;
 import org.localpilot.shared.HarnessCoordinator;
 import org.localpilot.shared.ConsoleAgentContract;
 import java.io.IOException;
@@ -245,6 +246,9 @@ public final class HarnessDashboardActivity extends Activity {
    List<ConsoleExperienceMemory.Episode> all=
      ConsoleExperienceMemory.read(getFilesDir().toPath());
    row(train,"Проверенных визуальных переходов: "+all.size());
+   VerifiedReplayFilter.Verdict legacy=VerifiedReplayFilter.inspectLegacyVisualMemory(all);
+   row(train,"PPO-допуск старого журнала: "+(legacy.eligible()?all.size():0)
+     +" · "+legacy.reason()+". Нет доверенных наград.");
   }catch(IOException error){row(train,"STOP: журнал повреждён, обучение невозможно.");}
   row(train,"Достоверных игровых наград NES: 0");
   row(train,"PPO / DQN для NES: НЕ ПОДКЛЮЧЕНЫ");
