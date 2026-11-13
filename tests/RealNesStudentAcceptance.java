@@ -28,7 +28,7 @@ public final class RealNesStudentAcceptance {
      checked.reward(),checked.reached()));
   }
   var learner=HomebrewStudentNetwork.train(rows);
-  if(learner.sourceSessions<3||learner.heldoutTransitions<2)
+  if(learner.sourceSessions<3||learner.holdoutTransitions<2)
    throw new AssertionError("No independent real NES holdout");
   try(DataOutputStream out=new DataOutputStream(Files.newOutputStream(Path.of(args[2])))){
    out.writeInt(learner.weights.length);
