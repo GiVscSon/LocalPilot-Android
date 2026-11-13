@@ -48,6 +48,13 @@ class SingleNativeHarnessConsole(unittest.TestCase):
   self.assertIn("активные веса не заменены",self.dash)
   self.assertNotIn("reward=1",self.dash)
   self.assertIn("STOP: журнал повреждён",self.dash)
+ def test_nes_viewport_and_stop_are_not_pushed_offscreen_by_student_controls(self):
+  self.assertIn("root.addView(actionScroll,new LinearLayout.LayoutParams(-1,",self.nes)
+  self.assertIn("actionPanel.addView(studentBatchButton)",self.nes)
+  self.assertIn("root.addView(stopCpuButton)",self.nes)
+  self.assertNotIn("actionPanel.addView(stopCpuButton)",self.nes)
+  self.assertIn("root.addView(web,new LinearLayout.LayoutParams(-1,0,1))",self.nes)
+  self.assertIn("root.addView(controls)",self.nes)
  def test_gpu_is_real_backend_status_not_fake_benchmark(self):
   self.assertIn("BuildConfig.VULKAN_COMPILED",self.dash)
   self.assertIn("ModelLabActivity.harnessGpuLayers()",self.dash)
