@@ -26,6 +26,8 @@ on:
       - 'tests/ConsoleExperienceMemory*.java'
       - 'tests/HomebrewGoalReward*.java'
       - 'tests/HomebrewStudentNetwork*.java'
+      - 'tests/RealNesStudentAcceptance.java'
+      - 'tests/nes_student_real_onpolicy.cjs'
       - 'tests/test_harness_student_contract.py'
       - 'tests/HarnessCoordinator*.java'
       - 'tests/test_harness_single_panel.py'
@@ -119,6 +121,20 @@ jobs:
           java tests/ConsoleExperienceMemoryVerify.java
           java tests/HomebrewGoalRewardVerify.java
           java tests/HomebrewStudentNetworkVerify.java
+          # End-to-end: actual JSNES frames/RAM -> production student training
+          # -> serialized/reloaded weights -> action improves real fresh-ROM goal.
+          mkdir -p build/integration/student
+          javac --release 17 -d build/integration/student \
+            shared/src/main/java/org/localpilot/shared/ConsoleAgentContract.java \
+            shared/src/main/java/org/localpilot/shared/NesTrial.java \
+            shared/src/main/java/org/localpilot/shared/HomebrewGoalReward.java \
+            shared/src/main/java/org/localpilot/shared/ConsoleExperienceMemory.java \
+            shared/src/main/java/org/localpilot/shared/HomebrewStudentNetwork.java \
+            tests/RealNesStudentAcceptance.java
+          node tests/nes_student_real_onpolicy.cjs \
+            build/integration/core/package/dist/jsnes.min.js \
+            build/integration/rom/homebrew.nes \
+            build/integration/student build/integration/student/evidence
           python3 -m unittest discover -s tests -p 'test_harness_student_contract.py' -v
           java tests/HarnessCoordinatorVerify.java
           python3 -m unittest discover -s tests -p 'test_harness_single_panel.py' -v
