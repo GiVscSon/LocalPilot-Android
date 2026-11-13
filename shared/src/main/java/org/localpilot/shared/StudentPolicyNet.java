@@ -76,13 +76,13 @@ public final class StudentPolicyNet {
   if((mask&allowed)==0||(mask&~allowed)!=0)throw new IllegalArgumentException("invalid legalMask");
   float[] a=new float[HIDDEN],b=new float[HIDDEN],p=new float[actionCount];
   for(int o=0;o<HIDDEN;o++){
-   float sum=b1[o],row=o*INPUT;
+   float sum=b1[o];int row=o*INPUT;
    for(int i=0;i<INPUT;i++)sum+=w1[row+i]*observation[i];
    if(!Float.isFinite(sum))throw new IllegalStateException("nonfinite layer1");
    a[o]=(float)Math.tanh(sum);
   }
   for(int o=0;o<HIDDEN;o++){
-   float sum=b2[o],row=o*HIDDEN;
+   float sum=b2[o];int row=o*HIDDEN;
    for(int i=0;i<HIDDEN;i++)sum+=w2[row+i]*a[i];
    if(!Float.isFinite(sum))throw new IllegalStateException("nonfinite layer2");
    b[o]=(float)Math.tanh(sum);
@@ -91,7 +91,7 @@ public final class StudentPolicyNet {
   float max=Float.NEGATIVE_INFINITY;
   for(int action=0;action<actionCount;action++){
    if((mask&(1<<action))==0)continue;
-   float sum=ba[action],row=action*HIDDEN;
+   float sum=ba[action];int row=action*HIDDEN;
    for(int j=0;j<HIDDEN;j++)sum+=wa[row+j]*b[j];
    if(!Float.isFinite(sum))throw new IllegalStateException("nonfinite actor");
    logits[action]=sum;
