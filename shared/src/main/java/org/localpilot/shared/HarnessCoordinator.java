@@ -14,6 +14,9 @@ import java.util.Base64;
 public final class HarnessCoordinator {
  public enum Actor { MANUAL, HEURISTIC, GGUF }
  public enum Mode { STEP_MODE, REALTIME_MODE }
+ /** Immutable read-only dashboard projection. This grants no input authority. */
+ public record Snapshot(String epoch,String mode,String owner,boolean waiting,
+   boolean actionInFlight,long stopRevision,String lastStopReason) {}
 
  public static final class Ticket {
   public final String nonce,epoch;
@@ -67,6 +70,11 @@ public final class HarnessCoordinator {
   if(!matches(expectedEpoch)||next==null||waiting!=null||
      prepared!=null||active!=null)return false;
   mode=next;return true;
+ }
+ public synchronized Snapshot snapshot(){
+  return new Snapshot(epoch,mode.name(),
+    active==null?"NONE":active.actor.name(),
+    waiting!=null||prepared!=null,active!=null,stopRevision,stopReason);
  }
  public synchronized boolean hasPending(){return waiting!=null||prepared!=null;}
  public synchronized boolean actionInFlight(){return active!=null;}
