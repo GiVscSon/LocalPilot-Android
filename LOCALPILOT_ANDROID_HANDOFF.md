@@ -1,3 +1,21 @@
+# Единое обучение и захват · PR #141 · 13.11.2026
+
+[Текущая реализация, проверки и ограничения](docs/HARNESS-UNIFIED-LEARNING-20261113.md).
+Рабочая ветка integration/harness-ppo-goal-unified-20261113, main сверена:
+189b3b0a3edb2f27bb366a4e335d6da013372b83, версия 0.8.1/code53.
+Объединены #139 precision Student, существующий #136 PPO и #140 capture.
+PPO серия резервирует единый HarnessController; generic start не обходит
+подготовленное наблюдение. Несовместимые задачи/награды/веса не смешиваются.
+Портирован append-integrity fix #137 с сохранением новых goal-схем.
+Local JVM/Android compile/lint PASS. Actual JSNES PPO меняет веса, но
+независимая оценка не показала улучшения: promotion BLOCKED.
+Новая реальная Android WebView→Harness→PPO приёмка добавлена в all-in-one CI;
+её результата и всей матрицы совмещённого SHA ещё нужно дождаться.
+Следующие шаги: проверить CI #141; исправить runtime ошибки; расширить batch
+приёмку на API30/35/36; проверить конечный ARM64 APK и сохранить отчёт одного SHA.
+Постоянная подпись и физическая приёмка заблокированы внешним доступом;
+release_ready=false. Исторические заявления ниже не описывают новый SHA.
+
 # Захват: API 30/34/35/36 подтверждены · 13.11.2026
 
 PR #140, HEAD ee03b48: [все 6 jobs PASS](https://github.com/GiVscSon/LocalPilot-Android/actions/runs/43458665012).
