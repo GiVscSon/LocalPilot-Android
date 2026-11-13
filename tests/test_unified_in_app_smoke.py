@@ -156,6 +156,13 @@ class UnifiedUiSmokeContract(unittest.TestCase):
         self.assertIn("task.name.toLowerCase(java.util.Locale.ROOT).contains('release')", gradle)
         self.assertIn("Emulator-only ABI may not execute any app release task", gradle)
 
+    def test_file_access_is_only_enabled_in_release_blocked_emulator_derivative(self):
+        gradle=(ROOT/"app/build.gradle").read_text()
+        self.assertIn("debuggable false",gradle)
+        self.assertIn("if (unifiedEmulatorAbi) {\n   buildTypes.debug.debuggable = true\n }",gradle)
+        self.assertIn("unifiedEmulatorAbi && !unifiedModelLab",gradle)
+        self.assertIn("Emulator-only ABI may not execute any app release task",gradle)
+
     def test_ci_uses_only_compiled_single_candidate_artifact(self):
         workflow=(ROOT/".github/workflows/localpilot-all-in-one.yml").read_text(encoding="utf-8")
         self.assertIn("needs: all-in-one",workflow)

@@ -112,6 +112,12 @@ android {
    buildTypes.debug.applicationIdSuffix = '.dev.unified'
    buildTypes.debug.versionNameSuffix = '-unified-test-only'
  }
+ // Only the isolated x86 instrumentation derivative permits run-as to read
+ // its own newly generated training evidence. ARM64 debug/release stay closed;
+ // the existing task-graph guard forbids any release task with this flag.
+ if (unifiedEmulatorAbi) {
+   buildTypes.debug.debuggable = true
+ }
  // Keep legacy dev package literals intact for strict release tooling.
  // Only the dedicated embedded APK uses its own install identity.
  if (bundledGguf) {

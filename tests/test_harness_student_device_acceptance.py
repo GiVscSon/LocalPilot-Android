@@ -48,6 +48,15 @@ class AndroidCandidateEvidence(unittest.TestCase):
   with patch.object(runtime.subprocess,'run',return_value=missing) as run:
    with self.assertRaises(RuntimeError):runtime.private_file('files/candidate.json')
    self.assertEqual(run.call_args.args[0][:4],['adb','shell','-T','run-as'])
+ def test_permission_failure_is_not_retried_as_pending_data(self):
+  import subprocess
+  denied=subprocess.CompletedProcess([],1,b'run-as: package not debuggable',b'')
+  with patch.object(runtime.subprocess,'run',return_value=denied):
+   with self.assertRaises(RuntimeError) as result:runtime.private_file('files/candidate.json')
+   self.assertNotIsInstance(result.exception,runtime.EvidencePending)
+  absent=subprocess.CompletedProcess([],1,b'cat: files/candidate.json: No such file or directory',b'')
+  with patch.object(runtime.subprocess,'run',return_value=absent):
+   with self.assertRaises(runtime.EvidencePending):runtime.private_file('files/candidate.json')
  def test_no_device_setup_on_physical_phone(self):
   with patch.object(runtime.ui,'is_emulator',return_value=False),patch.object(runtime.ui,'adb') as adb:
    with self.assertRaisesRegex(RuntimeError,'Isolated'):runtime.run(Path('missing.apk'),Path('out'))

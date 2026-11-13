@@ -21,11 +21,18 @@ VAULT = 'files/localpilot_vault/models/'
 SHA = re.compile(r'^[0-9a-f]{64}$')
 
 
+class EvidencePending(RuntimeError):
+    pass
+
+
 def private_file(path, limit=100000):
     result = subprocess.run(['adb', 'shell', '-T', 'run-as', ui.PACKAGE, 'cat', path],
                             capture_output=True, timeout=15)
     if result.returncode:
-        raise RuntimeError('Missing generated homebrew evidence: ' + path)
+        diagnostic=(result.stdout+result.stderr)[:600].decode('utf-8',errors='replace')
+        if 'cat:' in diagnostic and path in diagnostic and 'No such file or directory' in diagnostic:
+            raise EvidencePending('Generated homebrew evidence not written yet: '+path)
+        raise RuntimeError('Cannot read generated homebrew evidence: '+diagnostic[:300])
     # shell v2 carries remote exit status; exec-out alone can report transport
     # success while returning cat/run-as errors as if they were file bytes.
     if not 0 < len(result.stdout) <= limit:
@@ -115,6 +122,7 @@ def run(apk, output):
     apk_sha=hashlib.sha256(apk.read_bytes()).hexdigest()
     if ui.adb('shell','sha256sum',installed).split()[0] != apk_sha:
         raise RuntimeError('Installed APK differs from tested source artifact')
+    ui.adb('shell','run-as',ui.PACKAGE,'true') # Fail immediately if this is not the test derivative.
     source_sha=subprocess.run(['git','rev-parse','HEAD'],check=True,capture_output=True,text=True).stdout.strip()
     inspect_apk(apk,expected_source_sha=source_sha)
     process=ui.one_process()
@@ -129,7 +137,7 @@ def run(apk, output):
     while True:
         try:
             manifest=json.loads(private_file(manifest_path,4096));break
-        except RuntimeError:
+        except EvidencePending:
             if time.monotonic()>=deadline:raise RuntimeError('Production Android NES/PPO batch did not finish')
             time.sleep(.5)
     active=private_file(VAULT+'active/student-homebrew-v1.weights.bin')
