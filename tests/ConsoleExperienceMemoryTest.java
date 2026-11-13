@@ -44,6 +44,23 @@ public final class ConsoleExperienceMemoryTest {
   try{ConsoleExperienceMemory.context(temp,"import:alpha",sha);}
   catch(IOException corrupted){blocked=true;}
   require(blocked,"checksum failure must prevent untrusted context");
+  // A failed integrity check must also block APPEND, not just context reads.
+  String damagedBefore=Files.readString(journal,StandardCharsets.UTF_8);
+  blocked=false;
+  try{ConsoleExperienceMemory.append(temp,"import:alpha",sha,changed);}
+  catch(IOException corrupted){blocked=true;}
+  require(blocked,"append must fail closed on corrupted current journal");
+  require(Files.readString(journal,StandardCharsets.UTF_8).equals(damagedBefore),
+    "failed append modified corrupted evidence");
+  // Even a healthy active journal cannot conceal a corrupted previous generation.
+  Path previous=temp.resolve("console-ai-experience-v2.previous.log");
+  Files.move(journal,previous);
+  blocked=false;
+  try{ConsoleExperienceMemory.append(temp,"import:alpha",sha,changed);}
+  catch(IOException corrupted){blocked=true;}
+  require(blocked,"append must fail closed on corrupted previous generation");
+  require(!Files.exists(journal),"blocked append must not create active journal");
+  Files.delete(previous);
   Files.delete(journal);
   ConsoleExperienceMemory.append(temp,"import:alpha",sha,changed);
   require(ConsoleExperienceMemory.read(temp).size()==1,"recovery after explicit file reset");
