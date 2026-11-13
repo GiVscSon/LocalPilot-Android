@@ -42,6 +42,12 @@ class AndroidCandidateEvidence(unittest.TestCase):
   self.assertEqual(report['coreFrames'],256)
   with self.assertRaises(RuntimeError):runtime.verify_journal(self.journal(m,True),m)
   with self.assertRaises(RuntimeError):runtime.verify_journal(self.journal(m).split(b'\n',1)[1],m)
+ def test_remote_file_failure_is_not_transport_success(self):
+  import subprocess
+  missing=subprocess.CompletedProcess([],1,b'cat: no such file',b'')
+  with patch.object(runtime.subprocess,'run',return_value=missing) as run:
+   with self.assertRaises(RuntimeError):runtime.private_file('files/candidate.json')
+   self.assertEqual(run.call_args.args[0][:4],['adb','shell','-T','run-as'])
  def test_no_device_setup_on_physical_phone(self):
   with patch.object(runtime.ui,'is_emulator',return_value=False),patch.object(runtime.ui,'adb') as adb:
    with self.assertRaisesRegex(RuntimeError,'Isolated'):runtime.run(Path('missing.apk'),Path('out'))

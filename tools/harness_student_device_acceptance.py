@@ -21,10 +21,12 @@ SHA = re.compile(r'^[0-9a-f]{64}$')
 
 
 def private_file(path, limit=100000):
-    result = subprocess.run(['adb', 'exec-out', 'run-as', ui.PACKAGE, 'cat', path],
+    result = subprocess.run(['adb', 'shell', '-T', 'run-as', ui.PACKAGE, 'cat', path],
                             capture_output=True, timeout=15)
     if result.returncode:
         raise RuntimeError('Missing generated homebrew evidence: ' + path)
+    # shell v2 carries remote exit status; exec-out alone can report transport
+    # success while returning cat/run-as errors as if they were file bytes.
     if not 0 < len(result.stdout) <= limit:
         raise RuntimeError('Generated homebrew evidence exceeds its bound')
     return result.stdout
@@ -153,6 +155,15 @@ if __name__=='__main__':
     args=parser.parse_args()
     try:run(args.apk,args.output)
     except Exception as error:
+        report=dict(result='FAIL',error=str(error)[:1000],releaseReady=False)
+        try:
+            if ui.is_emulator():
+                root=ET.fromstring(ui.dump_ui())
+                report['isolated_fixture_ui']=[n.get('text','')[:500] for n in root.iter('node')
+                    if n.get('text')][:35]
+                report['crash_log']=ui.adb('logcat','-d','-b','crash')[-6000:]
+        except Exception as diagnostic:
+            report['diagnostic_error']=type(diagnostic).__name__
         args.output.parent.mkdir(parents=True,exist_ok=True)
-        args.output.write_text(json.dumps(dict(result='FAIL',error=str(error)[:1000],releaseReady=False)))
+        args.output.write_text(json.dumps(report,ensure_ascii=False,indent=2))
         raise
