@@ -15,6 +15,8 @@ public final class ConsoleAgentContract {
  public static final String BUTTON="org.localpilot.console.BUTTON";
  public static final String MODEL_ID="org.localpilot.console.MODEL_ID";
  public static final String MODEL_SHA="org.localpilot.console.MODEL_SHA";
+ public static final String TASK_X="org.localpilot.console.TASK_X";
+ public static final String TASK_Y="org.localpilot.console.TASK_Y";
  public static final int HOLD_FRAMES=16;
  public static final long TTL_MS=120_000L;
  public static boolean tokenValid(String token){

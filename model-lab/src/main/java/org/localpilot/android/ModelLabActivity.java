@@ -66,6 +66,7 @@ public final class ModelLabActivity extends Activity {
  private NesTrial nesTrial;
  private String consoleAgentTicket;
  private int consoleAgentFrame,consoleAgentHash;
+ private int consoleAgentTaskX=-1,consoleAgentTaskY=-1;
  // A callback from an earlier NES episode or screenshot is never displayed
  // as the result of a later one. UI-thread confined revision tracking.
  private final ModelLabResultGate revisions=new ModelLabResultGate();
@@ -162,6 +163,37 @@ public final class ModelLabActivity extends Activity {
    final ModelLabStore.Entry selection=selected();
    if(!inUnifiedApk()||!ConsoleAgentContract.tokenValid(nonce)){
     nesStatus.setText("Сначала открой встроенную homebrew NES и нажми «ИИ-агент · получить кадр»");return;
+   }
+   HarnessModelBinding.Assignment bound=HarnessModelBinding.read(this);
+   if(bound!=null&&bound.id().startsWith("student:")){
+    if(consoleAgentTaskX<0||consoleAgentTaskY<0){
+     nesStatus.setText("STOP: student не получил 6502 RAM из замороженной NES");
+     cancelConsoleAgent();return;
+    }
+    try{
+     var proposal=HomebrewStudentStore.propose(this,
+       consoleAgentTaskX,consoleAgentTaskY,bound.id(),bound.sha());
+     if(!ConsoleAgentContract.playable(proposal.button())){
+      nesStatus.setText("STOP: student не уверен в ходе; NONE, ввод не выполнен");
+      cancelConsoleAgent();return;
+     }
+     Intent move=new Intent(ConsoleAgentContract.MOVE)
+       .setClassName(getPackageName(),"org.localpilot.gamelab.NesEmulatorActivity")
+       .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP|Intent.FLAG_ACTIVITY_SINGLE_TOP)
+       .putExtra(ConsoleAgentContract.TOKEN,nonce)
+       .putExtra(ConsoleAgentContract.BUTTON,proposal.button())
+       .putExtra(ConsoleAgentContract.MODEL_ID,bound.id())
+       .putExtra(ConsoleAgentContract.MODEL_SHA,bound.sha());
+     startActivity(move);
+     consoleAgentTicket=null;
+     nesStatus.setText("STUDENT: "+proposal.button()+
+       " · веса проверены · NES подтверждает действие независимо");
+    }catch(Exception failure){
+     nesStatus.setText("STOP: student checkpoint или решение недопустимы: "+
+       failure.getClass().getSimpleName());
+     cancelConsoleAgent();
+    }
+    return;
    }
    if(selection==null||engine.busy()){
     nesStatus.setText("Выбери загруженную GGUF-модель; движок должен быть свободен");return;
@@ -505,6 +537,7 @@ public final class ModelLabActivity extends Activity {
  private void receiveConsoleAgentObservation(Intent intent){
   revisions.newNes();revisions.newImage();
   consoleAgentTicket=null;nesTrial=null;
+  consoleAgentTaskX=-1;consoleAgentTaskY=-1;
   rgb=null;nesFrameLoaded=false;width=height=0;
   if(preview!=null){preview.setImageDrawable(null);preview.setVisibility(View.GONE);}
   if(previewBitmap!=null){previewBitmap.recycle();previewBitmap=null;}
@@ -526,10 +559,20 @@ public final class ModelLabActivity extends Activity {
    }
    applyBitmap(frameBitmap,true);
    consoleAgentTicket=token;consoleAgentFrame=frame;consoleAgentHash=hash;
+   int sx=intent.getIntExtra(ConsoleAgentContract.TASK_X,-1);
+   int sy=intent.getIntExtra(ConsoleAgentContract.TASK_Y,-1);
+   try{
+    org.localpilot.shared.HomebrewGoalReward.distance(sx,sy);
+    consoleAgentTaskX=sx;consoleAgentTaskY=sy;
+   }catch(IllegalArgumentException invalid){
+    consoleAgentTaskX=-1;consoleAgentTaskY=-1;
+   }
    nesStatus.setText("NES наблюдение #"+frame+" получено. Выбери GGUF и нажми "+
      "«ИИ-агент · выбрать и выполнить один ход». STOP и TTL действуют.");
    imageStatus.setText("Только свежий PNG-кадр из встроенной NES. "+
-     "Text GGUF не видит картинку; для зрения нужен mmproj.");
+     "Text GGUF не видит картинку; для зрения нужен mmproj. "+
+     (consoleAgentTaskX>=0?"Задача CPU: ("+consoleAgentTaskX+","+
+       consoleAgentTaskY+").":"CPU-наблюдение не подтверждено."));
   }catch(RuntimeException|OutOfMemoryError invalid){
    nesStatus.setText("STOP: PNG-кадр NES не прошёл проверку");
   }

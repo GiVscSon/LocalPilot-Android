@@ -72,6 +72,13 @@ public final class NesEmulatorActivity extends Activity {
   }
  }
  private GoalSample pendingGoal;
+ private static final class TaskObservation {
+  final String token,epoch;final int x,y;
+  TaskObservation(String token,String epoch,int x,int y){
+   this.token=token;this.epoch=epoch;this.x=x;this.y=y;
+  }
+ }
+ private TaskObservation taskObservation;
  private final HarnessCoordinator harness=HarnessCoordinator.nes();
  private HarnessCoordinator.ActionPermit pendingPermit;
  private boolean aiSnapshot,aiRunning,aiFrozen;
@@ -332,6 +339,20 @@ public final class NesEmulatorActivity extends Activity {
      requestFrozenAiObservation();
     });
    }
+   @JavascriptInterface public void onHomebrewObservation(
+      int x,int y,String token,String epoch){
+    runOnUiThread(()->{
+     if(closed||!resumed||!homebrewRom||!aiFrozen||
+        !frameEpoch.current(epoch)||!snapshotGate.current(token))return;
+     try{
+      HomebrewGoalReward.distance(x,y); // Only real 8-bit RAM task coordinates
+      taskObservation=new TaskObservation(token,epoch,x,y);
+     }catch(IllegalArgumentException bad){
+      harness.stop("INVALID_TASK_OBSERVATION");
+      taskObservation=null;
+     }
+    });
+   }
    @JavascriptInterface public void onSnapshot(String encoded,String token){
     // JavascriptInterface runs on a different WebView thread. Reject huge
     // responses before allocating or decoding any PNG bytes.
@@ -427,7 +448,7 @@ public final class NesEmulatorActivity extends Activity {
   runHomebrewCpuAgent();
  }
  private void stopCpuExperiment(String reason){
-  harness.stop("STOP_OR_RECOVERY");pendingPermit=null;pendingGoal=null;
+  harness.stop("STOP_OR_RECOVERY");pendingPermit=null;pendingGoal=null;taskObservation=null;
   aiTicketNonce=null;aiSnapshot=false;queuedAiButton=null;aiRunning=false;
   snapshotGate.cancel();exportTrial=null;
   if(aiObserveButton!=null)aiObserveButton.setEnabled(
@@ -581,6 +602,7 @@ public final class NesEmulatorActivity extends Activity {
    aiTicketNonce=ticket.nonce;
    aiExpectedHash=ticket.hash;
    String token=snapshotGate.begin();
+   taskObservation=null;
    aiSnapshot=true;
    if(aiObserveButton!=null)aiObserveButton.setEnabled(false);
    web.evaluateJavascript("window.retroSnapshot("+org.json.JSONObject.quote(token)+")",ack->{
@@ -597,6 +619,8 @@ public final class NesEmulatorActivity extends Activity {
  }
  private void completeAiObservation(String token,byte[] png){
   if(!snapshotGate.finish(token))return;
+  TaskObservation task=taskObservation;
+  taskObservation=null;
   aiSnapshot=false;
   if(aiObserveButton!=null)aiObserveButton.setEnabled(aiEligible());
   if(png==null||!aiFrozen||!harness.hasPending()||!aiEligible()||
@@ -613,6 +637,10 @@ public final class NesEmulatorActivity extends Activity {
   intent.putExtra(ConsoleAgentContract.TOKEN,aiTicketNonce);
   intent.putExtra(ConsoleAgentContract.FRAME,frames);
   intent.putExtra(ConsoleAgentContract.HASH,hash);
+  if(task!=null&&task.token.equals(token)&&task.epoch.equals(frameEpoch.token())){
+   intent.putExtra(ConsoleAgentContract.TASK_X,task.x);
+   intent.putExtra(ConsoleAgentContract.TASK_Y,task.y);
+  }
   intent.putExtra(NesFrameTransfer.EXTRA_PNG,png);
   try{startActivity(intent);}
   catch(RuntimeException failure){
@@ -683,7 +711,9 @@ public final class NesEmulatorActivity extends Activity {
    state.setText("STOP: новый кадр не совпадает с наблюдением ИИ");
    return;
   }
-  if(!beginTrial(button,HarnessCoordinator.Actor.GGUF)){
+  HarnessCoordinator.Actor owner=aiModelId.startsWith("student:")?
+    HarnessCoordinator.Actor.STUDENT:HarnessCoordinator.Actor.GGUF;
+  if(!beginTrial(button,owner)){
    harness.stop("PERMIT_DENIED");
    state.setText("STOP: Harness не выдал право на ввод NES");return;
   }
@@ -783,7 +813,7 @@ public final class NesEmulatorActivity extends Activity {
   String encoded=Base64.encodeToString(rom,Base64.NO_WRAP);
   String session=frameEpoch.begin();
   harness.reset(session,HarnessCoordinator.Mode.REALTIME_MODE);
-  pendingPermit=null;pendingGoal=null;aiFrozen=false;
+  pendingPermit=null;pendingGoal=null;taskObservation=null;aiFrozen=false;
   frames=hash=0;touches.set(0);
   ++experimentGeneration;experiment.stop();
   snapshotGate.cancel();exportTrial=null;

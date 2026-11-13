@@ -12,7 +12,7 @@ import java.util.Base64;
  * preempted by another actor. Stale proposals always fail closed.
  */
 public final class HarnessCoordinator {
- public enum Actor { MANUAL, HEURISTIC, GGUF }
+ public enum Actor { MANUAL, HEURISTIC, GGUF, STUDENT }
  public enum Mode { STEP_MODE, REALTIME_MODE }
  /** Immutable read-only dashboard projection. This grants no input authority. */
  public record Snapshot(String epoch,String mode,String owner,boolean waiting,
@@ -111,7 +111,7 @@ public final class HarnessCoordinator {
   if(actor==null||!matches(expectedEpoch)||active!=null||waiting!=null||
       !ConsoleAgentContract.playable(button)||frame<15||hash==0||now<0)
    return null;
-  if(actor==Actor.GGUF){
+  if(actor==Actor.GGUF||actor==Actor.STUDENT){
    Ticket t=prepared;
    if(t==null||!t.epoch.equals(expectedEpoch)||t.frame!=frame||
       t.hash!=hash||t.stopRevision!=stopRevision||

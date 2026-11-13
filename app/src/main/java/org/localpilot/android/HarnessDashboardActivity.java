@@ -17,6 +17,8 @@ import org.localpilot.shared.HarnessCoordinator;
 import org.localpilot.shared.ConsoleAgentContract;
 import java.io.IOException;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /** Single-app native view of existing HarnessCoordinator, NES and ModelLab.
  * No parallel neural backend, emulator, trainer or input owner is created.
@@ -29,6 +31,11 @@ public final class HarnessDashboardActivity extends Activity {
  private LinearLayout content;
  private String tab="Обзор";
  private boolean destroyed;
+ private volatile boolean trainingBusy;
+ private final ExecutorService trainingWorker=Executors.newSingleThreadExecutor(job->{
+  Thread thread=new Thread(job,"LocalPilot-GoalStudent-Training");
+  thread.setDaemon(true);return thread;
+ });
  private TextView notice;
 
  @Override public void onCreate(Bundle saved){
@@ -141,7 +148,11 @@ public final class HarnessDashboardActivity extends Activity {
   LinearLayout model=card("Нейросеть и её фактическое использование",
     "Назначение ≠ запуск. Использование подтверждается только сохранённым переходом.");
   ModelLabStore.Entry bound=boundModel();
-  row(model,bound==null?"Для NES не назначена доступная GGUF.":
+  HarnessModelBinding.Assignment binding=HarnessModelBinding.read(this);
+  row(model,bound==null?
+    (binding!=null&&binding.id().startsWith("student:")?
+      "Экспериментальная student-сеть: "+binding.id()+" · только homebrew":
+      "Для NES не назначена доступная GGUF или student-сеть.") :
     "Назначена: "+bound.label+" · "+bound.modelSha.substring(0,12));
   row(model,"Бэкенд: "+(BuildConfig.VULKAN_COMPILED?
     "Vulkan собран, работа GPU ещё должна быть доказана":"CPU · Vulkan не собран в этом APK"));
@@ -186,7 +197,7 @@ public final class HarnessDashboardActivity extends Activity {
   ModelLabStore.Entry assigned=HarnessModelBinding.resolve(this,list);
   if(stored!=null&&assigned==null)
    row(intro,"STOP: назначенная модель отсутствует или её SHA изменился.");
-  if(list.isEmpty()){row(intro,"Нет GGUF. Скачай или импортируй модель в ModelLab.");return;}
+  if(list.isEmpty())row(intro,"Нет GGUF. Можно загрузить GGUF или использовать обученный CPU student.");
   for(ModelLabStore.Entry e:list){
    LinearLayout model=card(e.label,e.vision()?"Мультимодальная · требуется совместимый mmproj":
      "Текстовая · без зрения кадра NES");
@@ -204,6 +215,8 @@ public final class HarnessDashboardActivity extends Activity {
     render();
    }));
   }
+  row(intro,HomebrewStudentStore.status(this));
+  intro.addView(button("Открыть обучение CPU student",()->{tab="Обучение";render();}));
   intro.addView(button("Отвязать выбранную модель",()->{
    try{HarnessModelBinding.clear(this);render();}
    catch(RuntimeException failure){info("STOP: не удалось отозвать назначение");}
@@ -272,9 +285,31 @@ public final class HarnessDashboardActivity extends Activity {
   }catch(IOException corrupted){
    row(train,"STOP: журнал целевой награды повреждён");
   }
-  row(train,"Остальные ROM: награда UNKNOWN. PPO / DQN ещё не подключены.");
-  row(train,"Обученная политика с независимой оценкой: НЕ ПОДТВЕРЖДЕНА");
-  row(train,"Для настоящего обучения нужны наблюдения, достоверная цель/награда и проверка весов на отдельных эпизодах.");
+  row(train,"Остальные ROM: награда UNKNOWN. PPO / DQN для чужих игр не подключены.");
+  row(train,HomebrewStudentStore.status(this));
+  row(train,"Сеть 7→12→6 обучается по реальным целевым наградам. "+
+    "Holdout проверяет TD-ошибку на другой ROM-сессии, но не доказывает победу.");
+  train.addView(button(trainingBusy?"Обучение выполняется...":
+    "Обучить CPU student на проверенных NES-эпизодах",()->{
+    if(trainingBusy){info("Уже обучаю candidate; дождись завершения");return;}
+    trainingBusy=true;info("Обучаю отдельные веса на CPU; другие NES-режимы не запускаю");
+    trainingWorker.execute(()->{
+     String outcome;
+     try{outcome=HomebrewStudentStore.train(getApplicationContext());}
+     catch(Exception invalid){outcome="STOP: нет допустимого набора для обучения: "+
+       invalid.getClass().getSimpleName()+" · "+invalid.getMessage();}
+     final String result=outcome;
+     runOnUiThread(()->{trainingBusy=false;if(!destroyed){render();info(result);}});
+    });
+  }));
+  train.addView(button("Назначить проверенного student для одного NES-шага",()->{
+   try{
+    String outcome=HomebrewStudentStore.bindSandbox(this);
+    render();info(outcome);
+   }catch(Exception failure){info("STOP: student не прошёл offline gate: "+
+      failure.getClass().getSimpleName()+" · "+failure.getMessage());}
+  }));
+  row(train,"Физическая on-policy приёмка и автоматическое продвижение: НЕ ПОДТВЕРЖДЕНЫ.");
   card("Старые симуляторы","Архивное обучение не применяется к NES. Нет автоматического переноса весов.");
  }
  private void gpu(){
@@ -312,5 +347,5 @@ public final class HarnessDashboardActivity extends Activity {
  }
  private void openModelLab(){startActivity(new Intent(this,ModelLabActivity.class));}
  @Override protected void onResume(){super.onResume();render();}
- @Override protected void onDestroy(){destroyed=true;super.onDestroy();}
+ @Override protected void onDestroy(){destroyed=true;trainingWorker.shutdown();super.onDestroy();}
 }

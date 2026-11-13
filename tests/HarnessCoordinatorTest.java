@@ -50,6 +50,16 @@ public final class HarnessCoordinatorTest {
   check(c.complete(action,epoch,76,345,true,true),
     "unchanged pixels do not invalidate verified frame transport");
   check(!c.actionInFlight(),"verified transport releases action");
+  t=c.begin(epoch,76,345,6150);
+  check(c.consume(t.nonce,epoch,76,345,6151),"student consumes same nonce gate");
+  HarnessCoordinator.ActionPermit student=c.start(
+    HarnessCoordinator.Actor.STUDENT,epoch,"RIGHT",76,345,16,6152);
+  check(student!=null&&c.snapshot().owner().equals("STUDENT"),
+    "trained student has an explicit and exclusive real input owner");
+  check(c.start(HarnessCoordinator.Actor.GGUF,epoch,"A",76,345,16,6153)==null,
+    "GGUF cannot interleave while student executes");
+  check(c.complete(student,epoch,92,400,true,true),
+    "student still requires the same emulated frame/ACK proof");
   check(c.changeMode(epoch,HarnessCoordinator.Mode.STEP_MODE),
     "empty harness can enter frozen-time mode");
   check(c.changeMode(epoch,HarnessCoordinator.Mode.REALTIME_MODE),

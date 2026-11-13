@@ -34,6 +34,16 @@ public final class HarnessModelBinding {
     .putString(KEY_ID,e.id).putString(KEY_SHA,e.modelSha).commit();
   if(!ok)throw new IllegalStateException("Cannot commit NES model assignment");
  }
+ /** Bind only the already checksum-validated student for a user-approved trial. */
+ public static void assignStudent(Context context,String id,String sha){
+  if(id==null||!id.matches("student:[0-9a-f]{16}")||
+     sha==null||!sha.matches("[a-f0-9]{64}")||
+     !id.equals("student:"+sha.substring(0,16)))
+   throw new IllegalArgumentException("Student identity must match its real weights");
+  if(!context.getSharedPreferences(PREF,Context.MODE_PRIVATE).edit()
+       .putString(KEY_ID,id).putString(KEY_SHA,sha).commit())
+   throw new IllegalStateException("Cannot save student sandbox binding");
+ }
  public static void clear(Context context){
   if(!context.getSharedPreferences(PREF,Context.MODE_PRIVATE).edit()
       .remove(KEY_ID).remove(KEY_SHA).commit())
