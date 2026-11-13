@@ -40,7 +40,10 @@ class SingleNativeHarnessConsole(unittest.TestCase):
   self.assertIn("ConsoleExperienceMemory.summary(",self.dash)
   self.assertIn("ConsoleExperienceMemory.read(",self.dash)
   self.assertIn("Награда: НЕИЗВЕСТНА",self.dash)
-  self.assertIn("Достоверных игровых наград NES: 0",self.dash)
+  self.assertIn("Награды встроенной ROM по проверенной памяти 6502:",self.dash)
+  self.assertIn("ConsoleExperienceMemory.readGoals(",self.dash)
+  self.assertIn("Остальные ROM: награда UNKNOWN",self.dash)
+  self.assertNotIn("Универсальная награда NES",self.dash)
   self.assertNotIn("reward=1",self.dash)
   self.assertIn("STOP: журнал повреждён",self.dash)
  def test_gpu_is_real_backend_status_not_fake_benchmark(self):
