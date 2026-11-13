@@ -47,8 +47,15 @@ public final class HomebrewStudentStore {
   if(location(ctx).length()>MAX_BYTES||location(ctx).length()<100)
    throw new IllegalArgumentException("Student checkpoint size invalid");
   try(FileInputStream in=f.openRead()){
-   byte[] bytes=in.readAllBytes();
-   if(bytes.length>MAX_BYTES)throw new IllegalArgumentException("Oversized student");
+   byte[] bytes=new byte[(int)location(ctx).length()];
+   int offset=0,n;
+   while(offset<bytes.length&&
+       (n=in.read(bytes,offset,bytes.length-offset))!=-1){
+    if(n==0)throw new java.io.IOException("Student checkpoint stalled");
+    offset+=n;
+   }
+   if(offset!=bytes.length||in.read()!=-1)
+    throw new java.io.IOException("Student checkpoint changed during read");
    return new JSONObject(new String(bytes,StandardCharsets.UTF_8));
   }
  }
