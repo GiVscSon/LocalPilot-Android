@@ -1,6 +1,5 @@
 package org.localpilot.shared;
 
-import org.localpilot.gamelab.HomebrewRamReward;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -22,7 +21,10 @@ import java.util.Set;
 public final class StudentEvaluationGate {
  private StudentEvaluationGate() {}
  public static final int MIN_SCENARIOS=5, MIN_STEPS_PER_ARM=4;
- public static final String TASK=HomebrewRamReward.GOAL;
+ public static final String TASK="builtin-homebrew-right-progress-v1";
+ /** A concrete EnvironmentAdapter must verify game-specific evidence before
+  * returning a numeric reward. Shared Harness has no dependency on GameLab. */
+ @FunctionalInterface public interface RewardVerifier { Float fromVerifiedCoreRam(Step step); }
  public enum Arm { ACTIVE, CANDIDATE }
  public enum Provenance { RETRO_EMULATED, SYNTHETIC, MANUAL, UNKNOWN }
  public enum Reason {
@@ -70,8 +72,9 @@ public final class StudentEvaluationGate {
   */
  public static Report evaluate(StudentPolicyNet active,StudentPolicyNet candidate,
                                String pinnedRomSha256,Set<Integer> trainingX,
-                               List<Step> rows){
-  if(active==null||candidate==null||!sha(pinnedRomSha256)||trainingX==null||rows==null)
+                               List<Step> rows,RewardVerifier rewardVerifier){
+  if(active==null||candidate==null||!sha(pinnedRomSha256)||trainingX==null||
+     rows==null||rewardVerifier==null)
    throw new IllegalArgumentException("Missing pinned evaluation inputs");
   String activeSha=active.sha256(),candidateSha=candidate.sha256();
   if(active.actionCount!=HomebrewObs64.ACTIONS||
@@ -144,13 +147,11 @@ public final class StudentEvaluationGate {
      if(!row.inputAck()||!row.freshFrame()||!row.coreVerified())
       return reject(Reason.UNVERIFIED_CORE_STEP,scenarios.size(),0,0,0,
                     activeSha,candidateSha,scenarios);
-     var reward=HomebrewRamReward.evaluate(true,true,
-       HomebrewObs64.BUTTONS[row.actionId()],row.frameBefore(),row.frameAfter(),
-       row.xBefore(),row.xAfter());
-     if(!reward.verified())
+     Float verifiedReward=rewardVerifier.fromVerifiedCoreRam(row);
+     if(verifiedReward==null||!Float.isFinite(verifiedReward))
       return reject(Reason.INVALID_ROM_REWARD,scenarios.size(),0,0,0,
                     activeSha,candidateSha,scenarios);
-     results[j]+=reward.reward();
+     results[j]+=verifiedReward;
      previous=row;
     }
    }
