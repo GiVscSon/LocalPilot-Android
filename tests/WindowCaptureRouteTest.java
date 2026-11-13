@@ -33,6 +33,12 @@ public final class WindowCaptureRouteTest {
     ==WindowCaptureRoute.Source.DISPLAY,"larger window -> display");
   ok(route(36,0,0,0,320,240,320,240,10,10,100,100)
     ==WindowCaptureRoute.Source.WINDOW_FULLSCREEN,"window 0 can be a valid id");
+  for(int api:new int[]{30,34,36}){
+   rejects(()->route(api,3,0,0,0,0,320,240,10,10,100,100),
+     "unknown window bounds cannot silently select display capture");
+   rejects(()->route(api,3,100,100,90,120,320,240,10,10,100,100),
+     "inverted window bounds cannot select a capture source");
+  }
   rejects(()->route(35,3,0,0,320,240,320,240,-1,10,100,100),
     "negative ROI requires fail-closed");
   rejects(()->route(35,3,0,0,320,240,320,240,10,10,320,250),

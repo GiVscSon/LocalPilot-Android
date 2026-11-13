@@ -53,6 +53,7 @@ jobs:
       java tests/ProcessExitVerify.java
       java tests/AuditVerify.java
       java tests/CaptureCleanupVerify.java
+      java tests/DiagnosticFrameSizeVerify.java
       java tests/RuntimeVerify.java
       java tests/Upgrade726Verify.java
       java tests/Upgrade727Verify.java

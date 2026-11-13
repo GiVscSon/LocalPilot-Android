@@ -18,6 +18,8 @@ public final class WindowCaptureRoute {
   if(screenWidth<=0||screenHeight<=0||roiRight<=roiLeft||roiBottom<=roiTop
       ||roiLeft<0||roiTop<0||roiRight>screenWidth||roiBottom>screenHeight)
    throw new IllegalArgumentException("SCREEN_OR_ROI_GEOMETRY_INVALID");
+  if(windowRight<=windowLeft||windowBottom<=windowTop)
+   throw new IllegalArgumentException("WINDOW_GEOMETRY_UNKNOWN");
   if(sdk<34||windowId<0
       ||windowLeft!=0||windowTop!=0
       ||windowRight!=screenWidth||windowBottom!=screenHeight)
