@@ -15,6 +15,8 @@ on:
       - 'tests/ConsoleAgentContract*.java'
       - 'tests/ConsoleExperienceMemory*.java'
       - 'tests/HomebrewGoalReward*.java'
+      - 'tests/HomebrewStudentNetwork*.java'
+      - 'tests/test_harness_student_contract.py'
       - '.github/workflows/localpilot-all-in-one.yml'
   workflow_dispatch:
 permissions:
@@ -50,6 +52,8 @@ jobs:
           java tests/ConsoleAgentContractVerify.java
           java tests/ConsoleExperienceMemoryVerify.java
           java tests/HomebrewGoalRewardVerify.java
+          java tests/HomebrewStudentNetworkVerify.java
+          python3 -m unittest discover -s tests -p 'test_harness_student_contract.py' -v
           java tests/ModelLabPolicyVerify.java
           java tests/ModelLabComputePolicyVerify.java
           java tests/ModelLabCatalogVerify.java
