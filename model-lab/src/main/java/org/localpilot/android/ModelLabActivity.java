@@ -38,6 +38,16 @@ public final class ModelLabActivity extends Activity {
  // The standalone ModelLab still uses ModelLabApp's own app-scoped objects.
  private static EmbeddedGgufRuntime unifiedEngine;
  private static ModelLabStore unifiedStore;
+ /** One shared catalog instance; panel and ModelLab use the same registry. */
+ static synchronized ModelLabStore harnessStore(android.content.Context ctx){
+  if(!ctx.getPackageName().startsWith("org.localpilot.android"))
+   throw new IllegalStateException("Unified model catalog unavailable");
+  if(unifiedStore==null)unifiedStore=new ModelLabStore(ctx.getApplicationContext());
+  return unifiedStore;
+ }
+ static synchronized int harnessGpuLayers(){
+  return unifiedEngine==null?0:unifiedEngine.lastGpuLayers();
+ }
  private boolean inUnifiedApk(){return getPackageName().startsWith("org.localpilot.android");}
  private static final int OPEN_MODEL=820,OPEN_PROJECTOR=821,OPEN_IMAGE=822;
  private ModelLabStore store;
@@ -92,9 +102,9 @@ public final class ModelLabActivity extends Activity {
     store=app.store();engine=app.engine();
    }else if(inUnifiedApk()){
     synchronized(ModelLabActivity.class){
-     if(unifiedStore==null)unifiedStore=new ModelLabStore(getApplicationContext());
+     store=harnessStore(this);
      if(unifiedEngine==null)unifiedEngine=new EmbeddedGgufRuntime(getApplicationContext());
-     store=unifiedStore;engine=unifiedEngine;
+     engine=unifiedEngine;
     }
    }else throw new IllegalStateException("Unknown ModelLab Application host");
   }catch(Exception failure){
@@ -608,8 +618,10 @@ public final class ModelLabActivity extends Activity {
  }
  private void refresh(){
   if(closed||modelPicker==null)return;
+  ModelLabStore.Entry bound=inUnifiedApk()?
+    HarnessModelBinding.resolve(this,store.list()):null;
   String selectedId=preferredModelId!=null?preferredModelId:
-    selected()==null?getPreferences(MODE_PRIVATE)
+    bound!=null?bound.id:selected()==null?getPreferences(MODE_PRIVATE)
     .getString("selected","builtin:qwen35"):selected().id;
   preferredModelId=null;
   List<ModelLabStore.Entry> current=store.list();

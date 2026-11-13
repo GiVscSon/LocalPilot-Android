@@ -8,6 +8,7 @@ public final class ConsoleAgentContract {
  public static final String OBSERVE="org.localpilot.console.OBSERVE";
  public static final String MOVE="org.localpilot.console.MOVE";
  public static final String CANCEL="org.localpilot.console.CANCEL";
+ public static final String DASHBOARD_STOP="org.localpilot.console.DASHBOARD_STOP";
  public static final String TOKEN="org.localpilot.console.TOKEN";
  public static final String FRAME="org.localpilot.console.FRAME";
  public static final String HASH="org.localpilot.console.HASH";

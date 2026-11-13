@@ -35,7 +35,10 @@ class AllInOneContract(unittest.TestCase):
         self.assertIn('android:name=".MainActivity" android:exported="true"',self.manifest)
         self.assertIn("new Intent(this,ModelLabActivity.class)",self.hub)
     def test_models_are_imported_not_embedded(self):
-        self.assertIn("new ModelLabStore(getApplicationContext())",self.model)
+        self.assertIn("store=harnessStore(this)",self.model)
+        self.assertIn("static synchronized ModelLabStore harnessStore(",self.model)
+        binding=source("model-lab/src/main/java/org/localpilot/android/HarnessModelBinding.java")
+        self.assertIn("SharedPreferences",binding)
         self.assertIn("store.importFile",self.model)
         self.assertIn("store.download",self.model)
         self.assertIn("model-lab/src/main/java",self.gradle)
