@@ -43,6 +43,7 @@ class HarnessConsoleContract(unittest.TestCase):
   self.assertIn('"VISUAL".equals(stage)&&"PIXELS_DIFFER".equals(status)',trainer)
   self.assertIn('"EXAMPLE".equals(stage)&&"VISUAL_ONLY".equals(status)',trainer)
   self.assertIn('action.equals(detail.substring(at+8))',trainer)
+  self.assertIn('detail.equals(proposedByModel.get(key))',trainer)
   self.assertIn('id.startsWith("fast-policy:")',trainer)
   self.assertIn('groups.size()>=4',trainer)
   self.assertIn('root.put("imitationEvidence",evidence)',activity)
