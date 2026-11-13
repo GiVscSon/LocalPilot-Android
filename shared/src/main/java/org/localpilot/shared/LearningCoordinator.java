@@ -33,6 +33,10 @@ public final class LearningCoordinator {
    throw new IllegalArgumentException("UNTRUSTED_REWARD_FOR_NES_STUDENT");
   Path directory=appPrivateVault.resolve("models/candidates");
   Path candidate=directory.resolve("student-homebrew-v1.weights.bin");
+  Path manifest=directory.resolve("student-homebrew-v1.manifest.json");
+  // Do not overwrite an unexamined previous candidate or crash-partial file.
+  if(Files.exists(candidate)||Files.exists(manifest))
+   throw new IOException("PPO_PENDING_CANDIDATE_MUST_BE_EVALUATED");
   PpoGaeTrainer.Report trained=PpoGaeTrainer.updateCandidate(
     active,verifiedSteps,candidate,PpoGaeTrainer.DEFAULT);
   if(Thread.currentThread().isInterrupted())throw new IOException("STOP_AFTER_TRAINING");
@@ -52,7 +56,6 @@ public final class LearningCoordinator {
     "  \"evaluation\":\"NOT_RUN\",\n"+
     "  \"promotion\":\"BLOCKED_UNTIL_INDEPENDENT_EVALUATION\"\n"+
     "}\n";
-  Path manifest=directory.resolve("student-homebrew-v1.manifest.json");
   byte[] bytes=manifestText.getBytes(StandardCharsets.UTF_8);
   Path tmp=Files.createTempFile(directory,"student-manifest-",".pending");
   try{
