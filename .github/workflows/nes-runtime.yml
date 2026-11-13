@@ -36,6 +36,10 @@ on:
       - 'shared/src/main/java/org/localpilot/shared/PpoGaeTrainer.java'
       - 'tests/PpoGaeTrainerTest.java'
       - 'shared/src/main/java/org/localpilot/shared/LearningCoordinator.java'
+      - 'shared/src/main/java/org/localpilot/shared/StudentEvaluationGate.java'
+      - 'tests/StudentEvaluationGateTest.java'
+      - 'tests/nes_student_holdout_smoke.cjs'
+      - 'tests/StudentHoldoutRealNesVerify.java'
       - 'tests/StudentPolicyCli.java'
       - 'tests/nes_student_onpolicy_smoke.cjs'
       - 'tests/StudentPpoRealNesVerify.java'
@@ -146,6 +150,22 @@ jobs:
             shared/src/main/java/org/localpilot/shared/PpoGaeTrainer.java \
             tests/PpoGaeTrainerTest.java
           java -cp build/ppo-gae org.localpilot.shared.PpoGaeTrainerTest
+      - name: Verify independent evaluation math and reject untrusted holdout claims
+        run: |
+          set -euo pipefail
+          mkdir -p build/student-eval
+          javac --release 17 -d build/student-eval \
+            shared/src/main/java/org/localpilot/shared/ConsoleAgentContract.java \
+            shared/src/main/java/org/localpilot/shared/HarnessCoordinator.java \
+            shared/src/main/java/org/localpilot/shared/NesTrial.java \
+            shared/src/main/java/org/localpilot/shared/ConsoleExperienceMemory.java \
+            shared/src/main/java/org/localpilot/shared/VerifiedReplayFilter.java \
+            shared/src/main/java/org/localpilot/shared/StudentPolicyNet.java \
+            shared/src/main/java/org/localpilot/shared/HomebrewObs64.java \
+            game-lab/src/main/java/org/localpilot/gamelab/HomebrewRamReward.java \
+            shared/src/main/java/org/localpilot/shared/StudentEvaluationGate.java \
+            tests/StudentEvaluationGateTest.java
+          java -cp build/student-eval org.localpilot.shared.StudentEvaluationGateTest
       - name: Real JSNES 6502 -> real StudentPolicy -> ROM RAM reward -> PPO candidate
         run: |
           set -euo pipefail
@@ -172,6 +192,59 @@ jobs:
           java -cp build/real-student org.localpilot.shared.StudentPpoRealNesVerify \
             build/nes-runtime/demo.nes build/real-student/active.weights.bin \
             build/real-student/real-steps.tsv build/real-student/vault
+      - name: Real independent JSNES holdout comparing old and PPO candidate with NO auto-activation
+        run: |
+          set -euo pipefail
+          mkdir -p build/real-student
+          javac --release 17 -cp build/real-student -d build/real-student \
+            game-lab/src/main/java/org/localpilot/gamelab/HomebrewRamReward.java \
+            game-lab/src/main/java/org/localpilot/gamelab/HomebrewNes.java \
+            shared/src/main/java/org/localpilot/shared/StudentEvaluationGate.java \
+            tests/StudentHoldoutRealNesVerify.java
+          node tests/nes_student_holdout_smoke.cjs \
+            build/test-core/package/dist/jsnes.min.js \
+            build/nes-runtime/demo.nes \
+            build/real-student \
+            build/real-student/active.weights.bin \
+            build/real-student/vault/models/candidates/student-homebrew-v1.weights.bin \
+            build/real-student/real-steps.tsv \
+            build/real-student/real-holdout.tsv
+          java -cp build/real-student org.localpilot.shared.StudentHoldoutRealNesVerify \
+            build/nes-runtime/demo.nes \
+            build/real-student/active.weights.bin \
+            build/real-student/vault/models/candidates/student-homebrew-v1.weights.bin \
+            build/real-student/real-steps.tsv \
+            build/real-student/real-holdout.tsv \
+            build/real-student/actual-ppo-holdout.json EXPECT_EVALUATION
+          # Positive control is a FIXED TEST-ONLY policy pair, never trained
+          # weights or an Android deployment. Both still run true JSNES.
+          java -cp build/real-student org.localpilot.shared.StudentPolicyCli \
+            force-for-test build/real-student/test-left.weights.bin 0
+          java -cp build/real-student org.localpilot.shared.StudentPolicyCli \
+            force-for-test build/real-student/test-right.weights.bin 1
+          node tests/nes_student_holdout_smoke.cjs \
+            build/test-core/package/dist/jsnes.min.js \
+            build/nes-runtime/demo.nes build/real-student \
+            build/real-student/test-left.weights.bin \
+            build/real-student/test-right.weights.bin \
+            build/real-student/real-steps.tsv \
+            build/real-student/test-positive-holdout.tsv
+          java -cp build/real-student org.localpilot.shared.StudentHoldoutRealNesVerify \
+            build/nes-runtime/demo.nes \
+            build/real-student/test-left.weights.bin \
+            build/real-student/test-right.weights.bin \
+            build/real-student/real-steps.tsv \
+            build/real-student/test-positive-holdout.tsv \
+            build/real-student/test-positive-evaluation.json EXPECT_PASS
+      - name: Publish independent NES evidence and candidate decision WITHOUT weights
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: NES-Student-Independent-Holdout-${{ github.sha }}
+          retention-days: 14
+          path: |
+            build/real-student/actual-ppo-holdout.json
+            build/real-student/test-positive-evaluation.json
       - name: Verify full iNES/NES2 ROM preflight and unsafe mapper rejection
         run: |
           set -euo pipefail
