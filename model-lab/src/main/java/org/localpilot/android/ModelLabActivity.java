@@ -166,6 +166,9 @@ public final class ModelLabActivity extends Activity {
    if(selection==null||engine.busy()){
     nesStatus.setText("Выбери загруженную GGUF-модель; движок должен быть свободен");return;
    }
+   if(!currentNesModel(selection)){
+    nesStatus.setText("STOP: выбранная модель не совпадает с назначением Harness. Выбери назначенную модель или измени назначение.");return;
+   }
    final int observedFrame=consoleAgentFrame,observedHash=consoleAgentHash;
    final byte[] pixels=rgb==null?null:rgb.clone();
    final int w=width,h=height;
@@ -197,6 +200,10 @@ public final class ModelLabActivity extends Activity {
      try{
       EmbeddedGgufRuntime.Result callback=(answer,elapsed)->{
        if(closed||!revisions.currentNes(revision)||!nonce.equals(consoleAgentTicket))return;
+       if(!currentNesModel(selection)){
+        nesStatus.setText("STOP: модель или назначение изменились во время генерации");
+        cancelConsoleAgent();return;
+       }
        String button=ConsoleAgentContract.parseButton(answer);
        if(button==null){
         nesStatus.setText("STOP: модель не выдала ровно BUTTON=... ("+elapsed+" мс)");
@@ -583,6 +590,13 @@ public final class ModelLabActivity extends Activity {
  @Override protected void onNewIntent(Intent next){
   super.onNewIntent(next);
   setIntent(next);
+  // ModelLab can already be alive when the user changes the assignment in
+  // Harness. A new observation must see the current assignment, not the
+  // spinner selection left by the previous activity session.
+  if(next!=null&&ConsoleAgentContract.OBSERVE.equals(next.getAction())){
+   preferredModelId=null;
+   refresh();
+  }
   receiveNesIntent(next);
  }
  private static String filenameFromUrl(String link){
@@ -601,6 +615,25 @@ public final class ModelLabActivity extends Activity {
   if(modelPicker==null)return null;
   int pos=modelPicker.getSelectedItemPosition();
   return pos>=0&&pos<displayed.size()?displayed.get(pos):null;
+ }
+ private boolean currentNesModel(ModelLabStore.Entry requested){
+  if(requested==null||!inUnifiedApk())return false;
+  try{
+   ModelLabStore.Entry current=selected();
+   HarnessModelBinding.Assignment binding=HarnessModelBinding.read(this);
+   java.util.List<ModelLabStore.Entry> catalog=store.list();
+   boolean available=false;
+   for(ModelLabStore.Entry e:catalog)
+    if(requested.id.equals(e.id)&&requested.modelSha.equals(e.modelSha)){
+     available=true;break;
+    }
+   ModelLabStore.Entry resolved=binding==null?null:
+     HarnessModelBinding.resolve(this,catalog);
+   return org.localpilot.shared.NesModelSelection.permits(
+     current==null?null:current.id,current==null?null:current.modelSha,
+     requested.id,requested.modelSha,binding==null?null:binding.id(),
+     binding==null?null:binding.sha(),available,resolved!=null);
+  }catch(RuntimeException invalid){return false;}
  }
  private boolean validBenchmarkText(String answer){
   return answer!=null&&!answer.isBlank()&&

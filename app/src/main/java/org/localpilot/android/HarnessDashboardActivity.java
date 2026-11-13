@@ -243,6 +243,7 @@ public final class HarnessDashboardActivity extends Activity {
  private void learning(){
   LinearLayout train=card("Обучение · проверка источника награды",
    "Память предыдущих ходов используется как контекст; это НЕ обучение весов GGUF.");
+  train.addView(button("Открыть NES для StudentPolicy",this::openNES));
   try{
    List<ConsoleExperienceMemory.Episode> all=
      ConsoleExperienceMemory.read(getFilesDir().toPath());
@@ -273,7 +274,7 @@ public final class HarnessDashboardActivity extends Activity {
     StudentPolicyNet policy=StudentPolicyNet.load(student);
     row(train,"StudentPolicy CPU: НАСТОЯЩИЙ forward · 64→64→64→"+
       policy.actionCount+" · SHA "+policy.sha256().substring(0,16));
-    row(train,"Веса StudentPolicy есть, но PPO-обновление / holdout: НЕ ПОДТВЕРЖДЕНЫ");
+    row(train,"Активная StudentPolicy загружена · независимая оценка не подтверждена");
    }else row(train,"StudentPolicy CPU: создаётся по первому реальному NES-ходу");
   }catch(IOException broken) {
    row(train,"STOP: StudentPolicy weights.bin повреждены; не используем модель.");
