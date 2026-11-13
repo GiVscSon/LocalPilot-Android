@@ -193,7 +193,8 @@ public final class ConsoleExperienceMemory {
   if(g==null||g.epoch()==null||!g.epoch().matches("[1-9][0-9]{0,18}")||
     !sha(g.romSha())||!id(g.modelId())||!sha(g.modelSha())||
     !ConsoleAgentContract.playable(g.button())||
-    g.frameBefore()<15||g.frameAfter()-g.frameBefore()!=16||
+    g.frameBefore()<15||g.frameAfter()<=g.frameBefore()||
+    (long)g.frameAfter()-(long)g.frameBefore()!=16L||
     g.xBefore()<0||g.xBefore()>255||g.xAfter()<0||g.xAfter()>255||
     !Float.isFinite(g.reward()))
    throw new IllegalArgumentException("Invalid homebrew goal evidence");
