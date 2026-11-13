@@ -33,6 +33,8 @@ on:
       - 'tests/StudentPolicyNetTest.java'
       - 'shared/src/main/java/org/localpilot/shared/StudentPolicyNet.java'
       - 'shared/src/main/java/org/localpilot/shared/HomebrewObs64.java'
+      - 'shared/src/main/java/org/localpilot/shared/PpoGaeTrainer.java'
+      - 'tests/PpoGaeTrainerTest.java'
   pull_request:
     paths:
       - 'game-lab/**'
@@ -125,6 +127,21 @@ jobs:
             shared/src/main/java/org/localpilot/shared/HomebrewObs64.java \
             tests/StudentPolicyNetTest.java
           java -cp build/student-policy org.localpilot.shared.StudentPolicyNetTest
+      - name: Verify real PPO plus duration-aware GAE gradients and candidate checkpoint
+        run: |
+          set -euo pipefail
+          mkdir -p build/ppo-gae
+          javac --release 17 -d build/ppo-gae \
+            shared/src/main/java/org/localpilot/shared/ConsoleAgentContract.java \
+            shared/src/main/java/org/localpilot/shared/HarnessCoordinator.java \
+            shared/src/main/java/org/localpilot/shared/NesTrial.java \
+            shared/src/main/java/org/localpilot/shared/ConsoleExperienceMemory.java \
+            shared/src/main/java/org/localpilot/shared/VerifiedReplayFilter.java \
+            shared/src/main/java/org/localpilot/shared/StudentPolicyNet.java \
+            shared/src/main/java/org/localpilot/shared/HomebrewObs64.java \
+            shared/src/main/java/org/localpilot/shared/PpoGaeTrainer.java \
+            tests/PpoGaeTrainerTest.java
+          java -cp build/ppo-gae org.localpilot.shared.PpoGaeTrainerTest
       - name: Verify full iNES/NES2 ROM preflight and unsafe mapper rejection
         run: |
           set -euo pipefail
