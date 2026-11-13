@@ -198,6 +198,7 @@ jobs:
           mkdir -p build/real-student
           javac --release 17 -cp build/real-student -d build/real-student \
             game-lab/src/main/java/org/localpilot/gamelab/HomebrewRamReward.java \
+            game-lab/src/main/java/org/localpilot/gamelab/HomebrewNes.java \
             shared/src/main/java/org/localpilot/shared/StudentEvaluationGate.java \
             tests/StudentHoldoutRealNesVerify.java
           node tests/nes_student_holdout_smoke.cjs \
