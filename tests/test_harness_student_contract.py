@@ -7,8 +7,8 @@ class StudentIntegrationContract(unittest.TestCase):
  def test_student_training_is_not_fake_gguf_reward(self):
   store=src("model-lab/src/main/java/org/localpilot/android/HomebrewStudentStore.java")
   math=src("shared/src/main/java/org/localpilot/shared/HomebrewStudentNetwork.java")
-  for part in ("HomebrewStudentNetwork.train(rows)","ConsoleExperienceMemory.readGoals(",
-               "AtomicFile","sha256(weights)","NOT_VERIFIED","heldoutTdMae"):
+  for part in ("HomebrewStudentNetwork.trainImitation(rows)","ConsoleExperienceMemory.readGoals(",
+               "AtomicFile","sha256(weights)","NOT_VERIFIED","validationLoss"):
    self.assertIn(part,store)
   self.assertIn("Math.tanh",math)
   self.assertIn("Collections.shuffle(order",math)

@@ -48,6 +48,8 @@ on:
       - 'tools/verify_public_nes.py'
       - 'tools/device_triad_acceptance.py'
       - 'tests/test_device_triad_acceptance.py'
+      - 'tools/verify_harness_task_reports.py'
+      - 'tests/test_harness_task_reports.py'
       - 'settings.gradle'
       - '.github/workflows/whole-system-acceptance.yml'
 permissions:
@@ -141,6 +143,23 @@ jobs:
             build/integration/core/package/dist/jsnes.min.js \
             build/integration/rom/homebrew.nes \
             build/integration/student build/integration/student/diverse-evidence diverse-v1
+          # Same production classifier and typed duration/lease path. Keep old
+          # negative controls, then require all known task cases and a frozen exam.
+          node tests/nes_student_real_onpolicy.cjs \
+            build/integration/core/package/dist/jsnes.min.js \
+            build/integration/rom/homebrew.nes \
+            build/integration/student build/integration/student/dagger-evidence dagger-v2 --require-task-pass
+          node tests/nes_student_real_onpolicy.cjs \
+            build/integration/core/package/dist/jsnes.min.js \
+            build/integration/rom/homebrew.nes \
+            build/integration/student build/integration/student/frozen-exam exam-v2 \
+            build/integration/student/dagger-evidence --require-task-pass
+          python3 -m unittest discover -s tests -p test_harness_task_reports.py -v
+          python3 tools/verify_harness_task_reports.py \
+            build/integration/student/dagger-evidence/onpolicy-evaluation.json \
+            build/integration/student/frozen-exam/onpolicy-evaluation.json \
+            --expected-source-sha "$GITHUB_SHA" \
+            --report build/integration/student/task-gate.json
           python3 -m unittest discover -s tests -p 'test_harness_student_contract.py' -v
           java tests/HarnessCoordinatorVerify.java
           python3 -m unittest discover -s tests -p 'test_harness_single_panel.py' -v
@@ -215,4 +234,76 @@ jobs:
             build/integration/rom/evidence.txt
             build/integration/student/evidence/onpolicy-evaluation.json
             build/integration/student/diverse-evidence/onpolicy-evaluation.json
+            build/integration/student/dagger-evidence/onpolicy-evaluation.json
+            build/integration/student/frozen-exam/onpolicy-evaluation.json
+            build/integration/student/task-gate.json
             build/reports/unified-script-engine/selfplay/model-gate.md
+
+  student-seed-matrix:
+    name: Student independent data seed ${{ matrix.seed }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        seed: [571, 9091, 12097, 65537]
+    env:
+      LOCALPILOT_COLLECTION_SEED: ${{ matrix.seed }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Fetch the same immutable CPU core used by integrated acceptance
+        run: |
+          set -euo pipefail
+          npm pack jsnes@2.1.0 --ignore-scripts --silent
+          python3 - <<'PY'
+          import hashlib,base64
+          from pathlib import Path
+          raw=Path('jsnes-2.1.0.tgz').read_bytes()
+          expected='LUa++E5Dfs1A6ZYB5HiSOR4JrUzrZEXGLZ5Imczhu9lkg7f+94SqnLZ/MXwGa7oc02+j/xYyHR0azGQ6LCU68g=='
+          assert base64.b64encode(hashlib.sha512(raw).digest()).decode()==expected
+          PY
+          mkdir -p build/student-core build/student-seed
+          tar -xzf jsnes-2.1.0.tgz -C build/student-core package/dist/jsnes.min.js
+      - name: Compile the production policy and original cartridge
+        run: |
+          set -euo pipefail
+          javac --release 17 -d build/student-seed \
+            shared/src/main/java/org/localpilot/shared/ConsoleAgentContract.java \
+            shared/src/main/java/org/localpilot/shared/NesTrial.java \
+            shared/src/main/java/org/localpilot/shared/HomebrewGoalReward.java \
+            shared/src/main/java/org/localpilot/shared/ConsoleExperienceMemory.java \
+            shared/src/main/java/org/localpilot/shared/HomebrewStudentNetwork.java \
+            game-lab/src/main/java/org/localpilot/gamelab/HomebrewNes.java \
+            tests/ExportHomebrewNes.java tests/RealNesStudentAcceptance.java
+          java -cp build/student-seed ExportHomebrewNes build/student-seed/demo.nes
+      - name: Train on this data seed, freeze weights, require untouched task exam
+        run: |
+          set -euo pipefail
+          node tests/nes_student_real_onpolicy.cjs \
+            build/student-core/package/dist/jsnes.min.js build/student-seed/demo.nes \
+            build/student-seed build/student-seed/learning dagger-v2 --require-task-pass
+          node tests/nes_student_real_onpolicy.cjs \
+            build/student-core/package/dist/jsnes.min.js build/student-seed/demo.nes \
+            build/student-seed build/student-seed/exam exam-v2 \
+            build/student-seed/learning --require-task-pass
+          python3 tools/verify_harness_task_reports.py \
+            build/student-seed/learning/onpolicy-evaluation.json \
+            build/student-seed/exam/onpolicy-evaluation.json \
+            --expected-source-sha "$GITHUB_SHA" --report build/student-seed/task-gate.json
+      - name: Preserve task metadata, never ROM or private checkpoints
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Harness-Student-Seed-${{ matrix.seed }}-${{ github.sha }}
+          if-no-files-found: error
+          path: |
+            build/student-seed/learning/onpolicy-evaluation.json
+            build/student-seed/exam/onpolicy-evaluation.json
+            build/student-seed/task-gate.json

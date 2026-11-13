@@ -30,14 +30,15 @@ public final class HarnessCoordinator {
  public static final class ActionPermit {
   public final Actor actor;
   public final Mode mode;
-  public final String epoch,button;
+  public final String epoch,button,nonce;
   public final int beforeFrame,beforeHash,holdFrames;
-  public final long stopRevision;
+  public final long stopRevision,issuedAt;
   private ActionPermit(Actor actor,Mode mode,String epoch,String button,
-    int beforeFrame,int beforeHash,int holdFrames,long stopRevision){
+    int beforeFrame,int beforeHash,int holdFrames,long stopRevision,String nonce,long issuedAt){
    this.actor=actor;this.mode=mode;this.epoch=epoch;this.button=button;
    this.beforeFrame=beforeFrame;this.beforeHash=beforeHash;
    this.holdFrames=holdFrames;this.stopRevision=stopRevision;
+   this.nonce=nonce;this.issuedAt=issuedAt;
   }
  }
  private static final HarnessCoordinator PROCESS_NES=new HarnessCoordinator();
@@ -49,16 +50,17 @@ public final class HarnessCoordinator {
  private Ticket waiting,prepared;
  private ActionPermit active;
  private long stopRevision;
+ private boolean stopPending;
  private String stopReason="NOT_STARTED";
 
  public synchronized void reset(String newEpoch,Mode newMode){
   stop("ROM_RESET");
   if(newEpoch==null||!newEpoch.matches("[1-9][0-9]{0,18}")||newMode==null)
    throw new IllegalArgumentException("Invalid emulator reset");
-  epoch=newEpoch;mode=newMode;
+  epoch=newEpoch;mode=newMode;stopPending=false;
  }
  public synchronized Ticket begin(String expectedEpoch,int frame,int hash,long now){
-  if(!matches(expectedEpoch)||waiting!=null||prepared!=null||active!=null||
+  if(stopPending||!matches(expectedEpoch)||waiting!=null||prepared!=null||active!=null||
      frame<15||hash==0||now<0)
    throw new IllegalStateException("Another NES input owner or unready observation");
   byte[] bytes=new byte[16];random.nextBytes(bytes);
@@ -67,16 +69,16 @@ public final class HarnessCoordinator {
   return waiting;
  }
  public synchronized boolean changeMode(String expectedEpoch,Mode next){
-  if(!matches(expectedEpoch)||next==null||waiting!=null||
+  if(stopPending||!matches(expectedEpoch)||next==null||waiting!=null||
      prepared!=null||active!=null)return false;
   mode=next;return true;
  }
  public synchronized Snapshot snapshot(){
   return new Snapshot(epoch,mode.name(),
     active==null?"NONE":active.actor.name(),
-    waiting!=null||prepared!=null,active!=null,stopRevision,stopReason);
+    stopPending||waiting!=null||prepared!=null,active!=null,stopRevision,stopReason);
  }
- public synchronized boolean hasPending(){return waiting!=null||prepared!=null;}
+ public synchronized boolean hasPending(){return stopPending||waiting!=null||prepared!=null;}
  public synchronized boolean actionInFlight(){return active!=null;}
  public synchronized long stopRevision(){return stopRevision;}
  public synchronized String lastStopReason(){return stopReason;}
@@ -88,6 +90,8 @@ public final class HarnessCoordinator {
  public synchronized boolean consume(String nonce,String expectedEpoch,
                                      int currentFrame,int currentHash,long now){
   Ticket old=waiting;
+  if(old==null||!old.nonce.equals(nonce)||!matches(expectedEpoch)||!old.epoch.equals(expectedEpoch))
+   return false; // A stale reply never consumes somebody else's observation.
   waiting=null;
   if(old==null||!ConsoleAgentContract.tokenValid(nonce)||
       !old.nonce.equals(nonce)||!matches(expectedEpoch)||
@@ -108,43 +112,75 @@ public final class HarnessCoordinator {
   */
  public synchronized ActionPermit start(Actor actor,String expectedEpoch,
       String button,int frame,int hash,int holdFrames,long now){
-  if(actor==null||!matches(expectedEpoch)||active!=null||waiting!=null||
-      !ConsoleAgentContract.playable(button)||frame<15||hash==0||now<0)
+  if(stopPending||actor==null||!matches(expectedEpoch)||active!=null||waiting!=null||
+      !(actor==Actor.MANUAL?ConsoleAgentContract.manualPlayable(button):ConsoleAgentContract.playable(button))||frame<15||hash==0||now<0)
    return null;
   if(actor==Actor.GGUF||actor==Actor.STUDENT){
    Ticket t=prepared;
+   if(t!=null&&(now<t.issuedAt||now-t.issuedAt>ConsoleAgentContract.TTL_MS)){
+    prepared=null;return null;
+   }
    if(t==null||!t.epoch.equals(expectedEpoch)||t.frame!=frame||
       t.hash!=hash||t.stopRevision!=stopRevision||
       now<t.issuedAt||now-t.issuedAt>ConsoleAgentContract.TTL_MS||
-      holdFrames!=ConsoleAgentContract.HOLD_FRAMES)return null;
+      (actor==Actor.STUDENT?
+       mode!=Mode.STEP_MODE||!ConsoleAgentContract.studentFramesValid(holdFrames):
+       holdFrames!=ConsoleAgentContract.HOLD_FRAMES))return null;
    prepared=null;
   }else{
    if(prepared!=null)return null;
    if(actor==Actor.MANUAL ? holdFrames!=0 : holdFrames<4||holdFrames>60)
     return null;
   }
-  active=new ActionPermit(actor,mode,epoch,button,frame,hash,holdFrames,stopRevision);
+  byte[] nonce=new byte[16];random.nextBytes(nonce);
+  active=new ActionPermit(actor,mode,epoch,button,frame,hash,holdFrames,stopRevision,
+    Base64.getUrlEncoder().withoutPadding().encodeToString(nonce),now);
   return active;
  }
  /**
   * Returns transport/observation validity ONLY. No score, win, training label
   * or positive reward can be inferred from this outcome or changed pixels.
   */
+ /** Synchronous WebView lease fence. A core frame already authorized may finish. */
+ public synchronized boolean authorizesStep(String session,String nonce,int requestedFrames,long now){
+  return !stopPending&&active!=null&&active.mode==Mode.STEP_MODE&&
+    (active.actor==Actor.GGUF||active.actor==Actor.STUDENT)&&matches(session)&&
+    active.epoch.equals(session)&&active.nonce.equals(nonce)&&active.holdFrames==requestedFrames&&
+    active.stopRevision==stopRevision&&now>=active.issuedAt&&
+    now-active.issuedAt<=ConsoleAgentContract.TTL_MS;
+ }
+ public synchronized long requestStop(String session,String reason){
+  if(!matches(session))return -1;
+  stop(reason);stopPending=true;return stopRevision;
+ }
+ public synchronized boolean confirmStop(String session,long revision){
+  if(!stopPending||!matches(session)||revision!=stopRevision)return false;
+  stopPending=false;return true;
+ }
+ public synchronized boolean stopAwaitingConfirmation(){return stopPending;}
  public synchronized boolean complete(ActionPermit permit,String expectedEpoch,
-      int afterFrame,int afterHash,boolean downAck,boolean upAck){
-  if(permit==null||permit!=active||!matches(expectedEpoch)||
-      permit.stopRevision!=stopRevision||!downAck||!upAck||
-      afterFrame-permit.beforeFrame<15||afterHash==0){
-   stop("UNVERIFIED_TRANSITION");
-   return false;
+      int afterFrame,int afterHash,boolean downAck,boolean upAck,long now){
+  // A callback from a previous owner can never revoke a newer owner's lease.
+  if(permit==null||permit!=active||!matches(expectedEpoch))return false;
+  long delta=(long)afterFrame-permit.beforeFrame;
+  boolean exact=permit.mode==Mode.STEP_MODE&&
+    (permit.actor==Actor.GGUF||permit.actor==Actor.STUDENT);
+  if(stopPending||permit.stopRevision!=stopRevision||!downAck||!upAck||
+      now<permit.issuedAt||now-permit.issuedAt>ConsoleAgentContract.TTL_MS||
+      afterFrame<0||delta<(permit.holdFrames>0?permit.holdFrames:15)||
+      exact&&delta!=permit.holdFrames||delta>600||afterHash==0){
+   stop("UNVERIFIED_TRANSITION");return false;
   }
-  active=null;
-  return true;
+  active=null;return true;
+ }
+ public synchronized boolean stopForEpoch(String session,String reason){
+  if(!matches(session))return false;
+  stop(reason);return true;
  }
  public synchronized void stop(){stop("STOP");}
  public synchronized void stop(String reason){
   waiting=null;prepared=null;active=null;
-  ++stopRevision;
+  if(!stopPending)++stopRevision;
   stopReason=reason==null||reason.isBlank()?"STOP":reason;
  }
  private boolean matches(String expectedEpoch){

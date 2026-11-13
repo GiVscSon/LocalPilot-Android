@@ -11,14 +11,17 @@ import java.util.Set;
  * A pixel fingerprint changing does not prove score, causality, or game success.
  */
 public final class NesTrial {
- public static final String SCHEMA="MODELLAB-NES-TRIAL-v1";
+ public static final String SCHEMA="MODELLAB-NES-TRIAL-v2";
+ private static final String LEGACY_SCHEMA="MODELLAB-NES-TRIAL-v1";
  public static final String ACTION="org.localpilot.modellab.NES_TRIAL";
  public static final String EXTRA="org.localpilot.shared.NES_TRIAL";
  private static final Set<String> BUTTONS=Set.of("UP","DOWN","LEFT","RIGHT","A","B","START","SELECT");
  public final String scenario,button,status;
+ private final String wireSchema;
  public final int frameBefore,frameAfter,hashBefore,hashAfter;
 
- private NesTrial(String scenario,String button,int start,int finish,int before,int after){
+ private NesTrial(String scenario,String button,int start,int finish,int before,int after,String wireSchema){
+  this.wireSchema=wireSchema;
   this.scenario=scenario;this.button=button;
   this.frameBefore=start;this.frameAfter=finish;
   this.hashBefore=before;this.hashAfter=after;
@@ -27,13 +30,14 @@ public final class NesTrial {
  public static NesTrial create(String scenario,String button,int start,int finish,
                                int before,int after){
   if(!("HOMEBREW".equals(scenario)||"USER_ROM".equals(scenario))||
-     !BUTTONS.contains(button)||start<15||finish<start+15||
-     finish>start+600||before==0||after==0)
+     !BUTTONS.contains(button)||start<15||
+     !((long)finish-start>=15&&(long)finish-start<=600||
+       "HOMEBREW".equals(scenario)&&((long)finish-start==4||(long)finish-start==8))||before==0||after==0)
    throw new IllegalArgumentException("Incomplete or impossible NES frame observation");
-  return new NesTrial(scenario,button,start,finish,before,after);
+  return new NesTrial(scenario,button,start,finish,before,after,SCHEMA);
  }
  private String body(){
-  return SCHEMA+"|JSNES_2_1_0|"+scenario+"|"+button+"|"+frameBefore+"|"+
+  return wireSchema+"|JSNES_2_1_0|"+scenario+"|"+button+"|"+frameBefore+"|"+
     frameAfter+"|"+Integer.toUnsignedString(hashBefore)+"|"+
     Integer.toUnsignedString(hashAfter)+"|"+status;
  }
@@ -52,7 +56,7 @@ public final class NesTrial {
      text.indexOf('\n')!=-1||text.indexOf('\r')!=-1)
    throw new IllegalArgumentException("Invalid NES evidence length");
   String[] parts=text.split("\\|",-1);
-  if(parts.length!=10||!SCHEMA.equals(parts[0])||!"JSNES_2_1_0".equals(parts[1])||
+  if(parts.length!=10||!(SCHEMA.equals(parts[0])||LEGACY_SCHEMA.equals(parts[0]))||!"JSNES_2_1_0".equals(parts[1])||
      !parts[9].matches("[0-9a-f]{64}"))
    throw new IllegalArgumentException("Unknown NES trial schema");
   int cutoff=text.lastIndexOf('|');
@@ -64,10 +68,15 @@ public final class NesTrial {
    long hb=Long.parseUnsignedLong(parts[6]),ha=Long.parseUnsignedLong(parts[7]);
    if(hb>0xffffffffL||ha>0xffffffffL)
     throw new IllegalArgumentException("NES fingerprint out of range");
+   if(LEGACY_SCHEMA.equals(parts[0])&&
+       (long)Integer.parseInt(parts[5])-Integer.parseInt(parts[4])<15)
+    throw new IllegalArgumentException("Legacy evidence cannot declare short steps");
    NesTrial result=create(parts[2],parts[3],Integer.parseInt(parts[4]),
      Integer.parseInt(parts[5]),(int)hb,(int)ha);
    if(!result.status.equals(parts[8]))
     throw new IllegalArgumentException("Forged NES transition state");
+   if(LEGACY_SCHEMA.equals(parts[0]))return new NesTrial(result.scenario,result.button,
+      result.frameBefore,result.frameAfter,result.hashBefore,result.hashAfter,LEGACY_SCHEMA);
    return result;
   }catch(NumberFormatException e){
    throw new IllegalArgumentException("Invalid NES frame counter or hash",e);

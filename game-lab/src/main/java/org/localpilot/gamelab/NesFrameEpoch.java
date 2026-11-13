@@ -7,11 +7,12 @@ package org.localpilot.gamelab;
  * Call on the UI thread, like the lifecycle/bridge controller.
  */
 public final class NesFrameEpoch {
- private long serial;
+ private static final java.util.concurrent.atomic.AtomicLong SERIAL=new java.util.concurrent.atomic.AtomicLong();
  private String active;
  private int last;
  public String begin(){
-  serial=serial==Long.MAX_VALUE?1:serial+1;
+  long serial=SERIAL.incrementAndGet();
+  if(serial<=0)throw new IllegalStateException("NES epoch exhausted");
   active=Long.toString(serial);
   last=0;
   return active;

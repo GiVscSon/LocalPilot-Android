@@ -17,7 +17,9 @@ public final class ConsoleAgentContract {
  public static final String MODEL_SHA="org.localpilot.console.MODEL_SHA";
  public static final String TASK_X="org.localpilot.console.TASK_X";
  public static final String TASK_Y="org.localpilot.console.TASK_Y";
+ public static final String FRAMES="org.localpilot.console.FRAMES";
  public static final int HOLD_FRAMES=16;
+ public static boolean studentFramesValid(long frames){return frames==4||frames==8||frames==16;}
  public static final long TTL_MS=120_000L;
  public static boolean tokenValid(String token){
   return token!=null&&token.matches("[A-Za-z0-9_-]{22}");
@@ -28,6 +30,7 @@ public final class ConsoleAgentContract {
   if(!normalized.matches("BUTTON=(A|B|UP|DOWN|LEFT|RIGHT|NONE)"))return null;
   return normalized.substring(7);
  }
+ public static boolean manualPlayable(String button){return playable(button)||"START".equals(button)||"SELECT".equals(button);}
  public static boolean playable(String button){
   return "A".equals(button)||"B".equals(button)||"UP".equals(button)||
     "DOWN".equals(button)||"LEFT".equals(button)||"RIGHT".equals(button);

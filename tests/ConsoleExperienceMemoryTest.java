@@ -65,6 +65,19 @@ public final class ConsoleExperienceMemoryTest {
   rejected=false;
   try{ConsoleExperienceMemory.readGoals(temp);}catch(IOException corrupted){rejected=true;}
   require(rejected,"tampered engine-state reward must fail closed");
+  Files.writeString(goal,original,StandardCharsets.UTF_8);
+  NesTrial shortProof=NesTrial.create("HOMEBREW","RIGHT",110,114,55,66);
+  ConsoleExperienceMemory.appendGoal(temp,"3005","import:alpha",sha,shortProof,189,112,192,112);
+  var mixed=ConsoleExperienceMemory.readGoals(temp);
+  require(mixed.size()==2&&mixed.get(1).reached()&&mixed.get(1).reward()==23,
+    "Short-step V2 task records coexist with preserved long-step data");
+  String oldBody=String.join("|","CONSOLE_HOME_BREW_GOAL_V1","JSNES_6502_ZERO_PAGE_01_02",
+    "3004","import:alpha",sha,"RIGHT","90","106","44","55","PIXELS_DIFFER",
+    "128","112","144","112","16","0");
+  String oldHash=java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256")
+    .digest(oldBody.getBytes(StandardCharsets.UTF_8)));
+  Files.writeString(goal,oldBody+"|"+oldHash+"\n",StandardCharsets.UTF_8);
+  require(ConsoleExperienceMemory.readGoals(temp).get(0).reward()==16,"Legacy V1 task journal remains readable");
   System.out.println("CONSOLE_SHARED_MEMORY_PASS");
  }
 }

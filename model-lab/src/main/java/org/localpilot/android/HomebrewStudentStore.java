@@ -22,15 +22,16 @@ import java.util.Locale;
  */
 public final class HomebrewStudentStore {
  private HomebrewStudentStore(){}
- private static final String FILE="homebrew-goal-student-candidate-v1.json";
+ private static final String FILE="homebrew-goal-student-imitation-v3.json";
  private static final int MAX_BYTES=28000;
- private static final String KIND="TASK_REWARD_Q_STUDENT_CANDIDATE_NOT_ONLINE_VERIFIED";
+ private static final String KIND="TASK_TEACHER_STUDENT_CANDIDATE_NOT_ONLINE_VERIFIED";
  private static File location(Context ctx){return new File(ctx.getNoBackupFilesDir(),FILE);}
  public record Candidate(String id,String sha,double[] weights,int train,int heldout,
    int sessions,double td,double baseline,boolean offlineGate){}
 
  private static String sha256(double[] weights)throws Exception{
   MessageDigest digest=MessageDigest.getInstance("SHA-256");
+  digest.update((HomebrewStudentNetwork.SCHEMA+"|IMITATION").getBytes(StandardCharsets.UTF_8));
   for(double weight:weights){
    if(!Double.isFinite(weight)||Math.abs(weight)>12)
     throw new IllegalArgumentException("Invalid student weight");
@@ -64,7 +65,7 @@ public final class HomebrewStudentStore {
   if(!HomebrewStudentNetwork.SCHEMA.equals(o.getString("schema"))||
      !HomebrewGoalReward.TASK.equals(o.getString("task"))||
      !HomebrewGoalReward.SOURCE.equals(o.getString("source"))||
-     !KIND.equals(o.getString("kind"))||
+     !KIND.equals(o.getString("kind"))||!"IMITATION".equals(o.getString("objective"))||
      !("NOT_VERIFIED".equals(o.getString("onlineEvaluation"))))
    throw new IllegalArgumentException("Unsupported student task/version");
   JSONArray raw=o.getJSONArray("weights");
@@ -79,8 +80,8 @@ public final class HomebrewStudentStore {
   String id="student:"+hash.substring(0,16);
   if(!id.equals(o.getString("modelId")))throw new SecurityException("Student ID mismatch");
   int train=o.getInt("trainingTransitions"),test=o.getInt("heldoutTransitions"),
-      sessions=o.getInt("independentSessions");
-  double td=o.getDouble("heldoutTdMae"),baseline=o.getDouble("zeroBaselineMae");
+      sessions=o.getInt("sourceSessions");
+  double td=o.getDouble("validationLoss"),baseline=o.getDouble("baselineLoss");
   if(train<8||test<2||sessions<3||!Double.isFinite(td)||!Double.isFinite(baseline)||
       td<0||baseline<0)
    throw new IllegalArgumentException("Unverified student evaluation");
@@ -101,14 +102,14 @@ public final class HomebrewStudentStore {
  public static Candidate candidate(Context ctx)throws Exception{
   return decode(fromDisk(ctx));
  }
- /** Explicit user-triggered offline Q-training on real reward-bearing episodes. */
+ /** Explicit user-triggered teacher imitation from verified observations on real reward-bearing episodes. */
  public static String train(Context ctx)throws Exception{
   HarnessCoordinator.Snapshot live=HarnessCoordinator.nes().snapshot();
   if(live.waiting()||live.actionInFlight())
    throw new IllegalStateException("STOP active NES action before training");
   List<ConsoleExperienceMemory.GoalEpisode> rows=
     ConsoleExperienceMemory.readGoals(ctx.getFilesDir().toPath());
-  HomebrewStudentNetwork.Candidate learned=HomebrewStudentNetwork.train(rows);
+  HomebrewStudentNetwork.Candidate learned=HomebrewStudentNetwork.trainImitation(rows);
   JSONArray weights=new JSONArray();
   for(double value:learned.weights)weights.put(value);
   String sha=sha256(learned.weights);
@@ -116,16 +117,16 @@ public final class HomebrewStudentStore {
     .put("schema",HomebrewStudentNetwork.SCHEMA)
     .put("task",HomebrewGoalReward.TASK)
     .put("source",HomebrewGoalReward.SOURCE)
-    .put("kind",KIND).put("onlineEvaluation","NOT_VERIFIED")
+    .put("kind",KIND).put("objective","IMITATION").put("onlineEvaluation","NOT_VERIFIED")
     .put("modelId","student:"+sha.substring(0,16))
     .put("sha256",sha).put("weights",weights)
     .put("trainingTransitions",learned.trainingTransitions)
     .put("heldoutTransitions",learned.holdoutTransitions)
-    .put("independentSessions",learned.sourceSessions)
+    .put("sourceSessions",learned.sourceSessions)
     .put("trainingEpochs",learned.trainingEpochs)
     .put("holdoutEpoch",learned.holdoutEpoch)
-    .put("heldoutTdMae",learned.heldoutTdMae)
-    .put("zeroBaselineMae",learned.zeroBaselineMae)
+    .put("validationLoss",learned.validationLoss)
+    .put("baselineLoss",learned.baselineLoss)
     .put("trainedAt",System.currentTimeMillis());
   atomicSave(ctx,row);
   // AgentEmu-style export/runtime parity: the exact checkpoint that Android
@@ -134,17 +135,18 @@ public final class HomebrewStudentStore {
   if(roundTrip==null||!roundTrip.sha.equals(sha))
    throw new SecurityException("Exported student checkpoint identity mismatch");
   for(int[] state:new int[][]{{128,112},{160,112},{192,112},{80,96},{210,140}}){
-   var expected=HomebrewStudentNetwork.propose(learned.weights,state[0],state[1]);
-   var actual=HomebrewStudentNetwork.propose(roundTrip.weights,state[0],state[1]);
-   if(!expected.button().equals(actual.button())||
+   var expected=HomebrewStudentNetwork.proposeImitation(learned.weights,state[0],state[1]);
+   var actual=HomebrewStudentNetwork.proposeImitation(roundTrip.weights,state[0],state[1]);
+   if(!expected.button().equals(actual.button())||expected.frames()!=actual.frames()||
+      !expected.admission().equals(actual.admission())||
       Math.abs(expected.value()-actual.value())>1.0e-10||
       Math.abs(expected.margin()-actual.margin())>1.0e-10)
     throw new SecurityException("Learned/stored model inference parity failure");
   }
   return "Настоящая обученная CPU-сеть: 7→12→6; SHA "+sha.substring(0,16)+
-    ", train "+learned.trainingTransitions+", независимый holdout "+
-    learned.holdoutTransitions+"; TD "+String.format(Locale.ROOT,"%.3f",learned.heldoutTdMae)+
-    " против нулевой модели "+String.format(Locale.ROOT,"%.3f",learned.zeroBaselineMae)+
+    ", train "+learned.trainingTransitions+", holdout отдельного сеанса "+
+    learned.holdoutTransitions+"; teacher error "+String.format(Locale.ROOT,"%.3f",learned.validationLoss)+
+    " против majority baseline "+String.format(Locale.ROOT,"%.3f",learned.baselineLoss)+
     ". "+(learned.eligibleForSandboxTrial()?"Offline gate PASS.":"Offline gate FAIL.")+
     " Веса GGUF не изменялись, победы в NES ещё не подтверждены.";
  }
@@ -158,7 +160,7 @@ public final class HomebrewStudentStore {
   Candidate c=candidate(ctx);
   if(c==null)throw new IllegalStateException("No verified neural checkpoint");
   if(!c.offlineGate)throw new IllegalStateException(
-    "Holdout TD gate failed: need more independent goal-task NES evidence");
+    "Teacher holdout gate failed: need more independent goal-task NES evidence");
   HarnessModelBinding.assignStudent(ctx,c.id,c.sha);
   return "STUDENT SANDBOX BOUND: "+c.id+"; only built-in homebrew, one verified input per click.";
  }
@@ -167,7 +169,7 @@ public final class HomebrewStudentStore {
    Candidate c=candidate(ctx);
    if(c==null)return "Student: ещё нет обученных весов.";
    return "Student "+c.id+" · "+c.train+" train / "+c.heldout+" holdout"+
-     " · TD "+String.format(Locale.ROOT,"%.3f",c.td)+" / baseline "+
+     " · teacher error "+String.format(Locale.ROOT,"%.3f",c.td)+" / baseline "+
      String.format(Locale.ROOT,"%.3f",c.baseline)+
      (c.offlineGate?" · OFFLINE PASS":" · OFFLINE FAIL")+
      " · физический on-policy тест НЕ ПРОВЕДЁН.";
@@ -180,6 +182,6 @@ public final class HomebrewStudentStore {
   Candidate c=candidate(ctx);
   if(c==null||!c.id.equals(expectedId)||!c.sha.equals(expectedSha)||!c.offlineGate)
    throw new SecurityException("Student checkpoint does not match NES model assignment");
-  return HomebrewStudentNetwork.propose(c.weights,x,y);
+  return HomebrewStudentNetwork.proposeImitation(c.weights,x,y);
  }
 }

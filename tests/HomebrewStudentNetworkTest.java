@@ -43,7 +43,7 @@ public final class HomebrewStudentNetworkTest {
   double norm=0;
   for(double weight:result.weights){norm+=Math.abs(weight);check(Double.isFinite(weight),"finite weights");}
   check(norm>1,"Training changed CPU student weights");
-  check(Double.isFinite(result.heldoutTdMae)&&Double.isFinite(result.zeroBaselineMae),
+  check(Double.isFinite(result.validationLoss)&&Double.isFinite(result.baselineLoss),
     "Heldout error is computed, not synthetic win rate");
   var proposal=HomebrewStudentNetwork.propose(result.weights,128,112);
   check(proposal.button()!=null&&proposal.margin()==proposal.margin(),"Candidate produced numerical score");
@@ -51,6 +51,25 @@ public final class HomebrewStudentNetworkTest {
   try{HomebrewStudentNetwork.train(samples.subList(0,6));}
   catch(IllegalArgumentException invalid){blocked=true;}
   check(blocked,"No training on too few samples");
+  var imitation=HomebrewStudentNetwork.trainImitation(samples);
+  var again=HomebrewStudentNetwork.trainImitation(samples);
+  check(imitation.objective==HomebrewStudentNetwork.Objective.IMITATION,
+    "Teacher classifier objective is not mislabeled as TD or PPO");
+  check(java.util.Arrays.equals(imitation.weights,again.weights),"Imitation training is deterministic");
+  check(!imitation.eligibleForSandboxTrial(),"Only-RIGHT heldout cannot beat majority baseline and is not promoted");
+  var near=HomebrewStudentNetwork.proposeImitation(imitation.weights,189,112);
+  check("RIGHT".equals(near.button())&&near.frames()==4,"Learned direction uses bounded precision adapter");
+  check("NONE".equals(HomebrewStudentNetwork.proposeImitation(imitation.weights,192,112).button()),
+    "Verified task terminal never sends an additional action");
+  double[] ambiguous=new double[HomebrewStudentNetwork.WEIGHTS];
+  java.util.Arrays.fill(ambiguous,ambiguous.length-6,ambiguous.length,-12);
+  ambiguous[ambiguous.length-6+4]=0.02; // LEFT is the original argmax.
+  ambiguous[ambiguous.length-6+2]=0; // UP is the other credible direction.
+  var diagonal=HomebrewStudentNetwork.proposeImitation(ambiguous,194,115);
+  check("LEFT".equals(diagonal.button())&&"TASK_DIRECTIONAL_MASS".equals(diagonal.admission()),
+    "Known task admits model argmax when both credible directions approach the goal");
+  check("NONE".equals(HomebrewStudentNetwork.proposeImitation(ambiguous,190,115).button()),
+    "Task admission never substitutes a different button when model argmax points away");
   var bogus=samples.get(0);
   samples.set(0,new ConsoleExperienceMemory.GoalEpisode(
     bogus.epoch(),bogus.modelId(),bogus.modelSha(),bogus.button(),
