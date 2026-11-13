@@ -23,6 +23,9 @@ public class MainActivity extends Activity {
   button(box,"Показать панель",()->{PilotService pilot=PilotService.instance;if(pilot==null){toast(CrashDiagnostics.connectionHint(this));return;}pilot.recoverPanel();status.setText(CrashDiagnostics.connectionHint(this));});
   TextView panelHelp=new TextView(this);panelHelp.setText("Панель можно свернуть. STOP всегда остаётся доступным.");box.addView(panelHelp);
   section(box,"02 · Модели и обучение");
+  if(BuildConfig.UNIFIED_MODELLAB)
+   button(box,"🎮 Harness Console · модели, NES, эпизоды, STOP, GPU",
+     ()->startActivity(new Intent(this,HarnessDashboardActivity.class)));
   if(BuildConfig.UNIFIED_MODELLAB) {
    button(box,"🧠 ModelLab · GGUF, загрузка моделей и анализ фото",
      ()->startActivity(new Intent(this,ModelLabActivity.class)));
