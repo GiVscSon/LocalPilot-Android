@@ -1,3 +1,27 @@
+# Student: разнообразные реальные NES-данные · 13.11.2026
+
+В существующий Whole System добавлен diverse-v1: 40 ROM-сеансов, все 6 действий,
+770 train + 24 holdout. Production Java Student обучается на настоящей RAM,
+решения экспортированных весов исполняет JSNES. Validation return вырос с
+-73/-73/-73 до +61/+91/+91, но цель не достигнута (distance 3/4/4, NONE).
+Статус SHADOW_ONLY_GOAL_NOT_REACHED; автоматическое продвижение отключено.
+В holdout обнаружены 4 пересекающихся train перехода; final test ещё нужен.
+[Протокол, метрики и следующий критерий](docs/HARNESS-LEARNING-STRATEGY-20261113.ru.md).
+Два JSON-отчёта с trajectory и SHA сохраняются существующим CI. Релиза нет.
+
+# План после исследования аналогов · 13.11.2026
+
+[Проверенные источники, схема и критерии следующих шагов](docs/HARNESS-LEARNING-STRATEGY-20261113.ru.md).
+Изучены AgentEmu, CleanRL DQN, Gymnasium и Stable-Retro, ссылки закреплены SHA.
+В существующий Student добавлена target-сеть, выполнен реальный JSNES benchmark.
+Return остался -73 на всех трёх условиях: улучшение игры не подтверждено,
+кандидат отклонён. Дальше: разнообразные train состояния/все действия,
+проверенный teacher → BC → DAgger, независимый final test. PPO после baseline.
+
+# Current Student continuation · 2026-11-13
+
+PR #134 base ba0140e has ten green PR workflows. Behavioral release evidence is still insufficient. The revised real-JSNES evaluation finds a sustained Student regression despite a useful first action; candidate must not be promoted. See [on-policy review](docs/HARNESS-STUDENT-ONPOLICY-REVIEW-20261113.md). Current work branch: fix/harness-student-release-gates-20261113. Physical-device acceptance and permanent release signing remain unverified. Old capture/NES worktree is preserved separately, not overwritten.
+
 # Подпись объединённого APK · 12.11.2026
 
 [Конкретные причины блокировки и доказательства](docs/SIGNING_DIAGNOSIS_2026-11-12.ru.md): окружений GitHub 0, создание защищённого android-signing запрещено подключению (403), подписывающих manual runs 0. PR #106 ещё отсутствует в main; PR #107 исправляет source binding и отдельный pin для checkout при dispatch. Наличие release-ключа вне этой среды не установлено; локально обнаружен только Android Debug. Проверку policy нельзя считать подписанным APK. Новый SHA/CI сверять в PR #107; issue #99 остаётся открыт.

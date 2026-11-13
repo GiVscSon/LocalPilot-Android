@@ -17,6 +17,23 @@ public final class HomebrewStudentNetworkTest {
    }
   }
   var result=HomebrewStudentNetwork.train(samples);
+  var repeated=HomebrewStudentNetwork.train(samples);
+  check(java.util.Arrays.equals(result.weights,repeated.weights),
+    "Same verified trajectories reproduce identical trained weights");
+  // A saturated online network must not manufacture its own TD target.
+  // Compare a single update against frozen zero vs terminal value sources.
+  try{
+   var update=HomebrewStudentNetwork.class.getDeclaredMethod("learn",double[].class,
+     double[].class,ConsoleExperienceMemory.GoalEpisode.class,double.class);
+   update.setAccessible(true);
+   double[] online=new double[HomebrewStudentNetwork.WEIGHTS];
+   double[] frozen=new double[HomebrewStudentNetwork.WEIGHTS];
+   online[online.length-1]=2;
+   double[] frozenCopy=frozen.clone();
+   update.invoke(null,online,frozen,samples.get(0),0.03);
+   check(java.util.Arrays.equals(frozen,frozenCopy),"TD update never mutates target snapshot");
+   check(online[online.length-1]<2,"Frozen zero future value prevents online self-bootstrap inflation");
+  }catch(ReflectiveOperationException e){throw new AssertionError(e);}
   check(result.trainingTransitions==18&&result.holdoutTransitions==6,
     "Independent held-out ROM session split");
   check(result.sourceSessions==4&&result.holdoutEpoch.equals("2004"),
