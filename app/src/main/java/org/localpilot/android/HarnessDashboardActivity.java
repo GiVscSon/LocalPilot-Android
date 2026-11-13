@@ -13,6 +13,7 @@ import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import org.localpilot.shared.ConsoleExperienceMemory;
+import org.localpilot.shared.StudentPolicyNet;
 import org.localpilot.shared.VerifiedReplayFilter;
 import org.localpilot.shared.HarnessCoordinator;
 import org.localpilot.shared.ConsoleAgentContract;
@@ -265,6 +266,18 @@ public final class HarnessDashboardActivity extends Activity {
    row(train,"STOP: RAM-журнал повреждён или недоступен, обучение заблокировано.");
   }
   row(train,"Общих игровых побед/счётов NES: НЕ ПОДТВЕРЖДЕНО");
+  try {
+   java.nio.file.Path student=new java.io.File(getFilesDir(),
+     "localpilot_vault/models/active/student-homebrew-v1.weights.bin").toPath();
+   if(java.nio.file.Files.isRegularFile(student)){
+    StudentPolicyNet policy=StudentPolicyNet.load(student);
+    row(train,"StudentPolicy CPU: НАСТОЯЩИЙ forward · 64→64→64→"+
+      policy.actionCount+" · SHA "+policy.sha256().substring(0,16));
+    row(train,"Веса StudentPolicy есть, но PPO-обновление / holdout: НЕ ПОДТВЕРЖДЕНЫ");
+   }else row(train,"StudentPolicy CPU: создаётся по первому реальному NES-ходу");
+  }catch(IOException broken) {
+   row(train,"STOP: StudentPolicy weights.bin повреждены; не используем модель.");
+  }
   row(train,"PPO / DQN для NES: НЕ ПОДКЛЮЧЕНЫ");
   row(train,"Обученная политика с независимой оценкой: НЕ ПОДТВЕРЖДЕНА");
   row(train,"Для настоящего обучения нужны наблюдения, достоверная цель/награда и проверка весов на отдельных эпизодах.");

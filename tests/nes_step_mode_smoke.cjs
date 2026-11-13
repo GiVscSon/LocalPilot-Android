@@ -37,12 +37,18 @@ env.nes=machine;
 env.gamepadLatch=new FrameHeldButtons(machine,4);
 for(let i=0;i<45;i++)machine.frame();
 for(const name of ["retroPause","retroResume","retroHomebrewRamX",
-                    "retroEnterStepMode","retroExitStepMode","retroAiStep"]){
+                    "retroHomebrewState","retroEnterStepMode",
+                    "retroExitStepMode","retroAiStep"]){
  vm.runInNewContext(snippet(name),env,{timeout:2000});
 }
 assert.equal(env.window.retroEnterStepMode(),true);
 assert.equal(env.stepMode,true);
 assert.equal(env.paused,true);
+const obs=env.window.retroHomebrewState();
+assert.equal(obs.session,"4242","student RAM snapshot preserves ROM epoch");
+assert.equal(obs.frame,env.frames,"student RAM snapshot preserves frozen frame");
+assert.equal(obs.x,env.nes.cpu.mem[1],"student observes actual emulator CPU X");
+assert.equal(obs.y,env.nes.cpu.mem[2],"student observes actual emulator CPU Y");
 assert.equal(events[0][0],"ready");
 const first=env.frames;
 assert.equal(env.window.retroResume(),true);
@@ -76,6 +82,7 @@ console.log("NES_REAL_ROM_RAM_REWARD_SOURCE_PASS delta="+(ramRight[5]-ramRight[4
 assert.equal(env.window.retroExitStepMode(),true);
 assert.equal(env.stepMode,false);
 assert.equal(env.paused,false);
+assert.equal(env.window.retroHomebrewState(),null,"realtime never serves PPO snapshot");
 assert.equal(env.window.retroAiStep("A",16),false,"realtime cannot call step");
 env.homebrewRom=false;
 assert.equal(env.window.retroEnterStepMode(),false,"unprofiled user ROM cannot enter agent step");

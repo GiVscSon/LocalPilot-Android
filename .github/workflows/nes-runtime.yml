@@ -30,6 +30,9 @@ on:
       - 'game-lab/src/main/java/org/localpilot/gamelab/NesExperimentPolicy.java'
       - 'tests/HomebrewRamRewardTest.java'
       - 'tests/ConsoleHomebrewGoalMemoryTest.java'
+      - 'tests/StudentPolicyNetTest.java'
+      - 'shared/src/main/java/org/localpilot/shared/StudentPolicyNet.java'
+      - 'shared/src/main/java/org/localpilot/shared/HomebrewObs64.java'
   pull_request:
     paths:
       - 'game-lab/**'
@@ -111,6 +114,17 @@ jobs:
             shared/src/main/java/org/localpilot/shared/ConsoleExperienceMemory.java \
             tests/ConsoleHomebrewGoalMemoryTest.java
           java -cp build/nes-goal-journal org.localpilot.shared.ConsoleHomebrewGoalMemoryTest
+      - name: Verify real local StudentPolicy forward, masking, big-endian weights, STOP
+        run: |
+          set -euo pipefail
+          mkdir -p build/student-policy
+          javac --release 17 -d build/student-policy \
+            shared/src/main/java/org/localpilot/shared/ConsoleAgentContract.java \
+            shared/src/main/java/org/localpilot/shared/HarnessCoordinator.java \
+            shared/src/main/java/org/localpilot/shared/StudentPolicyNet.java \
+            shared/src/main/java/org/localpilot/shared/HomebrewObs64.java \
+            tests/StudentPolicyNetTest.java
+          java -cp build/student-policy org.localpilot.shared.StudentPolicyNetTest
       - name: Verify full iNES/NES2 ROM preflight and unsafe mapper rejection
         run: |
           set -euo pipefail
