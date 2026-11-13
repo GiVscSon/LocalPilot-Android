@@ -128,6 +128,19 @@ public final class HomebrewStudentStore {
     .put("zeroBaselineMae",learned.zeroBaselineMae)
     .put("trainedAt",System.currentTimeMillis());
   atomicSave(ctx,row);
+  // AgentEmu-style export/runtime parity: the exact checkpoint that Android
+  // will load must reproduce in-memory predictions on independent states.
+  Candidate roundTrip=decode(fromDisk(ctx));
+  if(roundTrip==null||!roundTrip.sha.equals(sha))
+   throw new SecurityException("Exported student checkpoint identity mismatch");
+  for(int[] state:new int[][]{{128,112},{160,112},{192,112},{80,96},{210,140}}){
+   var expected=HomebrewStudentNetwork.propose(learned.weights,state[0],state[1]);
+   var actual=HomebrewStudentNetwork.propose(roundTrip.weights,state[0],state[1]);
+   if(!expected.button().equals(actual.button())||
+      Math.abs(expected.value()-actual.value())>1.0e-10||
+      Math.abs(expected.margin()-actual.margin())>1.0e-10)
+    throw new SecurityException("Learned/stored model inference parity failure");
+  }
   return "Настоящая обученная CPU-сеть: 7→12→6; SHA "+sha.substring(0,16)+
     ", train "+learned.trainingTransitions+", независимый holdout "+
     learned.holdoutTransitions+"; TD "+String.format(Locale.ROOT,"%.3f",learned.heldoutTdMae)+
