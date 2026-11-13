@@ -44,6 +44,10 @@ add_library(localpilot_embedded SHARED localpilot_embedded.cpp)
 target_include_directories(localpilot_embedded PRIVATE
   "${LLAMA_SRC}/include" "${LLAMA_SRC}/ggml/include" "${LLAMA_SRC}/tools/mtmd")
 if(ANDROID)
+  # NDK r27 does not enable flexible page sizes by default. ZIP alignment
+  # alone cannot make 4KiB ELF LOAD segments compatible with 16KiB devices.
+  target_link_options(localpilot_embedded PRIVATE
+    "-Wl,-z,max-page-size=16384" "-Wl,-z,common-page-size=16384")
   target_link_libraries(localpilot_embedded PRIVATE llama mtmd log)
 else()
   # Host smoke testing exercises the SAME JNI implementation with original GGUF.

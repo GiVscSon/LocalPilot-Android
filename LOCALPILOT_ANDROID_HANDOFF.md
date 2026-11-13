@@ -1,3 +1,22 @@
+# 0.8.2/code54: единый кандидат, новые блокирующие проверки · 13.11.2026
+
+PR #141 в main, ветка integration/harness-ppo-goal-unified-20261113.
+[Реализация, команды/ограничения и причины ошибок](docs/HARNESS-UNIFIED-LEARNING-20261113.md).
+Исправлен подтверждённый Android false STOP: таймер уже потреблённого RAM-ticket
+прерывал следующий шаг той же PPO-серии. Теперь reply/timeout сверяются с точным
+ожидаемым наблюдением в HarnessCoordinator, а callback JS — с текущим permit.
+73 coordinator +450 model assertions PASS; Android Java/AndroidTest compile/lint PASS.
+У предыдущего ARM64 APK выявлен ELF p_align4096 при правильном ZIP16KiB.
+Добавлены NDK27 linker flags и обязательный ELF+ZIP gate; старый APK отвергнут.
+Сборка x86 выполняется один раз, затем тот же APK проходит телефон/планшет
+API30/35/36. Эти новые проверки ещё требуют CI текущего SHA.
+Production release НЕ выпущен: нет совместимого постоянного ключа/защищённого
+android-signing (API403) и физических устройств. Перед слиянием сверить все CI,
+отдельно проверить новый Android PPO runtime и ELF16K реального ARM64 APK.
+Архивы созданы: archive/main-before-harness-082-20261113 (189b3b0),
+archive/harness-precision-v3-before-ppo-20261113 (964ce1e).
+Ни старые артефакты, ни synthetic/эмуляторные победы не закрывают релизные gates.
+
 # Единое обучение и захват · PR #141 · 13.11.2026
 
 [Текущая реализация, проверки и ограничения](docs/HARNESS-UNIFIED-LEARNING-20261113.md).

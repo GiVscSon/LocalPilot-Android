@@ -111,6 +111,12 @@ public final class HarnessCoordinator {
     epoch,frame,hash,now,stopRevision);
   return waiting;
  }
+ /** Correlates a timeout/reply with the exact still-pending observation.
+  * An old timer must not cancel a later step of the same reserved episode. */
+ public synchronized boolean awaiting(Ticket ticket){
+  return ticket!=null&&waiting==ticket&&!stopPending&&matches(ticket.epoch)&&
+    ticket.stopRevision==stopRevision;
+ }
  public synchronized boolean changeMode(String expectedEpoch,Mode next){
   if(stopPending||episode!=null||!matches(expectedEpoch)||next==null||waiting!=null||
      prepared!=null||active!=null)return false;

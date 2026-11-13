@@ -51,7 +51,7 @@ class ReleaseToolsTest(unittest.TestCase):
         config = common.configuration(self.root)
         self.assertEqual('org.localpilot.android.dev.install1081', config['package'])
         self.assertNotEqual('org.localpilot.android.dev', config['package'])
-        self.assertEqual('0.8.1-dev-install1081', config['version'])
+        self.assertEqual('0.8.2-dev-install1081', config['version'])
 
     def test_missing_or_ambiguous_version_fails(self):
         path = self.root / 'app/build.gradle'

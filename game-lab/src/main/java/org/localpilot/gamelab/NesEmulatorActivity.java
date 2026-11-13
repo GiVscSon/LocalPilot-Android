@@ -625,8 +625,9 @@ public final class NesEmulatorActivity extends Activity {
   else{
    studentStepRequested=true;
    String session=frameEpoch.token();
+   final HarnessCoordinator.EpisodeLease freezing=studentLease;
    web.postDelayed(()->{
-    if(studentStepRequested&&frameEpoch.current(session))stopCpuExperiment("STOP: PPO freeze timeout");
+    if(studentStepRequested&&studentLease==freezing&&harness.ownsEpisode(freezing)&&frameEpoch.current(session))stopCpuExperiment("STOP: PPO freeze timeout");
    },2500);
    web.evaluateJavascript("window.retroEnterStepMode()",accepted->{
     if(studentStepRequested&&frameEpoch.current(session)&&!"true".equals(accepted))
@@ -645,10 +646,11 @@ public final class NesEmulatorActivity extends Activity {
   try{observation=harness.beginEpisodeObservation(lease,expectedFrame,expectedHash,SystemClock.elapsedRealtime());}
   catch(RuntimeException stale){stopCpuExperiment("STOP: PPO observation denied");return;}
   web.postDelayed(()->{
-   if(studentLease==lease&&harness.ownsEpisode(lease)&&pendingTrial==null)
+   if(studentLease==lease&&harness.ownsEpisode(lease)&&harness.awaiting(observation))
     stopCpuExperiment("STOP: PPO observation timeout");
   },2500);
   web.evaluateJavascript("window.retroHomebrewState()",result->{
+   if(!harness.awaiting(observation))return; // Late reply never revokes another step.
    if(closed||!resumed||!homebrewRom||!aiFrozen||
       !frameEpoch.current(epoch)||frames!=expectedFrame||hash!=expectedHash||
       !harness.ownsEpisode(lease)||harness.actionInFlight()||pendingTrial!=null||aiRunning){
@@ -692,7 +694,7 @@ public final class NesEmulatorActivity extends Activity {
       org.json.JSONObject.quote(button)+","+ConsoleAgentContract.HOLD_FRAMES+","+
       org.json.JSONObject.quote(pendingPermit.nonce)+")",reply->{
        TrialPending current=pendingTrial;
-       if(current!=null&&current.button.equals(button)&&!"true".equals(reply))
+       if(pendingPermit==issued&&current!=null&&!"true".equals(reply))
         stopCpuExperiment("STOP: JSNES отказал StudentPolicy");
     });
    }catch(IOException|org.json.JSONException|RuntimeException invalid){

@@ -182,7 +182,19 @@ public final class StudentPolicyNet {
  public static StudentPolicyNet load(Path weights)throws IOException{
   if(!Files.isRegularFile(weights)||Files.isSymbolicLink(weights))
    throw new IOException("Unsafe policy path");
-  return fromBytes(Files.readAllBytes(weights));
+  // Reject before allocating file-sized memory; a damaged/imported checkpoint
+  // must not exhaust Android's heap before the decoder checks its shape.
+  if(Files.size(weights)<20||Files.size(weights)>100000)
+   throw new IOException("Invalid weights file size");
+  try(java.io.InputStream input=Files.newInputStream(weights);
+      ByteArrayOutputStream bytes=new ByteArrayOutputStream(40000)){
+   byte[] chunk=new byte[4096];int count;
+   while((count=input.read(chunk))!=-1){
+    if(count==0||bytes.size()+count>100000)throw new IOException("Weights changed or exceeded quota");
+    bytes.write(chunk,0,count);
+   }
+   return fromBytes(bytes.toByteArray());
+  }
  }
  public void saveAtomically(Path weights)throws IOException{
   if(weights==null||weights.getParent()==null)throw new IOException("Missing policy directory");

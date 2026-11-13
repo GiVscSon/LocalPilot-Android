@@ -96,6 +96,11 @@ public final class StudentPolicyNetTest {
      "changed weights must produce changed SHA");
   yes(!Files.exists(directory.resolve("student.weights.bin.pending")),
     "atomic save does not leave pending marker");
+  Path oversized=directory.resolve("oversized.weights.bin");
+  Files.write(oversized,new byte[100001]);
+  boolean oversizedRejected=false;
+  try{StudentPolicyNet.load(oversized);}catch(java.io.IOException expected){oversizedRejected=true;}
+  yes(oversizedRejected,"oversized checkpoint rejected before file-sized allocation");
   // Student actor is NOT a second input controller: same process singleton.
   var h=HarnessCoordinator.nes();
   h.reset("888",HarnessCoordinator.Mode.REALTIME_MODE);

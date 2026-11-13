@@ -7,6 +7,7 @@ external game, physical-device success, policy improvement or release is claimed
 import argparse
 import hashlib
 import json
+import os
 from pathlib import Path
 import re
 import subprocess
@@ -104,6 +105,9 @@ def tap_scroll_control(label):
 
 def run(apk, output):
     if not ui.is_emulator(): raise RuntimeError('Isolated AVD required')
+    api=int(ui.adb('shell','getprop','ro.build.version.sdk').strip())
+    if os.environ.get('LOCALPILOT_EXPECTED_API',str(api))!=str(api):
+        raise RuntimeError('Observed Android API differs from requested matrix')
     ui.wait_activity(ui.MAIN)
     installed=ui.adb('shell','pm','path',ui.PACKAGE).strip().removeprefix('package:')
     if '\n' in installed or not installed.startswith('/data/app/'):
@@ -137,7 +141,8 @@ def run(apk, output):
     if hashlib.sha256(private_file(VAULT+'active/student-homebrew-v1.weights.bin')).hexdigest()!=before:
         raise RuntimeError('Candidate unexpectedly replaced active policy')
     report=dict(schema='localpilot-android-nes-student-v1',result='PASS',
-        api=int(ui.adb('shell','getprop','ro.build.version.sdk').strip()),apkSha256=apk_sha,sourceSha=source_sha,
+        api=api,deviceProfile=os.environ.get('LOCALPILOT_EXPECTED_PROFILE','UNSPECIFIED'),
+        screenSize=ui.screen_size(),apkSha256=apk_sha,sourceSha=source_sha,
         policyBeforeSha256=before,policyAfterSha256=after,romSha256=manifest['romSha256'],
         rollout=rollout,changedParameters=manifest['changedParameters'],
         runtime='PRODUCTION_ANDROID_WEBVIEW_HARNESS_PPO',singlePackage=True,

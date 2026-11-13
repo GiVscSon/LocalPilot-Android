@@ -131,7 +131,10 @@ public final class HarnessCoordinatorTest {
   check(c.start(HarnessCoordinator.Actor.PPO_STUDENT,"1200","RIGHT",30,123,16,11000)==null,"generic start cannot bypass PPO observation");
   check(c.startEpisodeStep(lease,sha,"RIGHT",30,123,11000)==null,"episode still requires prepared observation");
   t=c.beginEpisodeObservation(lease,30,123,11000);
+  var firstPpoObservation=t;
+  check(c.awaiting(firstPpoObservation),"current PPO observation owns its timeout");
   check(c.consume(t.nonce,"1200",30,123,11001),"episode observation uses common one-use ticket");
+  check(!c.awaiting(firstPpoObservation),"completed observation timer cannot stop the episode between steps");
   check(c.startEpisodeStep(lease,"b".repeat(64),"RIGHT",30,123,11002)==null,"different weights cannot consume reserved observation");
   var ppo=c.startEpisodeStep(lease,sha,"RIGHT",30,123,11002);
   check(ppo!=null&&c.authorizesStep("1200",ppo.nonce,16,11003),"PPO uses common per-frame JS fence");
@@ -140,6 +143,7 @@ public final class HarnessCoordinatorTest {
     "between-step gap remains reserved");
   check(!c.finishEpisode(lease),"cannot silently finish a partial series");
   t=c.beginEpisodeObservation(lease,46,321,11006);
+  check(c.awaiting(t)&&!c.awaiting(firstPpoObservation),"old timer cannot cancel a newer observation in same episode");
   c.consume(t.nonce,"1200",46,321,11007);
   ppo=c.startEpisodeStep(lease,sha,"LEFT",46,321,11008);
   check(c.complete(ppo,"1200",62,123,true,true,11009),"second exact PPO transition");
