@@ -890,15 +890,15 @@ public final class PilotUiInstrumentation extends Instrumentation {
         traceClick("click begin label="+text+" "+onMain(this::activitySummary));
         await(() -> {
             // A scrollable own View can be laid out before its off-screen
-            // accessibility node is published. Reveal it on the UI thread,
-            // then deliver the same OS touch used by the geometry fallback.
+            // accessibility node is published. Reveal it on the UI thread
+            // before the lookup. Keep accessibility action priority, notably
+            // for overlay STOP while an agent gesture is in flight.
             // Starting with a remote tree lookup could consume this entire
             // deadline before its first scroll (observed on API 36).
             boolean revealed=onMain(()->revealOwnActivityControl(text));
             if(revealed)traceClick("click label="+text+" path=own-view-reveal");
-            if(touchOwnControl(text))return true;
             AccessibilityNodeInfo node = findText(text);
-            if (node == null) { boolean scrolled=scrollForward();traceClick("click label="+text+" path=own-app-scroll result="+scrolled);return false; }
+            if (node == null) { if(touchOwnControl(text))return true;boolean scrolled=scrollForward();traceClick("click label="+text+" path=own-app-scroll result="+scrolled);return false; }
             try {
                 if(!node.refresh()||!node.isVisibleToUser()||!node.isEnabled()||!node.isClickable()){traceClick("click label="+text+" path=node refreshed-actionable=false");return false;}
                 Rect bounds=new Rect();node.getBoundsInScreen(bounds);
