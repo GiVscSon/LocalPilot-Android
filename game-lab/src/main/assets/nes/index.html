@@ -198,6 +198,12 @@ window.retroAiStep=function(name,holdFrames){
  const mapped=keyMap[name];
  if(!mapped||!Object.prototype.hasOwnProperty.call(jsnes.Controller,mapped))return false;
  const code=jsnes.Controller[mapped],started=frames;
+ // This exact bundled homebrew uses CPU RAM $01/$02 for sprite X/Y.
+ // Unlike pixel differences, these are emulator-executed task coordinates.
+ if(!nes.cpu||!nes.cpu.mem||nes.cpu.mem.length<3)return false;
+ const beforeX=nes.cpu.mem[1],beforeY=nes.cpu.mem[2];
+ if(!Number.isInteger(beforeX)||!Number.isInteger(beforeY)||
+    beforeX<0||beforeX>255||beforeY<0||beforeY>255)return false;
  if(typeof code!=="number"||!gamepadLatch.change(name,code,true,frames))return false;
  try{
   for(let i=0;i<holdFrames;i++){
@@ -207,7 +213,16 @@ window.retroAiStep=function(name,holdFrames){
   if(!gamepadLatch.change(name,code,false,frames))throw Error("Button release failed");
   gamepadLatch.flush(frames);
   if(frames-started!==holdFrames)throw Error("Frame budget violated");
+  const afterX=nes.cpu.mem[1],afterY=nes.cpu.mem[2];
+  if(!Number.isInteger(afterX)||!Number.isInteger(afterY)||
+      afterX<0||afterX>255||afterY<0||afterY>255)
+   throw Error("Unverified homebrew state");
   if(window.GameLabBridge){
+   // Exact pre/post emulated RAM is separately verified in Android. No
+   // generic reward for imported ROMs; no win inferred from the PPU frame.
+   if(typeof window.GameLabBridge.onHomebrewTask==="function")
+    window.GameLabBridge.onHomebrewTask(name,started,frames,
+      beforeX,beforeY,afterX,afterY,activeRomSession);
    window.GameLabBridge.onAgentAction(name,started,frames,activeRomSession);
    window.GameLabBridge.onFrame(frames,validFrame|0,activeRomSession);
   }

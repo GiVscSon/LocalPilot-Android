@@ -14,6 +14,7 @@ on:
       - 'tests/HarnessCoordinator*.java'
       - 'tests/ConsoleAgentContract*.java'
       - 'tests/ConsoleExperienceMemory*.java'
+      - 'tests/HomebrewGoalReward*.java'
       - '.github/workflows/localpilot-all-in-one.yml'
   workflow_dispatch:
 permissions:
@@ -48,6 +49,7 @@ jobs:
           java tests/HarnessCoordinatorVerify.java
           java tests/ConsoleAgentContractVerify.java
           java tests/ConsoleExperienceMemoryVerify.java
+          java tests/HomebrewGoalRewardVerify.java
           java tests/ModelLabPolicyVerify.java
           java tests/ModelLabComputePolicyVerify.java
           java tests/ModelLabCatalogVerify.java

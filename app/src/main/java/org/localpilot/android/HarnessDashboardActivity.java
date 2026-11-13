@@ -157,8 +157,10 @@ public final class HarnessDashboardActivity extends Activity {
   }
   LinearLayout experience=card("Общая память NES",
     "Одна история для эмулятора, ModelLab и панели; только реальные homebrew-переходы.");
-  try{row(experience,ConsoleExperienceMemory.summary(getFilesDir().toPath()));}
-  catch(IOException invalid){row(experience,"STOP: целостность опыта не пройдена.");}
+  try{
+   row(experience,ConsoleExperienceMemory.summary(getFilesDir().toPath()));
+   row(experience,ConsoleExperienceMemory.goalSummary(getFilesDir().toPath()));
+  }catch(IOException invalid){row(experience,"STOP: целостность опыта или игровой награды не пройдена.");}
   experience.addView(button("Открыть эпизоды",()->{tab="Эпизоды";render();}));
   LinearLayout launch=card("Играть и исследовать","ROM запускается в существующем GameLab.");
   launch.addView(button("Открыть NES / Денди",this::openNES));
@@ -226,7 +228,22 @@ public final class HarnessDashboardActivity extends Activity {
    row(summary,"STOP: повреждённая или недоступная история. Не используем в моделях.");
    return;
   }
-  if(all.isEmpty()){row(summary,"Ещё нет подтверждённых игровых переходов.");return;}
+  // Reward-bearing steps live in the same ConsoleExperienceMemory and have
+  // an independent exact-6502 provenance, never inferred from pixel changes.
+  try{
+   List<ConsoleExperienceMemory.GoalEpisode> tasks=
+     ConsoleExperienceMemory.readGoals(getFilesDir().toPath());
+   row(summary,ConsoleExperienceMemory.goalSummary(getFilesDir().toPath()));
+   int from=Math.max(0,tasks.size()-12);
+   for(int i=tasks.size()-1;i>=from;i--){
+    ConsoleExperienceMemory.GoalEpisode goal=tasks.get(i);
+    LinearLayout detail=card("CPU task "+goal.button()+" · reward "+goal.reward(),
+       goal.reached()?"ЦЕЛЬ ДОСТИГНУТА во встроенной ROM":"Встроенная ROM · цель (192,112)");
+    row(detail,"Настоящая NES RAM: ("+goal.beforeX()+","+goal.beforeY()+
+       ") → ("+goal.afterX()+","+goal.afterY()+") · модель "+goal.modelId());
+   }
+  }catch(IOException invalid){row(summary,"STOP: записи награды не прошли проверку.");return;}
+  if(all.isEmpty()){row(summary,"Пока нет визуальных переходов. Новых оценок игры не предполагаем.");return;}
   int start=Math.max(0,all.size()-15);
   for(int i=all.size()-1;i>=start;i--){
    ConsoleExperienceMemory.Episode e=all.get(i);
@@ -246,8 +263,16 @@ public final class HarnessDashboardActivity extends Activity {
      ConsoleExperienceMemory.read(getFilesDir().toPath());
    row(train,"Проверенных визуальных переходов: "+all.size());
   }catch(IOException error){row(train,"STOP: журнал повреждён, обучение невозможно.");}
-  row(train,"Достоверных игровых наград NES: 0");
-  row(train,"PPO / DQN для NES: НЕ ПОДКЛЮЧЕНЫ");
+  try{
+   List<ConsoleExperienceMemory.GoalEpisode> goals=
+     ConsoleExperienceMemory.readGoals(getFilesDir().toPath());
+   row(train,"Награды встроенной ROM по проверенной памяти 6502: "+goals.size());
+   int achieved=0;for(var g:goals)if(g.reached())achieved++;
+   row(train,"Цель (192,112) достигнута: "+achieved+" раз");
+  }catch(IOException corrupted){
+   row(train,"STOP: журнал целевой награды повреждён");
+  }
+  row(train,"Остальные ROM: награда UNKNOWN. PPO / DQN ещё не подключены.");
   row(train,"Обученная политика с независимой оценкой: НЕ ПОДТВЕРЖДЕНА");
   row(train,"Для настоящего обучения нужны наблюдения, достоверная цель/награда и проверка весов на отдельных эпизодах.");
   card("Старые симуляторы","Архивное обучение не применяется к NES. Нет автоматического переноса весов.");

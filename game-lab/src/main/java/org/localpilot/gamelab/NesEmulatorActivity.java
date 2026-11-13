@@ -36,6 +36,7 @@ import org.localpilot.shared.HubContract;
 import org.localpilot.shared.NesTrial;
 import org.localpilot.shared.NesFrameTransfer;
 import org.localpilot.shared.ConsoleExperienceMemory;
+import org.localpilot.shared.HomebrewGoalReward;
 import org.localpilot.shared.ConsoleAgentContract;
 import org.localpilot.shared.HarnessCoordinator;
 
@@ -62,6 +63,15 @@ public final class NesEmulatorActivity extends Activity {
  private NesTrial exportTrial;
  private final NesSnapshotGate snapshotGate=new NesSnapshotGate();
  // Process-wide permit owner shared by the one embedded NES instance.
+ private static final class GoalSample {
+  final String epoch,button;
+  final int start,finish,x0,y0,x1,y1;
+  GoalSample(String epoch,String button,int start,int finish,int x0,int y0,int x1,int y1){
+   this.epoch=epoch;this.button=button;this.start=start;this.finish=finish;
+   this.x0=x0;this.y0=y0;this.x1=x1;this.y1=y1;
+  }
+ }
+ private GoalSample pendingGoal;
  private final HarnessCoordinator harness=HarnessCoordinator.nes();
  private HarnessCoordinator.ActionPermit pendingPermit;
  private boolean aiSnapshot,aiRunning,aiFrozen;
@@ -265,6 +275,24 @@ public final class NesEmulatorActivity extends Activity {
        +" · касаний "+touches.get()+" · только эмуляция (не результат Маркета)");
     });
    }
+   @JavascriptInterface public void onHomebrewTask(String name,int start,int finish,
+       int beforeX,int beforeY,int afterX,int afterY,String session){
+    runOnUiThread(()->{
+     if(closed||!resumed||!homebrewRom||!aiFrozen||!aiRunning||
+         !frameEpoch.current(session)||pendingTrial==null||
+         !pendingTrial.button.equals(name)||pendingTrial.frame!=start||
+         finish-start!=HomebrewGoalReward.REQUIRED_FRAMES){
+      if(aiRunning)stopCpuExperiment("STOP: не удалось привязать RAM-награду к NES-сеансу");
+      return;
+     }
+     try{
+      HomebrewGoalReward.verify(name,start,finish,beforeX,beforeY,afterX,afterY);
+      pendingGoal=new GoalSample(session,name,start,finish,beforeX,beforeY,afterX,afterY);
+     }catch(IllegalArgumentException invalid){
+      stopCpuExperiment("STOP: память встроенной NES противоречит заявленному действию");
+     }
+    });
+   }
    @JavascriptInterface public void onAgentAction(String name,int started,int finished,String session){
     runOnUiThread(()->{
      if(!resumed||!frameEpoch.current(session))return;
@@ -399,7 +427,7 @@ public final class NesEmulatorActivity extends Activity {
   runHomebrewCpuAgent();
  }
  private void stopCpuExperiment(String reason){
-  harness.stop("STOP_OR_RECOVERY");pendingPermit=null;
+  harness.stop("STOP_OR_RECOVERY");pendingPermit=null;pendingGoal=null;
   aiTicketNonce=null;aiSnapshot=false;queuedAiButton=null;aiRunning=false;
   snapshotGate.cancel();exportTrial=null;
   if(aiObserveButton!=null)aiObserveButton.setEnabled(
@@ -469,11 +497,29 @@ public final class NesEmulatorActivity extends Activity {
    state.setText(readyTrial.summary()+" · можно передать в ModelLab");
     if(aiRunning){
      aiRunning=false;
+     GoalSample goal=pendingGoal;
+     pendingGoal=null;
      boolean saved=recordAiEpisode(readyTrial);
-     state.setText(saved?
-       "ИИ-ход "+readyTrial.button+": "+readyTrial.status+
-         " · сохранён в общей памяти, награда неизвестна":
-       "STOP: кадр проверен, но общая память эпизодов недоступна; ход не записан");
+     if(!saved)state.setText("STOP: общий журнал NES недоступен");
+     else if(goal!=null&&goal.epoch.equals(frameEpoch.token())&&
+          goal.button.equals(readyTrial.button)&&
+          goal.start==readyTrial.frameBefore&&goal.finish==readyTrial.frameAfter){
+      try{
+       ConsoleExperienceMemory.appendGoal(getFilesDir().toPath(),goal.epoch,
+         aiModelId,aiModelSha,readyTrial,goal.x0,goal.y0,goal.x1,goal.y1);
+       HomebrewGoalReward.Result task=HomebrewGoalReward.verify(goal.button,
+         goal.start,goal.finish,goal.x0,goal.y0,goal.x1,goal.y1);
+       state.setText("NES 6502: "+goal.button+" · задача дойти до (192,112)"+
+         " · reward "+task.reward()+" · "+(task.reached()?"ЦЕЛЬ ДОСТИГНУТА":"продолжается")+
+         " · вес GGUF не изменился");
+      }catch(IOException|IllegalArgumentException invalid){
+       state.setText("STOP: подтверждён ход, но награда NES не записана: "+
+         invalid.getClass().getSimpleName());
+      }
+     }else{
+      state.setText("ИИ-ход "+readyTrial.button+": "+readyTrial.status+
+        " · RAM-награда не подтверждена (UNKNOWN)");
+     }
     }
    if(experiment.running()){
     NesExperimentPolicy.Decision result=experiment.observe(readyTrial.status);
@@ -737,11 +783,15 @@ public final class NesEmulatorActivity extends Activity {
   String encoded=Base64.encodeToString(rom,Base64.NO_WRAP);
   String session=frameEpoch.begin();
   harness.reset(session,HarnessCoordinator.Mode.REALTIME_MODE);
-  pendingPermit=null;aiFrozen=false;
+  pendingPermit=null;pendingGoal=null;aiFrozen=false;
   frames=hash=0;touches.set(0);
   ++experimentGeneration;experiment.stop();
   snapshotGate.cancel();exportTrial=null;
   harness.stop();aiTicketNonce=null;queuedAiButton=null;aiRunning=false;aiSnapshot=false;
+  if(homebrew&&!java.util.Arrays.equals(rom,HomebrewNes.cartridge())){
+   harness.stop("HOME_BREW_ROM_MISMATCH");
+   state.setText("STOP: только точная встроенная ROM даёт RAM-награду");return;
+  }
   homebrewRom=homebrew;pendingTrial=null;readyTrial=null;
   if(shareTrial!=null)shareTrial.setEnabled(false);
   if(cpuAgentButton!=null)cpuAgentButton.setEnabled(false);

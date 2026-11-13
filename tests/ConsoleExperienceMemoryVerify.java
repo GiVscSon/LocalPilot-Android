@@ -9,6 +9,7 @@ class ConsoleExperienceMemoryVerify {
         "--release","17","-d",out.toString(),
         "shared/src/main/java/org/localpilot/shared/ConsoleAgentContract.java",
         "shared/src/main/java/org/localpilot/shared/NesTrial.java",
+        "shared/src/main/java/org/localpilot/shared/HomebrewGoalReward.java",
         "shared/src/main/java/org/localpilot/shared/ConsoleExperienceMemory.java",
         "tests/ConsoleExperienceMemoryTest.java")!=0)
    throw new AssertionError("Console memory verifier failed to compile");

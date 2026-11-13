@@ -19,6 +19,7 @@ const events=[];
 const env={window:{GameLabBridge:{
  onStepReady(...args){events.push(["ready",...args]);},
  onAgentAction(...args){events.push(["ack",...args]);},
+ onHomebrewTask(...args){events.push(["goal",...args]);},
  onFrame(...args){events.push(["frame",...args]);}
 }},jsnes,stepMode:false,paused:false,agentTrial:null,homebrewRom:true,
  frames:0,validFrame:0,activeRomSession:"4242",timer:1,audioContext:null,
@@ -47,6 +48,7 @@ const first=env.frames;
 assert.equal(env.window.retroResume(),true);
 assert.equal(env.frames,first,"resume must not advance frozen game");
 assert.equal(env.window.retroAiStep("A",16),true);
+assert.equal(events.at(-3)[0],"goal","one real 6502 goal report precedes ACK and frame");
 assert.equal(env.frames,first+16,"true JSNES must execute exactly 16 frames");
 assert.equal(events.at(-2)[0],"ack","button release precedes final frame");
 assert.equal(events.at(-1)[0],"frame");
@@ -56,6 +58,13 @@ assert.equal(env.window.retroAiStep("A",15),false);
 assert.equal(env.window.retroAiStep("START",16),false);
 const second=env.frames;
 assert.equal(env.window.retroAiStep("RIGHT",16),true);
+const goal=events.at(-3);
+assert.equal(goal[0],"goal");
+assert.equal(goal[1],"RIGHT");
+assert.equal(goal[3]-goal[2],16,"goal evidence bound to exact 16 CPU/PPU frames");
+assert.equal(goal[5],112,"ROM defines Y at 112");
+assert.equal(goal[7],112,"RIGHT does not move Y");
+assert.ok(goal[6]>goal[4],"RIGHT must advance real emulated CPU RAM X");
 assert.equal(env.frames,second+16,"second step also exactly 16 frames");
 assert.equal(env.window.retroExitStepMode(),true);
 assert.equal(env.stepMode,false);

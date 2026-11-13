@@ -47,6 +47,24 @@ public final class ConsoleExperienceMemoryTest {
   Files.delete(journal);
   ConsoleExperienceMemory.append(temp,"import:alpha",sha,changed);
   require(ConsoleExperienceMemory.read(temp).size()==1,"recovery after explicit file reset");
+  NesTrial proof=NesTrial.create("HOMEBREW","RIGHT",90,106,44,55);
+  ConsoleExperienceMemory.appendGoal(temp,"3004","import:alpha",sha,
+    proof,128,112,144,112);
+  var tasks=ConsoleExperienceMemory.readGoals(temp);
+  require(tasks.size()==1&&tasks.get(0).reward()==16&&!tasks.get(0).reached(),
+    "actual engine-state reward is re-derived from verified task coordinates");
+  require(ConsoleExperienceMemory.goalSummary(temp).contains("1 проверенных CPU-переходов"),
+    "shared memory reports task provenance, not generic NES reward");
+  boolean rejected=false;
+  try{ConsoleExperienceMemory.appendGoal(temp,"3004","import:alpha",sha,
+    proof,128,112,90,112);}catch(IllegalArgumentException invalid){rejected=true;}
+  require(rejected,"unsupported controller transition must not create positive reward");
+  Path goal=temp.resolve(ConsoleExperienceMemory.GOAL_FILE);
+  String original=Files.readString(goal,StandardCharsets.UTF_8);
+  Files.writeString(goal,original.replace("|16|0|","|99|0|"),StandardCharsets.UTF_8);
+  rejected=false;
+  try{ConsoleExperienceMemory.readGoals(temp);}catch(IOException corrupted){rejected=true;}
+  require(rejected,"tampered engine-state reward must fail closed");
   System.out.println("CONSOLE_SHARED_MEMORY_PASS");
  }
 }
