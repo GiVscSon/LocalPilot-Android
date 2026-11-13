@@ -1,6 +1,5 @@
 package org.localpilot.shared;
 
-import java.util.Arrays;
 import java.util.List;
 
 /**
@@ -91,14 +90,14 @@ public final class VerifiedReplayFilter {
       !first.policySha256().equals(s.policySha256())||
       !first.observationSchema().equals(s.observationSchema()))
     return deny(Reason.EPOCH_OR_POLICY_CHANGED,n);
+   if(!finite64(s.state64)||!finite64(s.nextState64))
+    return deny(Reason.INVALID_OBSERVATION,n);
    if(s.sequence()!=i||s.frameBefore()<15||s.durationFrames()<1||
       s.durationFrames()>600||s.frameAfter()<=s.frameBefore()||
       s.frameAfter()-s.frameBefore()!=s.durationFrames()||
       (previous!=null&&(s.frameBefore()!=previous.frameAfter()
                          ||!sameVector(s.state64,previous.nextState64))))
     return deny(Reason.NOT_CONTIGUOUS,n);
-   if(!finite64(s.state64)||!finite64(s.nextState64))
-    return deny(Reason.INVALID_OBSERVATION,n);
    if(s.actionCount()<2||s.actionCount()>16||s.actionId()<0||
       s.actionId()>=s.actionCount()||
       (s.legalMask()&~((1<<s.actionCount())-1))!=0||
