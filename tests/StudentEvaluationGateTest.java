@@ -19,6 +19,17 @@ public final class StudentEvaluationGateTest {
   return policy;
  }
  private static final String ROM="a".repeat(64);
+ private static Float fixtureReward(StudentEvaluationGate.Step step){
+  if(step.frameAfter()-step.frameBefore()!=16||
+     step.xBefore()<0||step.xBefore()>255||
+     step.xAfter()<0||step.xAfter()>255)return null;
+  int diff=step.xAfter()-step.xBefore();
+  if(Math.abs(diff)>16||step.actionId()==0&&diff>0||
+     step.actionId()==1&&diff<0||
+     step.actionId()!=0&&step.actionId()!=1&&diff!=0)return null;
+  return diff/16f;
+ }
+
  private static List<StudentEvaluationGate.Step> rows(StudentPolicyNet active,
    StudentPolicyNet candidate) {
   List<StudentEvaluationGate.Step> list=new ArrayList<>();
@@ -53,7 +64,7 @@ public final class StudentEvaluationGateTest {
  public static void main(String[] args){
   StudentPolicyNet left=forced(0),right=forced(1);
   var normal=rows(left,right);
-  var report=StudentEvaluationGate.evaluate(left,right,ROM,Set.of(128),normal);
+  var report=StudentEvaluationGate.evaluate(left,right,ROM,Set.of(128),normal,StudentEvaluationGateTest::fixtureReward);
   check(report.accepted()&&report.reason()==StudentEvaluationGate.Reason.ACCEPTED,
     "independent matched fixture with task progress passes");
   check(report.scenarios()==5&&report.candidateWins()==5,"paired scenarios count");
@@ -62,11 +73,11 @@ public final class StudentEvaluationGateTest {
   check(left.sha256().equals(report.activeSha256()),"baseline SHA tied to report");
   check(right.sha256().equals(report.candidateSha256()),"candidate SHA tied to report");
   var first=normal.get(0);
-  check(StudentEvaluationGate.evaluate(left,right,ROM,Set.of(40),normal).reason()
+  check(StudentEvaluationGate.evaluate(left,right,ROM,Set.of(40),normal,StudentEvaluationGateTest::fixtureReward).reason()
     ==StudentEvaluationGate.Reason.TRAINING_OVERLAP,"training initial state leakage denied");
   var missing=new ArrayList<>(normal);
   missing.remove(0);
-  check(!StudentEvaluationGate.evaluate(left,right,ROM,Set.of(128),missing).accepted(),
+  check(!StudentEvaluationGate.evaluate(left,right,ROM,Set.of(128),missing,StudentEvaluationGateTest::fixtureReward).accepted(),
     "missing core step cannot pass");
   var invented=new StudentEvaluationGate.Step(
    first.scenarioId(),first.arm(),first.epoch(),
@@ -74,7 +85,7 @@ public final class StudentEvaluationGateTest {
    first.sequence(),first.frameBefore(),first.frameAfter(),first.xBefore(),first.yBefore(),
    first.xAfter(),first.yAfter(),first.actionId(),true,true,true);
   check(StudentEvaluationGate.evaluate(left,right,ROM,Set.of(128),
-    changed(normal,0,invented)).reason()==StudentEvaluationGate.Reason.UNTRUSTED_PROVENANCE,
+    changed(normal,0,invented),StudentEvaluationGateTest::fixtureReward).reason()==StudentEvaluationGate.Reason.UNTRUSTED_PROVENANCE,
     "synthetic data rejected as holdout");
   var badAck=new StudentEvaluationGate.Step(
    first.scenarioId(),first.arm(),first.epoch(),first.provenance(),
@@ -82,7 +93,7 @@ public final class StudentEvaluationGateTest {
    first.frameAfter(),first.xBefore(),first.yBefore(),first.xAfter(),first.yAfter(),
    first.actionId(),false,true,true);
   check(StudentEvaluationGate.evaluate(left,right,ROM,Set.of(128),
-    changed(normal,0,badAck)).reason()==StudentEvaluationGate.Reason.UNVERIFIED_CORE_STEP,
+    changed(normal,0,badAck),StudentEvaluationGateTest::fixtureReward).reason()==StudentEvaluationGate.Reason.UNVERIFIED_CORE_STEP,
     "missing actual emulator input ACK rejected");
   var fakeRamJump=new StudentEvaluationGate.Step(
    first.scenarioId(),first.arm(),first.epoch(),first.provenance(),
@@ -90,7 +101,7 @@ public final class StudentEvaluationGateTest {
    first.frameAfter(),first.xBefore(),first.yBefore(),first.xAfter()+45,first.yAfter(),
    first.actionId(),true,true,true);
   check(StudentEvaluationGate.evaluate(left,right,ROM,Set.of(128),
-    changed(normal,0,fakeRamJump)).reason()==StudentEvaluationGate.Reason.INVALID_ROM_REWARD,
+    changed(normal,0,fakeRamJump),StudentEvaluationGateTest::fixtureReward).reason()==StudentEvaluationGate.Reason.INVALID_ROM_REWARD,
     "impossible zero-page jump cannot mint reward");
   var fakeDecision=new StudentEvaluationGate.Step(
    first.scenarioId(),first.arm(),first.epoch(),first.provenance(),
@@ -98,7 +109,7 @@ public final class StudentEvaluationGateTest {
    first.frameAfter(),first.xBefore(),first.yBefore(),first.xAfter(),first.yAfter(),
    5,true,true,true);
   check(StudentEvaluationGate.evaluate(left,right,ROM,Set.of(128),
-    changed(normal,0,fakeDecision)).reason()==StudentEvaluationGate.Reason.ACTION_MISMATCH,
+    changed(normal,0,fakeDecision),StudentEvaluationGateTest::fixtureReward).reason()==StudentEvaluationGate.Reason.ACTION_MISMATCH,
     "model may not be credited for an action it did not select");
   var wrongSha=new StudentEvaluationGate.Step(
    first.scenarioId(),first.arm(),first.epoch(),first.provenance(),
@@ -106,11 +117,11 @@ public final class StudentEvaluationGateTest {
    first.frameAfter(),first.xBefore(),first.yBefore(),first.xAfter(),first.yAfter(),
    first.actionId(),true,true,true);
   check(StudentEvaluationGate.evaluate(left,right,ROM,Set.of(128),
-    changed(normal,0,wrongSha)).reason()==StudentEvaluationGate.Reason.BAD_IDENTITY,
+    changed(normal,0,wrongSha),StudentEvaluationGateTest::fixtureReward).reason()==StudentEvaluationGate.Reason.BAD_IDENTITY,
     "weights drift cannot pass holdout");
   StudentPolicyNet noProgress1=forced(4),noProgress2=forced(5);
   var stalled=StudentEvaluationGate.evaluate(noProgress1,noProgress2,ROM,Set.of(128),
-    rows(noProgress1,noProgress2));
+    rows(noProgress1,noProgress2),StudentEvaluationGateTest::fixtureReward);
   check(!stalled.accepted()&&stalled.reason()==StudentEvaluationGate.Reason.NO_PROVEN_IMPROVEMENT,
     "no goal improvement never activates a candidate");
   try{
