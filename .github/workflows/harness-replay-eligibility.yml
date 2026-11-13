@@ -1,0 +1,47 @@
+name: Harness on-policy replay eligibility (contract only)
+
+on:
+  pull_request:
+    paths:
+      - 'shared/src/main/java/org/localpilot/shared/VerifiedReplayFilter.java'
+      - 'app/src/main/java/org/localpilot/android/HarnessDashboardActivity.java'
+      - 'tests/VerifiedReplayFilterTest.java'
+      - '.github/workflows/harness-replay-eligibility.yml'
+  push:
+    branches: ['feat/harness-*']
+    paths:
+      - 'shared/src/main/java/org/localpilot/shared/VerifiedReplayFilter.java'
+      - 'tests/VerifiedReplayFilterTest.java'
+      - '.github/workflows/harness-replay-eligibility.yml'
+permissions:
+  contents: read
+jobs:
+  replay-contract-jvm:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Compile actual shared model and run adversarial contract tests
+        run: |
+          set -euo pipefail
+          mkdir -p build/replay-contract
+          javac --release 17 -d build/replay-contract \
+            shared/src/main/java/org/localpilot/shared/ConsoleAgentContract.java \
+            shared/src/main/java/org/localpilot/shared/NesTrial.java \
+            shared/src/main/java/org/localpilot/shared/ConsoleExperienceMemory.java \
+            shared/src/main/java/org/localpilot/shared/VerifiedReplayFilter.java \
+            tests/VerifiedReplayFilterTest.java
+          java -cp build/replay-contract org.localpilot.shared.VerifiedReplayFilterTest
+      - name: Verify learning UI does not promote legacy NES context into PPO
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          dashboard=Path("app/src/main/java/org/localpilot/android/HarnessDashboardActivity.java").read_text()
+          assert "VerifiedReplayFilter.inspectLegacyVisualMemory(all)" in dashboard
+          print("LEGACY_REPLAY_UI_BLOCK_PASS")
+          PY
