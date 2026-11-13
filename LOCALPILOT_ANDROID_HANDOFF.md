@@ -1,3 +1,46 @@
+# Подтверждённая точка 0.8.2/code54 · 13.11.2026
+
+**Код приложения: main = 8b6cfca368f991aa6eff28af69b72d77c6b5b304.**
+PR #141 merged. В main перенесён сам проверенный test-merge commit, SHA не менялся.
+Эта reports-ветка добавляет только результаты; не выдавать её doc-commit за
+исходный SHA проверенного приложения. Для продолжения кода начинать от main.
+
+[Полный отчёт и ограничения](docs/validation/0.8.2-8b6cfca/VALIDATION.md),
+[JSON](docs/validation/0.8.2-8b6cfca/VALIDATION.json),
+[Android CSV](docs/validation/0.8.2-8b6cfca/ANDROID-MATRIX.csv),
+[сравнение стратегий](docs/validation/0.8.2-8b6cfca/PRECISION-STRATEGIES.csv),
+[10 legacy-сцен по трём seed, отдельно от NES](docs/validation/0.8.2-8b6cfca/LEGACY-SIMULATORS.csv).
+37 проверок SUCCESS, один optional standalone-preloaded SKIPPED; четыре старых
+concurrent push-job отменены и заменены успешными PR jobs.
+Все6 API30/35/36 Pixel2/PixelC: реальный Android WebView→Harness→16 шагов→PPO
+candidate PASS. Всего96 действий/1536 CPU/PPU кадров; активные веса не заменены.
+Один идентичный x86 тестовый APK, source8b6cfca; ARM64 того же SHA проверен
+отдельно по ZIP CRC, подписи debug, DEX/assets и ELF+ZIP16KiB.
+Тестовый ARM64 APK21 852 085байт, SHA256
+9325edffdae25060b4f857d5f4bf593f0dff508b6f46177aedb1cde9fe882d4e.
+Unsigned production APK11 733 245байт, SHA256
+86f49eb6e3541da692f2a0eea3a48bf53ffd2bf4f53b2a89a1dd62259a9441e2.
+
+[Тестовый APK](https://github.com/GiVscSon/LocalPilot-Android/actions/runs/43506503407/artifacts/14076337160),
+[Android матрица](https://github.com/GiVscSon/LocalPilot-Android/actions/runs/43506503407),
+[unsigned build](https://github.com/GiVscSon/LocalPilot-Android/actions/runs/43506753483).
+Кандидат debug не является совместимым production update. Не удалять установленное
+приложение/данные ради подписи. Physical/upgrade acceptance NOT_RUN, совместимый
+постоянный ключ недоступен, создание защищённого android-signing возвращает403.
+Загрузка release assets через uploads.github.com вернула401; GitHub draft release
+v0.8.2-harness-rc1 создан, остаётся draft/prerelease, отчёты сохранены здесь.
+
+Precision7: headless15/15 известных и20/20 frozen на5 data seeds; Android матрица
+проверяет отдельный PPO64. PPO improvement не доказан, promotion BLOCKED.
+Встроенная RAM-награда относится только к точной homebrew ROM; imported ROM без
+проверенного task profile не получает награду. Unified APK CPU-only; Vulkan не
+выдавать за проверенный GPU POCO. Старые симуляторы SIMULATED_GAME, не VERIFIED_REAL.
+release_ready=false, стабильный релиз НЕ опубликован.
+
+Дальше: физическая phone/tablet+upgrade приёмка; совместимый ключ и защищённое
+подписание; восстановление доступа загрузки release-assets; отдельное улучшение
+PPO и GPU/других ROM-профилей с новыми независимыми gates. Без подмены результатов.
+
 # 0.8.2/code54: единый кандидат, новые блокирующие проверки · 13.11.2026
 
 PR #141 в main, ветка integration/harness-ppo-goal-unified-20261113.

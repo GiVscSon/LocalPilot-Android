@@ -1,0 +1,771 @@
+{
+  "schema": "localpilot-082-reviewed-candidate-v1",
+  "generatedAt": "2026-11-13T21:26:29.485407+00:00",
+  "applicationSourceSha": "8b6cfca368f991aa6eff28af69b72d77c6b5b304",
+  "reviewedPrHead": "e5dc8e29fd1bde3df771ab6d13f0d7fcde5a122a",
+  "version": "0.8.2",
+  "versionCode": 54,
+  "pr": 141,
+  "status": "TESTED_CANDIDATE_RELEASE_BLOCKED",
+  "releaseReady": false,
+  "checks": {
+    "successful": 37,
+    "optionalSkipped": 1,
+    "supersededConcurrentCancellations": 4,
+    "failed": 0,
+    "pending": 0
+  },
+  "build": {
+    "arm64TestOnly": {
+      "schema": "localpilot-all-in-one-test-v1",
+      "source": "GitHub Actions candidate",
+      "package": "org.localpilot.android.dev.unified",
+      "versionCode": 54,
+      "versionName": "0.8.2-unified-test-only",
+      "sha256": "9325edffdae25060b4f857d5f4bf593f0dff508b6f46177aedb1cde9fe882d4e",
+      "bytes": 21852085,
+      "debugSignerSha256": "4cf9e2713688d4bb85b089f0f89b92025a7522900143d9a110558fbe2026ea7f",
+      "contains": {
+        "LocalPilot": true,
+        "GameLabNES": true,
+        "ModelLabGGUFImport": true,
+        "NativeCpuRuntime": true
+      },
+      "signedRelease": false,
+      "releaseReady": false,
+      "physicalAndroidTest": "NOT_VERIFIED",
+      "upgradeDataPreservation": "NOT_VERIFIED"
+    },
+    "unsignedProduction": {
+      "schema": "localpilot-unsigned-build-v1",
+      "sourceSha": "8b6cfca368f991aa6eff28af69b72d77c6b5b304",
+      "apkSha256": "86f49eb6e3541da692f2a0eea3a48bf53ffd2bf4f53b2a89a1dd62259a9441e2",
+      "apkBytes": 11733245
+    },
+    "elf16k": "PASS",
+    "zipCrc": "PASS",
+    "sourceProvenance": "PASS",
+    "productionDebuggable": false
+  },
+  "artifactUrls": {
+    "arm64": "https://github.com/GiVscSon/LocalPilot-Android/actions/runs/43506503407/artifacts/14076337160",
+    "unsigned": "https://github.com/GiVscSon/LocalPilot-Android/actions/runs/43506753483"
+  },
+  "androidMatrix": [
+    {
+      "schema": "localpilot-android-nes-student-v1",
+      "result": "PASS",
+      "api": 30,
+      "deviceProfile": "pixel_2",
+      "screenSize": [
+        1080,
+        1920
+      ],
+      "apkSha256": "0dd6709d96e529229ad31b048c64908a078bf98f98ccc24317d95fa0549cb665",
+      "sourceSha": "8b6cfca368f991aa6eff28af69b72d77c6b5b304",
+      "policyBeforeSha256": "126f84eca9ded692420d99132050e6ecc3fe69c9513ff7a5b5b03af9b043d189",
+      "policyAfterSha256": "8cf1e2313d0e8fccf1cd178f0ebdb49b833db0d5b1d68a08d61ad3b88f91b73d",
+      "romSha256": "7bfc5e462c6acddc0fcb7f5ac6cef4d87888a54d5bf788a31aab25320e446372",
+      "rollout": {
+        "steps": 16,
+        "coreFrames": 256,
+        "taskReturn": 1.875,
+        "rewardSource": "VERIFIED_ROM_RAM",
+        "provenance": "RETRO_EMULATED"
+      },
+      "changedParameters": 4999,
+      "runtime": "PRODUCTION_ANDROID_WEBVIEW_HARNESS_PPO",
+      "singlePackage": true,
+      "evaluation": "NOT_RUN",
+      "promotion": "BLOCKED_UNTIL_INDEPENDENT_EVALUATION",
+      "physicalDevice": false,
+      "releaseReady": false,
+      "artifactId": 14077042308
+    },
+    {
+      "schema": "localpilot-android-nes-student-v1",
+      "result": "PASS",
+      "api": 30,
+      "deviceProfile": "pixel_c",
+      "screenSize": [
+        2560,
+        1800
+      ],
+      "apkSha256": "0dd6709d96e529229ad31b048c64908a078bf98f98ccc24317d95fa0549cb665",
+      "sourceSha": "8b6cfca368f991aa6eff28af69b72d77c6b5b304",
+      "policyBeforeSha256": "8ffd952fa7a9b0437f3e690735e7187b48417451e6a34f04a27ddf184da5e45a",
+      "policyAfterSha256": "1cd5b6e6cf3cfb50746b29220b683f59040ed4a23f7a9bc6abda31724eb6e90e",
+      "romSha256": "7bfc5e462c6acddc0fcb7f5ac6cef4d87888a54d5bf788a31aab25320e446372",
+      "rollout": {
+        "steps": 16,
+        "coreFrames": 256,
+        "taskReturn": 3.8125,
+        "rewardSource": "VERIFIED_ROM_RAM",
+        "provenance": "RETRO_EMULATED"
+      },
+      "changedParameters": 4999,
+      "runtime": "PRODUCTION_ANDROID_WEBVIEW_HARNESS_PPO",
+      "singlePackage": true,
+      "evaluation": "NOT_RUN",
+      "promotion": "BLOCKED_UNTIL_INDEPENDENT_EVALUATION",
+      "physicalDevice": false,
+      "releaseReady": false,
+      "artifactId": 14076617818
+    },
+    {
+      "schema": "localpilot-android-nes-student-v1",
+      "result": "PASS",
+      "api": 35,
+      "deviceProfile": "pixel_2",
+      "screenSize": [
+        1080,
+        1920
+      ],
+      "apkSha256": "0dd6709d96e529229ad31b048c64908a078bf98f98ccc24317d95fa0549cb665",
+      "sourceSha": "8b6cfca368f991aa6eff28af69b72d77c6b5b304",
+      "policyBeforeSha256": "d7a553722080eff48710a66375ffc25107addd04c6b8a2c82ae59a8dd099cfa8",
+      "policyAfterSha256": "51458ca364ed4d65b0a2e9abcec341318b2828cce17fffd23a586c1e0ed3223e",
+      "romSha256": "7bfc5e462c6acddc0fcb7f5ac6cef4d87888a54d5bf788a31aab25320e446372",
+      "rollout": {
+        "steps": 16,
+        "coreFrames": 256,
+        "taskReturn": 0.0625,
+        "rewardSource": "VERIFIED_ROM_RAM",
+        "provenance": "RETRO_EMULATED"
+      },
+      "changedParameters": 4999,
+      "runtime": "PRODUCTION_ANDROID_WEBVIEW_HARNESS_PPO",
+      "singlePackage": true,
+      "evaluation": "NOT_RUN",
+      "promotion": "BLOCKED_UNTIL_INDEPENDENT_EVALUATION",
+      "physicalDevice": false,
+      "releaseReady": false,
+      "artifactId": 14076048876
+    },
+    {
+      "schema": "localpilot-android-nes-student-v1",
+      "result": "PASS",
+      "api": 35,
+      "deviceProfile": "pixel_c",
+      "screenSize": [
+        2560,
+        1800
+      ],
+      "apkSha256": "0dd6709d96e529229ad31b048c64908a078bf98f98ccc24317d95fa0549cb665",
+      "sourceSha": "8b6cfca368f991aa6eff28af69b72d77c6b5b304",
+      "policyBeforeSha256": "0b111eef88a6dfc6abff6ed44fab5eaa977d700610abfe85a285b51597742ac3",
+      "policyAfterSha256": "b1ef07b929fa45857fd9aa9aa14015c1fd68976ecc43c1ec42289f3d205661b7",
+      "romSha256": "7bfc5e462c6acddc0fcb7f5ac6cef4d87888a54d5bf788a31aab25320e446372",
+      "rollout": {
+        "steps": 16,
+        "coreFrames": 256,
+        "taskReturn": 0.0625,
+        "rewardSource": "VERIFIED_ROM_RAM",
+        "provenance": "RETRO_EMULATED"
+      },
+      "changedParameters": 4999,
+      "runtime": "PRODUCTION_ANDROID_WEBVIEW_HARNESS_PPO",
+      "singlePackage": true,
+      "evaluation": "NOT_RUN",
+      "promotion": "BLOCKED_UNTIL_INDEPENDENT_EVALUATION",
+      "physicalDevice": false,
+      "releaseReady": false,
+      "artifactId": 14076213282
+    },
+    {
+      "schema": "localpilot-android-nes-student-v1",
+      "result": "PASS",
+      "api": 36,
+      "deviceProfile": "pixel_2",
+      "screenSize": [
+        1080,
+        1920
+      ],
+      "apkSha256": "0dd6709d96e529229ad31b048c64908a078bf98f98ccc24317d95fa0549cb665",
+      "sourceSha": "8b6cfca368f991aa6eff28af69b72d77c6b5b304",
+      "policyBeforeSha256": "a82b6cfdc926dc6a428a64ac1c8d7937eef7e3d22b6d3b1cc2b1282283e8447c",
+      "policyAfterSha256": "1d435c16805abd04763a4aaac0e8a956aafdf4bad0e0ebdec331a2985b48e2e7",
+      "romSha256": "7bfc5e462c6acddc0fcb7f5ac6cef4d87888a54d5bf788a31aab25320e446372",
+      "rollout": {
+        "steps": 16,
+        "coreFrames": 256,
+        "taskReturn": -1.875,
+        "rewardSource": "VERIFIED_ROM_RAM",
+        "provenance": "RETRO_EMULATED"
+      },
+      "changedParameters": 4999,
+      "runtime": "PRODUCTION_ANDROID_WEBVIEW_HARNESS_PPO",
+      "singlePackage": true,
+      "evaluation": "NOT_RUN",
+      "promotion": "BLOCKED_UNTIL_INDEPENDENT_EVALUATION",
+      "physicalDevice": false,
+      "releaseReady": false,
+      "artifactId": 14078020134
+    },
+    {
+      "schema": "localpilot-android-nes-student-v1",
+      "result": "PASS",
+      "api": 36,
+      "deviceProfile": "pixel_c",
+      "screenSize": [
+        2560,
+        1800
+      ],
+      "apkSha256": "0dd6709d96e529229ad31b048c64908a078bf98f98ccc24317d95fa0549cb665",
+      "sourceSha": "8b6cfca368f991aa6eff28af69b72d77c6b5b304",
+      "policyBeforeSha256": "bb48c3c836c2fc4d4a9d9e4cb58aed25b56c9cfea1c3203f3c4481379483c055",
+      "policyAfterSha256": "37ed33ffd8543c4cb5bd72435c4e0db70b9d0d7f51e6484cf709a3822caee6d9",
+      "romSha256": "7bfc5e462c6acddc0fcb7f5ac6cef4d87888a54d5bf788a31aab25320e446372",
+      "rollout": {
+        "steps": 16,
+        "coreFrames": 256,
+        "taskReturn": -0.0625,
+        "rewardSource": "VERIFIED_ROM_RAM",
+        "provenance": "RETRO_EMULATED"
+      },
+      "changedParameters": 4999,
+      "runtime": "PRODUCTION_ANDROID_WEBVIEW_HARNESS_PPO",
+      "singlePackage": true,
+      "evaluation": "NOT_RUN",
+      "promotion": "BLOCKED_UNTIL_INDEPENDENT_EVALUATION",
+      "physicalDevice": false,
+      "releaseReady": false,
+      "artifactId": 14076039063
+    }
+  ],
+  "precision": [
+    {
+      "dataSeed": 270113,
+      "weightsSha256": "77fadb8d4df2c108de8d5184f55d65bf5f56677dfc498b20c6e822ac4f2ba025",
+      "known": 15,
+      "frozen": 20,
+      "strategies": {
+        "random": {
+          "cases": 20,
+          "reached": 0,
+          "meanTaskReturn": 10.3
+        },
+        "scripted": {
+          "cases": 20,
+          "reached": 20,
+          "meanTaskReturn": 112.0
+        },
+        "student": {
+          "cases": 20,
+          "reached": 20,
+          "meanTaskReturn": 112.0
+        }
+      },
+      "androidPrecisionAcceptance": "NOT_PROVEN_BY_HEADLESS_SUITE",
+      "source": "RETRO_EMULATED"
+    },
+    {
+      "dataSeed": 65537,
+      "weightsSha256": "a818c5d3716cf5289bf916ecf4ddf61cab7e81a64cf539f263113df619e2e3b2",
+      "known": 15,
+      "frozen": 20,
+      "strategies": {
+        "random": {
+          "cases": 20,
+          "reached": 0,
+          "meanTaskReturn": 10.3
+        },
+        "scripted": {
+          "cases": 20,
+          "reached": 20,
+          "meanTaskReturn": 112.0
+        },
+        "student": {
+          "cases": 20,
+          "reached": 20,
+          "meanTaskReturn": 112.0
+        }
+      },
+      "androidPrecisionAcceptance": "NOT_PROVEN_BY_HEADLESS_SUITE",
+      "source": "RETRO_EMULATED"
+    },
+    {
+      "dataSeed": 571,
+      "weightsSha256": "d870bbb3668e3325ce15f07fb67ba326f54de89704c7a741cb99fa212c88dbd2",
+      "known": 15,
+      "frozen": 20,
+      "strategies": {
+        "random": {
+          "cases": 20,
+          "reached": 0,
+          "meanTaskReturn": 10.3
+        },
+        "scripted": {
+          "cases": 20,
+          "reached": 20,
+          "meanTaskReturn": 112.0
+        },
+        "student": {
+          "cases": 20,
+          "reached": 20,
+          "meanTaskReturn": 112.0
+        }
+      },
+      "androidPrecisionAcceptance": "NOT_PROVEN_BY_HEADLESS_SUITE",
+      "source": "RETRO_EMULATED"
+    },
+    {
+      "dataSeed": 9091,
+      "weightsSha256": "9b0099f1763d0c8dd7a64eb65c17f7ed96c9c4ce567db6fe17183ab7ff759d83",
+      "known": 15,
+      "frozen": 20,
+      "strategies": {
+        "random": {
+          "cases": 20,
+          "reached": 0,
+          "meanTaskReturn": 10.3
+        },
+        "scripted": {
+          "cases": 20,
+          "reached": 20,
+          "meanTaskReturn": 112.0
+        },
+        "student": {
+          "cases": 20,
+          "reached": 20,
+          "meanTaskReturn": 111.9
+        }
+      },
+      "androidPrecisionAcceptance": "NOT_PROVEN_BY_HEADLESS_SUITE",
+      "source": "RETRO_EMULATED"
+    },
+    {
+      "dataSeed": 12097,
+      "weightsSha256": "4fcabb7ab3ed241d2fcb1702b65d1f1947aecf78bd4322ffea458150c133a92a",
+      "known": 15,
+      "frozen": 20,
+      "strategies": {
+        "random": {
+          "cases": 20,
+          "reached": 0,
+          "meanTaskReturn": 10.3
+        },
+        "scripted": {
+          "cases": 20,
+          "reached": 20,
+          "meanTaskReturn": 112.0
+        },
+        "student": {
+          "cases": 20,
+          "reached": 20,
+          "meanTaskReturn": 112.0
+        }
+      },
+      "androidPrecisionAcceptance": "NOT_PROVEN_BY_HEADLESS_SUITE",
+      "source": "RETRO_EMULATED"
+    }
+  ],
+  "legacySimulators": [
+    {
+      "seed": 20261108,
+      "source": "SIMULATED_GAME",
+      "game": "BUBBLE",
+      "training_actions": 80,
+      "random_change_rate": 100.0,
+      "lab_change_rate": 100.0,
+      "scripted_change_rate": 100.0,
+      "delta_percentage_points": 0.0,
+      "random_mean_score": 30.0,
+      "lab_mean_score": 30.0,
+      "scripted_mean_score": 30.0
+    },
+    {
+      "seed": 20261108,
+      "source": "SIMULATED_GAME",
+      "game": "ARI",
+      "training_actions": 80,
+      "random_change_rate": 100.0,
+      "lab_change_rate": 100.0,
+      "scripted_change_rate": 100.0,
+      "delta_percentage_points": 0.0,
+      "random_mean_score": 0.0,
+      "lab_mean_score": 0.0,
+      "scripted_mean_score": 0.0
+    },
+    {
+      "seed": 20261108,
+      "source": "SIMULATED_GAME",
+      "game": "MATCH",
+      "training_actions": 80,
+      "random_change_rate": 2.5,
+      "lab_change_rate": 0.0,
+      "scripted_change_rate": 100.0,
+      "delta_percentage_points": -2.5,
+      "random_mean_score": 7.5,
+      "lab_mean_score": 0.0,
+      "scripted_mean_score": 390.0
+    },
+    {
+      "seed": 20261108,
+      "source": "SIMULATED_GAME",
+      "game": "PADDLE",
+      "training_actions": 80,
+      "random_change_rate": 85.0,
+      "lab_change_rate": 60.0,
+      "scripted_change_rate": 20.0,
+      "delta_percentage_points": -25.0,
+      "random_mean_score": 0.0,
+      "lab_mean_score": 0.0,
+      "scripted_mean_score": 0.0
+    },
+    {
+      "seed": 20261108,
+      "source": "SIMULATED_GAME",
+      "game": "TRAFFIC",
+      "training_actions": 80,
+      "random_change_rate": 50.0,
+      "lab_change_rate": 15.0,
+      "scripted_change_rate": 0.0,
+      "delta_percentage_points": -35.0,
+      "random_mean_score": 2.0,
+      "lab_mean_score": 2.0,
+      "scripted_mean_score": 2.0
+    },
+    {
+      "seed": 20261108,
+      "source": "SIMULATED_GAME",
+      "game": "FLAPPY",
+      "training_actions": 80,
+      "random_change_rate": 100.0,
+      "lab_change_rate": 100.0,
+      "scripted_change_rate": 100.0,
+      "delta_percentage_points": 0.0,
+      "random_mean_score": 0.0,
+      "lab_mean_score": 0.0,
+      "scripted_mean_score": 0.0
+    },
+    {
+      "seed": 20261108,
+      "source": "SIMULATED_GAME",
+      "game": "BOARD2048",
+      "training_actions": 80,
+      "random_change_rate": 80.0,
+      "lab_change_rate": 50.0,
+      "scripted_change_rate": 100.0,
+      "delta_percentage_points": -30.0,
+      "random_mean_score": 19.0,
+      "lab_mean_score": 10.0,
+      "scripted_mean_score": 39.0
+    },
+    {
+      "seed": 20261108,
+      "source": "SIMULATED_GAME",
+      "game": "HEXON",
+      "training_actions": 80,
+      "random_change_rate": 100.0,
+      "lab_change_rate": 100.0,
+      "scripted_change_rate": 100.0,
+      "delta_percentage_points": 0.0,
+      "random_mean_score": 10.0,
+      "lab_mean_score": 10.0,
+      "scripted_mean_score": 10.0
+    },
+    {
+      "seed": 20261108,
+      "source": "SIMULATED_GAME",
+      "game": "PROTECTED_SWAP",
+      "training_actions": 80,
+      "random_change_rate": 10.0,
+      "lab_change_rate": 5.0,
+      "scripted_change_rate": 80.0,
+      "delta_percentage_points": -5.0,
+      "random_mean_score": 30.0,
+      "lab_mean_score": 15.0,
+      "scripted_mean_score": 280.0
+    },
+    {
+      "seed": 20261108,
+      "source": "SIMULATED_GAME",
+      "game": "CAT_TOWER",
+      "training_actions": 80,
+      "random_change_rate": 100.0,
+      "lab_change_rate": 100.0,
+      "scripted_change_rate": 100.0,
+      "delta_percentage_points": 0.0,
+      "random_mean_score": 20.0,
+      "lab_mean_score": 20.0,
+      "scripted_mean_score": 20.0
+    },
+    {
+      "seed": 177777,
+      "source": "SIMULATED_GAME",
+      "game": "BUBBLE",
+      "training_actions": 80,
+      "random_change_rate": 100.0,
+      "lab_change_rate": 100.0,
+      "scripted_change_rate": 100.0,
+      "delta_percentage_points": 0.0,
+      "random_mean_score": 30.0,
+      "lab_mean_score": 30.0,
+      "scripted_mean_score": 30.0
+    },
+    {
+      "seed": 177777,
+      "source": "SIMULATED_GAME",
+      "game": "ARI",
+      "training_actions": 80,
+      "random_change_rate": 100.0,
+      "lab_change_rate": 100.0,
+      "scripted_change_rate": 100.0,
+      "delta_percentage_points": 0.0,
+      "random_mean_score": 0.0,
+      "lab_mean_score": 0.0,
+      "scripted_mean_score": 0.0
+    },
+    {
+      "seed": 177777,
+      "source": "SIMULATED_GAME",
+      "game": "MATCH",
+      "training_actions": 80,
+      "random_change_rate": 0.0,
+      "lab_change_rate": 0.0,
+      "scripted_change_rate": 100.0,
+      "delta_percentage_points": 0.0,
+      "random_mean_score": 0.0,
+      "lab_mean_score": 0.0,
+      "scripted_mean_score": 437.5
+    },
+    {
+      "seed": 177777,
+      "source": "SIMULATED_GAME",
+      "game": "PADDLE",
+      "training_actions": 80,
+      "random_change_rate": 75.0,
+      "lab_change_rate": 65.0,
+      "scripted_change_rate": 20.0,
+      "delta_percentage_points": -10.0,
+      "random_mean_score": 0.0,
+      "lab_mean_score": 0.0,
+      "scripted_mean_score": 0.0
+    },
+    {
+      "seed": 177777,
+      "source": "SIMULATED_GAME",
+      "game": "TRAFFIC",
+      "training_actions": 80,
+      "random_change_rate": 45.0,
+      "lab_change_rate": 45.0,
+      "scripted_change_rate": 0.0,
+      "delta_percentage_points": 0.0,
+      "random_mean_score": 2.0,
+      "lab_mean_score": 2.0,
+      "scripted_mean_score": 2.0
+    },
+    {
+      "seed": 177777,
+      "source": "SIMULATED_GAME",
+      "game": "FLAPPY",
+      "training_actions": 80,
+      "random_change_rate": 100.0,
+      "lab_change_rate": 100.0,
+      "scripted_change_rate": 100.0,
+      "delta_percentage_points": 0.0,
+      "random_mean_score": 0.0,
+      "lab_mean_score": 0.0,
+      "scripted_mean_score": 0.0
+    },
+    {
+      "seed": 177777,
+      "source": "SIMULATED_GAME",
+      "game": "BOARD2048",
+      "training_actions": 80,
+      "random_change_rate": 95.0,
+      "lab_change_rate": 90.0,
+      "scripted_change_rate": 100.0,
+      "delta_percentage_points": -5.0,
+      "random_mean_score": 29.0,
+      "lab_mean_score": 17.0,
+      "scripted_mean_score": 46.0
+    },
+    {
+      "seed": 177777,
+      "source": "SIMULATED_GAME",
+      "game": "HEXON",
+      "training_actions": 80,
+      "random_change_rate": 100.0,
+      "lab_change_rate": 100.0,
+      "scripted_change_rate": 100.0,
+      "delta_percentage_points": 0.0,
+      "random_mean_score": 10.0,
+      "lab_mean_score": 10.0,
+      "scripted_mean_score": 10.0
+    },
+    {
+      "seed": 177777,
+      "source": "SIMULATED_GAME",
+      "game": "PROTECTED_SWAP",
+      "training_actions": 80,
+      "random_change_rate": 25.0,
+      "lab_change_rate": 15.0,
+      "scripted_change_rate": 100.0,
+      "delta_percentage_points": -10.0,
+      "random_mean_score": 90.0,
+      "lab_mean_score": 45.0,
+      "scripted_mean_score": 395.0
+    },
+    {
+      "seed": 177777,
+      "source": "SIMULATED_GAME",
+      "game": "CAT_TOWER",
+      "training_actions": 80,
+      "random_change_rate": 100.0,
+      "lab_change_rate": 100.0,
+      "scripted_change_rate": 100.0,
+      "delta_percentage_points": 0.0,
+      "random_mean_score": 20.0,
+      "lab_mean_score": 20.0,
+      "scripted_mean_score": 20.0
+    },
+    {
+      "seed": 20261201,
+      "source": "SIMULATED_GAME",
+      "game": "BUBBLE",
+      "training_actions": 80,
+      "random_change_rate": 100.0,
+      "lab_change_rate": 100.0,
+      "scripted_change_rate": 100.0,
+      "delta_percentage_points": 0.0,
+      "random_mean_score": 30.0,
+      "lab_mean_score": 30.0,
+      "scripted_mean_score": 30.0
+    },
+    {
+      "seed": 20261201,
+      "source": "SIMULATED_GAME",
+      "game": "ARI",
+      "training_actions": 80,
+      "random_change_rate": 100.0,
+      "lab_change_rate": 100.0,
+      "scripted_change_rate": 100.0,
+      "delta_percentage_points": 0.0,
+      "random_mean_score": 0.0,
+      "lab_mean_score": 0.0,
+      "scripted_mean_score": 0.0
+    },
+    {
+      "seed": 20261201,
+      "source": "SIMULATED_GAME",
+      "game": "MATCH",
+      "training_actions": 80,
+      "random_change_rate": 0.0,
+      "lab_change_rate": 2.5,
+      "scripted_change_rate": 32.5,
+      "delta_percentage_points": 2.5,
+      "random_mean_score": 0.0,
+      "lab_mean_score": 7.5,
+      "scripted_mean_score": 122.5
+    },
+    {
+      "seed": 20261201,
+      "source": "SIMULATED_GAME",
+      "game": "PADDLE",
+      "training_actions": 80,
+      "random_change_rate": 82.5,
+      "lab_change_rate": 42.5,
+      "scripted_change_rate": 20.0,
+      "delta_percentage_points": -40.0,
+      "random_mean_score": 0.0,
+      "lab_mean_score": 0.0,
+      "scripted_mean_score": 0.0
+    },
+    {
+      "seed": 20261201,
+      "source": "SIMULATED_GAME",
+      "game": "TRAFFIC",
+      "training_actions": 80,
+      "random_change_rate": 32.5,
+      "lab_change_rate": 10.0,
+      "scripted_change_rate": 0.0,
+      "delta_percentage_points": -22.5,
+      "random_mean_score": 2.0,
+      "lab_mean_score": 2.0,
+      "scripted_mean_score": 2.0
+    },
+    {
+      "seed": 20261201,
+      "source": "SIMULATED_GAME",
+      "game": "FLAPPY",
+      "training_actions": 80,
+      "random_change_rate": 100.0,
+      "lab_change_rate": 100.0,
+      "scripted_change_rate": 100.0,
+      "delta_percentage_points": 0.0,
+      "random_mean_score": 0.0,
+      "lab_mean_score": 0.0,
+      "scripted_mean_score": 0.0
+    },
+    {
+      "seed": 20261201,
+      "source": "SIMULATED_GAME",
+      "game": "BOARD2048",
+      "training_actions": 80,
+      "random_change_rate": 92.5,
+      "lab_change_rate": 65.0,
+      "scripted_change_rate": 100.0,
+      "delta_percentage_points": -27.5,
+      "random_mean_score": 24.0,
+      "lab_mean_score": 14.0,
+      "scripted_mean_score": 40.0
+    },
+    {
+      "seed": 20261201,
+      "source": "SIMULATED_GAME",
+      "game": "HEXON",
+      "training_actions": 80,
+      "random_change_rate": 100.0,
+      "lab_change_rate": 100.0,
+      "scripted_change_rate": 100.0,
+      "delta_percentage_points": 0.0,
+      "random_mean_score": 10.0,
+      "lab_mean_score": 10.0,
+      "scripted_mean_score": 10.0
+    },
+    {
+      "seed": 20261201,
+      "source": "SIMULATED_GAME",
+      "game": "PROTECTED_SWAP",
+      "training_actions": 80,
+      "random_change_rate": 10.0,
+      "lab_change_rate": 22.5,
+      "scripted_change_rate": 100.0,
+      "delta_percentage_points": 12.5,
+      "random_mean_score": 35.0,
+      "lab_mean_score": 72.5,
+      "scripted_mean_score": 462.5
+    },
+    {
+      "seed": 20261201,
+      "source": "SIMULATED_GAME",
+      "game": "CAT_TOWER",
+      "training_actions": 80,
+      "random_change_rate": 100.0,
+      "lab_change_rate": 100.0,
+      "scripted_change_rate": 100.0,
+      "delta_percentage_points": 0.0,
+      "random_mean_score": 20.0,
+      "lab_mean_score": 20.0,
+      "scripted_mean_score": 20.0
+    }
+  ],
+  "ppoSelection": {
+    "independentImprovement": "NOT_PROVEN",
+    "automaticPromotion": false,
+    "activePolicyReplacement": false,
+    "scope": "Android matrix proves production batch/training execution, not improved gameplay"
+  },
+  "limitations": [
+    "Permanent compatible production signing key unavailable; protected android-signing creation returns403",
+    "Physical phone/tablet and non-destructive installed-app upgrade NOT_RUN",
+    "PPO independent improvement not proven; candidates remain blocked",
+    "Precision 7-input task success is headless; Android matrix exercises PPO64",
+    "Imported ROMs have no generic trusted reward; built-in homebrew task only",
+    "Unified APK uses CPU backend; Vulkan remains experimental, not physical POCO proof",
+    "GGUF weights are on-demand/imported; 16 profiles are not16 bundled pretrained GGUF models",
+    "Legacy ten-game simulator metrics are SIMULATED_GAME and not external-game acceptance"
+  ]
+}
