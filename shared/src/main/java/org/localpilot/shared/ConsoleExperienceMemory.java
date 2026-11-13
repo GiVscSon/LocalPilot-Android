@@ -172,4 +172,99 @@ public final class ConsoleExperienceMemory {
     ", без визуального изменения "+unchanged+
     ". Награда не установлена; веса GGUF не обучались.";
  }
+ /** Additional reward-bearing records in the SAME bounded ConsoleExperienceMemory
+  * namespace. Existing v2 unknown-reward logs remain fully backward compatible.
+  * No generic ROM can supply this exact cartridge-specific CPU task state.
+  */
+ public static final String GOAL_FILE="console-homebrew-goals-v1.log";
+ private static final String GOAL_SCHEMA="CONSOLE_HOME_BREW_GOAL_V1";
+ private static final int GOAL_RECORD_LIMIT=500;
+ public record GoalEpisode(String epoch,String modelId,String modelSha,String button,
+   int frameBefore,int frameAfter,int hashBefore,int hashAfter,String visualStatus,
+   int beforeX,int beforeY,int afterX,int afterY,int reward,boolean reached){}
+
+ private static int parseByte(String s){
+  int v=number(s);
+  if(v>255)throw new IllegalArgumentException("Invalid zero-page byte");
+  return v;
+ }
+ private static GoalEpisode requireGoal(String epoch,String modelId,String modelSha,
+     NesTrial trial,int bx,int by,int ax,int ay){
+  if(epoch==null||!epoch.matches("[1-9][0-9]{0,18}")||!id(modelId)||!sha(modelSha)||
+      trial==null||!"HOMEBREW".equals(trial.scenario))
+   throw new IllegalArgumentException("Untrusted goal task/ROM identity");
+  HomebrewGoalReward.Result result=HomebrewGoalReward.verify(trial.button,
+    trial.frameBefore,trial.frameAfter,bx,by,ax,ay);
+  return new GoalEpisode(epoch,modelId,modelSha,trial.button,trial.frameBefore,
+    trial.frameAfter,trial.hashBefore,trial.hashAfter,trial.status,
+    bx,by,ax,ay,result.reward(),result.reached());
+ }
+ public static void appendGoal(Path directory,String epoch,String modelId,
+   String modelSha,NesTrial proof,int bx,int by,int ax,int ay)throws IOException{
+  GoalEpisode t=requireGoal(epoch,modelId,modelSha,proof,bx,by,ax,ay);
+  String payload=GOAL_SCHEMA+"|"+HomebrewGoalReward.SOURCE+"|"+t.epoch+"|"+
+    t.modelId+"|"+t.modelSha+"|"+t.button+"|"+t.frameBefore+"|"+t.frameAfter+"|"+
+    Integer.toUnsignedString(t.hashBefore)+"|"+Integer.toUnsignedString(t.hashAfter)+
+    "|"+t.visualStatus+"|"+t.beforeX+"|"+t.beforeY+"|"+t.afterX+"|"+t.afterY+
+    "|"+t.reward+"|"+(t.reached?"1":"0");
+  byte[] entry=(payload+"|"+digest(payload)+"\n").getBytes(StandardCharsets.UTF_8);
+  if(entry.length>GOAL_RECORD_LIMIT)throw new IllegalArgumentException("Oversized task row");
+  Files.createDirectories(directory);
+  Path file=directory.resolve(GOAL_FILE);
+  if(Files.isSymbolicLink(file)||Files.exists(file)&&!Files.isRegularFile(file))
+   throw new IOException("Unsafe task journal");
+  long size=Files.exists(file)?Files.size(file):0;
+  if(size+entry.length>MAX_BYTES)
+   throw new IOException("Goal journal full: export before further learning");
+  try(FileOutputStream out=new FileOutputStream(file.toFile(),true)){
+   out.write(entry);out.getFD().sync();
+  }
+ }
+ private static GoalEpisode parseGoal(String line){
+  if(line==null||line.isEmpty()||line.length()>GOAL_RECORD_LIMIT)
+   throw new IllegalArgumentException("Bad goal record length");
+  String[] p=line.split("\\|",-1);
+  if(p.length!=18||!GOAL_SCHEMA.equals(p[0])||
+     !HomebrewGoalReward.SOURCE.equals(p[1])||!sha(p[4])||!sha(p[17]))
+   throw new IllegalArgumentException("Unknown goal task schema/checksum");
+  int suffix=line.lastIndexOf('|');
+  if(!MessageDigest.isEqual(digest(line.substring(0,suffix)).getBytes(StandardCharsets.US_ASCII),
+       p[17].getBytes(StandardCharsets.US_ASCII)))
+   throw new IllegalArgumentException("Goal evidence checksum changed");
+  NesTrial proof=NesTrial.create("HOMEBREW",p[5],number(p[6]),number(p[7]),
+    hash(p[8]),hash(p[9]));
+  if(!proof.status.equals(p[10]))
+   throw new IllegalArgumentException("Visual verification changed");
+  GoalEpisode row=requireGoal(p[2],p[3],p[4],proof,
+    parseByte(p[11]),parseByte(p[12]),parseByte(p[13]),parseByte(p[14]));
+  if(row.reward!=Integer.parseInt(p[15])||row.reached!=("1".equals(p[16])))
+   throw new IllegalArgumentException("Task reward is not reproducible from ROM memory");
+  return row;
+ }
+ public static List<GoalEpisode> readGoals(Path directory)throws IOException{
+  Path path=directory.resolve(GOAL_FILE);
+  if(!Files.exists(path))return List.of();
+  if(Files.isSymbolicLink(path)||!Files.isRegularFile(path)||Files.size(path)>MAX_BYTES)
+   throw new IOException("Invalid homebrew goal journal");
+  List<GoalEpisode> rows=new ArrayList<>();
+  for(String line:Files.readAllLines(path,StandardCharsets.UTF_8)){
+   try{rows.add(parseGoal(line));}
+   catch(IllegalArgumentException invalid){
+    throw new IOException("Goal evidence rejected: "+invalid.getMessage(),invalid);
+   }
+  }
+  return List.copyOf(rows);
+ }
+ public static String goalSummary(Path directory)throws IOException{
+  List<GoalEpisode> rows=readGoals(directory);
+  int reached=0,positive=0;
+  for(GoalEpisode e:rows){
+   if(e.reached)reached++;
+   if(e.reward>0)positive++;
+  }
+  return "Homebrew task "+HomebrewGoalReward.TASK+": "+rows.size()+
+    " проверенных CPU-переходов, "+positive+" приблизили к цели, "+
+    reached+" достигли цели. Награда относится ТОЛЬКО к встроенной ROM.";
+ }
+
 }
