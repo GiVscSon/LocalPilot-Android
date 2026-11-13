@@ -35,6 +35,10 @@ on:
       - 'shared/src/main/java/org/localpilot/shared/HomebrewObs64.java'
       - 'shared/src/main/java/org/localpilot/shared/PpoGaeTrainer.java'
       - 'tests/PpoGaeTrainerTest.java'
+      - 'shared/src/main/java/org/localpilot/shared/LearningCoordinator.java'
+      - 'tests/StudentPolicyCli.java'
+      - 'tests/nes_student_onpolicy_smoke.cjs'
+      - 'tests/StudentPpoRealNesVerify.java'
   pull_request:
     paths:
       - 'game-lab/**'
@@ -142,6 +146,32 @@ jobs:
             shared/src/main/java/org/localpilot/shared/PpoGaeTrainer.java \
             tests/PpoGaeTrainerTest.java
           java -cp build/ppo-gae org.localpilot.shared.PpoGaeTrainerTest
+      - name: Real JSNES 6502 -> real StudentPolicy -> ROM RAM reward -> PPO candidate
+        run: |
+          set -euo pipefail
+          mkdir -p build/real-student
+          javac --release 17 -d build/real-student \
+            shared/src/main/java/org/localpilot/shared/ConsoleAgentContract.java \
+            shared/src/main/java/org/localpilot/shared/HarnessCoordinator.java \
+            shared/src/main/java/org/localpilot/shared/NesTrial.java \
+            shared/src/main/java/org/localpilot/shared/ConsoleExperienceMemory.java \
+            shared/src/main/java/org/localpilot/shared/VerifiedReplayFilter.java \
+            shared/src/main/java/org/localpilot/shared/StudentPolicyNet.java \
+            shared/src/main/java/org/localpilot/shared/HomebrewObs64.java \
+            shared/src/main/java/org/localpilot/shared/PpoGaeTrainer.java \
+            shared/src/main/java/org/localpilot/shared/LearningCoordinator.java \
+            game-lab/src/main/java/org/localpilot/gamelab/HomebrewRamReward.java \
+            tests/StudentPolicyCli.java tests/StudentPpoRealNesVerify.java
+          java -cp build/real-student org.localpilot.shared.StudentPolicyCli init \
+            build/real-student/active.weights.bin
+          node tests/nes_student_onpolicy_smoke.cjs \
+            build/test-core/package/dist/jsnes.min.js \
+            build/nes-runtime/demo.nes \
+            build/real-student build/real-student/active.weights.bin \
+            build/real-student/real-steps.tsv
+          java -cp build/real-student org.localpilot.shared.StudentPpoRealNesVerify \
+            build/nes-runtime/demo.nes build/real-student/active.weights.bin \
+            build/real-student/real-steps.tsv build/real-student/vault
       - name: Verify full iNES/NES2 ROM preflight and unsafe mapper rejection
         run: |
           set -euo pipefail
