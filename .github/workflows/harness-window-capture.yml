@@ -1,12 +1,21 @@
 name: Harness Phase 1 window screenshot safety
 
 on:
+  workflow_dispatch:
   pull_request:
     paths:
       - 'app/src/main/java/org/localpilot/android/WindowCaptureRoute.java'
       - 'app/src/main/java/org/localpilot/android/WindowCaptureBridge.java'
       - 'app/src/main/java/org/localpilot/android/PilotService.java'
       - 'tests/WindowCaptureRouteTest.java'
+      - 'app/src/main/java/org/localpilot/android/DiagnosticFrameSize.java'
+      - 'tests/DiagnosticFrameSizeTest.java'
+      - 'tests/DiagnosticFrameSizeVerify.java'
+      - 'app/src/androidTest/AndroidManifest.xml'
+      - 'app/build.gradle'
+      - 'app/src/androidTest/java/org/localpilot/android/CaptureAcceptance*.java'
+      - 'tools/run_capture_acceptance.py'
+      - 'tests/test_capture_acceptance_contract.py'
       - '.github/workflows/harness-window-capture.yml'
   push:
     branches: [ 'fix/harness-*', 'feat/harness-*' ]
@@ -15,6 +24,14 @@ on:
       - 'app/src/main/java/org/localpilot/android/WindowCaptureBridge.java'
       - 'app/src/main/java/org/localpilot/android/PilotService.java'
       - 'tests/WindowCaptureRouteTest.java'
+      - 'app/src/main/java/org/localpilot/android/DiagnosticFrameSize.java'
+      - 'tests/DiagnosticFrameSizeTest.java'
+      - 'tests/DiagnosticFrameSizeVerify.java'
+      - 'app/src/androidTest/AndroidManifest.xml'
+      - 'app/build.gradle'
+      - 'app/src/androidTest/java/org/localpilot/android/CaptureAcceptance*.java'
+      - 'tools/run_capture_acceptance.py'
+      - 'tests/test_capture_acceptance_contract.py'
       - '.github/workflows/harness-window-capture.yml'
 permissions:
   contents: read
@@ -39,6 +56,8 @@ jobs:
             app/src/main/java/org/localpilot/android/WindowCaptureRoute.java \
             tests/WindowCaptureRouteTest.java
           java -cp build/window-capture-jvm org.localpilot.android.WindowCaptureRouteTest
+          java tests/DiagnosticFrameSizeVerify.java
+          python3 -m unittest discover -s tests -p test_capture_acceptance_contract.py -v
       - name: Assert routing is actually wired into PilotService without relaxing STOP
         run: |
           set -euo pipefail
@@ -74,3 +93,80 @@ jobs:
           set -euo pipefail
           bash ./gradlew --no-daemon :app:compileDebugJavaWithJavac
           echo "JAVA_COMPILE_ONLY: emulator API34/35/36 capture and on-device ROI proof still needed"
+
+  actual-android-capture:
+    needs: route-and-invariants
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - api: 30
+            target: default
+          - api: 34
+            target: default
+          - api: 35
+            target: default
+          - api: 36
+            target: google_apis
+    env:
+      LOCALPILOT_BUILD_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      LOCALPILOT_EXPECTED_API: ${{ matrix.api }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Build the ordinary app and its existing instrumentation companion
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p capture-evidence
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-35' 'build-tools;35.0.0'
+          # No native backend is needed to test the Java capture path. This is
+          # not an ARM64 user-release or a native GGUF inference verification.
+          bash ./gradlew --no-daemon -PcaptureAcceptance=true :app:assembleDebug :app:assembleDebugAndroidTest \
+            2>&1 | tee capture-evidence/gradle-build.log
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs \
+            app/build/outputs/apk/debug/app-debug.apk > capture-evidence/app-signature.txt
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs \
+            app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk > capture-evidence/instrumentation-signature.txt
+          python3 - <<'PY'
+          from pathlib import Path
+          service=Path('app/src/main/res/xml/pilot_service.xml').read_text()
+          assert 'android:isAccessibilityTool="false"' in service
+          assert 'android:isAccessibilityTool="true"' not in service
+          PY
+      - name: Require hosted KVM for an actual isolated emulator
+        run: |
+          test -c /dev/kvm
+          sudo chmod 666 /dev/kvm
+      - name: Run actual screenshot routes and production Fail-Closed guards
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ matrix.api }}
+          target: ${{ matrix.target }}
+          arch: x86_64
+          profile: pixel_2
+          disable-animations: true
+          emulator-boot-timeout: 300
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
+          script: python3 tools/run_capture_acceptance.py
+      - name: Preserve bounded isolated-emulator crash evidence
+        if: always()
+        run: |
+          mkdir -p capture-evidence
+          timeout 10s adb logcat -d -b crash 2>&1 | tail -c 16000 > capture-evidence/final-crash-logcat.txt || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Harness-Capture-API${{ matrix.api }}-x86_64-${{ env.LOCALPILOT_BUILD_SOURCE_SHA }}-attempt${{ github.run_attempt }}
+          if-no-files-found: error
+          path: capture-evidence/

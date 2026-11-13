@@ -7,12 +7,19 @@ on:
       - 'tools/verify_harness_apk.py'
       - 'tests/test_verify_harness_apk.py'
       - 'app/build.gradle'
+      - 'app/src/**'
+      - 'game-lab/src/**'
+      - 'shared/src/**'
       - '.github/workflows/harness-phase0-apk.yml'
   push:
     branches:
       - 'feat/harness-*'
       - 'fix/harness-*'
     paths:
+      - 'app/build.gradle'
+      - 'app/src/**'
+      - 'game-lab/src/**'
+      - 'shared/src/**'
       - 'tools/verify_harness_apk.py'
       - 'tests/test_verify_harness_apk.py'
       - '.github/workflows/harness-phase0-apk.yml'
@@ -74,8 +81,20 @@ jobs:
           set -euo pipefail
           apksigner="$(find "$ANDROID_HOME/build-tools" -maxdepth 2 -type f -name apksigner | sort -V | tail -1)"
           test -n "$apksigner"
-          "$apksigner" verify --print-certs app/build/outputs/apk/debug/app-debug.apk
+          "$apksigner" verify --verbose --print-certs app/build/outputs/apk/debug/app-debug.apk | tee build/reports/harness-phase0-signature.txt
+          sha256sum app/build/outputs/apk/debug/app-debug.apk > build/reports/harness-phase0-apk.sha256
           echo "DEBUG_SIGNATURE_ONLY: not a release signing provenance"
+      - name: Archive the exact audited test APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: harness-unified-debug-${{ github.event.pull_request.head.sha || github.sha }}
+          retention-days: 14
+          if-no-files-found: error
+          path: |
+            app/build/outputs/apk/debug/app-debug.apk
+            build/reports/harness-apk-phase0.json
+            build/reports/harness-phase0-signature.txt
+            build/reports/harness-phase0-apk.sha256
       - name: Archive packaging facts (never as a release)
         if: always()
         uses: actions/upload-artifact@v4
@@ -83,4 +102,7 @@ jobs:
           name: harness-phase0-packaging-${{ github.event.pull_request.head.sha || github.sha }}
           retention-days: 14
           if-no-files-found: ignore
-          path: build/reports/harness-apk-phase0.json
+          path: |
+            build/reports/harness-apk-phase0.json
+            build/reports/harness-phase0-signature.txt
+            build/reports/harness-phase0-apk.sha256
