@@ -1,5 +1,7 @@
 package org.localpilot.shared;
 
+import org.localpilot.gamelab.HomebrewRamReward;
+
 import java.io.FileOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -80,7 +82,12 @@ public final class StudentHoldoutRealNesVerify {
    if(step.epoch().equals(trainEpoch))
     throw new IllegalArgumentException("Holdout episode reused training epoch");
   var verdict=StudentEvaluationGate.evaluate(
-    active,candidate,pinnedRom,trainingX,steps);
+    active,candidate,pinnedRom,trainingX,steps,row->{
+     var verified=HomebrewRamReward.evaluate(true,true,
+       HomebrewObs64.BUTTONS[row.actionId()],row.frameBefore(),row.frameAfter(),
+       row.xBefore(),row.xAfter());
+     return verified.verified()?verified.reward():null;
+    });
   if(verdict.reason()!=StudentEvaluationGate.Reason.ACCEPTED&&
      verdict.reason()!=StudentEvaluationGate.Reason.NO_PROVEN_IMPROVEMENT)
    throw new IllegalStateException("INVALID_INDEPENDENT_EVALUATION: "+verdict.reason());
