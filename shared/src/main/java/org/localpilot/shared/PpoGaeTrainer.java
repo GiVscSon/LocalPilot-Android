@@ -207,10 +207,12 @@ public final class PpoGaeTrainer {
   float lastKl=0;int updates=0;
   boolean stoppedForKl=false;
   for(int epoch=0;epoch<config.epochs();epoch++){
+   if(Thread.currentThread().isInterrupted())throw new IllegalStateException("PPO_CANCELLED_STOP");
    lastKl=approximateKl(candidate,onPolicy);
    if(lastKl>config.targetKl()){stoppedForKl=true;break;}
    Grad gradients=new Grad(candidate.actionCount);
    for(int t=0;t<onPolicy.size();t++){
+    if(Thread.currentThread().isInterrupted())throw new IllegalStateException("PPO_CANCELLED_STOP");
     var step=onPolicy.get(t);
     StudentPolicyNet.Forward fp=candidate.forward(step.state64(),step.legalMask());
     float[] p=fp.probs();
@@ -256,6 +258,7 @@ public final class PpoGaeTrainer {
    for(int j=0;j<limit;j++)if(original[i+j]!=modified[i+j])different=true;
    if(different)changed++;
   }
+  if(Thread.currentThread().isInterrupted())throw new IllegalStateException("PPO_CANCELLED_STOP");
   // Critical: only app-private models/candidates can be supplied, never
   // models/active, rollback, an unverified arbitrary directory or a symlink.
   Path destination=candidateWeights.toAbsolutePath().normalize();
