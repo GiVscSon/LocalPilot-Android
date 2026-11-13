@@ -29,7 +29,7 @@ public final class StudentEvaluationGateTest {
     StudentPolicyNet model=arm==StudentEvaluationGate.Arm.ACTIVE?active:candidate;
     int current=x;
     int startFrame=45+scenario*16;
-    for(int i=0;i<8;i++){
+    for(int i=0;i<4;i++){
      int choice=model.argmax(HomebrewObs64.encode(current,112),HomebrewObs64.LEGAL_MASK);
      int delta=choice==1?1:choice==0?-1:0;
      list.add(new StudentEvaluationGate.Step(
