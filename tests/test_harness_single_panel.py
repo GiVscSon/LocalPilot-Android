@@ -43,7 +43,9 @@ class SingleNativeHarnessConsole(unittest.TestCase):
   self.assertIn("ConsoleExperienceMemory.readHomebrewGoals(",self.dash)
   self.assertIn("Допущено из RAM-журнала к PPO: 0",self.dash)
   self.assertIn("Общих игровых побед/счётов NES: НЕ ПОДТВЕРЖДЕНО",self.dash)
-  self.assertIn("PPO / DQN для NES: НЕ ПОДКЛЮЧЕНЫ",self.dash)
+  self.assertIn("PPO/GAE: доступен в NES после 16 on-policy ходов",self.dash)
+  self.assertIn("EvaluationGate: НЕ ПРОЙДЕН",self.dash)
+  self.assertIn("активные веса не заменены",self.dash)
   self.assertNotIn("reward=1",self.dash)
   self.assertIn("STOP: журнал повреждён",self.dash)
  def test_gpu_is_real_backend_status_not_fake_benchmark(self):
