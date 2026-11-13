@@ -171,6 +171,13 @@ window.retroAiTrial=function(name,holdFrames){
  agentTrial={name,code,started:frames,holdFrames};
  return true;
 };
+// Read-only evidence from the actual 6502 CPU's homebrew sprite-X variable.
+// Not a network/GGUF/reward call and not supported for arbitrary user ROMs.
+window.retroHomebrewRamX=function(){
+ if(!nes||!homebrewRom||!nes.cpu||!nes.cpu.mem)return -1;
+ const x=nes.cpu.mem[1];
+ return Number.isInteger(x)&&x>=0&&x<=255?x:-1;
+};
 // Frozen-time mode: real JSNES executes exactly the approved frame budget.
 // No timer runs while a slow GGUF is deciding. Only the bundled homebrew
 // supports this agent entry point until a verified task profile exists.
@@ -198,6 +205,7 @@ window.retroAiStep=function(name,holdFrames){
  const mapped=keyMap[name];
  if(!mapped||!Object.prototype.hasOwnProperty.call(jsnes.Controller,mapped))return false;
  const code=jsnes.Controller[mapped],started=frames;
+ const xBefore=window.retroHomebrewRamX();
  if(typeof code!=="number"||!gamepadLatch.change(name,code,true,frames))return false;
  try{
   for(let i=0;i<holdFrames;i++){
@@ -208,6 +216,13 @@ window.retroAiStep=function(name,holdFrames){
   gamepadLatch.flush(frames);
   if(frames-started!==holdFrames)throw Error("Frame budget violated");
   if(window.GameLabBridge){
+   // One checked RAM snapshot, after the button was released and exactly
+   // 16 real CPU/PPU frames advanced. Android validates the pinned ROM,
+   // permit and fresh frame independently before accepting a goal reward.
+   const xAfter=window.retroHomebrewRamX();
+   if(typeof window.GameLabBridge.onHomebrewRamProgress==="function")
+    window.GameLabBridge.onHomebrewRamProgress(
+      name,started,frames,xBefore,xAfter,activeRomSession);
    window.GameLabBridge.onAgentAction(name,started,frames,activeRomSession);
    window.GameLabBridge.onFrame(frames,validFrame|0,activeRomSession);
   }
