@@ -61,7 +61,9 @@ public final class ConsoleExperienceMemoryTest {
   require(blocked,"append must fail closed on corrupted previous generation");
   require(!Files.exists(journal),"blocked append must not create active journal");
   Files.delete(previous);
-  Files.delete(journal);
+  // The active journal was MOVED to previous; it no longer exists here.
+  // The recovery test now starts from a deliberately cleared directory.
+  require(!Files.exists(journal),"journal should remain absent after move");
   ConsoleExperienceMemory.append(temp,"import:alpha",sha,changed);
   require(ConsoleExperienceMemory.read(temp).size()==1,"recovery after explicit file reset");
   System.out.println("CONSOLE_SHARED_MEMORY_PASS");
