@@ -100,10 +100,9 @@ function stop(){
 }
 window.retroStop=function(){stop();status("Игра остановлена");};
 window.retroCancelAgent=function(){
- const wasActive=Boolean(agentTrial);
  agentTrial=null;
  if(gamepadLatch)gamepadLatch.clear();
- return wasActive;
+ return !gamepadLatch||gamepadLatch.down.size===0;
 };
 window.retroPause=function(){
  if(gamepadLatch)gamepadLatch.clear();
@@ -191,10 +190,17 @@ window.retroExitStepMode=function(){
  stepMode=false;
  return window.retroResume();
 };
-window.retroAiStep=function(name,holdFrames){
+let usedStepNonce="";
+window.retroAiStep=function(name,holdFrames,nonce){
  if(!nes||!stepMode||!paused||!homebrewRom||!gamepadLatch||agentTrial||
     !["A","B","UP","DOWN","LEFT","RIGHT"].includes(name)||
-    !Number.isInteger(holdFrames)||holdFrames!==16)return false;
+    !Number.isInteger(holdFrames)||![4,8,16].includes(holdFrames)||
+    typeof nonce!=="string"||!/^[A-Za-z0-9_-]{22}$/.test(nonce)||nonce===usedStepNonce||
+    !window.GameLabBridge||typeof window.GameLabBridge.allowStep!=="function"||
+    typeof window.GameLabBridge.onStepAction!=="function"||
+    typeof window.GameLabBridge.onHomebrewTask!=="function"||
+    !window.GameLabBridge.allowStep(activeRomSession,nonce,holdFrames))return false;
+ usedStepNonce=nonce;
  const mapped=keyMap[name];
  if(!mapped||!Object.prototype.hasOwnProperty.call(jsnes.Controller,mapped))return false;
  const code=jsnes.Controller[mapped],started=frames;
@@ -205,13 +211,16 @@ window.retroAiStep=function(name,holdFrames){
  if(!Number.isInteger(beforeX)||!Number.isInteger(beforeY)||
     beforeX<0||beforeX>255||beforeY<0||beforeY>255)return false;
  if(typeof code!=="number"||!gamepadLatch.change(name,code,true,frames))return false;
+ let revoked=false;
  try{
   for(let i=0;i<holdFrames;i++){
+   if(!window.GameLabBridge.allowStep(activeRomSession,nonce,holdFrames)){revoked=true;throw Error("STOP revoked lease");}
    nes.frame(); // PPU framebuffer + real CPU side-effects, not a timer guess.
    gamepadLatch.flush(frames);
   }
   if(!gamepadLatch.change(name,code,false,frames))throw Error("Button release failed");
   gamepadLatch.flush(frames);
+  if(!window.GameLabBridge.allowStep(activeRomSession,nonce,holdFrames)){revoked=true;throw Error("STOP revoked lease");}
   if(frames-started!==holdFrames)throw Error("Frame budget violated");
   const afterX=nes.cpu.mem[1],afterY=nes.cpu.mem[2];
   if(!Number.isInteger(afterX)||!Number.isInteger(afterY)||
@@ -222,14 +231,15 @@ window.retroAiStep=function(name,holdFrames){
    // generic reward for imported ROMs; no win inferred from the PPU frame.
    if(typeof window.GameLabBridge.onHomebrewTask==="function")
     window.GameLabBridge.onHomebrewTask(name,started,frames,
-      beforeX,beforeY,afterX,afterY,activeRomSession);
-   window.GameLabBridge.onAgentAction(name,started,frames,activeRomSession);
+      beforeX,beforeY,afterX,afterY,activeRomSession,nonce);
+   window.GameLabBridge.onStepAction(name,started,frames,activeRomSession,nonce);
    window.GameLabBridge.onFrame(frames,validFrame|0,activeRomSession);
   }
   return true;
  }catch(error){
   if(gamepadLatch)gamepadLatch.clear();
-  stop();status("STOP: ошибка пошаговой эмуляции");
+  if(revoked){window.retroPause();status("STOP: разрешение отозвано; шаг truncated без награды");}
+  else{stop();status("STOP: ошибка пошаговой эмуляции");}
   return false;
  }
 };

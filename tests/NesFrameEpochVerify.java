@@ -33,6 +33,9 @@ class NesFrameEpochVerify {
     check(!(boolean)accept.invoke(gate,a,14),"out-of-order frame");
     check(!(boolean)accept.invoke(gate,a,-1),"negative frame");
     check(!(boolean)accept.invoke(gate,"999",30),"invalid session accepted");
+    Object otherOwner=clazz.getDeclaredConstructor().newInstance();
+    String other=(String)begin.invoke(otherOwner);
+    check(!a.equals(other),"Activity instances share one unique process epoch namespace");
     String b=(String)begin.invoke(gate);
     check(!a.equals(b),"reused epoch token");
     check(!(boolean)current.invoke(gate,a),"old ROM session still current");

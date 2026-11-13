@@ -1,3 +1,15 @@
+# Точный Student и безопасный STEP: текущая точка · 13.11.2026
+
+Ветка fix/harness-precision-imitation-20261113 от PR #135/ba6cbd9.
+[Код, реальные измерения, команды и пределы доказательства](docs/HARNESS-PRECISION-IMITATION-20261113.ru.md).
+Student: настоящий teacher classifier + train-only DAgger, схема V3, кнопка сети
+и ограниченный duration adapter 4/8/16. Полный локальный прогон достиг цели на
+15/15 известных и 20/20 новых frozen starts; teacher 20/20, random 0/20.
+Это headless CPU/PPU, не физическая Android-приёмка и не PPO. Старые данные
+сохранены. STOP теперь fenced nonce/TTL/epoch и подтверждением release ACK;
+старые callback/Activity не отзывают новую сессию. Whole System проверяет
+траектории и 5 data seeds. CI нового SHA ждать отдельно; release_ready=false.
+
 # Student: разнообразные реальные NES-данные · 13.11.2026
 
 В существующий Whole System добавлен diverse-v1: 40 ROM-сеансов, все 6 действий,

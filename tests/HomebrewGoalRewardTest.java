@@ -15,6 +15,10 @@ public final class HomebrewGoalRewardTest {
   check(idle.reward()==0&&!idle.reached(),"B does not invent goal");
   HomebrewGoalReward.Result at=HomebrewGoalReward.verify("RIGHT",90,106,180,112,192,112);
   check(at.reached()&&at.reward()==32,"terminal bonus only on exact target transition");
+  var precision=HomebrewGoalReward.verify("RIGHT",90,94,189,112,192,112);
+  check(precision.reached()&&precision.reward()==23,"bounded precision action reaches unchanged goal");
+  invalid("RIGHT",90,94,189,112,200,112);
+  invalid("RIGHT",Integer.MAX_VALUE-2,Integer.MIN_VALUE+1,189,112,192,112);
   invalid("RIGHT",90,106,128,112,112,112);
   invalid("UP",90,106,128,112,144,112);
   invalid("A",90,106,128,112,144,112);

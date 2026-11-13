@@ -182,6 +182,7 @@ public final class ModelLabActivity extends Activity {
        .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP|Intent.FLAG_ACTIVITY_SINGLE_TOP)
        .putExtra(ConsoleAgentContract.TOKEN,nonce)
        .putExtra(ConsoleAgentContract.BUTTON,proposal.button())
+       .putExtra(ConsoleAgentContract.FRAMES,proposal.frames())
        .putExtra(ConsoleAgentContract.MODEL_ID,bound.id())
        .putExtra(ConsoleAgentContract.MODEL_SHA,bound.sha());
      startActivity(move);

@@ -1,75 +1,65 @@
 "use strict";
-const assert=require("node:assert/strict");
-const fs=require("node:fs");
-const path=require("node:path");
-const vm=require("node:vm");
-const args=process.argv.slice(2);
-if(args.length!==2)throw Error("Usage: node tests/nes_step_mode_smoke.cjs CORE_JS ROM_NES");
-const jsnes=require(path.resolve(args[0]));
+// Entire packaged page + genuine CPU/PPU; the Android lease bridge is modeled.
+const assert=require("node:assert/strict"),fs=require("node:fs"),path=require("node:path"),vm=require("node:vm"),crypto=require("node:crypto");
+const [core,rom]=process.argv.slice(2);
+if(!core||!rom)throw Error("Usage: CORE_JS ROM_NES");
+const jsnes=require(path.resolve(core));
 const {FrameHeldButtons}=require("../game-lab/src/main/assets/nes/latched-buttons.js");
 const html=fs.readFileSync("game-lab/src/main/assets/nes/index.html","utf8");
-function snippet(name){
- const start=html.indexOf("window."+name+"=function(");
- if(start<0)throw Error("Missing real JS hook: "+name);
- const end=html.indexOf("\n};",start);
- if(end<0)throw Error("Undelimited JS hook: "+name);
- return html.slice(start,end+3);
+let timer=0,lease=null,serial=0,revokeAt=null,pixels=null;
+const timers=new Map(),events=[];
+const context={jsnes,FrameHeldButtons,Uint8ClampedArray,Float32Array,
+ atob(s){return Buffer.from(s,"base64").toString("latin1");},
+ setInterval(fn){timers.set(++timer,fn);return timer;},clearInterval(id){timers.delete(id);},
+ addEventListener(){},document:{addEventListener(){},getElementById(id){return id==="screen"?{
+  getContext(){return {createImageData(){return {data:new Uint8ClampedArray(256*240*4)};},
+   putImageData(image){pixels=Uint8Array.from(image.data);if(revokeAt===metrics().frames+1){lease=null;revokeAt=null;}}
+  };}
+ }:{textContent:""};}},
+ GameLabBridge:{
+  allowStep(session,nonce,frames){return lease!==null&&session===lease.session&&nonce===lease.nonce&&frames===lease.frames;},
+  onStatus(){},onStepReady(...a){events.push(["ready",...a]);},
+  onFrame(...a){events.push(["frame",...a]);},onAgentAction(...a){events.push(["realtime",...a]);},
+  onStepAction(...a){events.push(["ack",...a]);},onHomebrewTask(...a){events.push(["goal",...a]);}
+ }};
+context.window=context;const page=vm.createContext(context);
+vm.runInContext(html.match(/<script>\s*([\s\S]*?)<\/script>/)[1],page,{timeout:3000});
+const encoded=fs.readFileSync(rom).toString("base64"),session="4242";
+function metrics(){return JSON.parse(context.retroMetrics());}
+function held(){return vm.runInContext("gamepadLatch?gamepadLatch.down.size:0",page);}
+function tick(n){for(let i=0;i<n;i++)for(const fn of [...timers.values()])fn();}
+function grant(frames){lease={session,frames,nonce:String(++serial).padStart(22,"n")};return {...lease};}
+function step(button,frames){return context.retroAiStep(button,frames,grant(frames).nonce);}
+assert.equal(context.retroLoadRom(encoded,false,true,session),true);tick(45);
+assert.equal(context.retroEnterStepMode(),true);
+const initial=metrics().frames,initialPixels=crypto.createHash("sha256").update(pixels).digest("hex");
+tick(3);assert.equal(metrics().frames,initial,"STEP_MODE freezes timer");
+assert.equal(context.retroAiStep("RIGHT",16),false,"missing lease does not press");
+assert.equal(step("START",16),false,"legal mask excludes Start");
+assert.equal(step("RIGHT",15),false,"arbitrary duration rejected");
+for(const frames of [16,4,8]){
+ const before=metrics().frames;
+ assert.equal(step("RIGHT",frames),true);
+ assert.equal(metrics().frames-before,frames,"exact real core frame budget");
+ assert.equal(held(),0,"release precedes evidence");
+ assert.equal(events.at(-3)[0],"goal");assert.equal(events.at(-2)[0],"ack");assert.equal(events.at(-1)[0],"frame");
+ assert.equal(events.at(-3)[3]-events.at(-3)[2],frames);
+ assert.equal(context.retroAiStep("RIGHT",frames,lease.nonce),false,"one-use step cannot replay");
 }
-const events=[];
-const env={window:{GameLabBridge:{
- onStepReady(...args){events.push(["ready",...args]);},
- onAgentAction(...args){events.push(["ack",...args]);},
- onHomebrewTask(...args){events.push(["goal",...args]);},
- onFrame(...args){events.push(["frame",...args]);}
-}},jsnes,stepMode:false,paused:false,agentTrial:null,homebrewRom:true,
- frames:0,validFrame:0,activeRomSession:"4242",timer:1,audioContext:null,
- keyMap:{A:"BUTTON_A",B:"BUTTON_B",UP:"BUTTON_UP",DOWN:"BUTTON_DOWN",
-   LEFT:"BUTTON_LEFT",RIGHT:"BUTTON_RIGHT"},
- setInterval(){return 7;},clearInterval(){},status(){},tick(){}};
-const machine=new jsnes.NES({emulateSound:false,onFrame(rgb){
- env.frames++;
- let hash=2166136261>>>0;
- for(let i=0;i<256*240;i+=241)hash=Math.imul(hash^rgb[i],16777619)>>>0;
- env.validFrame=hash;
-}});
-machine.loadROM(fs.readFileSync(args[1]).toString("latin1"));
-env.nes=machine;
-env.gamepadLatch=new FrameHeldButtons(machine,4);
-for(let i=0;i<45;i++)machine.frame();
-for(const name of ["retroPause","retroResume","retroEnterStepMode",
-                    "retroExitStepMode","retroAiStep"]){
- vm.runInNewContext(snippet(name),env,{timeout:2000});
-}
-assert.equal(env.window.retroEnterStepMode(),true);
-assert.equal(env.stepMode,true);
-assert.equal(env.paused,true);
-assert.equal(events[0][0],"ready");
-const first=env.frames;
-assert.equal(env.window.retroResume(),true);
-assert.equal(env.frames,first,"resume must not advance frozen game");
-assert.equal(env.window.retroAiStep("A",16),true);
-assert.equal(events.at(-3)[0],"goal","one real 6502 goal report precedes ACK and frame");
-assert.equal(env.frames,first+16,"true JSNES must execute exactly 16 frames");
-assert.equal(events.at(-2)[0],"ack","button release precedes final frame");
-assert.equal(events.at(-1)[0],"frame");
-assert.equal(events.at(-1)[1],env.frames);
-assert.equal(env.gamepadLatch.down.size,0,"button released in frozen time");
-assert.equal(env.window.retroAiStep("A",15),false);
-assert.equal(env.window.retroAiStep("START",16),false);
-const second=env.frames;
-assert.equal(env.window.retroAiStep("RIGHT",16),true);
-const goal=events.at(-3);
-assert.equal(goal[0],"goal");
-assert.equal(goal[1],"RIGHT");
-assert.equal(goal[3]-goal[2],16,"goal evidence bound to exact 16 CPU/PPU frames");
-assert.equal(goal[5],112,"ROM defines Y at 112");
-assert.equal(goal[7],112,"RIGHT does not move Y");
-assert.ok(goal[6]>goal[4],"RIGHT must advance real emulated CPU RAM X");
-assert.equal(env.frames,second+16,"second step also exactly 16 frames");
-assert.equal(env.window.retroExitStepMode(),true);
-assert.equal(env.stepMode,false);
-assert.equal(env.paused,false);
-assert.equal(env.window.retroAiStep("A",16),false,"realtime cannot call step");
-env.homebrewRom=false;
-assert.equal(env.window.retroEnterStepMode(),false,"unprofiled user ROM cannot enter agent step");
-console.log("NES_REAL_FROZEN_STEP_PASS frames="+env.frames+" trials=2");
+const stale=grant(16),beforeCancel=metrics().frames;
+lease=null;
+assert.equal(context.retroCancelAgent(),true,"STOP ACK confirms buttons released even when no realtime trial exists");
+assert.equal(context.retroAiStep("RIGHT",16,stale.nonce),false,"queued action loses Java authority before DOWN");
+assert.equal(metrics().frames,beforeCancel);
+const beforeRevoke=metrics().frames,goals=events.filter(e=>e[0]==="goal").length;
+revokeAt=beforeRevoke+2;
+assert.equal(step("RIGHT",16),false,"mid-step revocation cancels");
+assert.equal(metrics().frames,beforeRevoke+2,"no further frames after revocation observed");
+assert.equal(held(),0);assert.equal(events.filter(e=>e[0]==="goal").length,goals,"partial step earns no reward proof");
+tick(3);assert.equal(metrics().frames,beforeRevoke+2,"cancelled core remains paused");
+assert.equal(context.retroLoadRom(encoded,false,true,session),true);tick(45);
+assert.equal(crypto.createHash("sha256").update(pixels).digest("hex"),initialPixels,"deterministic actual ROM reset");
+context.retroStop();assert.equal(step("RIGHT",4),false,"no step after STOP ACK");
+assert.equal(context.retroLoadRom(encoded,false,false,"4243"),true);tick(45);
+assert.equal(context.retroEnterStepMode(),false,"unprofiled ROM has no autonomous adapter");
+console.log("NES_REAL_FROZEN_STEP_STOP_PASS durations=4,8,16 replay_rejected=true partial_reward=false deterministic_reset=true android_bridge_modeled=true");

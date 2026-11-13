@@ -329,7 +329,9 @@ public final class HarnessDashboardActivity extends Activity {
   row(stop,"Последний отказ: "+s.lastStopReason());
   stop.addView(button("STOP · отозвать ввод NES",()->{
    HarnessCoordinator.Snapshot before=HarnessCoordinator.nes().snapshot();
-   HarnessCoordinator.nes().stop("DASHBOARD_USER_STOP");
+   if(before.waiting()||before.actionInFlight())
+    HarnessCoordinator.nes().requestStop(before.epoch(),"DASHBOARD_USER_STOP");
+   else HarnessCoordinator.nes().stop("DASHBOARD_USER_STOP");
    if(before.waiting()||before.actionInFlight()){
     // Bring back the existing activity to release its actual JSNES controls.
     // This is a STOP command, never a model-proposed button.

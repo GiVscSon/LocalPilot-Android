@@ -40,6 +40,7 @@ public final class NesBridgeTest {
   if(args.length>0){
    String actual=Files.readString(Path.of(args[0]));
    NesTrial real=NesTrial.parse(actual);
+   yes(real.serialize().equals(actual.trim()),"legacy evidence retains exact wire identity across parsing");
    yes(real.scenario.equals("HOMEBREW")&&real.button.equals("A"),
        "actual JSNES homebrew output");
    yes(real.status.equals("PIXELS_DIFFER"),"CPU/PPU actually changed pixel hash");

@@ -177,7 +177,8 @@ public final class ConsoleExperienceMemory {
   * No generic ROM can supply this exact cartridge-specific CPU task state.
   */
  public static final String GOAL_FILE="console-homebrew-goals-v1.log";
- private static final String GOAL_SCHEMA="CONSOLE_HOME_BREW_GOAL_V1";
+ private static final String GOAL_SCHEMA="CONSOLE_HOME_BREW_GOAL_V2";
+ private static final String LEGACY_GOAL_SCHEMA="CONSOLE_HOME_BREW_GOAL_V1";
  private static final int GOAL_RECORD_LIMIT=500;
  public record GoalEpisode(String epoch,String modelId,String modelSha,String button,
    int frameBefore,int frameAfter,int hashBefore,int hashAfter,String visualStatus,
@@ -224,13 +225,16 @@ public final class ConsoleExperienceMemory {
   if(line==null||line.isEmpty()||line.length()>GOAL_RECORD_LIMIT)
    throw new IllegalArgumentException("Bad goal record length");
   String[] p=line.split("\\|",-1);
-  if(p.length!=18||!GOAL_SCHEMA.equals(p[0])||
+  if(p.length!=18||!(GOAL_SCHEMA.equals(p[0])||LEGACY_GOAL_SCHEMA.equals(p[0]))||
      !HomebrewGoalReward.SOURCE.equals(p[1])||!sha(p[4])||!sha(p[17]))
    throw new IllegalArgumentException("Unknown goal task schema/checksum");
   int suffix=line.lastIndexOf('|');
   if(!MessageDigest.isEqual(digest(line.substring(0,suffix)).getBytes(StandardCharsets.US_ASCII),
        p[17].getBytes(StandardCharsets.US_ASCII)))
    throw new IllegalArgumentException("Goal evidence checksum changed");
+  if(LEGACY_GOAL_SCHEMA.equals(p[0])&&
+      (long)number(p[7])-number(p[6])!=16)
+   throw new IllegalArgumentException("Legacy task duration changed");
   NesTrial proof=NesTrial.create("HOMEBREW",p[5],number(p[6]),number(p[7]),
     hash(p[8]),hash(p[9]));
   if(!proof.status.equals(p[10]))

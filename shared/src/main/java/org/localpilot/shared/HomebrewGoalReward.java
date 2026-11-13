@@ -21,13 +21,13 @@ public final class HomebrewGoalReward {
  public static Result verify(String action,int frameBefore,int frameAfter,
      int beforeX,int beforeY,int afterX,int afterY){
   if(!ConsoleAgentContract.playable(action)||frameBefore<15||
-     frameAfter-frameBefore!=REQUIRED_FRAMES||
+     !ConsoleAgentContract.studentFramesValid((long)frameAfter-frameBefore)||
      distance(beforeX,beforeY)<0||distance(afterX,afterY)<0)
    throw new IllegalArgumentException("Invalid verified ROM task input");
   int dx=afterX-beforeX,dy=afterY-beforeY;
   // The ROM moves at most once per emulated frame, and on ONE direction only.
   // Disallow wrapping or abnormal RAM jumps; these need independent proof.
-  if(Math.abs(dx)>REQUIRED_FRAMES+1||Math.abs(dy)>REQUIRED_FRAMES+1)
+  if(Math.abs(dx)>(long)frameAfter-frameBefore+1||Math.abs(dy)>(long)frameAfter-frameBefore+1)
    throw new IllegalArgumentException("NES coordinate jump");
   if(!switch(action){
    case "RIGHT"->dx>=0&&dy==0;
