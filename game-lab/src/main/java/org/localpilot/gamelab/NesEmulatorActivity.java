@@ -585,6 +585,10 @@ public final class NesEmulatorActivity extends Activity {
  }
  private void handleAiMove(Intent reply){
   if(reply==null)return;
+  if(ConsoleAgentContract.DASHBOARD_STOP.equals(reply.getAction())){
+   stopCpuExperiment("STOP: команда с единой панели Harness");
+   return;
+  }
   if(ConsoleAgentContract.CANCEL.equals(reply.getAction())){
    // Cancellation can only revoke a current local one-time capability; it
    // never authorizes a button. No response from stale ModelLab is replayed.
