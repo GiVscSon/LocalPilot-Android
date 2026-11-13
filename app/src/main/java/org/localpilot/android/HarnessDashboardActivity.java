@@ -13,6 +13,8 @@ import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import org.localpilot.shared.ConsoleExperienceMemory;
+import org.localpilot.shared.StudentPolicyNet;
+import org.localpilot.shared.VerifiedReplayFilter;
 import org.localpilot.shared.HarnessCoordinator;
 import org.localpilot.shared.ConsoleAgentContract;
 import java.io.IOException;
@@ -275,6 +277,9 @@ public final class HarnessDashboardActivity extends Activity {
    List<ConsoleExperienceMemory.Episode> all=
      ConsoleExperienceMemory.read(getFilesDir().toPath());
    row(train,"Проверенных визуальных переходов: "+all.size());
+   VerifiedReplayFilter.Verdict legacy=VerifiedReplayFilter.inspectLegacyVisualMemory(all);
+   row(train,"PPO-допуск старого журнала: "+(legacy.eligible()?all.size():0)
+     +" · "+legacy.reason()+". Нет доверенных наград.");
   }catch(IOException error){row(train,"STOP: журнал повреждён, обучение невозможно.");}
   try{
    List<ConsoleExperienceMemory.GoalEpisode> goals=
@@ -287,8 +292,8 @@ public final class HarnessDashboardActivity extends Activity {
   }
   row(train,"Остальные ROM: награда UNKNOWN. PPO / DQN для чужих игр не подключены.");
   row(train,HomebrewStudentStore.status(this));
-  row(train,"Сеть 7→12→6 обучается по реальным целевым наградам. "+
-    "Holdout проверяет TD-ошибку на другой ROM-сессии, но не доказывает победу.");
+  row(train,"Сеть 7→12→6 имитирует направление к цели по проверенной памяти ROM. "+
+    "Holdout проверяет ошибку классификации на другой ROM-сессии; это не приёмка устройства.");
   train.addView(button(trainingBusy?"Обучение выполняется...":
     "Обучить CPU student на проверенных NES-эпизодах",()->{
     if(trainingBusy){info("Уже обучаю candidate; дождись завершения");return;}
@@ -310,6 +315,47 @@ public final class HarnessDashboardActivity extends Activity {
       failure.getClass().getSimpleName()+" · "+failure.getMessage());}
   }));
   row(train,"Физическая on-policy приёмка и автоматическое продвижение: НЕ ПОДТВЕРЖДЕНЫ.");
+  try{
+   List<ConsoleExperienceMemory.HomebrewGoal> goals=
+     ConsoleExperienceMemory.readHomebrewGoals(getFilesDir().toPath());
+   row(train,"ROM RAM-цель homebrew, сохранённых шагов: "+goals.size());
+   row(train,"Допущено из RAM-журнала к PPO: 0 · нет obs64 и oldLogProb.");
+   if(!goals.isEmpty()){
+    ConsoleExperienceMemory.HomebrewGoal last=goals.get(goals.size()-1);
+    row(train,"Последняя RAM-награда: "+last.reward()+
+      " · модель SHA "+last.modelSha().substring(0,12)+
+      " · кадры "+last.frameBefore()+"→"+last.frameAfter());
+   }
+  }catch(IOException damaged){
+   row(train,"STOP: RAM-журнал повреждён или недоступен, обучение заблокировано.");
+  }
+  row(train,"Общих игровых побед/счётов NES: НЕ ПОДТВЕРЖДЕНО");
+  try {
+   java.nio.file.Path student=new java.io.File(getFilesDir(),
+     "localpilot_vault/models/active/student-homebrew-v1.weights.bin").toPath();
+   if(java.nio.file.Files.isRegularFile(student)){
+    StudentPolicyNet policy=StudentPolicyNet.load(student);
+    row(train,"StudentPolicy CPU: НАСТОЯЩИЙ forward · 64→64→64→"+
+      policy.actionCount+" · SHA "+policy.sha256().substring(0,16));
+    row(train,"Веса StudentPolicy есть, но PPO-обновление / holdout: НЕ ПОДТВЕРЖДЕНЫ");
+   }else row(train,"StudentPolicy CPU: создаётся по первому реальному NES-ходу");
+  }catch(IOException broken) {
+   row(train,"STOP: StudentPolicy weights.bin повреждены; не используем модель.");
+  }
+  try{
+   java.nio.file.Path candidate=new java.io.File(getFilesDir(),
+     "localpilot_vault/models/candidates/student-homebrew-v1.weights.bin").toPath();
+   if(java.nio.file.Files.isRegularFile(candidate)){
+    StudentPolicyNet pending=StudentPolicyNet.load(candidate);
+    row(train,"PPO-кандидат на диске: SHA "+pending.sha256().substring(0,16));
+    row(train,"EvaluationGate: НЕ ПРОЙДЕН · активные веса не заменены.");
+   }else row(train,"PPO-кандидат: ещё не создан из 16 реальных StudentPolicy шагов.");
+  }catch(IOException invalid){
+   row(train,"STOP: PPO-кандидат повреждён; активация невозможна.");
+  }
+  row(train,"PPO/GAE: доступен в NES после 16 on-policy ходов; автоматическая активация ЗАПРЕЩЕНА");
+  row(train,"Обученная политика с независимой оценкой: НЕ ПОДТВЕРЖДЕНА");
+  row(train,"Для настоящего обучения нужны наблюдения, достоверная цель/награда и проверка весов на отдельных эпизодах.");
   card("Старые симуляторы","Архивное обучение не применяется к NES. Нет автоматического переноса весов.");
  }
  private void gpu(){

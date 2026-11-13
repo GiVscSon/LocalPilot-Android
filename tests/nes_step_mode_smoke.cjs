@@ -20,7 +20,8 @@ const context={jsnes,FrameHeldButtons,Uint8ClampedArray,Float32Array,
   allowStep(session,nonce,frames){return lease!==null&&session===lease.session&&nonce===lease.nonce&&frames===lease.frames;},
   onStatus(){},onStepReady(...a){events.push(["ready",...a]);},
   onFrame(...a){events.push(["frame",...a]);},onAgentAction(...a){events.push(["realtime",...a]);},
-  onStepAction(...a){events.push(["ack",...a]);},onHomebrewTask(...a){events.push(["goal",...a]);}
+  onStepAction(...a){events.push(["ack",...a]);},onHomebrewTask(...a){events.push(["goal",...a]);},
+  onHomebrewRamProgress(...a){events.push(["right-progress",...a]);}
  }};
 context.window=context;const page=vm.createContext(context);
 vm.runInContext(html.match(/<script>\s*([\s\S]*?)<\/script>/)[1],page,{timeout:3000});
@@ -42,8 +43,14 @@ for(const frames of [16,4,8]){
  assert.equal(step("RIGHT",frames),true);
  assert.equal(metrics().frames-before,frames,"exact real core frame budget");
  assert.equal(held(),0,"release precedes evidence");
- assert.equal(events.at(-3)[0],"goal");assert.equal(events.at(-2)[0],"ack");assert.equal(events.at(-1)[0],"frame");
- assert.equal(events.at(-3)[3]-events.at(-3)[2],frames);
+ const task=events.filter(e=>e[0]==="goal").at(-1);
+ assert.equal(task[3]-task[2],frames);
+ assert.equal(task.at(-1),lease.nonce,"task evidence binds exact action nonce");
+ if(frames===16){
+  const right=events.at(-3);assert.equal(right[0],"right-progress");
+  assert.equal(right[3]-right[2],16);assert.equal(right.at(-1),lease.nonce);
+ }else assert.equal(events.at(-3)[0],"goal","short precision steps never become fixed-duration PPO tasks");
+ assert.equal(events.at(-2)[0],"ack");assert.equal(events.at(-1)[0],"frame");
  assert.equal(context.retroAiStep("RIGHT",frames,lease.nonce),false,"one-use step cannot replay");
 }
 const stale=grant(16),beforeCancel=metrics().frames;

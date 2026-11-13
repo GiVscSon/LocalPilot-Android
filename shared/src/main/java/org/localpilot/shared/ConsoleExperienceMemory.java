@@ -99,7 +99,7 @@ public final class ConsoleExperienceMemory {
   * Writes only already-verified real NES trials. The old JSONL format remains
   * untouched for backward diagnostics; new observations use this shared schema.
   */
- public static void append(Path directory,String modelId,String modelSha,
+ public static synchronized void append(Path directory,String modelId,String modelSha,
                             NesTrial trial)throws IOException{
   if(trial==null||!"HOMEBREW".equals(trial.scenario))
    throw new IllegalArgumentException("Only real verified homebrew is accepted");
@@ -111,6 +111,7 @@ public final class ConsoleExperienceMemory {
   if(encoded.length>MAX_LINE)
    throw new IllegalArgumentException("NES episode exceeds safe record limit");
   Files.createDirectories(directory);
+  read(directory); // Validate both generations before append or rotation.
   Path journal=directory.resolve(FILE);
   if(Files.isSymbolicLink(journal))
    throw new IOException("Unsafe NES journal path");
@@ -200,7 +201,7 @@ public final class ConsoleExperienceMemory {
     trial.frameAfter,trial.hashBefore,trial.hashAfter,trial.status,
     bx,by,ax,ay,result.reward(),result.reached());
  }
- public static void appendGoal(Path directory,String epoch,String modelId,
+ public static synchronized void appendGoal(Path directory,String epoch,String modelId,
    String modelSha,NesTrial proof,int bx,int by,int ax,int ay)throws IOException{
   GoalEpisode t=requireGoal(epoch,modelId,modelSha,proof,bx,by,ax,ay);
   String payload=GOAL_SCHEMA+"|"+HomebrewGoalReward.SOURCE+"|"+t.epoch+"|"+
@@ -211,6 +212,7 @@ public final class ConsoleExperienceMemory {
   byte[] entry=(payload+"|"+digest(payload)+"\n").getBytes(StandardCharsets.UTF_8);
   if(entry.length>GOAL_RECORD_LIMIT)throw new IllegalArgumentException("Oversized task row");
   Files.createDirectories(directory);
+  readGoals(directory); // Preserve corrupt evidence; never append a trusted row to it.
   Path file=directory.resolve(GOAL_FILE);
   if(Files.isSymbolicLink(file)||Files.exists(file)&&!Files.isRegularFile(file))
    throw new IOException("Unsafe task journal");
@@ -271,4 +273,120 @@ public final class ConsoleExperienceMemory {
     reached+" достигли цели. Награда относится ТОЛЬКО к встроенной ROM.";
  }
 
+
+ /**
+  * A distinct bounded journal in the SAME NES experience store. Hashes detect
+  * accidental corruption, not malicious forgery. The task is rightward motion
+  * of the exact built-in homebrew cartridge (CPU RAM zero-page $0001).
+  *
+  * No record here has StudentPolicy obs64/oldLogProb; PPO remains BLOCKED.
+  */
+ public static final String HOMEBREW_GOAL_FILE="console-ai-homebrew-goal-v1.log";
+ private static final String RIGHT_PROGRESS_SCHEMA="LOCALPILOT_HOMEBREW_GOAL_V1";
+ private static final String GOAL_TASK="builtin-homebrew-right-progress-v1";
+ public record HomebrewGoal(
+   String epoch,String romSha,String modelId,String modelSha,String button,
+   int frameBefore,int frameAfter,int xBefore,int xAfter,float reward
+ ) {
+  public boolean ppoEligible(){return false;}
+ }
+ private static void checkGoal(HomebrewGoal g){
+  if(g==null||g.epoch()==null||!g.epoch().matches("[1-9][0-9]{0,18}")||
+    !sha(g.romSha())||!id(g.modelId())||!sha(g.modelSha())||
+    !ConsoleAgentContract.playable(g.button())||
+    g.frameBefore()<15||g.frameAfter()<=g.frameBefore()||
+    (long)g.frameAfter()-(long)g.frameBefore()!=16L||
+    g.xBefore()<0||g.xBefore()>255||g.xAfter()<0||g.xAfter()>255||
+    !Float.isFinite(g.reward()))
+   throw new IllegalArgumentException("Invalid homebrew goal evidence");
+  int delta=g.xAfter()-g.xBefore();
+  if(Math.abs(delta)>16||
+    "RIGHT".equals(g.button())&&delta<0||
+    "LEFT".equals(g.button())&&delta>0||
+    !("RIGHT".equals(g.button())||"LEFT".equals(g.button()))&&delta!=0||
+    Float.floatToIntBits(g.reward())!=Float.floatToIntBits(delta/16.0f))
+   throw new IllegalArgumentException("Impossible ROM-RAM task reward");
+ }
+ private static String goalPayload(HomebrewGoal g,String previous){
+  checkGoal(g);
+  return RIGHT_PROGRESS_SCHEMA+"|"+g.epoch()+"|"+g.romSha()+"|"+g.modelId()+"|"+
+    g.modelSha()+"|"+g.button()+"|"+g.frameBefore()+"|"+g.frameAfter()+"|"+
+    g.xBefore()+"|"+g.xAfter()+"|"+
+    String.format(Locale.ROOT,"%08x",Float.floatToIntBits(g.reward()))+
+    "|"+GOAL_TASK+"|PPO_BLOCKED|"+previous;
+ }
+ private static List<HomebrewGoal> loadGoals(Path file)throws IOException{
+  if(!Files.exists(file))return List.of();
+  if(!Files.isRegularFile(file)||Files.isSymbolicLink(file)||Files.size(file)>MAX_BYTES)
+   throw new IOException("Unsafe or oversized homebrew goal journal");
+  List<String> lines=Files.readAllLines(file,StandardCharsets.UTF_8);
+  if(lines.size()>256)throw new IOException("Homebrew goal journal row quota");
+  List<HomebrewGoal> parsed=new ArrayList<>();
+  String previous="0";
+  for(String line:lines){
+   String[] fields=line.split("\\|",-1);
+   if(fields.length!=15||!RIGHT_PROGRESS_SCHEMA.equals(fields[0])||
+     !GOAL_TASK.equals(fields[11])||!"PPO_BLOCKED".equals(fields[12])||
+     !previous.equals(fields[13])||!sha(fields[14]))
+    throw new IOException("Invalid homebrew goal schema/previous hash");
+   String payload=line.substring(0,line.lastIndexOf('|'));
+   if(!digest(payload).equals(fields[14]))throw new IOException("Broken goal SHA chain");
+   try{
+    if(!fields[10].matches("[0-9a-f]{8}"))
+     throw new IllegalArgumentException("Invalid float32 bits");
+    HomebrewGoal record=new HomebrewGoal(
+      fields[1],fields[2],fields[3],fields[4],fields[5],
+      Integer.parseInt(fields[6]),Integer.parseInt(fields[7]),
+      Integer.parseInt(fields[8]),Integer.parseInt(fields[9]),
+      Float.intBitsToFloat((int)Long.parseUnsignedLong(fields[10],16)));
+    checkGoal(record);
+    parsed.add(record);
+   }catch(IllegalArgumentException error){
+    throw new IOException("Invalid goal evidence record",error);
+   }
+   previous=fields[14];
+  }
+  return List.copyOf(parsed);
+ }
+ public static List<HomebrewGoal> readHomebrewGoals(Path directory)throws IOException{
+  if(directory==null||Files.isSymbolicLink(directory))
+   throw new IOException("Invalid NES goal folder");
+  return loadGoals(directory.resolve(HOMEBREW_GOAL_FILE));
+ }
+ /**
+  * Called only AFTER HomebrewRamReward and HarnessCoordinator both approve a
+  * genuine fixed-ROM step. Every write is fsync'ed and atomically replaced.
+  */
+ public static synchronized void appendHomebrewGoal(Path directory,HomebrewGoal goal)
+      throws IOException{
+  try{checkGoal(goal);}catch(IllegalArgumentException invalid){
+   throw new IOException("Unverified RAM goal",invalid);
+  }
+  if(directory==null||Files.isSymbolicLink(directory))
+   throw new IOException("Invalid NES goal folder");
+  Files.createDirectories(directory);
+  Path journal=directory.resolve(HOMEBREW_GOAL_FILE);
+  List<HomebrewGoal> prior=loadGoals(journal);
+  if(prior.size()>=256)throw new IOException("RAM goal journal row quota");
+  String previous="0";
+  StringBuilder text=new StringBuilder();
+  for(HomebrewGoal old:prior){
+   String payload=goalPayload(old,previous);
+   previous=digest(payload);
+   text.append(payload).append('|').append(previous).append('\n');
+  }
+  String payload=goalPayload(goal,previous);
+  text.append(payload).append('|').append(digest(payload)).append('\n');
+  byte[] bytes=text.toString().getBytes(StandardCharsets.UTF_8);
+  if(bytes.length>MAX_BYTES)throw new IOException("RAM goal journal byte quota");
+  Path temp=Files.createTempFile(directory,"nes-goal-",".pending");
+  try{
+   try(FileOutputStream output=new FileOutputStream(temp.toFile())){
+    output.write(bytes);output.getFD().sync();
+   }
+   if(loadGoals(temp).size()!=prior.size()+1)
+    throw new IOException("RAM goal write check failed");
+   Files.move(temp,journal,StandardCopyOption.ATOMIC_MOVE,StandardCopyOption.REPLACE_EXISTING);
+  }finally{Files.deleteIfExists(temp);}
+ }
 }

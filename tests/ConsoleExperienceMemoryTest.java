@@ -44,6 +44,20 @@ public final class ConsoleExperienceMemoryTest {
   try{ConsoleExperienceMemory.context(temp,"import:alpha",sha);}
   catch(IOException corrupted){blocked=true;}
   require(blocked,"checksum failure must prevent untrusted context");
+  byte[] corruptBytes=Files.readAllBytes(journal);
+  blocked=false;
+  try{ConsoleExperienceMemory.append(temp,"import:alpha",sha,changed);}
+  catch(IOException corrupted){blocked=true;}
+  require(blocked&&java.util.Arrays.equals(corruptBytes,Files.readAllBytes(journal)),
+    "append preserves corrupted active evidence byte for byte");
+  Path previous=temp.resolve("console-ai-experience-v2.previous.log");
+  Files.move(journal,previous);
+  blocked=false;
+  try{ConsoleExperienceMemory.append(temp,"import:alpha",sha,changed);}
+  catch(IOException corrupted){blocked=true;}
+  require(blocked&&!Files.exists(journal)&&java.util.Arrays.equals(corruptBytes,Files.readAllBytes(previous)),
+    "corrupted previous generation blocks append and is preserved");
+  Files.move(previous,journal);
   Files.delete(journal);
   ConsoleExperienceMemory.append(temp,"import:alpha",sha,changed);
   require(ConsoleExperienceMemory.read(temp).size()==1,"recovery after explicit file reset");
@@ -65,6 +79,12 @@ public final class ConsoleExperienceMemoryTest {
   rejected=false;
   try{ConsoleExperienceMemory.readGoals(temp);}catch(IOException corrupted){rejected=true;}
   require(rejected,"tampered engine-state reward must fail closed");
+  corruptBytes=Files.readAllBytes(goal);
+  rejected=false;
+  try{ConsoleExperienceMemory.appendGoal(temp,"3004","import:alpha",sha,proof,128,112,144,112);}
+  catch(IOException corrupted){rejected=true;}
+  require(rejected&&java.util.Arrays.equals(corruptBytes,Files.readAllBytes(goal)),
+    "goal append cannot hide corrupted reward evidence");
   Files.writeString(goal,original,StandardCharsets.UTF_8);
   NesTrial shortProof=NesTrial.create("HOMEBREW","RIGHT",110,114,55,66);
   ConsoleExperienceMemory.appendGoal(temp,"3005","import:alpha",sha,shortProof,189,112,192,112);

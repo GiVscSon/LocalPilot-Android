@@ -12,7 +12,7 @@ import java.util.Base64;
  * preempted by another actor. Stale proposals always fail closed.
  */
 public final class HarnessCoordinator {
- public enum Actor { MANUAL, HEURISTIC, GGUF, STUDENT }
+ public enum Actor { MANUAL, HEURISTIC, GGUF, STUDENT, PPO_STUDENT }
  public enum Mode { STEP_MODE, REALTIME_MODE }
  /** Immutable read-only dashboard projection. This grants no input authority. */
  public record Snapshot(String epoch,String mode,String owner,boolean waiting,
@@ -41,6 +41,45 @@ public final class HarnessCoordinator {
    this.nonce=nonce;this.issuedAt=issuedAt;
   }
  }
+ /** A task/weights-bound reservation spans observation and between-step gaps. */
+ public static final String PPO_TASK="builtin-homebrew-right-progress-v1";
+ public static final class EpisodeLease {
+  public final String epoch,task,policySha;
+  private final long revision;
+  private int remaining;
+  private EpisodeLease(String epoch,String task,String sha,long revision,int steps){
+   this.epoch=epoch;this.task=task;policySha=sha;this.revision=revision;remaining=steps;
+  }
+ }
+ private EpisodeLease episode;
+ public synchronized EpisodeLease reserveEpisode(String session,String task,String sha,int steps){
+  if(stopPending||!matches(session)||episode!=null||waiting!=null||prepared!=null||active!=null||
+     !PPO_TASK.equals(task)||sha==null||!sha.matches("[0-9a-f]{64}")||steps<1||steps>16)return null;
+  episode=new EpisodeLease(epoch,task,sha,stopRevision,steps);return episode;
+ }
+ public synchronized boolean ownsEpisode(EpisodeLease lease){
+  return lease!=null&&lease==episode&&!stopPending&&matches(lease.epoch)&&lease.revision==stopRevision;
+ }
+ public synchronized boolean changeEpisodeMode(EpisodeLease lease){
+  if(!ownsEpisode(lease)||waiting!=null||prepared!=null||active!=null)return false;
+  mode=Mode.STEP_MODE;return true;
+ }
+ public synchronized Ticket beginEpisodeObservation(EpisodeLease lease,int frame,int hash,long now){
+  if(!ownsEpisode(lease)||lease.remaining<=0||mode!=Mode.STEP_MODE)
+   throw new IllegalStateException("Expired episode reservation");
+  return beginObservation(lease.epoch,frame,hash,now);
+ }
+ public synchronized ActionPermit startEpisodeStep(EpisodeLease lease,String sha,String button,
+     int frame,int hash,long now){
+  if(!ownsEpisode(lease)||!lease.policySha.equals(sha)||lease.remaining<=0||mode!=Mode.STEP_MODE)return null;
+  ActionPermit result=issue(Actor.PPO_STUDENT,lease.epoch,button,frame,hash,16,now);
+  if(result!=null)--lease.remaining;
+  return result;
+ }
+ public synchronized boolean finishEpisode(EpisodeLease lease){
+  if(!ownsEpisode(lease)||lease.remaining!=0||waiting!=null||prepared!=null||active!=null)return false;
+  episode=null;return true;
+ }
  private static final HarnessCoordinator PROCESS_NES=new HarnessCoordinator();
  public static HarnessCoordinator nes(){return PROCESS_NES;}
 
@@ -60,6 +99,10 @@ public final class HarnessCoordinator {
   epoch=newEpoch;mode=newMode;stopPending=false;
  }
  public synchronized Ticket begin(String expectedEpoch,int frame,int hash,long now){
+  if(episode!=null)throw new IllegalStateException("Episode owns controller");
+  return beginObservation(expectedEpoch,frame,hash,now);
+ }
+ private Ticket beginObservation(String expectedEpoch,int frame,int hash,long now){
   if(stopPending||!matches(expectedEpoch)||waiting!=null||prepared!=null||active!=null||
      frame<15||hash==0||now<0)
    throw new IllegalStateException("Another NES input owner or unready observation");
@@ -69,16 +112,16 @@ public final class HarnessCoordinator {
   return waiting;
  }
  public synchronized boolean changeMode(String expectedEpoch,Mode next){
-  if(stopPending||!matches(expectedEpoch)||next==null||waiting!=null||
+  if(stopPending||episode!=null||!matches(expectedEpoch)||next==null||waiting!=null||
      prepared!=null||active!=null)return false;
   mode=next;return true;
  }
  public synchronized Snapshot snapshot(){
   return new Snapshot(epoch,mode.name(),
-    active==null?"NONE":active.actor.name(),
-    stopPending||waiting!=null||prepared!=null,active!=null,stopRevision,stopReason);
+    active==null?(episode==null?"NONE":"PPO_STUDENT"):active.actor.name(),
+    stopPending||episode!=null||waiting!=null||prepared!=null,active!=null,stopRevision,stopReason);
  }
- public synchronized boolean hasPending(){return stopPending||waiting!=null||prepared!=null;}
+ public synchronized boolean hasPending(){return stopPending||episode!=null||waiting!=null||prepared!=null;}
  public synchronized boolean actionInFlight(){return active!=null;}
  public synchronized long stopRevision(){return stopRevision;}
  public synchronized String lastStopReason(){return stopReason;}
@@ -112,10 +155,14 @@ public final class HarnessCoordinator {
   */
  public synchronized ActionPermit start(Actor actor,String expectedEpoch,
       String button,int frame,int hash,int holdFrames,long now){
+  if(episode!=null||actor==Actor.PPO_STUDENT)return null;
+  return issue(actor,expectedEpoch,button,frame,hash,holdFrames,now);
+ }
+ private ActionPermit issue(Actor actor,String expectedEpoch,String button,int frame,int hash,int holdFrames,long now){
   if(stopPending||actor==null||!matches(expectedEpoch)||active!=null||waiting!=null||
       !(actor==Actor.MANUAL?ConsoleAgentContract.manualPlayable(button):ConsoleAgentContract.playable(button))||frame<15||hash==0||now<0)
    return null;
-  if(actor==Actor.GGUF||actor==Actor.STUDENT){
+  if(actor==Actor.GGUF||actor==Actor.STUDENT||actor==Actor.PPO_STUDENT){
    Ticket t=prepared;
    if(t!=null&&(now<t.issuedAt||now-t.issuedAt>ConsoleAgentContract.TTL_MS)){
     prepared=null;return null;
@@ -144,7 +191,7 @@ public final class HarnessCoordinator {
  /** Synchronous WebView lease fence. A core frame already authorized may finish. */
  public synchronized boolean authorizesStep(String session,String nonce,int requestedFrames,long now){
   return !stopPending&&active!=null&&active.mode==Mode.STEP_MODE&&
-    (active.actor==Actor.GGUF||active.actor==Actor.STUDENT)&&matches(session)&&
+    (active.actor==Actor.GGUF||active.actor==Actor.STUDENT||active.actor==Actor.PPO_STUDENT)&&matches(session)&&
     active.epoch.equals(session)&&active.nonce.equals(nonce)&&active.holdFrames==requestedFrames&&
     active.stopRevision==stopRevision&&now>=active.issuedAt&&
     now-active.issuedAt<=ConsoleAgentContract.TTL_MS;
@@ -164,7 +211,7 @@ public final class HarnessCoordinator {
   if(permit==null||permit!=active||!matches(expectedEpoch))return false;
   long delta=(long)afterFrame-permit.beforeFrame;
   boolean exact=permit.mode==Mode.STEP_MODE&&
-    (permit.actor==Actor.GGUF||permit.actor==Actor.STUDENT);
+    (permit.actor==Actor.GGUF||permit.actor==Actor.STUDENT||permit.actor==Actor.PPO_STUDENT);
   if(stopPending||permit.stopRevision!=stopRevision||!downAck||!upAck||
       now<permit.issuedAt||now-permit.issuedAt>ConsoleAgentContract.TTL_MS||
       afterFrame<0||delta<(permit.holdFrames>0?permit.holdFrames:15)||
@@ -179,7 +226,7 @@ public final class HarnessCoordinator {
  }
  public synchronized void stop(){stop("STOP");}
  public synchronized void stop(String reason){
-  waiting=null;prepared=null;active=null;
+  waiting=null;prepared=null;active=null;episode=null;
   if(!stopPending)++stopRevision;
   stopReason=reason==null||reason.isBlank()?"STOP":reason;
  }

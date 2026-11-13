@@ -170,6 +170,23 @@ window.retroAiTrial=function(name,holdFrames){
  agentTrial={name,code,started:frames,holdFrames};
  return true;
 };
+// Read-only evidence from the actual 6502 CPU's homebrew sprite-X variable.
+// Not a network/GGUF/reward call and not supported for arbitrary user ROMs.
+// State is read from live JSNES CPU RAM while STEP_MODE is truly frozen.
+// Session+frame are returned with bytes to prevent stale Java callback reuse.
+window.retroHomebrewState=function(){
+ if(!nes||!homebrewRom||!paused||!stepMode||!activeRomSession||
+    !nes.cpu||!nes.cpu.mem)return null;
+ const x=nes.cpu.mem[1],y=nes.cpu.mem[2];
+ if(!Number.isInteger(x)||!Number.isInteger(y)||
+    x<0||x>255||y<0||y>255)return null;
+ return {session:activeRomSession,frame:frames,x,y};
+};
+window.retroHomebrewRamX=function(){
+ if(!nes||!homebrewRom||!nes.cpu||!nes.cpu.mem)return -1;
+ const x=nes.cpu.mem[1];
+ return Number.isInteger(x)&&x>=0&&x<=255?x:-1;
+};
 // Frozen-time mode: real JSNES executes exactly the approved frame budget.
 // No timer runs while a slow GGUF is deciding. Only the bundled homebrew
 // supports this agent entry point until a verified task profile exists.
@@ -232,6 +249,8 @@ window.retroAiStep=function(name,holdFrames,nonce){
    if(typeof window.GameLabBridge.onHomebrewTask==="function")
     window.GameLabBridge.onHomebrewTask(name,started,frames,
       beforeX,beforeY,afterX,afterY,activeRomSession,nonce);
+   if(holdFrames===16&&typeof window.GameLabBridge.onHomebrewRamProgress==="function")
+    window.GameLabBridge.onHomebrewRamProgress(name,started,frames,beforeX,afterX,activeRomSession,beforeY,afterY,nonce);
    window.GameLabBridge.onStepAction(name,started,frames,activeRomSession,nonce);
    window.GameLabBridge.onFrame(frames,validFrame|0,activeRomSession);
   }

@@ -121,6 +121,36 @@ public final class HarnessCoordinatorTest {
   var human=c.start(HarnessCoordinator.Actor.MANUAL,"1101","START",45,333,0,10501);
   check(human!=null,"Real NES menu remains usable by the human through the same owner");
   check(c.complete(human,"1101",60,333,true,true,10502),"Manual Start has ordinary release and frame proof");
+  c.reset("1200",HarnessCoordinator.Mode.REALTIME_MODE);
+  String sha="a".repeat(64);
+  check(c.reserveEpisode("1200","wrong-task",sha,2)==null,"task incompatible weights rejected");
+  var lease=c.reserveEpisode("1200",HarnessCoordinator.PPO_TASK,sha,2);
+  check(lease!=null&&c.snapshot().owner().equals("PPO_STUDENT"),"episode reserves input before freeze");
+  check(!c.changeMode("1200",HarnessCoordinator.Mode.STEP_MODE),"other owner cannot change reserved episode mode");
+  check(c.changeEpisodeMode(lease),"episode freezes through same coordinator");
+  check(c.start(HarnessCoordinator.Actor.PPO_STUDENT,"1200","RIGHT",30,123,16,11000)==null,"generic start cannot bypass PPO observation");
+  check(c.startEpisodeStep(lease,sha,"RIGHT",30,123,11000)==null,"episode still requires prepared observation");
+  t=c.beginEpisodeObservation(lease,30,123,11000);
+  check(c.consume(t.nonce,"1200",30,123,11001),"episode observation uses common one-use ticket");
+  check(c.startEpisodeStep(lease,"b".repeat(64),"RIGHT",30,123,11002)==null,"different weights cannot consume reserved observation");
+  var ppo=c.startEpisodeStep(lease,sha,"RIGHT",30,123,11002);
+  check(ppo!=null&&c.authorizesStep("1200",ppo.nonce,16,11003),"PPO uses common per-frame JS fence");
+  check(c.complete(ppo,"1200",46,321,true,true,11004),"first exact PPO transition");
+  check(c.hasPending()&&c.start(HarnessCoordinator.Actor.MANUAL,"1200","A",46,321,0,11005)==null,
+    "between-step gap remains reserved");
+  check(!c.finishEpisode(lease),"cannot silently finish a partial series");
+  t=c.beginEpisodeObservation(lease,46,321,11006);
+  c.consume(t.nonce,"1200",46,321,11007);
+  ppo=c.startEpisodeStep(lease,sha,"LEFT",46,321,11008);
+  check(c.complete(ppo,"1200",62,123,true,true,11009),"second exact PPO transition");
+  check(c.startEpisodeStep(lease,sha,"LEFT",62,123,11010)==null,"episode action budget cannot overrun");
+  check(c.finishEpisode(lease)&&!c.hasPending(),"fully verified series explicitly releases reservation");
+  lease=c.reserveEpisode("1200",HarnessCoordinator.PPO_TASK,sha,1);
+  t=c.beginEpisodeObservation(lease,62,123,11011);
+  revision=c.requestStop("1200","PPO_STOP");
+  check(!c.ownsEpisode(lease)&&!c.consume(t.nonce,"1200",62,123,11012),"STOP invalidates pending episode observation");
+  check(c.confirmStop("1200",revision),"PPO STOP still needs release ACK");
+  check(c.startEpisodeStep(lease,sha,"RIGHT",62,123,11013)==null,"old episode cannot resurrect after ACK");
   System.out.println("HARNESS_COORDINATOR_PASS checks="+checks);
  }
 }

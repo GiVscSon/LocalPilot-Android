@@ -10,6 +10,25 @@ smoke=importlib.util.module_from_spec(spec)
 spec.loader.exec_module(smoke)
 
 class UnifiedUiSmokeContract(unittest.TestCase):
+    def test_clickable_harness_target_wins_over_non_clickable_label(self):
+        xml=('<hierarchy><node text="Harness Console" clickable="false" '
+             'bounds="[0,10][100,40]"/><node text="Harness Console" '
+             'clickable="true" bounds="[200,100][400,200]"/></hierarchy>')
+        self.assertEqual(smoke.target_bounds(xml,"Harness Console"),(300,150))
+
+    def test_wrong_neighbor_navigation_retries_once_and_verifies_dashboard(self):
+        with patch.object(smoke,"tap_text") as click, \
+             patch.object(smoke,"wait_activity",
+                          side_effect=[RuntimeError("ModelLab opened"),None,None]) as wait, \
+             patch.object(smoke,"resumed_activity",
+                          return_value=smoke.PACKAGE+"/"+smoke.MODEL), \
+             patch.object(smoke,"adb") as adb, \
+             patch.object(smoke.time,"sleep"):
+            self.assertEqual(smoke.tap_harness_and_verify(),1)
+            self.assertEqual(click.call_count,2)
+            adb.assert_called_once_with("shell","input","keyevent","KEYCODE_BACK")
+            self.assertEqual(wait.call_count,3)
+
     def test_parse_visible_button_text(self):
         xml='<hierarchy><node text="🧠 ModelLab · GGUF, загрузка моделей и анализ фото" bounds="[12,100][312,180]" /></hierarchy>'
         self.assertEqual(smoke.target_bounds(xml,"ModelLab · GGUF"),(162,140))
