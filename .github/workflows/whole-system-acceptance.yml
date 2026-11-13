@@ -207,4 +207,5 @@ jobs:
           if-no-files-found: ignore
           path: |
             build/integration/rom/evidence.txt
+            build/integration/student/evidence/onpolicy-evaluation.json
             build/reports/unified-script-engine/selfplay/model-gate.md
