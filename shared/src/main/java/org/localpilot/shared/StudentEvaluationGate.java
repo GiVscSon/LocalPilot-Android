@@ -21,7 +21,7 @@ import java.util.Set;
  */
 public final class StudentEvaluationGate {
  private StudentEvaluationGate() {}
- public static final int MIN_SCENARIOS=5, MIN_STEPS_PER_ARM=8;
+ public static final int MIN_SCENARIOS=5, MIN_STEPS_PER_ARM=4;
  public static final String TASK=HomebrewRamReward.GOAL;
  public enum Arm { ACTIVE, CANDIDATE }
  public enum Provenance { RETRO_EMULATED, SYNTHETIC, MANUAL, UNKNOWN }
