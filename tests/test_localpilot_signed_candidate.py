@@ -32,7 +32,7 @@ class SignedSingleApk(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.apk=Path(self.temp.name)/"one.apk"
         with zipfile.ZipFile(self.apk,"w") as z:
-            for name in gate.ASSETS:
+            for name in gate.ASSETS-{"classes.dex"}:
                 z.writestr(name,json.dumps({"schema":"localpilot-source-v1","sourceSha":SHA}) if name=="assets/localpilot-source.json" else b"unit test")
             z.writestr("classes.dex", b"org/localpilot/android/ModelLabActivity"+
                        b"org/localpilot/gamelab/NesEmulatorActivity")
@@ -74,14 +74,15 @@ class SignedSingleApk(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,"GGUF weights"):
             self.checked()
     def test_no_debug_fallback_or_auto_publish(self):
-        workflow=(ROOT/".github/workflows/localpilot-unified-signed-candidate.yml").read_text()
+        workflow=(ROOT/".github/workflows/localpilot-unified-release-dispatch.yml").read_text()
         self.assertIn("if: github.event_name == 'workflow_dispatch'",workflow)
         self.assertIn("environment: android-signing",workflow)
         self.assertIn("No debug fallback".lower(),workflow.lower())
         self.assertIn("vars.LOCALPILOT_RELEASE_CERT_SHA256",workflow)
         self.assertIn("secrets.LOCALPILOT_RELEASE_KEYSTORE_B64",workflow)
-        self.assertNotIn("gh release create",workflow)
-        self.assertNotIn("contents: write",workflow)
+        signing=workflow.split("\n  signed-candidate:\n",1)[1]
+        self.assertNotIn("gh release create",signing)
+        self.assertNotIn("contents: write",signing)
 
 if __name__=="__main__":
     unittest.main()

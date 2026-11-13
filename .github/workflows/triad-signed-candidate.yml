@@ -1,3 +1,4 @@
+# Legacy contract tests only. Signing moved to localpilot-unified-release-dispatch.yml.
 name: Signed triad candidate · protected key + fail-closed audit
 on:
   pull_request:
@@ -10,12 +11,7 @@ on:
       - 'tests/test_triad_signing_scope.py'
       - 'docs/TRIAD_SIGNED_RELEASE.ru.md'
       - '.github/workflows/triad-signed-candidate.yml'
-  workflow_dispatch:
-    inputs:
-      source_sha:
-        description: 'Exact 40-character git SHA to sign (must equal this checkout)'
-        required: true
-        type: string
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.head.repo.full_name || github.repository }}-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: false
@@ -37,105 +33,3 @@ jobs:
           python3 -m unittest discover -s tests -p 'test_triad_signing_scope.py' -v
           python3 -O -m unittest discover -s tests -p 'test_triad_signing_scope.py' -v
 
-  signed-candidate:
-    if: github.event_name == 'workflow_dispatch'
-    needs: signing-policy
-    environment: android-signing
-    runs-on: ubuntu-24.04
-    timeout-minutes: 75
-    steps:
-      - uses: actions/checkout@v4
-      - name: Enforce manually approved source and pinned release certificate
-        env:
-          EXPECTED_SOURCE_SHA: ${{ inputs.source_sha }}
-          PINNED_CERT_SHA256: ${{ vars.LOCALPILOT_RELEASE_CERT_SHA256 }}
-          KEYSTORE_BASE64: ${{ secrets.LOCALPILOT_RELEASE_KEYSTORE_B64 }}
-          KEYSTORE_PASSWORD: ${{ secrets.LOCALPILOT_RELEASE_STORE_PASS }}
-          KEY_PASSWORD: ${{ secrets.LOCALPILOT_RELEASE_KEY_PASS }}
-          KEY_ALIAS: ${{ secrets.LOCALPILOT_RELEASE_KEY_ALIAS }}
-        run: |
-          set -euo pipefail
-          test "$EXPECTED_SOURCE_SHA" = "$GITHUB_SHA"
-          [[ "$PINNED_CERT_SHA256" =~ ^[0-9a-fA-F]{64}$ ]] || { echo 'No pinned release certificate'; exit 1; }
-          test -n "$KEYSTORE_BASE64" && test -n "$KEYSTORE_PASSWORD" && \
-            test -n "$KEY_PASSWORD" && test -n "$KEY_ALIAS" || {
-              echo 'Release signing secrets are not configured; no debug-key fallback'; exit 1;
-            }
-          echo 'Explicit source SHA, certificate pin and key presence verified (values not logged)'
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '21'
-      - uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '8.9'
-      - name: Install Android SDK and ARM64 JNI toolchain
-        run: |
-          set -euo pipefail
-          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
-            'platforms;android-35' 'build-tools;35.0.0' 'cmake;3.22.1' 'ndk;27.2.12479018'
-      - name: Fetch reviewed pinned native inference source
-        run: |
-          set -euo pipefail
-          mkdir -p third_party/llama.cpp
-          cd third_party/llama.cpp
-          git init
-          git remote add origin https://github.com/ggml-org/llama.cpp.git
-          git fetch --depth 1 origin 2b66bfbf7107e43f5cd2fe99802ff6e872e4c4d0
-          git checkout --detach FETCH_HEAD
-          test "$(git rev-parse HEAD)" = '2b66bfbf7107e43f5cd2fe99802ff6e872e4c4d0'
-      - name: Build all three unsigned release identities from exactly one SHA
-        run: |
-          set -euo pipefail
-          ./gradlew --no-daemon --max-workers=2 --no-parallel \
-            -Dorg.gradle.jvmargs='-Xmx4096m -XX:MaxMetaspaceSize=768m -Dfile.encoding=UTF-8' \
-            -PincludeModelLab=true \
-            :app:assembleRelease :game-lab:assembleRelease :model-lab:assembleRelease
-      - name: Align, securely sign, pin and audit all three APKs
-        env:
-          KEYSTORE_BASE64: ${{ secrets.LOCALPILOT_RELEASE_KEYSTORE_B64 }}
-          KEYSTORE_PASSWORD: ${{ secrets.LOCALPILOT_RELEASE_STORE_PASS }}
-          KEY_PASSWORD: ${{ secrets.LOCALPILOT_RELEASE_KEY_PASS }}
-          KEY_ALIAS: ${{ secrets.LOCALPILOT_RELEASE_KEY_ALIAS }}
-          PINNED_CERT_SHA256: ${{ vars.LOCALPILOT_RELEASE_CERT_SHA256 }}
-        run: |
-          set -euo pipefail
-          umask 077
-          KEYDIR="$(mktemp -d "$RUNNER_TEMP/triad-sign.XXXXXX")"
-          trap 'rm -rf "$KEYDIR"' EXIT
-          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$KEYDIR/private.p12"
-          unset KEYSTORE_BASE64
-          mkdir -p dist/signed-candidate
-          ZIPALIGN="$ANDROID_HOME/build-tools/35.0.0/zipalign"
-          APKSIGNER="$ANDROID_HOME/build-tools/35.0.0/apksigner"
-          for item in 'LocalPilot:app' 'GameLab:game-lab' 'ModelLab:model-lab'; do
-            label="${item%%:*}"
-            module="${item#*:}"
-            mapfile -t sources < <(find "$module/build/outputs/apk/release" -maxdepth 1 \
-              -type f -name '*-release-unsigned.apk' -print)
-            test "${#sources[@]}" -eq 1 || { echo "Missing/ambiguous unsigned release APK: $module"; exit 1; }
-            "$ZIPALIGN" -P 16 -f 4 "${sources[0]}" "$KEYDIR/aligned.apk"
-            "$APKSIGNER" sign --ks "$KEYDIR/private.p12" --ks-type PKCS12 \
-              --ks-key-alias "$KEY_ALIAS" --ks-pass env:KEYSTORE_PASSWORD \
-              --key-pass env:KEY_PASSWORD --min-sdk-version 30 \
-              --v2-signing-enabled true --v3-signing-enabled true \
-              --out "dist/signed-candidate/$label.apk" "$KEYDIR/aligned.apk"
-            "$ZIPALIGN" -c -P 16 4 "dist/signed-candidate/$label.apk"
-          done
-          python3 tools/triad_release_gate.py \
-            --app dist/signed-candidate/LocalPilot.apk \
-            --gamelab dist/signed-candidate/GameLab.apk \
-            --modellab dist/signed-candidate/ModelLab.apk \
-            --aapt "$ANDROID_HOME/build-tools/35.0.0/aapt" \
-            --apksigner "$APKSIGNER" --certificate "$PINNED_CERT_SHA256" \
-            --sha "$GITHUB_SHA" --output dist/signed-candidate/CANDIDATE-MANIFEST.json
-          (cd dist/signed-candidate && sha256sum LocalPilot.apk GameLab.apk ModelLab.apk \
-            CANDIDATE-MANIFEST.json > SHA256SUMS.txt)
-          echo 'The signed files are installable CANDIDATES; physical/upgrade tests remain mandatory.'
-      - name: Upload only audited signed APKs; never upload signing keys
-        uses: actions/upload-artifact@v4
-        with:
-          name: LOCALPILOT-SIGNED-TRIAD-CANDIDATE-${{ github.sha }}
-          retention-days: 21
-          if-no-files-found: error
-          path: dist/signed-candidate/

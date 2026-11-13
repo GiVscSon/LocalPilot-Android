@@ -30,16 +30,18 @@ def sdk(*args):
         raise ValueError(f"Verification SDK tool {Path(args[0]).name} failed")
     return proc.stdout
 
-def verify(apk,aapt,apksigner,pinned_cert,source_sha,previous=None):
+def verify_payload(apk,source_sha):
     if not re.fullmatch(r"[0-9a-fA-F]{40}",source_sha):
         raise ValueError("Full pinned 40-digit git source SHA required")
-    if not re.fullmatch(r"[0-9a-fA-F]{64}",pinned_cert):
-        raise ValueError("One permanent 64-hex release certificate required")
-    cert=pinned_cert.lower()
     if not apk.is_file() or apk.stat().st_size>45*1024*1024:
         raise ValueError("Missing/unexpectedly large import-only unified release APK")
     with zipfile.ZipFile(apk) as z:
+        infos=z.infolist()
+        if len(infos)>10000 or sum(i.file_size for i in infos)>200*1024*1024:
+            raise ValueError("APK archive exceeds inspection limits")
         names=set(z.namelist())
+        if len(names)!=len(infos):
+            raise ValueError("Duplicate APK ZIP entries")
         if ASSETS-names or z.testzip() is not None:
             raise ValueError("Missing unified app assets or invalid ZIP CRC")
         if any(n.startswith("assets/models/") and n.endswith(".gguf") for n in names):
@@ -50,11 +52,13 @@ def verify(apk,aapt,apksigner,pinned_cert,source_sha,previous=None):
         if not isinstance(provenance,dict) or provenance.get("schema")!="localpilot-source-v1" or provenance.get("sourceSha")!=source_sha.lower():
             raise ValueError("APK embedded source SHA differs from requested source SHA")
         dex=b"".join(z.read(n) for n in names
-                     if re.fullmatch(r"classes(?:[2-9][0-9]*)?\.dex",n))
+                     if re.fullmatch(r"classes(?:[2-9]|[1-9][0-9]+)?\.dex",n))
         for symbol in (b"org/localpilot/android/ModelLabActivity",
                        b"org/localpilot/gamelab/NesEmulatorActivity"):
             if symbol not in dex:
                 raise ValueError("Required unified screen implementation is missing")
+
+def verify_metadata(apk,aapt):
     info=sdk(aapt,"dump","badging",str(apk))
     m=re.search(r"^package: name='([^']+)' versionCode='(\d+)' versionName='([^']+)'",info,re.M)
     if not m or m.group(1)!=PACKAGE or int(m.group(2))<=0:
@@ -69,6 +73,16 @@ def verify(apk,aapt,apksigner,pinned_cert,source_sha,previous=None):
     for activity in ACTIVITIES:
         if activity not in xml:
             raise ValueError(f"Missing unified screen {activity}")
+    return m
+
+def verify(apk,aapt,apksigner,pinned_cert,source_sha,previous=None):
+    if not re.fullmatch(r"[0-9a-fA-F]{40}",source_sha):
+        raise ValueError("Full pinned 40-digit git source SHA required")
+    if not re.fullmatch(r"[0-9a-fA-F]{64}",pinned_cert):
+        raise ValueError("One permanent 64-hex release certificate required")
+    cert=pinned_cert.lower()
+    verify_payload(apk,source_sha)
+    m=verify_metadata(apk,aapt)
     signed=sdk(apksigner,"verify","--verbose","--print-certs",str(apk))
     actual=re.findall(r"^Signer #\d+ certificate SHA-256 digest: ([0-9a-fA-F]{64})$",signed,re.M)
     if len(actual)!=1 or actual[0].lower()!=cert:
