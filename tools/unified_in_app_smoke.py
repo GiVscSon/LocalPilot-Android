@@ -57,9 +57,11 @@ def screen_size() -> tuple[int, int]:
 def target_bounds(xml_text: str, label: str) -> tuple[int, int] | None:
     """Locate a visible UI node using a bounded text substring, no OCR."""
     root = ET.fromstring(xml_text)
+    candidates = []
     for node in root.iter("node"):
-        visible = (node.attrib.get("text", "") + " " +
-                   node.attrib.get("content-desc", ""))
+        label_text = node.attrib.get("text", "")
+        description = node.attrib.get("content-desc", "")
+        visible = label_text + " " + description
         if label.casefold() not in visible.casefold():
             continue
         box = BOUNDS.fullmatch(node.attrib.get("bounds", ""))
@@ -67,8 +69,16 @@ def target_bounds(xml_text: str, label: str) -> tuple[int, int] | None:
             continue
         x1, y1, x2, y2 = (int(n) for n in box.groups())
         if x1 < x2 and y1 < y2:
-            return (x1 + x2) // 2, (y1 + y2) // 2
-    return None
+            # A parent/label may contain the same text as a real Button.
+            # Prefer the actual clickable node and exact accessible text.
+            rank = (2 if node.attrib.get("clickable") == "true" else 0) + (
+                1 if label.casefold() == label_text.strip().casefold() or
+                     label.casefold() == description.strip().casefold() else 0)
+            candidates.append((rank,(x1+x2)//2,(y1+y2)//2))
+    if not candidates:
+        return None
+    candidates.sort(reverse=True)
+    return candidates[0][1], candidates[0][2]
 
 
 def recover_system_ui_anr(xml_text: str) -> bool:
@@ -175,6 +185,33 @@ def tap_text(label: str, swipes: int = 6) -> None:
     raise RuntimeError("Required in-app button not visible: " + label)
 
 
+def tap_harness_and_verify() -> int:
+    """Test the real dashboard intent, not a neighboring ModelLab tap.
+
+    One bounded retry is permitted after a verified WRONG neighbor activity.
+    Every retry has to re-dump the fresh clickable node and actually open DASH.
+    No fallback to explicit am start of an unexported activity, and no false PASS.
+    """
+    for attempt in range(2):
+        tap_text("Harness Console")
+        try:
+            wait_activity(DASH, seconds=7)
+            return attempt
+        except RuntimeError as error:
+            if attempt == 1:
+                raise RuntimeError("Harness button did not open native dashboard after "
+                                   "two fresh UI taps: " + str(error))
+            current = resumed_activity()
+            if PACKAGE + "/" + MODEL not in current:
+                raise RuntimeError("Unexpected app route after Harness click: " + current)
+            # Only recover an actual neighboring ModelLab navigation;
+            # never dismiss an ANR or conceal an unrecognized activity.
+            adb("shell", "input", "keyevent", "KEYCODE_BACK")
+            wait_activity(MAIN)
+            time.sleep(.8)
+    raise RuntimeError("Harness UI launch unverified")
+
+
 def resumed_activity() -> str:
     text = adb("shell", "dumpsys", "activity", "activities", timeout=15)
     lines = [line.strip() for line in text.splitlines()
@@ -235,13 +272,13 @@ def verify(apk: Path, output: Path) -> dict:
     process = one_process()
     checks = [{"name": "single_installed_application", "status": "PASS"}]
 
-    tap_text("Harness Console")
-    wait_activity(DASH)
+    harness_navigation_retries = tap_harness_and_verify()
     if one_process() != process:
         raise RuntimeError("Harness panel started a second Android process")
     if target_bounds(dump_ui(), "LocalPilot · Harness Console") is None:
         raise RuntimeError("Native unified Harness console did not render")
-    checks.append({"name": "native_harness_console_screen", "status": "PASS"})
+    checks.append({"name": "native_harness_console_screen", "status": "PASS",
+                   "boundedWrongNeighborRetries": harness_navigation_retries})
 
     tap_text("Открыть ModelLab")
     wait_activity(MODEL)
