@@ -40,6 +40,11 @@ import org.localpilot.shared.ConsoleAgentContract;
 import org.localpilot.shared.HarnessCoordinator;
 import org.localpilot.shared.HomebrewObs64;
 import org.localpilot.shared.StudentPolicyNet;
+import org.localpilot.shared.LearningCoordinator;
+import org.localpilot.shared.VerifiedReplayFilter;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.Future;
 import java.nio.file.Path;
 import java.security.SecureRandom;
 
@@ -57,7 +62,7 @@ public final class NesEmulatorActivity extends Activity {
  private static final String[] GAMEPAD={"UP","LEFT","DOWN","RIGHT","SELECT","START","B","A"};
  private WebView web;
  private TextView state;
- private Button demoButton,aButton,bButton,shareTrial,cpuAgentButton,cpuBatchButton,stopCpuButton,aiObserveButton,studentStepButton;
+ private Button demoButton,aButton,bButton,shareTrial,cpuAgentButton,cpuBatchButton,stopCpuButton,aiObserveButton,studentStepButton,studentBatchButton;
  private CheckBox exploratoryStopSwitch;
  private final NesExperimentPolicy experiment=new NesExperimentPolicy();
  private long experimentGeneration;
@@ -72,6 +77,12 @@ public final class NesEmulatorActivity extends Activity {
  private boolean aiSnapshot,aiRunning,aiFrozen,studentStepRequested;
  private StudentPolicyNet studentNet;
  private final SecureRandom studentRandom=new SecureRandom();
+ private final ExecutorService studentTrainer=Executors.newSingleThreadExecutor();
+ private Future<?> studentTraining;
+ private final ArrayList<VerifiedReplayFilter.Step> studentRollout=new ArrayList<>();
+ private int studentRemaining;
+ private String studentBatchEpoch="";
+ private long studentBatchStopRevision;
  private String aiTicketNonce,queuedAiButton,aiModelId="",aiModelSha="",aiEpoch="";
  private int aiExpectedHash;
  private long aiIssuedAt;
@@ -83,7 +94,7 @@ public final class NesEmulatorActivity extends Activity {
   final String button;
   final int frame,hash;
   boolean downAck,upAck,ramProbeSeen;
-  int xBefore=-1,xAfter=-1;
+  int xBefore=-1,xAfter=-1,yBefore=-1,yAfter=-1;
   float studentOldLogProb,studentValue;
   float[] studentState64;
   int studentActionId=-1;
@@ -186,6 +197,11 @@ public final class NesEmulatorActivity extends Activity {
   studentStepButton.setEnabled(false);
   studentStepButton.setOnClickListener(v->requestStudentAction());
   root.addView(studentStepButton);
+  studentBatchButton=new Button(this);
+  studentBatchButton.setText("🧪 StudentPolicy · 16 реальных NES-шагов → PPO-кандидат");
+  studentBatchButton.setEnabled(false);
+  studentBatchButton.setOnClickListener(v->startStudentBatch());
+  root.addView(studentBatchButton);
   Button resumeRealtime=new Button(this);
   resumeRealtime.setText("▶ REALTIME_MODE · продолжить ручную NES");
   resumeRealtime.setOnClickListener(v->{
@@ -283,7 +299,7 @@ public final class NesEmulatorActivity extends Activity {
     });
    }
    @JavascriptInterface public void onHomebrewRamProgress(String name,int started,
-        int finished,int xBefore,int xAfter,String session){
+        int finished,int xBefore,int xAfter,String session,int yBefore,int yAfter){
     runOnUiThread(()->{
      // The WebView bridge is not self-authenticating. Stage RAM only while
      // the exact built-in ROM and a single in-flight GGUF permit are active.
@@ -292,11 +308,13 @@ public final class NesEmulatorActivity extends Activity {
      TrialPending current=pendingTrial;
      if(current==null||current.ramProbeSeen||!current.button.equals(name)||
         current.frame!=started||finished-started!=HomebrewRamReward.HOLD_FRAMES||
-        xBefore<0||xBefore>255||xAfter<0||xAfter>255){
+        xBefore<0||xBefore>255||xAfter<0||xAfter>255||
+        yBefore<0||yBefore>255||yAfter<0||yAfter>255){
       stopCpuExperiment("STOP: NES RAM evidence mismatch");return;
      }
      current.ramProbeSeen=true;
      current.xBefore=xBefore;current.xAfter=xAfter;
+     current.yBefore=yBefore;current.yAfter=yAfter;
     });
    }
    @JavascriptInterface public void onAgentAction(String name,int started,int finished,String session){
@@ -438,11 +456,13 @@ public final class NesEmulatorActivity extends Activity {
  private void stopCpuExperiment(String reason){
   harness.stop("STOP_OR_RECOVERY");pendingPermit=null;
   aiTicketNonce=null;aiSnapshot=false;queuedAiButton=null;aiRunning=false;
-  studentStepRequested=false;
+  studentStepRequested=false;studentRemaining=0;studentRollout.clear();
+  if(studentTraining!=null)studentTraining.cancel(true);
   snapshotGate.cancel();exportTrial=null;
   if(aiObserveButton!=null)aiObserveButton.setEnabled(
     resumed&&homebrewRom&&pageLoaded);
   if(studentStepButton!=null)studentStepButton.setEnabled(resumed&&homebrewRom&&pageLoaded);
+  if(studentBatchButton!=null)studentBatchButton.setEnabled(resumed&&homebrewRom&&pageLoaded);
   ++experimentGeneration;
   experiment.stop();
   pendingTrial=null;
@@ -893,6 +913,8 @@ public final class NesEmulatorActivity extends Activity {
   ++experimentGeneration;experiment.stop();
   snapshotGate.cancel();exportTrial=null;
   harness.stop();aiTicketNonce=null;queuedAiButton=null;aiRunning=false;aiSnapshot=false;
+  studentStepRequested=false;studentRemaining=0;studentRollout.clear();
+  if(studentTraining!=null)studentTraining.cancel(true);
   // A caller-provided boolean is not ROM provenance: require byte-for-byte
   // identity with the audited built-in 6502 cartridge before enabling RAM reward.
   if(homebrew&&!java.util.Arrays.equals(rom,HomebrewNes.cartridge())){
@@ -924,6 +946,7 @@ public final class NesEmulatorActivity extends Activity {
    if(cpuAgentButton!=null)cpuAgentButton.setEnabled(launched&&homebrew);
    if(cpuBatchButton!=null)cpuBatchButton.setEnabled(launched&&homebrew);
    if(studentStepButton!=null)studentStepButton.setEnabled(launched&&homebrew);
+   if(studentBatchButton!=null)studentBatchButton.setEnabled(launched&&homebrew);
    if(aiObserveButton!=null)aiObserveButton.setEnabled(launched&&homebrew&&
      getPackageName().startsWith("org.localpilot.android"));
    if(!launched)state.setText("NES ROM не запущен. Проверьте mapper и ядро.");
@@ -970,7 +993,9 @@ public final class NesEmulatorActivity extends Activity {
   resumed=false;snapshotGate.cancel();exportTrial=null;
   if(shareTrial!=null)shareTrial.setEnabled(readyTrial!=null);
   GameLabEvidenceProvider.clear("nes");
-  if(experiment.running()||aiRunning||studentStepRequested)stopCpuExperiment("STOP: NES ушла в фон");
+  if(experiment.running()||aiRunning||studentStepRequested||studentRemaining>0||
+     studentTraining!=null&&!studentTraining.isDone())
+   stopCpuExperiment("STOP: NES ушла в фон");
   if(pendingTrial!=null){harness.stop("NES_PAUSED_IN_FLIGHT");pendingPermit=null;}
   pendingTrial=null; // Keep a pending ModelLab ticket, but not held input.
   if(web!=null&&pageLoaded)web.evaluateJavascript("window.retroPause()",null);
@@ -989,7 +1014,7 @@ public final class NesEmulatorActivity extends Activity {
   closed=true;harness.stop("NES_DESTROYED");pendingPermit=null;aiFrozen=false;
   queuedAiButton=null;aiRunning=false;studentStepRequested=false;
   frameEpoch.cancel();snapshotGate.cancel();exportTrial=null;
-  romDownloads.shutdownNow();
+  romDownloads.shutdownNow();studentTrainer.shutdownNow();
   ++experimentGeneration;experiment.stop();
   if(web!=null){web.evaluateJavascript("window.retroStop()",null);
    web.removeJavascriptInterface("GameLabBridge");
