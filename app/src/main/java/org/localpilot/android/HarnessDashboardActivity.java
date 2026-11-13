@@ -132,13 +132,12 @@ public final class HarnessDashboardActivity extends Activity {
     root.put("events",events);
     root.put("imitation",HarnessImitationPolicy.status(HarnessDashboardActivity.this));
     Set<String> used=new HashSet<>(),visual=new HashSet<>(),goal=new HashSet<>();
-    int imitationExamples=0;
+    JSONObject evidence=HarnessImitationPolicy.evidenceStatus(events);
+    root.put("imitationEvidence",evidence);
+    int imitationExamples=evidence.optInt("examples",0);
     for(int i=0;i<events.length();i++){
      JSONObject event=events.optJSONObject(i);
      if(event==null)continue;
-     if("EXAMPLE".equals(event.optString("stage"))&&
-        "VISUAL_ONLY".equals(event.optString("status"))&&
-        !event.optString("modelId").startsWith("fast-policy:"))imitationExamples++;
      if("MODEL".equals(event.optString("stage"))&&
         "MODEL_USED".equals(event.optString("status")))used.add(event.optString("modelId"));
      if("VISUAL".equals(event.optString("stage"))&&

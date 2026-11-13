@@ -143,7 +143,7 @@ function episodesPage(){
 function trainingPage(){
  const es=episodes(),changed=es.filter(e=>e.rows.some(x=>x.stage==="VISUAL"&&x.status==="PIXELS_DIFFER")).length;
  const im=snapshot.imitation||{},examples=Number(snapshot.learning.imitationExamples||0);
- const trained=im.active===true,eligible=examples>=12;
+ const trained=im.active===true,eligible=snapshot.imitationEvidence?.eligible===true;
  const usedEpisodes=trained?im.sourceEpisodes:(im.candidateSourceEpisodes||[]);
  const holdoutEpisodes=im.candidateHoldoutEpisodes||[];
  const sourceIds=Array.isArray(usedEpisodes)?usedEpisodes:[];
@@ -154,6 +154,7 @@ function trainingPage(){
  panel("Реальное имитационное обучение","Учитель GGUF → проверенный переход NES → обучаемые веса",'<div class="panel-body">'+
  '<div class="runtime"><h3>✦ Fast Policy · softmax 8×8</h3><p>Использует настоящие пиксельные признаки NES и действия учителя, после которых получен новый кадр. Весам GGUF не приписывается обучение.</p><div class="chips">'+chip(trained?"ОБУЧЕНА · ПРОШЛА HOLDOUT":"НЕТ ПРИНЯТОЙ ПОЛИТИКИ",trained?"ok":"warn")+chip("ИМИТАЦИЯ, НЕ RL","blue")+'</div></div>'+
  '<div class="row-stats"><span>Примеры из реального NES</span><b>'+examples+'</b></div>'+
+ '<div class="row-stats"><span>Независимые эпизоды с полной цепочкой доказательств</span><b>'+Number(snapshot.imitationEvidence?.episodes||0)+'</b></div>'+
  '<div class="row-stats"><span>Весовой артефакт</span><b>'+(trained?E(String(im.sha256).slice(0,16))+'…':'Нет')+'</b></div>'+
  '<div class="row-stats"><span>Holdout accuracy</span><b>'+(trained?(100*im.accuracy).toFixed(1)+'%':'Не оценивалась')+'</b></div>'+
  '<div class="row-stats"><span>Baseline accuracy</span><b>'+(trained?(100*im.baseline).toFixed(1)+'%':'Не оценивалась')+'</b></div>'+
