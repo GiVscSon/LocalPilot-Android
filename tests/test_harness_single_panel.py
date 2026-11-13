@@ -36,6 +36,23 @@ class SingleNativeHarnessConsole(unittest.TestCase):
   self.assertIn("engine.proposeNesButton(",self.model)
   self.assertIn("modelSha",binding)
   self.assertIn("commit()",binding)
+ def test_gguf_action_requires_actual_native_inference(self):
+  runtime=source("app/src/main/java/org/localpilot/android/EmbeddedGgufRuntime.java")
+  self.assertIn("private static native String nativeInfer(",runtime)
+  self.assertIn("private static native String nativeAnalyzeImage(",runtime)
+  start=runtime.index("public void proposeNesButton(")
+  end=runtime.index("public void probeGpu(",start)
+  agent=runtime[start:end]
+  self.assertIn("nativeInfer(weights.getAbsolutePath()",agent)
+  self.assertIn("nativeAnalyzeImage(weights.getAbsolutePath()",agent)
+  self.assertIn("prepareNativeInference();",agent)
+  self.assertIn("submit(answer->callback.complete(answer,",agent)
+  self.assertNotIn("MessageDigest.getInstance(",agent)
+  self.assertNotIn("proposeNesStrategicIntent(",runtime)
+  self.assertIn("ConsoleAgentContract.parseButton(answer)",self.model)
+  self.assertIn("engine.proposeNesButton(",self.model)
+  self.assertIn("HarnessCoordinator.nes()",self.nes)
+
  def test_real_episode_journal_never_becomes_fake_reward(self):
   self.assertIn("ConsoleExperienceMemory.summary(",self.dash)
   self.assertIn("ConsoleExperienceMemory.read(",self.dash)

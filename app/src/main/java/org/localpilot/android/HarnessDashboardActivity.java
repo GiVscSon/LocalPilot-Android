@@ -149,8 +149,10 @@ public final class HarnessDashboardActivity extends Activity {
    try{
     int used=0;
     for(ConsoleExperienceMemory.Episode e:ConsoleExperienceMemory.read(getFilesDir().toPath()))
-     if(e.modelId().equals(bound.id)&&e.modelSha().equals(bound.modelSha))used++;
-    row(model,"Подтверждённых действий этой модели: "+used);
+     if(e.modelId().equals(bound.id)&&e.modelSha().equals(bound.modelSha)&&
+        "PIXELS_DIFFER".equals(e.status()))used++;
+    row(model,"Действий этой модели с изменением кадра: "+used+
+      " (не доказательство игровой цели)");
    }catch(IOException damaged){
     row(model,"STOP: журнал повреждён; количество действий не подтверждено.");
    }

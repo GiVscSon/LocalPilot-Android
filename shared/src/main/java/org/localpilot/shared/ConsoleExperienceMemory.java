@@ -111,6 +111,10 @@ public final class ConsoleExperienceMemory {
   if(encoded.length>MAX_LINE)
    throw new IllegalArgumentException("NES episode exceeds safe record limit");
   Files.createDirectories(directory);
+  // Never append to or rotate a corrupted journal. Otherwise the new record
+  // could be misrepresented as verified while the existing history is invalid.
+  // Both active and previous generations must pass the same checksum checks.
+  read(directory);
   Path journal=directory.resolve(FILE);
   if(Files.isSymbolicLink(journal))
    throw new IOException("Unsafe NES journal path");
