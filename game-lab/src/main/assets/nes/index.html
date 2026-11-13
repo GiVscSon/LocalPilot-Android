@@ -19,7 +19,9 @@ const image=ctx.createImageData(256,240),stat=document.getElementById("status");
 const keyMap={LEFT:"BUTTON_LEFT",RIGHT:"BUTTON_RIGHT",UP:"BUTTON_UP",DOWN:"BUTTON_DOWN",
  A:"BUTTON_A",B:"BUTTON_B",START:"BUTTON_START",SELECT:"BUTTON_SELECT"};
 let nes=null,timer=null,frames=0,validFrame=0,paused=false,sampleRate=44100;
-let gamepadLatch=null;
+let activeRomSession=null;
+let stepMode=false;
+let gamepadLatch=null,agentTrial=null,homebrewRom=false;
 let audioContext=null,audioNode=null;
 const SIZE=32768,ringL=new Float32Array(SIZE),ringR=new Float32Array(SIZE);
 let writeAt=0,readAt=0;
@@ -63,39 +65,66 @@ function sendFrame(rgb){
   data[at+2]=value&255;data[at+3]=255;
  }
  ctx.putImageData(image,0,0);frames++;
- if(frames%15===0){
-  let hash=2166136261>>>0;
-  for(let i=0;i<256*240;i+=241)hash=Math.imul(hash^rgb[i],16777619)>>>0;
-  validFrame=hash;
-  try{if(window.GameLabBridge)window.GameLabBridge.onFrame(frames,hash|0);}catch(error){}
+ // Latest fingerprint belongs to the rendered frame, even while frozen.
+ let hash=2166136261>>>0;
+ for(let i=0;i<256*240;i+=241)hash=Math.imul(hash^rgb[i],16777619)>>>0;
+ validFrame=hash;
+ // In STEP_MODE, only publish AFTER the action release ACK so Android can
+ // verify a coherent transition, never an intermediate frame.
+ if(frames%15===0&&!stepMode){
+  try{if(window.GameLabBridge)window.GameLabBridge.onFrame(frames,hash|0,activeRomSession);}catch(error){}
  }
 }
 function tick(){
  if(!nes||paused)return;
- try{nes.frame();if(gamepadLatch)gamepadLatch.flush(frames);}catch(error){stop();status("Ошибка игры: "+String(error.message||error));}
+ try{
+  nes.frame();
+  // CPU baseline executes only the original homebrew, never user ROMs.
+  // Button release is counted against REAL emulated frames, not a timer.
+  if(agentTrial&&frames>=agentTrial.started+agentTrial.holdFrames){
+   const trial=agentTrial;agentTrial=null;
+   gamepadLatch.change(trial.name,trial.code,false,frames);
+   gamepadLatch.flush(frames);
+   try{if(window.GameLabBridge)
+    window.GameLabBridge.onAgentAction(trial.name,trial.started,frames,activeRomSession);
+   }catch(ignored){}
+  }
+  if(gamepadLatch)gamepadLatch.flush(frames);
+ }catch(error){stop();status("Ошибка игры: "+String(error.message||error));}
 }
 function stop(){
  if(timer!==null){clearInterval(timer);timer=null;}
  if(gamepadLatch){gamepadLatch.clear();gamepadLatch=null;}
+ agentTrial=null;homebrewRom=false;activeRomSession=null;stepMode=false;
  nes=null;paused=true;audioStop();
 }
 window.retroStop=function(){stop();status("Игра остановлена");};
+window.retroCancelAgent=function(){
+ agentTrial=null;
+ if(gamepadLatch)gamepadLatch.clear();
+ return !gamepadLatch||gamepadLatch.down.size===0;
+};
 window.retroPause=function(){
  if(gamepadLatch)gamepadLatch.clear();
+ agentTrial=null;
  paused=true;
  if(timer!==null){clearInterval(timer);timer=null;}
  if(audioContext)audioContext.suspend();
 };
 window.retroResume=function(){
  if(!nes||!paused)return false;
+ if(stepMode)return true; // Never restart the realtime interval in STEP_MODE.
  paused=false;
  if(audioContext)audioContext.resume().catch(()=>{});
  timer=setInterval(tick,window.retroDendy?20:1000/60);
  return true;
 };
-window.retroLoadRom=function(encoded,dendy){
+window.retroLoadRom=function(encoded,dendy,homebrew,session){
  try{
   stop();
+  if(typeof session!=="string"||!(/^[1-9][0-9]{0,18}$/).test(session))
+   throw new Error("Отсутствует идентификатор NES-сеанса");
+  activeRomSession=session;
   if(!window.jsnes||typeof jsnes.NES!=="function"||!jsnes.Controller)
    throw new Error("В APK отсутствует JSNES-ядро");
   const binary=atob(encoded);
@@ -108,6 +137,7 @@ window.retroLoadRom=function(encoded,dendy){
    onFrame:sendFrame,onAudioSample:audioWrite});
   machine.loadROM(binary);nes=machine;
   gamepadLatch=new FrameHeldButtons(machine,4);
+  homebrewRom=Boolean(homebrew);
   window.retroDendy=Boolean(dendy);
   frames=0;validFrame=0;
   audioStart();paused=false;
@@ -118,11 +148,155 @@ window.retroLoadRom=function(encoded,dendy){
   stop();status("ROM не запущен: "+String(error.message||error));return false;
  }
 };
+window.retroAgentTrial=function(name,holdFrames){
+ if(!nes||paused||!gamepadLatch||!homebrewRom||agentTrial||
+    name!=="A"||!Number.isInteger(holdFrames)||holdFrames<4||holdFrames>60)
+   return false;
+ const code=jsnes.Controller.BUTTON_A;
+ if(!gamepadLatch.change(name,code,true,frames))return false;
+ agentTrial={name,code,started:frames,holdFrames};
+ return true;
+};
+// Independent, explicitly owner-triggered one-step GGUF experiment.
+// The old CPU-baseline retroAgentTrial remains A-only for parity tests.
+window.retroAiTrial=function(name,holdFrames){
+ if(!nes||paused||!gamepadLatch||!homebrewRom||agentTrial||
+    !["A","B","UP","DOWN","LEFT","RIGHT"].includes(name)||
+    !Number.isInteger(holdFrames)||holdFrames!==16)return false;
+ const mapped=keyMap[name];
+ if(!mapped||!Object.prototype.hasOwnProperty.call(jsnes.Controller,mapped))return false;
+ const code=jsnes.Controller[mapped];
+ if(typeof code!=="number"||!gamepadLatch.change(name,code,true,frames))return false;
+ agentTrial={name,code,started:frames,holdFrames};
+ return true;
+};
+// Read-only evidence from the actual 6502 CPU's homebrew sprite-X variable.
+// Not a network/GGUF/reward call and not supported for arbitrary user ROMs.
+// State is read from live JSNES CPU RAM while STEP_MODE is truly frozen.
+// Session+frame are returned with bytes to prevent stale Java callback reuse.
+window.retroHomebrewState=function(){
+ if(!nes||!homebrewRom||!paused||!stepMode||!activeRomSession||
+    !nes.cpu||!nes.cpu.mem)return null;
+ const x=nes.cpu.mem[1],y=nes.cpu.mem[2];
+ if(!Number.isInteger(x)||!Number.isInteger(y)||
+    x<0||x>255||y<0||y>255)return null;
+ return {session:activeRomSession,frame:frames,x,y};
+};
+window.retroHomebrewRamX=function(){
+ if(!nes||!homebrewRom||!nes.cpu||!nes.cpu.mem)return -1;
+ const x=nes.cpu.mem[1];
+ return Number.isInteger(x)&&x>=0&&x<=255?x:-1;
+};
+// Frozen-time mode: real JSNES executes exactly the approved frame budget.
+// No timer runs while a slow GGUF is deciding. Only the bundled homebrew
+// supports this agent entry point until a verified task profile exists.
+window.retroEnterStepMode=function(){
+ if(!nes||!homebrewRom||!gamepadLatch||agentTrial||!activeRomSession)return false;
+ if(!stepMode){
+  stepMode=true;window.retroPause();
+ }
+ if(!paused)return false;
+ try{
+  if(window.GameLabBridge&&typeof window.GameLabBridge.onStepReady==="function")
+   window.GameLabBridge.onStepReady(frames,validFrame|0,activeRomSession);
+ }catch(error){return false;}
+ return true;
+};
+window.retroExitStepMode=function(){
+ if(!nes||!stepMode||!paused)return false;
+ stepMode=false;
+ return window.retroResume();
+};
+let usedStepNonce="";
+window.retroAiStep=function(name,holdFrames,nonce){
+ if(!nes||!stepMode||!paused||!homebrewRom||!gamepadLatch||agentTrial||
+    !["A","B","UP","DOWN","LEFT","RIGHT"].includes(name)||
+    !Number.isInteger(holdFrames)||![4,8,16].includes(holdFrames)||
+    typeof nonce!=="string"||!/^[A-Za-z0-9_-]{22}$/.test(nonce)||nonce===usedStepNonce||
+    !window.GameLabBridge||typeof window.GameLabBridge.allowStep!=="function"||
+    typeof window.GameLabBridge.onStepAction!=="function"||
+    typeof window.GameLabBridge.onHomebrewTask!=="function"||
+    !window.GameLabBridge.allowStep(activeRomSession,nonce,holdFrames))return false;
+ usedStepNonce=nonce;
+ const mapped=keyMap[name];
+ if(!mapped||!Object.prototype.hasOwnProperty.call(jsnes.Controller,mapped))return false;
+ const code=jsnes.Controller[mapped],started=frames;
+ // This exact bundled homebrew uses CPU RAM $01/$02 for sprite X/Y.
+ // Unlike pixel differences, these are emulator-executed task coordinates.
+ if(!nes.cpu||!nes.cpu.mem||nes.cpu.mem.length<3)return false;
+ const beforeX=nes.cpu.mem[1],beforeY=nes.cpu.mem[2];
+ if(!Number.isInteger(beforeX)||!Number.isInteger(beforeY)||
+    beforeX<0||beforeX>255||beforeY<0||beforeY>255)return false;
+ if(typeof code!=="number"||!gamepadLatch.change(name,code,true,frames))return false;
+ let revoked=false;
+ try{
+  for(let i=0;i<holdFrames;i++){
+   if(!window.GameLabBridge.allowStep(activeRomSession,nonce,holdFrames)){revoked=true;throw Error("STOP revoked lease");}
+   nes.frame(); // PPU framebuffer + real CPU side-effects, not a timer guess.
+   gamepadLatch.flush(frames);
+  }
+  if(!gamepadLatch.change(name,code,false,frames))throw Error("Button release failed");
+  gamepadLatch.flush(frames);
+  if(!window.GameLabBridge.allowStep(activeRomSession,nonce,holdFrames)){revoked=true;throw Error("STOP revoked lease");}
+  if(frames-started!==holdFrames)throw Error("Frame budget violated");
+  const afterX=nes.cpu.mem[1],afterY=nes.cpu.mem[2];
+  if(!Number.isInteger(afterX)||!Number.isInteger(afterY)||
+      afterX<0||afterX>255||afterY<0||afterY>255)
+   throw Error("Unverified homebrew state");
+  if(window.GameLabBridge){
+   // Exact pre/post emulated RAM is separately verified in Android. No
+   // generic reward for imported ROMs; no win inferred from the PPU frame.
+   if(typeof window.GameLabBridge.onHomebrewTask==="function")
+    window.GameLabBridge.onHomebrewTask(name,started,frames,
+      beforeX,beforeY,afterX,afterY,activeRomSession,nonce);
+   if(holdFrames===16&&typeof window.GameLabBridge.onHomebrewRamProgress==="function")
+    window.GameLabBridge.onHomebrewRamProgress(name,started,frames,beforeX,afterX,activeRomSession,beforeY,afterY,nonce);
+   window.GameLabBridge.onStepAction(name,started,frames,activeRomSession,nonce);
+   window.GameLabBridge.onFrame(frames,validFrame|0,activeRomSession);
+  }
+  return true;
+ }catch(error){
+  if(gamepadLatch)gamepadLatch.clear();
+  if(revoked){window.retroPause();status("STOP: разрешение отозвано; шаг truncated без награды");}
+  else{stop();status("STOP: ошибка пошаговой эмуляции");}
+  return false;
+ }
+};
 window.retroButton=function(name,down){
  if(!nes||!gamepadLatch||paused||!Object.prototype.hasOwnProperty.call(keyMap,name))return false;
  const value=jsnes.Controller[keyMap[name]];
  if(typeof value!=="number")return false;
  return gamepadLatch.change(name,value,Boolean(down),frames);
+};
+// A user-triggered, downsized RGB screenshot. This is a NEW frame at export,
+// not a replay of the action-end fingerprint or a reward signal.
+window.retroSnapshot=function(token){
+ // Token is chosen by Android for this exact request, not by the ROM.
+ if(typeof token!=="string"||!(/^[1-9][0-9]{0,18}$/).test(token)||
+    !nes||(paused&&!stepMode)||!window.GameLabBridge)return false;
+ try{
+  const small=document.createElement("canvas");
+  small.width=128;small.height=120;
+  const output=small.getContext("2d",{alpha:false});
+  if(!output)return false;
+  output.imageSmoothingEnabled=false;
+  output.drawImage(canvas,0,0,128,120);
+  const image=small.toDataURL("image/png");
+  const prefix="data:image/png;base64,";
+  if(!image.startsWith(prefix)||image.length-prefix.length>200000)return false;
+  // The frozen emulator has not advanced since the screenshot. CPU RAM is
+  // read from the same original homebrew state, never guessed from pixels.
+  if(typeof homebrewRom!=="undefined"&&homebrewRom&&
+     typeof stepMode!=="undefined"&&stepMode&&nes.cpu&&nes.cpu.mem&&
+     typeof window.GameLabBridge.onHomebrewObservation==="function"){
+   const x=nes.cpu.mem[1],y=nes.cpu.mem[2];
+   if(!Number.isInteger(x)||!Number.isInteger(y)||
+      x<0||x>255||y<0||y>255)return false;
+   window.GameLabBridge.onHomebrewObservation(x,y,token,activeRomSession);
+  }
+  window.GameLabBridge.onSnapshot(image.substring(prefix.length),token);
+  return true;
+ }catch(error){return false;}
 };
 window.retroMetrics=function(){return JSON.stringify({frames,pixel_hash:validFrame,running:!!nes&&!paused});};
 document.addEventListener("visibilitychange",function(){

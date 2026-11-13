@@ -1,4 +1,7 @@
 name: Build Android debug APK
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.head.repo.full_name || github.repository }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
 on: [workflow_dispatch, push, pull_request]
 permissions:
  contents: read
@@ -50,6 +53,7 @@ jobs:
       java tests/ProcessExitVerify.java
       java tests/AuditVerify.java
       java tests/CaptureCleanupVerify.java
+      java tests/DiagnosticFrameSizeVerify.java
       java tests/RuntimeVerify.java
       java tests/Upgrade726Verify.java
       java tests/Upgrade727Verify.java
@@ -62,6 +66,9 @@ jobs:
       java tests/PaddleTransferVerify.java
       java tests/WeightSpaceSkillsVerify.java
       java tests/TextRepetitionGuardVerify.java
+      java tests/LocalCoreContractVerify.java
+      java tests/StrategyAdviceVerify.java
+      java tests/LocalModelCatalogVerify.java
       java tests/JumperWeightShadowVerify.java
       java tests/VisionV2Verify.java
       java tests/RealGameNeuralVerify.java

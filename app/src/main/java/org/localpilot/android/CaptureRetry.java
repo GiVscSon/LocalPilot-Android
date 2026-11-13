@@ -13,7 +13,7 @@ public final class CaptureRetry {
    if(timeoutRetries>=MAX_TIMEOUT_RETRIES)return false;
    timeoutRetries++;return true;
   }
-  if(!"STALE_FRAME".equals(reason)&&!"FRAME_TTL_EXPIRED".equals(reason)&&!"TICKET_EXPIRED".equals(reason)&&!"SCREENSHOT_INTERVAL".equals(reason))return false;
+  if(!"STALE_FRAME".equals(reason)&&!"FRAME_TTL_EXPIRED".equals(reason)&&!"TICKET_EXPIRED".equals(reason)&&!"SCREENSHOT_INTERVAL".equals(reason)&&!"NEAR_BLACK_FRAME".equals(reason))return false;
   if(retries>=MAX_RETRIES)return false;
   retries++;return true;
  }

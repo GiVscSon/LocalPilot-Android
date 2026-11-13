@@ -63,11 +63,12 @@ public class PilotService extends AccessibilityService {
   stop("Экспорт замеров: STOP");
   return metrics.report()+"\n"+captureTiming.report()+"\n"+captureCounters()
     +"\nVISION_V2_BEFORE_STOP: "+visual
-    +"\nLAST_STOP: "+lastStopReason+"\nCAPTURE STARTUP\n"+captureStartup.report()
+    +"\nCAPTURE_REQUEST_SOURCE: "+lastRequestedCaptureRoute+"\nLAST_STOP: "+lastStopReason+"\nCAPTURE STARTUP\n"+captureStartup.report()
     +"\n"+sceneRecovery.report()+"\nLAST_BUBBLE_SESSION\n"+bubbleReport;
  }
  private final Handler handler=new Handler(Looper.getMainLooper());private final Handler gestureHandler=new Handler(Looper.getMainLooper());private final ActionGate gate=new ActionGate();
  private final CaptureRetry captureRetry=new CaptureRetry();
+ private WindowCaptureRoute.Source lastRequestedCaptureRoute=WindowCaptureRoute.Source.DISPLAY;
  private final BrowserSceneGate browserSceneGate=new BrowserSceneGate();
  private DisplayGeometry displayGeometry;
  private WindowManager wm;private LinearLayout panel,controls,miniBar;private TextView miniState;private TextView state;private Button collapseButton;private boolean panelCompact,discoveringBoard;private WindowManager.LayoutParams layout;
@@ -212,15 +213,15 @@ public class PilotService extends AccessibilityService {
   if(!needed){clearRetainedGridFrame();return;}
   if(roi==null||roi.isEmpty()||!panelOutsideRoi(roi)
       ||!getSharedPreferences("diagnostics",MODE_PRIVATE).getBoolean("include_grid_frame",true))return;
+  Bitmap copy=null;
   try{
-   double scale=Math.min(1d,Math.min(720d/roi.width(),
-      Math.min(720d/roi.height(),Math.sqrt(345600d/((double)roi.width()*roi.height())))));
-   int w=Math.max(1,(int)Math.floor(roi.width()*scale)),h=Math.max(1,(int)Math.floor(roi.height()*scale));
-   Bitmap copy=Bitmap.createBitmap(w,h,Bitmap.Config.ARGB_8888);
-   new Canvas(copy).drawBitmap(pixels,roi,new Rect(0,0,w,h),new Paint(Paint.FILTER_BITMAP_FLAG));
+   DiagnosticFrameSize size=new DiagnosticFrameSize(roi.width(),roi.height());
+   copy=Bitmap.createBitmap(size.width,size.height,Bitmap.Config.ARGB_8888);
+   new Canvas(copy).drawBitmap(pixels,roi,new Rect(0,0,size.width,size.height),new Paint(Paint.FILTER_BITMAP_FLAG));
    if(retainedGridFrame!=null&&!retainedGridFrame.isRecycled())retainedGridFrame.recycle();
-   retainedGridFrame=copy;retainedGridFrameAt=timestamp;
+   retainedGridFrame=copy;copy=null;retainedGridFrameAt=timestamp;
   }catch(RuntimeException|OutOfMemoryError ignored){/* Diagnostic retention never changes input. */}
+  finally{Bitmap unused=copy;if(unused!=null)CaptureCleanup.run(()->{if(!unused.isRecycled())unused.recycle();});}
  }
  private void clearDiagnosticFrame(){if(diagnosticFrame!=null&&!diagnosticFrame.isRecycled())diagnosticFrame.recycle();diagnosticFrame=null;diagnosticFrameAt=-1;diagnosticFrameGeometry="No game frame retained";}
  /** A single RAM-only crop, sampled at most once a second while the bound game is focused. */
@@ -231,11 +232,13 @@ public class PilotService extends AccessibilityService {
   Bitmap copy=null;
   try{
    JumperFrameGeometry g=visualGeometry(frame);
-   copy=Bitmap.createBitmap(g.right-g.left,g.bottom-g.top,Bitmap.Config.ARGB_8888);
-   new Canvas(copy).drawBitmap(frame,new Rect(g.left,g.top,g.right,g.bottom),new Rect(0,0,copy.getWidth(),copy.getHeight()),null);
+   DiagnosticFrameSize size=new DiagnosticFrameSize(g.right-g.left,g.bottom-g.top);
+   copy=Bitmap.createBitmap(size.width,size.height,Bitmap.Config.ARGB_8888);
+   new Canvas(copy).drawBitmap(frame,new Rect(g.left,g.top,g.right,g.bottom),new Rect(0,0,size.width,size.height),new Paint(Paint.FILTER_BITMAP_FLAG));
    if(diagnosticFrame!=null&&!diagnosticFrame.isRecycled())diagnosticFrame.recycle();
    diagnosticFrame=copy;copy=null;diagnosticFrameAt=timestamp;
-   diagnosticFrameGeometry="frame_elapsed_ms="+timestamp+" crop="+diagnosticFrame.getWidth()+"x"+diagnosticFrame.getHeight()
+   diagnosticFrameGeometry="frame_elapsed_ms="+timestamp+" source_roi="+g.left+","+g.top+","+g.right+","+g.bottom
+      +" preview="+size.width+"x"+size.height
       +" screen_bounds="+armedBounds.toShortString()+" display="+jumperDisplayWidth+"x"+jumperDisplayHeight+" profile="+profileLabel();
   }catch(RuntimeException|OutOfMemoryError error){/* Reporting must not interrupt gameplay. */}
   finally{if(copy!=null&&!copy.isRecycled())copy.recycle();}
@@ -2321,12 +2324,39 @@ public class PilotService extends AccessibilityService {
    failStage(StageMetrics.Stage.CAPTURE,playingGrid&&selectedProfile==9?"PANEL_OVERLAPS_BUBBLE_ACTIVE":"PANEL_COVERS_ROI","Панель перекрывает активное поле; безопасное перемещение не удалось");
    return;
   }
+  // Current frame readers index screen-space pixels. Only full-screen windows
+  // are eligible for window capture until a separate ROI transform is verified.
+  final int captureWindowId=visualWindow;
+  final WindowCaptureRoute.Source route;
+  try{
+   Point physical=new Point();wm.getDefaultDisplay().getRealSize(physical);
+   route=WindowCaptureRoute.choose(Build.VERSION.SDK_INT,captureWindowId,
+     armedBounds.left,armedBounds.top,armedBounds.right,armedBounds.bottom,
+     physical.x,physical.y,roi.left,roi.top,roi.right,roi.bottom);
+  }catch(RuntimeException invalid){
+   failStage(StageMetrics.Stage.CAPTURE,"CAPTURE_SOURCE_GEOMETRY_INVALID",
+     "Окно и область снимка не согласованы");return;
+  }
+  lastRequestedCaptureRoute=route;
   final long captureNs=SystemClock.elapsedRealtimeNanos();captureBusy=true;long request=SystemClock.elapsedRealtime();final long requestedUptime=SystemClock.uptimeMillis();final long requestId=++captureCounter;pendingCapture=requestId;captureTiming.request(requestId,request);
   TakeScreenshotCallback callback=new TakeScreenshotCallback(){
    @Override public void onSuccess(ScreenshotResult shot){captureTiming.callback(requestId,request,SystemClock.elapsedRealtime(),true,pendingCapture==requestId);android.hardware.HardwareBuffer buffer=shot.getHardwareBuffer();if(pendingCapture!=requestId){CaptureCleanup.run(buffer::close);return;}captureBusy=false;Bitmap hardware=null,bitmap=null;boolean captured=false;
     try{if(epoch!=gate.epoch()||!captureEnabled()){metrics.cancelled(StageMetrics.Stage.CAPTURE);return;}if(boardRoi==null||!roi.equals(boardRoi)){failStage(StageMetrics.Stage.CAPTURE,"ROI_CHANGED","Область снимка изменилась");return;}if(!CaptureFreshness.valid(shot.getTimestamp(),requestedUptime,SystemClock.uptimeMillis(),lastShotTimestamp)){if(!retryCapture(epoch,result,"STALE_FRAME"))failStage(StageMetrics.Stage.CAPTURE,"STALE_FRAME","Снимок устарел/повторён после повторов");return;}long previousTimestamp=lastShotTimestamp;lastShotTimestamp=shot.getTimestamp();
+     // Reject unexpected native geometry before allocating the software copy.
+     // HardwareBuffer is not an Image.Plane; CPU readers still require ONE ARGB copy.
+     Point size=new Point();wm.getDefaultDisplay().getRealSize(size);
+     if(!WindowCaptureRoute.compatibleFrame(buffer.getWidth(),buffer.getHeight(),size.x,size.y)){failStage(StageMetrics.Stage.CAPTURE,"CAPTURE_FRAME_GEOMETRY_MISMATCH","Размеры окна/дисплея не подтверждены · STOP без ввода");return;}
      hardware=Bitmap.wrapHardwareBuffer(buffer,shot.getColorSpace());if(hardware==null)throw new IllegalArgumentException("Нет пикселей");bitmap=hardware.copy(Bitmap.Config.ARGB_8888,false);
-     Point size=new Point();wm.getDefaultDisplay().getRealSize(size);if(bitmap.getWidth()!=size.x||bitmap.getHeight()!=size.y)throw new IllegalArgumentException("Масштаб снимка не подтверждён");
+     // A near-black ROI can be a protected/muted window, transition, or a real dark scene.
+     // It is UNKNOWN, never GAME_OVER, no game reward, and no input authority.
+     // Sampling is bounded and allocation-free; existing capture retries stay bounded.
+     if(FrameBlackoutGate.nearBlack(bitmap.getWidth(),bitmap.getHeight(),
+       roi.left,roi.top,roi.right,roi.bottom,bitmap::getPixel)){
+      if(retryCapture(epoch,result,"NEAR_BLACK_FRAME"))return;
+      failStage(StageMetrics.Stage.CAPTURE,"NEAR_BLACK_FRAME",
+        "Почти чёрный кадр: сцена не подтверждена, ввод остановлен");
+      return;
+     }
      final Bitmap pixels=bitmap;
      // One final window query after pixel conversion is sufficient; querying the
      // same Binder tree twice per callback can consume the entire frame budget.
@@ -2348,19 +2378,22 @@ public class PilotService extends AccessibilityService {
       return;
      }
      metrics.record(StageMetrics.Stage.CAPTURE,SystemClock.elapsedRealtimeNanos()-captureNs);captured=true;captureRetry.fresh(epoch);result.ready(pixels,ticket,SystemClock.elapsedRealtime()-request);
+     // A reader can synchronously STOP on an invalid scene. Never repopulate
+     // a cleared preview with that revoked session's pixels after it returns.
+     if(epoch!=gate.epoch()||!captureEnabled()||focusPaused||boardRoi==null||!roi.equals(boardRoi))return;
      // Board games use Accessibility screenshots rather than MediaProjection.
      // Refresh their preview too, so it cannot keep showing the last arcade.
      long previewAt=SystemClock.elapsedRealtime();
      if(diagnosticFrameAt<0||previewAt-diagnosticFrameAt>=1000){
       clearDiagnosticFrame();
-      try{diagnosticFrame=Bitmap.createBitmap(roi.width(),roi.height(),Bitmap.Config.ARGB_8888);new Canvas(diagnosticFrame).drawBitmap(pixels,roi,new Rect(0,0,roi.width(),roi.height()),null);diagnosticFrameAt=previewAt;diagnosticFrameGeometry="profile="+profileLabel()+" roi="+roi.toShortString()+" frame_elapsed_ms="+previewAt;}
+      try{DiagnosticFrameSize previewSize=new DiagnosticFrameSize(roi.width(),roi.height());diagnosticFrame=Bitmap.createBitmap(previewSize.width,previewSize.height,Bitmap.Config.ARGB_8888);new Canvas(diagnosticFrame).drawBitmap(pixels,roi,new Rect(0,0,previewSize.width,previewSize.height),new Paint(Paint.FILTER_BITMAP_FLAG));diagnosticFrameAt=previewAt;diagnosticFrameGeometry="profile="+profileLabel()+" source_roi="+roi.toShortString()+" preview="+previewSize.width+"x"+previewSize.height+" frame_elapsed_ms="+previewAt;}
       catch(RuntimeException|OutOfMemoryError ignored){clearDiagnosticFrame();}
      }
     }catch(RuntimeException|OutOfMemoryError error){if(epoch==gate.epoch()){if(!captured)failStage(StageMetrics.Stage.CAPTURE,"BITMAP_FAILED","Не удалось подготовить пиксели");else stop("Ошибка обработки прочитанного кадра · захват остановлен");}}finally{Bitmap oldBitmap=bitmap,oldHardware=hardware;boolean released=CaptureCleanup.run(()->{if(oldBitmap!=null)oldBitmap.recycle();},()->{if(oldHardware!=null)oldHardware.recycle();},buffer::close);if(!released&&epoch==gate.epoch())stop("Ошибка освобождения кадра · захват остановлен");}
    }
-   @Override public void onFailure(int error){captureTiming.callback(requestId,request,SystemClock.elapsedRealtime(),false,pendingCapture==requestId);if(pendingCapture!=requestId)return;captureBusy=false;if(epoch==gate.epoch()&&error==ERROR_TAKE_SCREENSHOT_INTERVAL_TIME_SHORT&&retryCapture(epoch,result,"SCREENSHOT_INTERVAL"))return;if(epoch==gate.epoch())failStage(StageMetrics.Stage.CAPTURE,"ANDROID_SCREENSHOT_ERROR","Захват Android: ошибка "+error+". Проверьте доступ службы");}
+   @Override public void onFailure(int error){captureTiming.callback(requestId,request,SystemClock.elapsedRealtime(),false,pendingCapture==requestId);if(pendingCapture!=requestId)return;captureBusy=false;if(epoch==gate.epoch()&&error==ERROR_TAKE_SCREENSHOT_INTERVAL_TIME_SHORT&&retryCapture(epoch,result,"SCREENSHOT_INTERVAL"))return;if(epoch==gate.epoch()&&route==WindowCaptureRoute.Source.WINDOW_FULLSCREEN&&error==ERROR_TAKE_SCREENSHOT_INVALID_WINDOW){failStage(StageMetrics.Stage.CAPTURE,"SCREENSHOT_WINDOW_INVALID","Окно изменилось · перепривязка без ввода");return;}if(epoch==gate.epoch()&&error==ERROR_TAKE_SCREENSHOT_SECURE_WINDOW){failStage(StageMetrics.Stage.CAPTURE,"SCREENSHOT_SECURE_WINDOW","Защищённое окно: снимок недоступен, без обхода защиты");return;}if(epoch==gate.epoch())failStage(StageMetrics.Stage.CAPTURE,"ANDROID_SCREENSHOT_ERROR","Захват Android: ошибка "+error+". Проверьте доступ службы");}
   };
-  try{takeScreenshot(Display.DEFAULT_DISPLAY,getMainExecutor(),callback);}catch(RuntimeException e){captureTiming.unavailable(requestId,request,SystemClock.elapsedRealtime());captureBusy=false;failStage(StageMetrics.Stage.CAPTURE,"SCREENSHOT_UNAVAILABLE","Захват недоступен");return;}
+  try{WindowCaptureBridge.request(PilotService.this,route,captureWindowId,getMainExecutor(),callback);}catch(RuntimeException e){captureTiming.unavailable(requestId,request,SystemClock.elapsedRealtime());captureBusy=false;failStage(StageMetrics.Stage.CAPTURE,"SCREENSHOT_UNAVAILABLE","Захват недоступен");return;}
   final long watchdogScheduledAt=SystemClock.elapsedRealtime();captureTiming.apiReturned(requestId,request,watchdogScheduledAt);
   handler.postDelayed(()->{boolean stillPending=captureBusy&&pendingCapture==requestId&&epoch==gate.epoch();captureTiming.timeout(requestId,request,watchdogScheduledAt,SystemClock.elapsedRealtime(),4000,stillPending);if(stillPending){
    // Revoke the timed-out request ID BEFORE scheduling any retry. A late

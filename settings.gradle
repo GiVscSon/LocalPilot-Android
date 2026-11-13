@@ -2,3 +2,9 @@ pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal()
 dependencyResolutionManagement { repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS); repositories { google(); mavenCentral() } }
 rootProject.name = 'LocalPilotAndroid'
 include ':app', ':game-lab'
+
+ // ModelLab is a completely separate Android application with one stable package ID.
+ // Opt in to avoid changing legacy LocalPilot/Android CI graph.
+if (providers.gradleProperty('includeModelLab').orElse('false').get().toBoolean()) {
+    include ':model-lab'
+}

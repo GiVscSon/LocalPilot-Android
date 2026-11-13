@@ -1,0 +1,35 @@
+# Legacy contract tests only. Signing moved to localpilot-unified-release-dispatch.yml.
+name: Signed triad candidate · protected key + fail-closed audit
+on:
+  pull_request:
+    paths:
+      - 'tools/triad_release_gate.py'
+      - 'tests/test_triad_release_gate.py'
+      - 'tools/triad_device_preflight.py'
+      - 'tests/test_triad_device_preflight.py'
+      - 'tools/setup_triad_signing.ps1'
+      - 'tests/test_triad_signing_scope.py'
+      - 'docs/TRIAD_SIGNED_RELEASE.ru.md'
+      - '.github/workflows/triad-signed-candidate.yml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.head.repo.full_name || github.repository }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: false
+permissions:
+  contents: read
+jobs:
+  signing-policy:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test fail-closed release gate without Android SDK or private keys
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p 'test_triad_release_gate.py' -v
+          python3 -O -m unittest discover -s tests -p 'test_triad_release_gate.py' -v
+          python3 -m unittest discover -s tests -p 'test_triad_device_preflight.py' -v
+          python3 -O -m unittest discover -s tests -p 'test_triad_device_preflight.py' -v
+          python3 -m unittest discover -s tests -p 'test_triad_signing_scope.py' -v
+          python3 -O -m unittest discover -s tests -p 'test_triad_signing_scope.py' -v
+

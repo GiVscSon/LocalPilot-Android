@@ -1,0 +1,21 @@
+# Legacy contract tests only. Signing moved to localpilot-unified-release-dispatch.yml.
+name: LocalPilot unified signed CANDIDATE · protected environment
+on:
+  pull_request:
+    paths:
+      - 'tools/unified_signed_release_gate.py'
+      - 'tests/test_localpilot_signed_candidate.py'
+      - '.github/workflows/localpilot-unified-signed-candidate.yml'
+
+permissions:
+  contents: read
+jobs:
+  signing-policy:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check signing policy with no key access
+        run: |
+          python3 -m unittest discover -s tests -p 'test_localpilot_signed_candidate.py' -v
+          python3 -O -m unittest discover -s tests -p 'test_localpilot_signed_candidate.py' -v

@@ -147,6 +147,7 @@ public final class PilotUiInstrumentation extends Instrumentation {
 
             checkLauncherAndPicker();
             checkOpenRouterAdvisorPicker();
+            checkLocalEnglishCore();
             checkCollapseAndReopen();
             checkFullDemo();
             checkStopDuringDemo();
@@ -257,6 +258,29 @@ public final class PilotUiInstrumentation extends Instrumentation {
         waitForIdleSync();
     }
 
+    private void checkLocalEnglishCore() throws Exception {
+        // A native on-device assertion: HTTP loopback works, but remote plaintext is blocked.
+        var networkPolicy=android.security.NetworkSecurityPolicy.getInstance();
+        require(networkPolicy.isCleartextTrafficPermitted("127.0.0.1"),
+          "Local model loopback must be permitted by network security config");
+        require(!networkPolicy.isCleartextTrafficPermitted("example.com"),
+          "Remote plain HTTP must stay blocked");
+        onMain(()->{service.hidePanel();return null;});
+        launch(MainActivity.class);
+        click("Локальное ИИ-ядро · MNN-Pocket (English)");
+        await(()->present("Проверить подключение")
+               &&present("Самопроверка английского · BLUE / 27")
+               &&present("Спросить локальную модель"),3000,
+          "Local model screen or English smoke test controls missing");
+        require(!armed(),"Opening local AI must never arm game input");
+        addCheck("local_english_core_loopback_security_and_no_input",
+          new JSONObject().put("localhost_http",true)
+            .put("remote_http",false)
+            .put("dispatched_actions",0));
+        sendKeyDownUpSync(KeyEvent.KEYCODE_BACK);
+        waitForIdleSync();
+    }
+
     private void checkLauncherAndPicker() throws Exception {
         onMain(() -> { service.hidePanel(); return null; });
         launch(MainActivity.class);
@@ -307,18 +331,39 @@ public final class PilotUiInstrumentation extends Instrumentation {
 
         click("Свернуть");
         await(this::compact, 2_000, "Panel did not compact before hide/show setup");
+        View previousPanel=onMain(()->(View)field("panel"));
         onMain(() -> { service.hidePanel(); service.showPanel(); return null; });
-        await(() -> present("Свернуть"), 2_000, "Reopened panel is not expanded");
+        // WindowManager addView() and the accessibility node snapshot do not
+        // become ready in the same traversal. A stale overlay button could
+        // report visible before it is capable of receiving real OS touches.
+        await(()->onMain(()->{
+            Object current=field("panel");
+            return current instanceof View view&&view!=previousPanel&&
+                view.isAttachedToWindow()&&booleanField("panelRegistered");
+        }),4_000,"Fresh overlay was not attached after hide/show");
+        require(!armed(),"Hide/show must revoke the old gesture ticket");
+        await(() -> present("Свернуть"), 3_000, "Reopened panel is not expanded");
         require(!compact(), "Reopened panel retained stale compact flag");
+        if(android.os.Build.VERSION.SDK_INT>=33) {
+            await(()->{
+                AccessibilityNodeInfo node=findText("Свернуть");
+                if(node==null)return false;
+                try{return node.refresh()&&node.isVisibleToUser()&&node.isClickable();}
+                finally{node.recycle();}
+            },4_000,"Fresh collapsed-control accessibility node was not published");
+        }
         click("Свернуть");
-        await(this::compact, 2_000, "First collapse after hide/show failed");
+        await(this::compact, 3_000, "First collapse after hide/show failed");
         require(present("STOP"), "STOP missing after reopen/collapse");
         addCheck("first_collapse_after_hide_show", new JSONObject().put("hide_show_method", "public_service_api"));
     }
 
     private void checkFullDemo() throws Exception {
         launchDemo();
-        click("Начать проверку ×10");
+        // launchDemo() hides/recreates the panel. Previous game/window tickets
+        // were revoked by STOP, so the test must explicitly rebind the NEW window
+        // and obtain bounded consent rather than relying on a stale prior session.
+        armAndStart();
         await(() -> score() > 0, 6_000, "Demo made no first move");
         long configEpoch=onMain(()->gate().epoch());
         onMain(()->{
@@ -366,7 +411,8 @@ public final class PilotUiInstrumentation extends Instrumentation {
 
     private void checkRotationStopsInput() throws Exception {
         launchDemo();
-        click("Начать проверку ×10");
+        // Rotation is meaningful only after a fresh, explicitly armed session.
+        armAndStart();
         await(() -> score() >= 1, 6_000, "No real target touch before rotation");
         require(automation.setRotation(UiAutomation.ROTATION_FREEZE_90), "Cannot rotate isolated test device");
         try {
@@ -843,6 +889,18 @@ public final class PilotUiInstrumentation extends Instrumentation {
     private void click(String text) throws Exception {
         traceClick("click begin label="+text+" "+onMain(this::activitySummary));
         await(() -> {
+            // A scrollable own View can be laid out before its off-screen
+            // accessibility node is published. Reveal it on the UI thread,
+            // then deliver the same OS touch used by the geometry fallback.
+            // Starting with a remote tree lookup could consume this entire
+            // deadline before its first scroll (observed on API 36).
+            boolean revealed=onMain(()->revealOwnActivityControl(text));
+            if(revealed)traceClick("click label="+text+" path=own-view-reveal");
+            // Accessibility semantics must win over coordinate injection. A tap
+            // can be accepted by Android while STOP belongs to an overlay and
+            // no cancellation event reaches PilotService (API 30/35); API 36
+            // may reject the same injection. Keep geometry fallback only when
+            // the semantic target is absent, and never count a tap as STOP.
             AccessibilityNodeInfo node = findText(text);
             if (node == null) { if(touchOwnControl(text))return true;boolean scrolled=scrollForward();traceClick("click label="+text+" path=own-app-scroll result="+scrolled);return false; }
             try {
@@ -859,6 +917,31 @@ public final class PilotUiInstrumentation extends Instrumentation {
             }
             finally { node.recycle(); }
         }, 6_000, "Visible clickable UI control not found: " + text);
+    }
+
+    /** Scroll only our focused Activity; never inject a scroll into another app. */
+    private boolean revealOwnActivityControl(String text){
+        Activity activity=launchedActivity;
+        if(activity==null||activity.isFinishing()||activity.isDestroyed())return false;
+        View decor=activity.getWindow().getDecorView();
+        if(!decor.isAttachedToWindow()||decor.getWindowVisibility()!=View.VISIBLE||!decor.hasWindowFocus())return false;
+        return revealOwnActivityControl(decor,text);
+    }
+    private boolean revealOwnActivityControl(View view,String text){
+        if(view==null||!view.isAttachedToWindow()||!view.isShown()||!view.isEnabled())return false;
+        if(view instanceof TextView label&&matchesText(String.valueOf(label.getText()),text)
+                &&(view.isClickable()||view.getParent() instanceof android.widget.AbsListView)){
+            Rect visible=new Rect();
+            ControlTarget target=view.getLocalVisibleRect(visible)&&!visible.isEmpty()?new ControlTarget(view,visible):null;
+            if(target!=null&&target.canTap())return false;
+            return view.requestRectangleOnScreen(new Rect(0,0,view.getWidth(),view.getHeight()),true);
+        }
+        if(view instanceof ViewGroup group){
+            for(int i=0;i<group.getChildCount();i++){
+                if(revealOwnActivityControl(group.getChildAt(i),text))return true;
+            }
+        }
+        return false;
     }
 
     private boolean scrollForward() {

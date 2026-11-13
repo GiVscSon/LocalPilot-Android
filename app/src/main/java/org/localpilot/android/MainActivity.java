@@ -1,9 +1,10 @@
 package org.localpilot.android;
 import org.localpilot.shared.HubContract;
+import org.localpilot.shared.ConsoleExperienceMemory;
 import android.app.*;import android.os.*;import android.content.*;import android.provider.Settings;import android.widget.*;
 public class MainActivity extends Activity {
  public static final String PREF="pilot";
- private TextView status;private Switch automatic;private DiagnosticRequest diagnosticRequest;
+ private TextView status,consoleExperience;private Switch automatic;private DiagnosticRequest diagnosticRequest;
  private static final int REPORT=14;
  private static final class DiagnosticRequest {
   final String session;final android.graphics.Bitmap frame;
@@ -15,23 +16,36 @@ public class MainActivity extends Activity {
   // edge-to-edge windows. Padding belongs to the viewport, so scrolled controls
   // cannot first become touchable underneath Home or a display cutout.
   scroll.setOnApplyWindowInsetsListener((view,insets)->{android.graphics.Insets safe=insets.getInsets(android.view.WindowInsets.Type.systemBars()|android.view.WindowInsets.Type.displayCutout());if(view.getPaddingLeft()!=safe.left||view.getPaddingTop()!=safe.top||view.getPaddingRight()!=safe.right||view.getPaddingBottom()!=safe.bottom)view.setPadding(safe.left,safe.top,safe.right,safe.bottom);return insets;});setContentView(scroll);scroll.requestApplyInsets();
-  TextView title=new TextView(this);title.setText("LocalPilot Android"+(getPackageName().contains(".install10")?" Standalone":getPackageName().endsWith(".dev")?" Dev":"")+" · "+CrashDiagnostics.buildLabel(this)+"\nАркады и головоломки на телефоне");title.setTextSize(24);title.setTextColor(HubContract.TEXT);box.addView(title);
+  TextView title=new TextView(this);title.setText("LocalPilot Android"+(getPackageName().contains(".install10")?" Standalone":getPackageName().endsWith(".dev")?" Dev":"")+" · "+CrashDiagnostics.buildLabel(this)+"\nКонсольная ИИ-лаборатория · NES и локальные модели");title.setTextSize(24);title.setTextColor(HubContract.TEXT);box.addView(title);
   TextView help=new TextView(this);help.setText("1. Откройте игру и выберите её профиль: «Игра».\n2. Нажмите «Окно» и выберите приложение с игрой.\n3. Нажмите «Старт» и разрешите показ экрана.\n\nSTOP останавливает игру агента. В первый раз включите управление кнопкой ниже.");box.addView(help);
-  section(box,"01 · Управление настоящими играми");
+  section(box,"01 · Системное управление · дополнительные возможности");
   button(box,"Включить управление",()->startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)));
   button(box,"Показать панель",()->{PilotService pilot=PilotService.instance;if(pilot==null){toast(CrashDiagnostics.connectionHint(this));return;}pilot.recoverPanel();status.setText(CrashDiagnostics.connectionHint(this));});
   TextView panelHelp=new TextView(this);panelHelp.setText("Панель можно свернуть. STOP всегда остаётся доступным.");box.addView(panelHelp);
   section(box,"02 · Модели и обучение");
-  button(box,"Игровые модели · обучение и экспорт",()->startActivity(new Intent(this,TrainingActivity.class)));
+  if(BuildConfig.UNIFIED_MODELLAB)
+   button(box,"🎮 Harness Console · модели, NES, эпизоды, STOP, GPU",
+     ()->startActivity(new Intent(this,HarnessDashboardActivity.class)));
+  if(BuildConfig.UNIFIED_MODELLAB) {
+   button(box,"🧠 ModelLab · GGUF, загрузка моделей и анализ фото",
+     ()->startActivity(new Intent(this,ModelLabActivity.class)));
+  }else {
+  button(box,"Локальное ИИ-ядро · MNN-Pocket (English)",()->startActivity(new Intent(this,LocalCoreActivity.class)));
+  }
+
   button(box,"Внешние учителя · дополнительный API",()->startActivity(new Intent(this,WebLearningActivity.class)));
   automatic=new Switch(this);automatic.setText("Автоуправление выбранной игрой");automatic.setChecked(getSharedPreferences(PREF,MODE_PRIVATE).getBoolean("auto_control",true));automatic.setOnCheckedChangeListener((v,on)->{getSharedPreferences(PREF,MODE_PRIVATE).edit().putBoolean("auto_control",on).apply();if(PilotService.instance!=null)PilotService.instance.setAutomatic(on);});box.addView(automatic);
   button(box,"Выбрать игру или браузер",()->startActivity(new Intent(this,GamePickerActivity.class)));
   TextView autoHelp=new TextView(this);autoHelp.setText("Для сетки фишек: Игра → Мэтч Ворлд · обмен соседей или Фишки · удалить группу → выберите 6×6, 7×7 либо другой размер → обведите клетки → Старт. Настройки и типы фишек сохраняются. Поддерживаются различимые цветные фишки без специальных эффектов; цели уровня и усилители пока не распознаются. Для аркад другого оформления: Ещё → Настроить распознавание. Для разных игр одного браузера: Игра → Имя игры. STOP всегда останавливает ввод.");box.addView(autoHelp);
-  section(box,"03 · Игровая лаборатория");
+  section(box,"03 · Консольная лаборатория");
   TextView labCaption=new TextView(this);
-  labCaption.setText("Единый APK: 10 интерактивных симуляторов и офлайн NES/Денди. Скрипты обучают отдельные лабораторные модели. DOS: только проверка файлов, без исполнения. Симуляция не является приёмкой Маркета.");
+  labCaption.setText("Единый APK: NES/Денди и ModelLab. NES работает локально; модель пока анализирует кадры и эпизоды, но не управляет игрой. DOS пока только проверяет образы. Симуляторы мини-игр Яндекс Маркета выведены из основного интерфейса.");
   labCaption.setTextColor(HubContract.SECONDARY);box.addView(labCaption);
-  button(box,"Открыть встроенный GameLab · 10 игр / NES",this::openGameLab);
+  button(box,"Открыть консольную лабораторию · NES / Денди",this::openGameLab);
+  consoleExperience=new TextView(this);
+  consoleExperience.setTextColor(HubContract.SECONDARY);
+  consoleExperience.setText("NES: проверяю общий журнал агента...");
+  box.addView(consoleExperience);
   section(box,"04 · Диагностика и контроль");
   button(box,"Отчёт с кадром игры",this::beginDiagnosticReport);
   button(box,"Экспорт задержек",()->{if(PilotService.instance==null){toast("Сначала включите службу");return;}PilotService.instance.exportMetrics();startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT).setType("text/plain").addCategory(Intent.CATEGORY_OPENABLE).putExtra(Intent.EXTRA_TITLE,"localpilot-latency.txt"),10);});
@@ -41,6 +55,8 @@ public class MainActivity extends Activity {
     advanced.getVisibility()==android.view.View.VISIBLE?android.view.View.GONE:android.view.View.VISIBLE));
   box.addView(advanced);
   button(advanced,"Внешний GameLab · только тест Accessibility",this::openExternalGameLab);
+  button(advanced,"Архив прежнего обучения · DQN симуляторов (не NES)",
+    ()->startActivity(new Intent(this,TrainingActivity.class)));
   button(advanced,"Включить сбор примеров",()->{if(PilotService.instance==null){toast("Сначала включите службу");return;}new AlertDialog.Builder(this).setTitle("Сохранять игровые примеры?").setMessage("В памяти приложения останутся только распознанные поля до/после и проверенное действие, без снимков. До 256 примеров / 256 КиБ. Это не обучение. При заполнении сбор выключается, игра продолжается. При ошибке записи управление остановится.").setPositiveButton("Включить",(d,w)->{if(PilotService.instance!=null)PilotService.instance.enableExamples();else toast("Служба отключена");}).setNegativeButton("Отмена",null).show();});
   button(advanced,"Выключить сбор примеров",()->{if(PilotService.instance!=null)PilotService.instance.disableExamples();});
   button(advanced,"Экспорт примеров",()->{if(PilotService.instance==null){toast("Сначала включите службу");return;}try{PilotService.instance.exportExamples();startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT).setType("text/plain").addCategory(Intent.CATEGORY_OPENABLE).putExtra(Intent.EXTRA_TITLE,"localpilot-experience-v1.log"),11);}catch(java.io.IOException e){toast("Хранилище недоступно; исходник сохранён");}});
@@ -52,9 +68,9 @@ public class MainActivity extends Activity {
   status=new TextView(this);box.addView(status);
  }
  private void openGameLab(){
-  // Local GameLab is intentionally NOT a real Accessibility target.
-  // All simulator inputs stay inside the app and have SIM_ONLY provenance.
-  startActivity(new Intent(this,org.localpilot.gamelab.TestDeviceActivity.class));
+  // Console-first UX: no obsolete Yandex mini-game simulator launcher.
+  // The ROM loader and emulator are local to the same APK.
+  startActivity(new Intent(this,org.localpilot.gamelab.RetroLibraryActivity.class));
  }
  private void openExternalGameLab(){
   // Optional isolated Android target for testing real Accessibility delivery.
@@ -73,7 +89,14 @@ public class MainActivity extends Activity {
   PilotService pilot=PilotService.instance;
   if(pilot!=null)pilot.selectInstalledTarget(pkg,"GameLab · тестовые игры");
  }
- @Override public void onResume(){super.onResume();if(automatic!=null)automatic.setChecked(getSharedPreferences(PREF,MODE_PRIVATE).getBoolean("auto_control",true));if(status!=null)status.setText(CrashDiagnostics.connectionHint(this));}
+ @Override public void onResume(){super.onResume();if(automatic!=null)automatic.setChecked(getSharedPreferences(PREF,MODE_PRIVATE).getBoolean("auto_control",true));if(status!=null)status.setText(CrashDiagnostics.connectionHint(this));
+  if(consoleExperience!=null){
+   try{consoleExperience.setText(ConsoleExperienceMemory.summary(getFilesDir().toPath()));}
+   catch(java.io.IOException invalid){
+    consoleExperience.setText("STOP: общий журнал NES повреждён; автоматические выводы по опыту запрещены");
+   }
+  }
+ }
  private void beginDiagnosticReport(){
   if(diagnosticRequest!=null)diagnosticRequest.close();
   PilotService pilot=PilotService.instance;android.graphics.Bitmap frame=pilot==null?null:pilot.copyDiagnosticFrame();

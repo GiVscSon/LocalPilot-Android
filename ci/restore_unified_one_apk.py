@@ -34,7 +34,7 @@ REQUIRED={
         b"org.localpilot.gamelab.NesEmulatorActivity",
     ),
     "app/src/main/java/org/localpilot/android/MainActivity.java":(
-        b"org.localpilot.gamelab.TestDeviceActivity.class",
+        b"org.localpilot.gamelab.RetroLibraryActivity.class",
         b"private void openExternalGameLab()",
     ),
     "app/src/main/java/org/localpilot/android/TrainingActivity.java":(

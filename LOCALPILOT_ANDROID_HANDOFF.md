@@ -1,3 +1,100 @@
+# 0.8.2/code54: единый кандидат, новые блокирующие проверки · 13.11.2026
+
+PR #141 в main, ветка integration/harness-ppo-goal-unified-20261113.
+[Реализация, команды/ограничения и причины ошибок](docs/HARNESS-UNIFIED-LEARNING-20261113.md).
+Исправлен подтверждённый Android false STOP: таймер уже потреблённого RAM-ticket
+прерывал следующий шаг той же PPO-серии. Теперь reply/timeout сверяются с точным
+ожидаемым наблюдением в HarnessCoordinator, а callback JS — с текущим permit.
+73 coordinator +450 model assertions PASS; Android Java/AndroidTest compile/lint PASS.
+У предыдущего ARM64 APK выявлен ELF p_align4096 при правильном ZIP16KiB.
+Добавлены NDK27 linker flags и обязательный ELF+ZIP gate; старый APK отвергнут.
+Сборка x86 выполняется один раз, затем тот же APK проходит телефон/планшет
+API30/35/36. Эти новые проверки ещё требуют CI текущего SHA.
+Production release НЕ выпущен: нет совместимого постоянного ключа/защищённого
+android-signing (API403) и физических устройств. Перед слиянием сверить все CI,
+отдельно проверить новый Android PPO runtime и ELF16K реального ARM64 APK.
+Архивы созданы: archive/main-before-harness-082-20261113 (189b3b0),
+archive/harness-precision-v3-before-ppo-20261113 (964ce1e).
+Ни старые артефакты, ни synthetic/эмуляторные победы не закрывают релизные gates.
+
+# Единое обучение и захват · PR #141 · 13.11.2026
+
+[Текущая реализация, проверки и ограничения](docs/HARNESS-UNIFIED-LEARNING-20261113.md).
+Рабочая ветка integration/harness-ppo-goal-unified-20261113, main сверена:
+189b3b0a3edb2f27bb366a4e335d6da013372b83, версия 0.8.1/code53.
+Объединены #139 precision Student, существующий #136 PPO и #140 capture.
+PPO серия резервирует единый HarnessController; generic start не обходит
+подготовленное наблюдение. Несовместимые задачи/награды/веса не смешиваются.
+Портирован append-integrity fix #137 с сохранением новых goal-схем.
+Local JVM/Android compile/lint PASS. Actual JSNES PPO меняет веса, но
+независимая оценка не показала улучшения: promotion BLOCKED.
+Новая реальная Android WebView→Harness→PPO приёмка добавлена в all-in-one CI;
+её результата и всей матрицы совмещённого SHA ещё нужно дождаться.
+Следующие шаги: проверить CI #141; исправить runtime ошибки; расширить batch
+приёмку на API30/35/36; проверить конечный ARM64 APK и сохранить отчёт одного SHA.
+Постоянная подпись и физическая приёмка заблокированы внешним доступом;
+release_ready=false. Исторические заявления ниже не описывают новый SHA.
+
+# Захват: API 30/34/35/36 подтверждены · 13.11.2026
+
+PR #140, HEAD ee03b48: [все 6 jobs PASS](https://github.com/GiVscSon/LocalPilot-Android/actions/runs/43458665012).
+Это отдельная проверка реального Accessibility capture, а не физический телефон.
+Доказанная причина предыдущего FAIL: системная immersive-подсказка
+«Viewing full screen / GOT IT» забирала фокус у тестовой Activity.
+Подготовлен только изолированный AVD; screenshot consent, owner/focus/TTL,
+FLAG_SECURE и isAccessibilityTool=false не ослаблялись. Гипотеза кеша опровергнута;
+пробный production clearCache удалён. Уменьшен diagnostic preview, проверены
+поздний callback после STOP и запрет восстановления diagnosticFrame из reader.
+Следующая единая точка интеграции: PR #141; его SHA требует собственной матрицы.
+release_ready=false: постоянная подпись и физические телефон/планшет отсутствуют.
+
+# Capture-интеграция PR #131 · 13.11.2026
+
+В эту же ветку перенесены диагностические лимиты/STOP-проверки из #131.
+История и исходники сохранены. API30 screenshot acceptance проходил, API34–36
+ранее выявили ошибку; её причина расследуется до объявления PASS нового SHA.
+[Исходные capture-проверки](docs/HARNESS_CAPTURE_STEP_VALIDATION_2026-11-13.ru.md).
+
+# Точный Student и безопасный STEP: текущая точка · 13.11.2026
+
+Ветка fix/harness-precision-imitation-20261113 от PR #135/ba6cbd9.
+[Код, реальные измерения, команды и пределы доказательства](docs/HARNESS-PRECISION-IMITATION-20261113.ru.md).
+Student: настоящий teacher classifier + train-only DAgger, схема V3, кнопка сети
+и ограниченный duration adapter 4/8/16. Полный локальный прогон достиг цели на
+15/15 известных и 20/20 новых frozen starts; teacher 20/20, random 0/20.
+Это headless CPU/PPU, не физическая Android-приёмка и не PPO. Старые данные
+сохранены. STOP теперь fenced nonce/TTL/epoch и подтверждением release ACK;
+старые callback/Activity не отзывают новую сессию. Whole System проверяет
+траектории и 5 data seeds. CI нового SHA ждать отдельно; release_ready=false.
+
+# Student: разнообразные реальные NES-данные · 13.11.2026
+
+В существующий Whole System добавлен diverse-v1: 40 ROM-сеансов, все 6 действий,
+770 train + 24 holdout. Production Java Student обучается на настоящей RAM,
+решения экспортированных весов исполняет JSNES. Validation return вырос с
+-73/-73/-73 до +61/+91/+91, но цель не достигнута (distance 3/4/4, NONE).
+Статус SHADOW_ONLY_GOAL_NOT_REACHED; автоматическое продвижение отключено.
+В holdout обнаружены 4 пересекающихся train перехода; final test ещё нужен.
+[Протокол, метрики и следующий критерий](docs/HARNESS-LEARNING-STRATEGY-20261113.ru.md).
+Два JSON-отчёта с trajectory и SHA сохраняются существующим CI. Релиза нет.
+
+# План после исследования аналогов · 13.11.2026
+
+[Проверенные источники, схема и критерии следующих шагов](docs/HARNESS-LEARNING-STRATEGY-20261113.ru.md).
+Изучены AgentEmu, CleanRL DQN, Gymnasium и Stable-Retro, ссылки закреплены SHA.
+В существующий Student добавлена target-сеть, выполнен реальный JSNES benchmark.
+Return остался -73 на всех трёх условиях: улучшение игры не подтверждено,
+кандидат отклонён. Дальше: разнообразные train состояния/все действия,
+проверенный teacher → BC → DAgger, независимый final test. PPO после baseline.
+
+# Current Student continuation · 2026-11-13
+
+PR #134 base ba0140e has ten green PR workflows. Behavioral release evidence is still insufficient. The revised real-JSNES evaluation finds a sustained Student regression despite a useful first action; candidate must not be promoted. See [on-policy review](docs/HARNESS-STUDENT-ONPOLICY-REVIEW-20261113.md). Current work branch: fix/harness-student-release-gates-20261113. Physical-device acceptance and permanent release signing remain unverified. Old capture/NES worktree is preserved separately, not overwritten.
+
+# Подпись объединённого APK · 12.11.2026
+
+[Конкретные причины блокировки и доказательства](docs/SIGNING_DIAGNOSIS_2026-11-12.ru.md): окружений GitHub 0, создание защищённого android-signing запрещено подключению (403), подписывающих manual runs 0. PR #106 ещё отсутствует в main; PR #107 исправляет source binding и отдельный pin для checkout при dispatch. Наличие release-ключа вне этой среды не установлено; локально обнаружен только Android Debug. Проверку policy нельзя считать подписанным APK. Новый SHA/CI сверять в PR #107; issue #99 остаётся открыт.
+
 # Продолжение · 29 октября 2026
 
 В отдельной ветке `fix/api36-bubble-acceptance-20261029` от `91b1a15`

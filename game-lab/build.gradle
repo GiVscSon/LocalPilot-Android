@@ -2,6 +2,7 @@ plugins { id 'com.android.application' }
 android {
  sourceSets { main { java.srcDirs += ['../shared/src/main/java'] } }
  namespace 'org.localpilot.gamelab'
+ androidResources { ignoreAssetsPattern = '!.svn:!.git:!.bak:!*.bak:!*~:!.*' }
  compileSdk 35
  defaultConfig {
   applicationId 'org.localpilot.gamelab'
@@ -18,6 +19,8 @@ android {
  }
 }
 
+
+dependencies { implementation 'androidx.webkit:webkit:1.18.0' }
 
 /*
  * Bundled, OFFLINE-at-runtime NES engine. Source: bfirsh/jsnes v2.1.0,

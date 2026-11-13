@@ -1,0 +1,60 @@
+cmake_minimum_required(VERSION 3.22.1)
+project(localpilot_embedded_llama LANGUAGES C CXX)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+
+# CI checks out the pinned llama.cpp revision, never a moving branch.
+set(LLAMA_SRC "${CMAKE_CURRENT_LIST_DIR}/../../../../third_party/llama.cpp")
+if(NOT EXISTS "${LLAMA_SRC}/include/llama.h")
+  message(FATAL_ERROR "Pinned llama.cpp is missing: run bundled-model CI preflight")
+endif()
+set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+set(LLAMA_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(LLAMA_BUILD_TOOLS OFF CACHE BOOL "" FORCE)
+set(LLAMA_BUILD_COMMON OFF CACHE BOOL "" FORCE)
+set(LLAMA_BUILD_MTMD ON CACHE BOOL "" FORCE)
+set(LLAMA_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(LLAMA_BUILD_SERVER OFF CACHE BOOL "" FORCE)
+set(LLAMA_CURL OFF CACHE BOOL "" FORCE)
+set(LLAMA_OPENSSL OFF CACHE BOOL "" FORCE)
+set(GGML_NATIVE OFF CACHE BOOL "" FORCE)
+set(GGML_OPENMP OFF CACHE BOOL "" FORCE)
+set(GGML_LLAMAFILE OFF CACHE BOOL "" FORCE)
+set(GGML_BACKEND_DL OFF CACHE BOOL "" FORCE)
+# Only the dedicated ModelLab experimental APK enables Vulkan. The normal
+# LocalPilot/game/NES APKs continue to build and run the CPU backend.
+if(MODEL_LAB_VULKAN)
+  set(GGML_VULKAN ON CACHE BOOL "" FORCE)
+else()
+  set(GGML_VULKAN OFF CACHE BOOL "" FORCE)
+endif()
+add_subdirectory("${LLAMA_SRC}" "${CMAKE_CURRENT_BINARY_DIR}/llama-cpp")
+if(MODEL_LAB_VULKAN)
+  if(NOT EXISTS "${MODEL_LAB_SPIRV_INCLUDE_DIR}/spirv/unified1/spirv.hpp")
+    message(FATAL_ERROR "Missing pinned Khronos SPIRV Headers, do not fake Vulkan backend")
+  endif()
+  if(NOT EXISTS "${MODEL_LAB_VULKAN_HEADERS_DIR}/vulkan/vulkan.hpp")
+    message(FATAL_ERROR "Missing pinned Vulkan C++ header, no CPU-only substitution")
+  endif()
+  target_include_directories(ggml-vulkan PRIVATE
+    "${MODEL_LAB_VULKAN_HEADERS_DIR}" "${MODEL_LAB_SPIRV_INCLUDE_DIR}")
+  message(STATUS "ModelLab Vulkan compiles with pinned Khronos SPIRV + Vulkan-Hpp and NDK glslc")
+endif()
+add_library(localpilot_embedded SHARED localpilot_embedded.cpp)
+target_include_directories(localpilot_embedded PRIVATE
+  "${LLAMA_SRC}/include" "${LLAMA_SRC}/ggml/include" "${LLAMA_SRC}/tools/mtmd")
+if(ANDROID)
+  # NDK r27 does not enable flexible page sizes by default. ZIP alignment
+  # alone cannot make 4KiB ELF LOAD segments compatible with 16KiB devices.
+  target_link_options(localpilot_embedded PRIVATE
+    "-Wl,-z,max-page-size=16384" "-Wl,-z,common-page-size=16384")
+  target_link_libraries(localpilot_embedded PRIVATE llama mtmd log)
+else()
+  # Host smoke testing exercises the SAME JNI implementation with original GGUF.
+  if(NOT DEFINED ENV{JAVA_HOME})
+    message(FATAL_ERROR "JAVA_HOME is required for JNI host smoke tests")
+  endif()
+  target_include_directories(localpilot_embedded PRIVATE
+    "$ENV{JAVA_HOME}/include" "$ENV{JAVA_HOME}/include/linux")
+  target_link_libraries(localpilot_embedded PRIVATE llama mtmd)
+endif()

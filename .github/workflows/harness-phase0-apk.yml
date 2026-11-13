@@ -1,0 +1,112 @@
+name: Harness Phase 0 APK integrity gates
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
+on:
+  pull_request:
+    paths:
+      - 'docs/LOCALPILOT-HARNESS-EXECUTION-PLAN.md'
+      - 'tools/verify_harness_apk.py'
+      - 'tests/test_verify_harness_apk.py'
+      - 'app/build.gradle'
+      - 'app/src/**'
+      - 'game-lab/src/**'
+      - 'shared/src/**'
+      - '.github/workflows/harness-phase0-apk.yml'
+  push:
+    branches:
+      - 'feat/harness-*'
+      - 'fix/harness-*'
+    paths:
+      - 'app/build.gradle'
+      - 'app/src/**'
+      - 'game-lab/src/**'
+      - 'shared/src/**'
+      - 'tools/verify_harness_apk.py'
+      - 'tests/test_verify_harness_apk.py'
+      - '.github/workflows/harness-phase0-apk.yml'
+permissions:
+  contents: read
+
+jobs:
+  synthetic-package-regressions:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+      - name: Inspect malformed and valid synthetic APK ZIP fixtures
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p test_verify_harness_apk.py -v
+
+  actual-unified-apk:
+    needs: synthetic-package-regressions
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      LOCALPILOT_BUILD_SOURCE_SHA: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Fetch pinned reviewed llama.cpp (same revision as All-in-One CI)
+        run: |
+          set -euo pipefail
+          mkdir -p third_party/llama.cpp
+          cd third_party/llama.cpp
+          git init -q
+          git remote add origin https://github.com/ggml-org/llama.cpp.git
+          git fetch --depth 1 origin 2b66bfbf7107e43f5cd2fe99802ff6e872e4c4d0
+          git checkout --detach FETCH_HEAD
+          test "$(git rev-parse HEAD)" = 2b66bfbf7107e43f5cd2fe99802ff6e872e4c4d0
+          test -f include/llama.h
+      - name: Build one APK with GameLab, NES and ModelLab
+        run: |
+          set -euo pipefail
+          bash ./gradlew --no-daemon :app:assembleDebug -PunifiedModelLab=true
+      - name: Audit actual packaged DEX, NES assets, backups and source SHA
+        run: |
+          set -euo pipefail
+          python3 tools/verify_harness_apk.py \
+            app/build/outputs/apk/debug/app-debug.apk \
+            --expected-source-sha "$LOCALPILOT_BUILD_SOURCE_SHA" \
+            --report build/reports/harness-apk-phase0.json
+          echo "PACKAGING_ONLY: no device, Vulkan, network or real training claims"
+      - name: Check APK signing validity (test-only debug signing)
+        run: |
+          set -euo pipefail
+          apksigner="$(find "$ANDROID_HOME/build-tools" -maxdepth 2 -type f -name apksigner | sort -V | tail -1)"
+          test -n "$apksigner"
+          "$apksigner" verify --verbose --print-certs app/build/outputs/apk/debug/app-debug.apk | tee build/reports/harness-phase0-signature.txt
+          sha256sum app/build/outputs/apk/debug/app-debug.apk > build/reports/harness-phase0-apk.sha256
+          echo "DEBUG_SIGNATURE_ONLY: not a release signing provenance"
+      - name: Archive the exact audited test APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: harness-unified-debug-${{ github.sha }}
+          retention-days: 14
+          if-no-files-found: error
+          path: |
+            app/build/outputs/apk/debug/app-debug.apk
+            build/reports/harness-apk-phase0.json
+            build/reports/harness-phase0-signature.txt
+            build/reports/harness-phase0-apk.sha256
+      - name: Archive packaging facts (never as a release)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: harness-phase0-packaging-${{ github.sha }}
+          retention-days: 14
+          if-no-files-found: ignore
+          path: |
+            build/reports/harness-apk-phase0.json
+            build/reports/harness-phase0-signature.txt
+            build/reports/harness-phase0-apk.sha256

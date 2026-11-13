@@ -1,4 +1,60 @@
+import groovy.json.JsonSlurper
+
 plugins { id 'com.android.application' }
+
+def bundledCatalog = providers.gradleProperty('bundleLocalModelCatalog').orElse('false').get().toBoolean()
+def bundledGguf = bundledCatalog || providers.gradleProperty('bundleLocalModel').orElse('false').get().toBoolean()
+// Opt-in single APK with GameLab, NES, and import/download-on-demand ModelLab.
+def unifiedModelLab = providers.gradleProperty('unifiedModelLab').orElse('false').get().toBoolean()
+// Select the focused capture runner through AGP, which generates instrumentation.
+def captureAcceptance = providers.gradleProperty('captureAcceptance').orElse('false').get().toBoolean()
+// CI-only x86_64 build of the same Java/JNI sources for a KVM emulator.
+// Never use this flag for a release APK or distribute this test derivative.
+def unifiedEmulatorAbi = providers.gradleProperty('unifiedEmulatorAbi').orElse('false').get().toBoolean()
+if (unifiedEmulatorAbi && !unifiedModelLab) throw new GradleException('unifiedEmulatorAbi requires unifiedModelLab=true')
+if (unifiedEmulatorAbi && gradle.startParameter.taskNames.any { it.toLowerCase().contains('release') }) {
+ throw new GradleException('x86_64 emulator-only variant must never be built as release')
+}
+// Also reject aggregate tasks (e.g. assemble/build) that resolve to a release
+// variant. CLI task-name checks alone are insufficient for Gradle aliases.
+if (unifiedEmulatorAbi) {
+ gradle.taskGraph.whenReady { graph ->
+  if (graph.allTasks.any { task ->
+   task.project == project && task.name.toLowerCase(java.util.Locale.ROOT).contains('release')
+  }) throw new GradleException('Emulator-only ABI may not execute any app release task')
+ }
+}
+def bundledMetadataFile = rootProject.file('build/reports/embedded-gguf.json')
+def bundledMetadata = null
+if (bundledGguf) {
+ if (!bundledMetadataFile.isFile()) throw new GradleException('Verified GGUF missing: run tools/bundle_embedded_gguf.py prepare')
+ bundledMetadata = new JsonSlurper().parse(bundledMetadataFile)
+ if (!new File(rootProject.projectDir,'build/embedded-model-assets/models/'+bundledMetadata.filename).isFile()) {
+  throw new GradleException('Bundled GGUF weights are missing')
+ }
+}
+
+
+if(bundledCatalog) {
+ def extra=rootProject.file('build/reports/embedded-extra-models.json')
+ if(!extra.isFile()) throw new GradleException('Offline model catalog missing: run tools/bundle_optional_models.py prepare')
+ def info=new JsonSlurper().parse(extra)
+ if(info.schema!='localpilot-extra-models-v1'||info.files.size()!=4)
+  throw new GradleException('Offline model catalogue incomplete')
+ for(def item:info.files)
+  if(!rootProject.file('build/embedded-model-assets/models/'+item.filename).isFile())
+   throw new GradleException('Missing bundled model: '+item.filename)
+}
+
+// ModelLab is also an independent test APK. Copy its reviewed Java sources
+// into the unified build WITHOUT its competing EmbeddedGgufRuntime class.
+// The primary app owns the SINGLE JNI runtime and mediates the lab calls.
+def syncUnifiedModelLab = tasks.register('syncUnifiedModelLab', Sync) {
+ from(rootProject.file('model-lab/src/main/java'))
+ exclude '**/EmbeddedGgufRuntime.java'
+ into(layout.buildDirectory.dir('generated/source/unified-model-lab'))
+}
+
 android {
  // The same GameLab and NES sources are embedded into the PRIMARY APK.
  // :game-lab remains an optional standalone test target for external
@@ -6,25 +62,111 @@ android {
  sourceSets { main {
   java.srcDirs += ['../shared/src/main/java', '../game-lab/src/main/java']
   assets.srcDirs += ['../game-lab/src/main/assets', '../game-lab/build/generated/jsnes/assets']
+  if (bundledGguf) assets.srcDirs += [rootProject.file('build/embedded-model-assets')]
+  java.srcDirs += [layout.buildDirectory.dir('generated/source/unified-model-lab').get().asFile]
  } }
  namespace 'org.localpilot.android'
+ buildFeatures { buildConfig true }
+ androidResources {
+  noCompress += ['gguf']
+  // Drop backup archives and editor temp files from the installed APK.
+  ignoreAssetsPattern = '!.svn:!.git:!.bak:!*.bak:!*~:!.*'
+ }
+ if (bundledGguf || unifiedModelLab) {
+  ndkVersion '27.2.12479018'
+  externalNativeBuild { cmake { path file('src/main/cpp/CMakeLists.txt'); version '3.22.1' } }
+ }
  compileSdk 35
- defaultConfig { applicationId 'org.localpilot.android'; minSdk 30; targetSdk 35; versionCode 53; versionName '0.8.1'; testInstrumentationRunner 'org.localpilot.android.PilotUiInstrumentation' }
+ defaultConfig {
+  applicationId 'org.localpilot.android'
+  minSdk 30
+  targetSdk 35
+  versionCode 54
+  versionName '0.8.2'
+  testInstrumentationRunner captureAcceptance ? 'org.localpilot.android.CaptureAcceptanceInstrumentation' : 'org.localpilot.android.PilotUiInstrumentation'
+  buildConfigField 'boolean', 'EMBEDDED_GGUF', bundledGguf.toString()
+  buildConfigField 'boolean', 'UNIFIED_MODELLAB', unifiedModelLab.toString()
+  manifestPlaceholders = [unifiedModelLabEnabled: unifiedModelLab.toString()]
+  buildConfigField 'boolean', 'VULKAN_COMPILED', 'false'
+  buildConfigField 'boolean', 'PRELOADED_MODELS', 'false'
+  buildConfigField 'String', 'POCKET_SHA256', '\"\"'
+  buildConfigField 'long', 'POCKET_BYTES', '0L'
+  buildConfigField 'boolean', 'MULTI_MODEL_CATALOG', bundledCatalog.toString()
+  buildConfigField 'String', 'EMBEDDED_GGUF_SHA256',
+      bundledGguf ? ('"' + bundledMetadata.sha256 + '"') : '""'
+  buildConfigField 'long', 'EMBEDDED_GGUF_BYTES', bundledGguf ? (bundledMetadata.bytes + 'L') : '0L'
+  if (bundledGguf || unifiedModelLab) {
+    ndk { abiFilters unifiedEmulatorAbi ? 'x86_64' : 'arm64-v8a' }
+  }
+ }
  buildTypes {
   debug {
+   // Keep literal legacy identity for deterministic release-tooling metadata.
    applicationIdSuffix '.dev.install1081'
    versionNameSuffix '-dev-install1081'
    debuggable false
   }
+ }
+ // Alternative debug install identity is test-only, never a stable update.
+ if (unifiedModelLab) {
+   buildTypes.debug.applicationIdSuffix = '.dev.unified'
+   buildTypes.debug.versionNameSuffix = '-unified-test-only'
+ }
+ // Only the isolated x86 instrumentation derivative permits run-as to read
+ // its own newly generated training evidence. ARM64 debug/release stay closed;
+ // the existing task-graph guard forbids any release task with this flag.
+ if (unifiedEmulatorAbi) {
+   buildTypes.debug.debuggable = true
+ }
+ // Keep legacy dev package literals intact for strict release tooling.
+ // Only the dedicated embedded APK uses its own install identity.
+ if (bundledGguf) {
+   // Separate APK identities prevent independently signed CI candidates
+   // from conflicting with one another on the same Android device.
+   buildTypes.debug.applicationIdSuffix = bundledCatalog ? '.dev.offlinecatalog' : '.dev.mnnembedded'
+   buildTypes.debug.versionNameSuffix = bundledCatalog ? '-offline-catalog-candidate' : '-embedded-mnn-candidate'
  }
  lint { checkTestSources true }
  compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
 }
 
 // Share the already verified pinned JSNES assets; do not download a second core.
-tasks.named('preBuild').configure { dependsOn ':game-lab:bundleVerifiedNesEngine' }
+tasks.named('preBuild').configure {
+ dependsOn ':game-lab:bundleVerifiedNesEngine'
+ dependsOn syncUnifiedModelLab
+}
 // Asset snapshot must wait for the pinned emulator bundle, not just preBuild.
+tasks.matching { it.name ==~ /compile.*JavaWithJavac/ }.configureEach { dependsOn syncUnifiedModelLab }
 tasks.matching { it.name == 'mergeDebugAssets' }.configureEach {
  dependsOn ':game-lab:bundleVerifiedNesEngine'
 }
 
+
+// Bind candidate verification to the source actually compiled into the APK.
+def signingProvenance = layout.buildDirectory.dir('generated/signing-provenance')
+android.sourceSets.main.assets.srcDir(signingProvenance)
+tasks.register('writeSigningProvenance') {
+ outputs.upToDateWhen { false }
+ doLast {
+  def gitOutput = new ByteArrayOutputStream()
+  project.exec { workingDir rootProject.projectDir; commandLine 'git','rev-parse','HEAD'; standardOutput = gitOutput }
+  def revision = gitOutput.toString('UTF-8').trim()
+  if (!(revision ==~ /[0-9a-f]{40}/)) throw new GradleException('Invalid build source SHA')
+  // workflow_dispatch may run a trusted workflow from main while checking
+  // out a separately reviewed commit. GITHUB_SHA identifies that event,
+  // whereas the explicit pin identifies the actual app source to build.
+  def buildSourcePin = System.getenv('LOCALPILOT_BUILD_SOURCE_SHA')
+  def expected = buildSourcePin != null ? buildSourcePin : System.getenv('GITHUB_SHA')
+  if (expected != null && !(expected ==~ /[0-9a-fA-F]{40}/))
+   throw new GradleException('Invalid expected build source SHA')
+  if (expected != null && expected.toLowerCase() != revision)
+   throw new GradleException('CI source SHA differs from checkout')
+  def output = signingProvenance.get().file('localpilot-source.json').asFile
+  output.parentFile.mkdirs()
+  output.text = groovy.json.JsonOutput.toJson([schema:'localpilot-source-v1', sourceSha:revision])
+ }
+}
+tasks.named('preBuild').configure { dependsOn tasks.named('writeSigningProvenance') }
+
+// NES WebView uses a virtual HTTPS origin for packaged assets.
+dependencies { implementation 'androidx.webkit:webkit:1.18.0' }

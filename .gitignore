@@ -23,3 +23,7 @@ __pycache__/
 **/localpilot-frames.csv
 local-jpg/
 local-frames/
+
+# Generated native source checkout and large verified GGUF assets
+third_party/llama.cpp/
+*.gguf
