@@ -58,6 +58,7 @@ public final class NesEmulatorActivity extends Activity {
  private final NesExperimentPolicy experiment=new NesExperimentPolicy();
  private long experimentGeneration;
  private boolean homebrewRom;
+ private String pinnedHomebrewRomSha="";
  private NesTrial readyTrial;
  private NesTrial exportTrial;
  private final NesSnapshotGate snapshotGate=new NesSnapshotGate();
@@ -494,14 +495,30 @@ public final class NesEmulatorActivity extends Activity {
     if(aiRunning){
      aiRunning=false;
      boolean saved=recordAiEpisode(readyTrial);
+     boolean goalSaved=true;
+     if(saved&&goal.verified()) {
+      try{
+       // The same shared experience system owns both the legacy UNKNOWN
+       // history and this separate, non-PPO homebrew RAM-goal evidence.
+       ConsoleExperienceMemory.appendHomebrewGoal(getFilesDir().toPath(),
+         new ConsoleExperienceMemory.HomebrewGoal(
+           frameEpoch.token(),pinnedHomebrewRomSha,aiModelId,aiModelSha,
+           current.button,current.frame,count,current.xBefore,current.xAfter,
+           goal.reward()));
+      }catch(IOException|IllegalArgumentException failed){
+       goalSaved=false;
+       harness.stop("HOME_BREW_GOAL_JOURNAL_FAILURE");
+      }
+     }
      String ramGoal=goal.verified()?
        " · ROM RAM-цель "+HomebrewRamReward.GOAL+
-         " = "+goal.reward()+"; PPO ещё BLOCKED (нет obs64 / oldLogProb)":
+         " = "+goal.reward()+" · свидетельство "+(goalSaved?"сохранено":"НЕ СОХРАНЕНО")+
+         "; PPO BLOCKED (нет obs64 / oldLogProb)":
        " · ROM RAM-награда UNKNOWN ["+goal.reason()+"]";
-     state.setText(saved?
+     state.setText(saved&&goalSaved?
        "ИИ-ход "+readyTrial.button+": "+readyTrial.status+
          " · визуальный журнал reward=UNKNOWN"+ramGoal:
-       "STOP: кадр проверен, но общая память эпизодов недоступна; ход не записан");
+       "STOP: проверенный кадр / RAM-цель не удалось сохранить; ввод отозван");
     }
    if(experiment.running()){
     NesExperimentPolicy.Decision result=experiment.observe(readyTrial.status);
@@ -775,6 +792,18 @@ public final class NesEmulatorActivity extends Activity {
   if(homebrew&&!java.util.Arrays.equals(rom,HomebrewNes.cartridge())){
    frameEpoch.cancel();harness.stop("HOME_BREW_ROM_IDENTITY_MISMATCH");
    state.setText("STOP: тестовый ROM не совпадает с эталоном");return;
+  }
+  homebrewRom=false;pinnedHomebrewRomSha="";
+  if(homebrew) {
+   try{
+    byte[] fingerprint=java.security.MessageDigest.getInstance("SHA-256").digest(rom);
+    StringBuilder hex=new StringBuilder(64);
+    for(byte v:fingerprint)hex.append(String.format(java.util.Locale.ROOT,"%02x",v&255));
+    pinnedHomebrewRomSha=hex.toString();
+   }catch(java.security.NoSuchAlgorithmException impossible){
+    frameEpoch.cancel();harness.stop("ROM_SHA256_UNAVAILABLE");
+    state.setText("STOP: не удалось проверить SHA ROM");return;
+   }
   }
   homebrewRom=homebrew;pendingTrial=null;readyTrial=null;
   if(shareTrial!=null)shareTrial.setEnabled(false);

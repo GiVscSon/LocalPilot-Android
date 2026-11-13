@@ -29,6 +29,7 @@ on:
       - 'tests/NesExperimentPolicyTest.java'
       - 'game-lab/src/main/java/org/localpilot/gamelab/NesExperimentPolicy.java'
       - 'tests/HomebrewRamRewardTest.java'
+      - 'tests/ConsoleHomebrewGoalMemoryTest.java'
   pull_request:
     paths:
       - 'game-lab/**'
@@ -100,6 +101,16 @@ jobs:
             game-lab/src/main/java/org/localpilot/gamelab/HomebrewRamReward.java \
             tests/HomebrewRamRewardTest.java
           java -cp build/nes-runtime org.localpilot.gamelab.HomebrewRamRewardTest
+      - name: Verify atomic bounded NES RAM evidence journal (synthetic Java)
+        run: |
+          set -euo pipefail
+          mkdir -p build/nes-goal-journal
+          javac --release 17 -d build/nes-goal-journal \
+            shared/src/main/java/org/localpilot/shared/ConsoleAgentContract.java \
+            shared/src/main/java/org/localpilot/shared/NesTrial.java \
+            shared/src/main/java/org/localpilot/shared/ConsoleExperienceMemory.java \
+            tests/ConsoleHomebrewGoalMemoryTest.java
+          java -cp build/nes-goal-journal org.localpilot.shared.ConsoleHomebrewGoalMemoryTest
       - name: Verify full iNES/NES2 ROM preflight and unsafe mapper rejection
         run: |
           set -euo pipefail
