@@ -38,6 +38,10 @@ import org.localpilot.shared.NesFrameTransfer;
 import org.localpilot.shared.ConsoleExperienceMemory;
 import org.localpilot.shared.ConsoleAgentContract;
 import org.localpilot.shared.HarnessCoordinator;
+import org.localpilot.shared.HomebrewObs64;
+import org.localpilot.shared.StudentPolicyNet;
+import java.nio.file.Path;
+import java.security.SecureRandom;
 
 /**
  * NES CPU/PPU emulation: JSNES 2.1.0 execution inside a
@@ -53,7 +57,7 @@ public final class NesEmulatorActivity extends Activity {
  private static final String[] GAMEPAD={"UP","LEFT","DOWN","RIGHT","SELECT","START","B","A"};
  private WebView web;
  private TextView state;
- private Button demoButton,aButton,bButton,shareTrial,cpuAgentButton,cpuBatchButton,stopCpuButton,aiObserveButton;
+ private Button demoButton,aButton,bButton,shareTrial,cpuAgentButton,cpuBatchButton,stopCpuButton,aiObserveButton,studentStepButton;
  private CheckBox exploratoryStopSwitch;
  private final NesExperimentPolicy experiment=new NesExperimentPolicy();
  private long experimentGeneration;
@@ -65,7 +69,9 @@ public final class NesEmulatorActivity extends Activity {
  // Process-wide permit owner shared by the one embedded NES instance.
  private final HarnessCoordinator harness=HarnessCoordinator.nes();
  private HarnessCoordinator.ActionPermit pendingPermit;
- private boolean aiSnapshot,aiRunning,aiFrozen;
+ private boolean aiSnapshot,aiRunning,aiFrozen,studentStepRequested;
+ private StudentPolicyNet studentNet;
+ private final SecureRandom studentRandom=new SecureRandom();
  private String aiTicketNonce,queuedAiButton,aiModelId="",aiModelSha="",aiEpoch="";
  private int aiExpectedHash;
  private long aiIssuedAt;
@@ -78,6 +84,10 @@ public final class NesEmulatorActivity extends Activity {
   final int frame,hash;
   boolean downAck,upAck,ramProbeSeen;
   int xBefore=-1,xAfter=-1;
+  float studentOldLogProb,studentValue;
+  float[] studentState64;
+  int studentActionId=-1;
+  String studentPolicySha;
   TrialPending(String button,int frame,int hash){
    this.button=button;this.frame=frame;this.hash=hash;
   }
@@ -171,6 +181,11 @@ public final class NesEmulatorActivity extends Activity {
   aiObserveButton.setEnabled(false);
   aiObserveButton.setOnClickListener(v->requestAiObservation());
   root.addView(aiObserveButton);
+  studentStepButton=new Button(this);
+  studentStepButton.setText("🧠 StudentPolicy · 1 ход NES (64→64→64→кнопка)");
+  studentStepButton.setEnabled(false);
+  studentStepButton.setOnClickListener(v->requestStudentAction());
+  root.addView(studentStepButton);
   Button resumeRealtime=new Button(this);
   resumeRealtime.setText("▶ REALTIME_MODE · продолжить ручную NES");
   resumeRealtime.setOnClickListener(v->{
@@ -320,7 +335,10 @@ public final class NesEmulatorActivity extends Activity {
       stopCpuExperiment("STOP: другой владелец NES-ввода");return;
      }
      aiFrozen=true;
-     requestFrozenAiObservation();
+     if(studentStepRequested){
+      studentStepRequested=false;
+      requestStudentFromFrozenRam(session,count,pixelsHash);
+     }else requestFrozenAiObservation();
     });
    }
    @JavascriptInterface public void onSnapshot(String encoded,String token){
@@ -420,9 +438,11 @@ public final class NesEmulatorActivity extends Activity {
  private void stopCpuExperiment(String reason){
   harness.stop("STOP_OR_RECOVERY");pendingPermit=null;
   aiTicketNonce=null;aiSnapshot=false;queuedAiButton=null;aiRunning=false;
+  studentStepRequested=false;
   snapshotGate.cancel();exportTrial=null;
   if(aiObserveButton!=null)aiObserveButton.setEnabled(
     resumed&&homebrewRom&&pageLoaded);
+  if(studentStepButton!=null)studentStepButton.setEnabled(resumed&&homebrewRom&&pageLoaded);
   ++experimentGeneration;
   experiment.stop();
   pendingTrial=null;
@@ -432,6 +452,92 @@ public final class NesEmulatorActivity extends Activity {
   if(cpuAgentButton!=null)cpuAgentButton.setEnabled(homebrewRom&&pageLoaded&&resumed);
   if(state!=null)state.setText(reason);
  }
+
+ /**
+  * There is ONE local StudentPolicy file; corrupt weights always fail closed.
+  * No separate emulation input owner or duplicate JNI backend is created.
+  */
+ private StudentPolicyNet activeStudent()throws IOException{
+  if(studentNet!=null)return studentNet;
+  Path weights=new File(getFilesDir(),
+    "localpilot_vault/models/active/student-homebrew-v1.weights.bin").toPath();
+  if(Files.exists(weights))studentNet=StudentPolicyNet.load(weights);
+  else{
+   StudentPolicyNet initial=new StudentPolicyNet(HomebrewObs64.ACTIONS,
+      studentRandom.nextLong());
+   initial.saveAtomically(weights);
+   studentNet=StudentPolicyNet.load(weights);
+  }
+  if(studentNet.actionCount!=HomebrewObs64.ACTIONS)
+   throw new IOException("StudentPolicy action vocabulary mismatch");
+  return studentNet;
+ }
+ private void requestStudentAction(){
+  if(closed||!resumed||!homebrewRom||!pageLoaded||web==null||
+     frames<15||hash==0||pendingTrial!=null||aiRunning||
+     experiment.running()||harness.hasPending()||harness.actionInFlight()||
+     studentStepRequested){
+   state.setText("STOP: StudentPolicy не получила свободный NES-контроллер");
+   return;
+  }
+  if(aiFrozen)requestStudentFromFrozenRam(frameEpoch.token(),frames,hash);
+  else{
+   studentStepRequested=true;
+   String session=frameEpoch.token();
+   web.evaluateJavascript("window.retroEnterStepMode()",accepted->{
+    if(studentStepRequested&&frameEpoch.current(session)&&!"true".equals(accepted))
+     stopCpuExperiment("STOP: StudentPolicy не смогла заморозить NES");
+   });
+  }
+ }
+ private void requestStudentFromFrozenRam(String epoch,int expectedFrame,int expectedHash){
+  if(!resumed||!homebrewRom||!aiFrozen||!frameEpoch.current(epoch)||
+     frames!=expectedFrame||hash!=expectedHash||pendingTrial!=null||
+     harness.hasPending()||harness.actionInFlight()||aiRunning){
+   stopCpuExperiment("STOP: StudentPolicy увидела устаревший кадр");return;
+  }
+  web.evaluateJavascript("window.retroHomebrewState()",result->{
+   if(closed||!resumed||!homebrewRom||!aiFrozen||
+      !frameEpoch.current(epoch)||frames!=expectedFrame||hash!=expectedHash||
+      harness.hasPending()||harness.actionInFlight()||pendingTrial!=null||aiRunning){
+    stopCpuExperiment("STOP: StudentPolicy RAM state устарело");return;
+   }
+   try{
+    org.json.JSONObject observed=new org.json.JSONObject(result);
+    if(!epoch.equals(observed.getString("session"))||
+       observed.getInt("frame")!=expectedFrame)
+     throw new IllegalArgumentException("Stale NES RAM snapshot");
+    float[] obs=HomebrewObs64.encode(observed.getInt("x"),observed.getInt("y"));
+    StudentPolicyNet.Decision choice=activeStudent().choose(
+      obs,HomebrewObs64.LEGAL_MASK,studentRandom);
+    if(choice.action()<0||choice.action()>=HomebrewObs64.BUTTONS.length)
+     throw new IllegalArgumentException("Illegal StudentPolicy action");
+    String button=HomebrewObs64.BUTTONS[choice.action()];
+    if(!beginTrial(button,HarnessCoordinator.Actor.STUDENT))
+     throw new IllegalStateException("StudentPolicy permit denied");
+    TrialPending trial=pendingTrial;
+    trial.studentOldLogProb=choice.oldLogProb();
+    trial.studentValue=choice.value();
+    trial.studentState64=obs.clone();
+    trial.studentActionId=choice.action();
+    trial.studentPolicySha=choice.policySha();
+    aiModelId="student-homebrew-v1";
+    aiModelSha=choice.policySha();
+    aiRunning=true;
+    state.setText("StudentPolicy "+button+" · 16 NES-кадров · SHA "+
+      choice.policySha().substring(0,12));
+    web.evaluateJavascript("window.retroAiStep("+
+      org.json.JSONObject.quote(button)+","+ConsoleAgentContract.HOLD_FRAMES+")",reply->{
+       TrialPending current=pendingTrial;
+       if(current!=null&&current.button.equals(button)&&!"true".equals(reply))
+        stopCpuExperiment("STOP: JSNES отказал StudentPolicy");
+    });
+   }catch(IOException|RuntimeException invalid){
+    stopCpuExperiment("STOP: StudentPolicy: "+invalid.getClass().getSimpleName());
+   }
+  });
+ }
+
  private void runHomebrewCpuAgent(){
   if(aiFrozen){state.setText("Сначала выйди из STEP_MODE");return;}
   if(!resumed||!homebrewRom||!pageLoaded||frames<15||hash==0||
@@ -817,6 +923,7 @@ public final class NesEmulatorActivity extends Activity {
    if(!launched){frameEpoch.cancel();harness.stop("ROM_LOAD_FAILED");}
    if(cpuAgentButton!=null)cpuAgentButton.setEnabled(launched&&homebrew);
    if(cpuBatchButton!=null)cpuBatchButton.setEnabled(launched&&homebrew);
+   if(studentStepButton!=null)studentStepButton.setEnabled(launched&&homebrew);
    if(aiObserveButton!=null)aiObserveButton.setEnabled(launched&&homebrew&&
      getPackageName().startsWith("org.localpilot.android"));
    if(!launched)state.setText("NES ROM не запущен. Проверьте mapper и ядро.");
@@ -863,7 +970,7 @@ public final class NesEmulatorActivity extends Activity {
   resumed=false;snapshotGate.cancel();exportTrial=null;
   if(shareTrial!=null)shareTrial.setEnabled(readyTrial!=null);
   GameLabEvidenceProvider.clear("nes");
-  if(experiment.running()||aiRunning)stopCpuExperiment("STOP: NES ушла в фон");
+  if(experiment.running()||aiRunning||studentStepRequested)stopCpuExperiment("STOP: NES ушла в фон");
   if(pendingTrial!=null){harness.stop("NES_PAUSED_IN_FLIGHT");pendingPermit=null;}
   pendingTrial=null; // Keep a pending ModelLab ticket, but not held input.
   if(web!=null&&pageLoaded)web.evaluateJavascript("window.retroPause()",null);
@@ -880,7 +987,7 @@ public final class NesEmulatorActivity extends Activity {
  }
  @Override protected void onDestroy(){
   closed=true;harness.stop("NES_DESTROYED");pendingPermit=null;aiFrozen=false;
-  queuedAiButton=null;aiRunning=false;
+  queuedAiButton=null;aiRunning=false;studentStepRequested=false;
   frameEpoch.cancel();snapshotGate.cancel();exportTrial=null;
   romDownloads.shutdownNow();
   ++experimentGeneration;experiment.stop();
