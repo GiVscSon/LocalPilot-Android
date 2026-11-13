@@ -532,7 +532,7 @@ public final class NesEmulatorActivity extends Activity {
        if(current!=null&&current.button.equals(button)&&!"true".equals(reply))
         stopCpuExperiment("STOP: JSNES отказал StudentPolicy");
     });
-   }catch(IOException|RuntimeException invalid){
+   }catch(IOException|org.json.JSONException|RuntimeException invalid){
     stopCpuExperiment("STOP: StudentPolicy: "+invalid.getClass().getSimpleName());
    }
   });
