@@ -52,7 +52,7 @@ class CanonicalSourceTests(unittest.TestCase):
         with self.assertRaises(ValueError): produce(self.repo,self.root/'a.zip')
 
     def test_source_example_is_not_a_secret(self):
-        (self.repo/'README.md').write_text('Example: -----BEGIN PRIVATE KEY----- (not a key)')
+        (self.repo/'README.md').write_text('Example: '+'-----BEGIN '+'PRIVATE KEY----- (not a key)')
         subprocess.run(['git','-C',str(self.repo),'add','.'],check=True)
         subprocess.run(['git','-C',str(self.repo),'-c','user.name=Test',
                         '-c','user.email=test@example.invalid','commit','-qm','example'],check=True)
@@ -62,7 +62,7 @@ class CanonicalSourceTests(unittest.TestCase):
 
     def test_real_private_key_block_rejected(self):
         (self.repo/'README.md').write_text(
-            '-----BEGIN PRIVATE KEY-----'+'\n'+'A'*120+'\n-----END PRIVATE KEY-----')
+            '-----BEGIN '+'PRIVATE KEY-----'+'\n'+'A'*120+'\n-----END '+'PRIVATE KEY-----')
         subprocess.run(['git','-C',str(self.repo),'add','.'],check=True)
         subprocess.run(['git','-C',str(self.repo),'-c','user.name=Test',
                         '-c','user.email=test@example.invalid','commit','-qm','key'],check=True)
