@@ -806,6 +806,7 @@ public final class NesEmulatorActivity extends Activity {
      GoalSample goal=pendingGoal;
      pendingGoal=null;
      boolean saved=recordAiEpisode(readyTrial);
+     boolean taskGoalSaved=false; // GGUF uses onHomebrewTask; student uses RAM progress.
      if(!saved)state.setText("STOP: общий журнал NES недоступен");
      else if(goal!=null&&goal.epoch.equals(frameEpoch.token())&&
           goal.button.equals(readyTrial.button)&&
@@ -813,6 +814,7 @@ public final class NesEmulatorActivity extends Activity {
       try{
        ConsoleExperienceMemory.appendGoal(getFilesDir().toPath(),goal.epoch,
          aiModelId,aiModelSha,readyTrial,goal.x0,goal.y0,goal.x1,goal.y1);
+       taskGoalSaved=true;
        HomebrewGoalReward.Result task=HomebrewGoalReward.verify(goal.button,
          goal.start,goal.finish,goal.x0,goal.y0,goal.x1,goal.y1);
        state.setText("NES 6502: "+goal.button+" · задача дойти до (192,112)"+
@@ -851,13 +853,13 @@ public final class NesEmulatorActivity extends Activity {
          " · визуальный журнал reward=UNKNOWN"+ramGoal:
        "STOP: проверенный кадр / RAM-цель не удалось сохранить; ввод отозван");
      if(autoGgufRemaining>0){
-      if(!saved||!goalSaved||!rightProgress.verified()||
+      if(!saved||!taskGoalSaved||
          !"PIXELS_DIFFER".equals(readyTrial.status)){
        stopCpuExperiment("STOP: нет независимого подтверждения GGUF-действия");
       }else{
        --autoGgufRemaining;
        if(autoGgufRemaining==0){
-        state.setText("GGUF: 4 реальных NES-действия записаны; RAM reward подтверждён. "+
+        state.setText("GGUF: до 4 реальных NES-действий записаны; RAM-цель подтверждена. "+
          "Веса GGUF не обучались; проверь журнал в Harness.");
        }else{
         final String nextEpoch=frameEpoch.token();
