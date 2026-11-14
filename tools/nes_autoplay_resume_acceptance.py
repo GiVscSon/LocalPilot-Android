@@ -108,5 +108,14 @@ if __name__=='__main__':
     p=argparse.ArgumentParser(description=__doc__);p.add_argument('--apk',type=Path,required=True);p.add_argument('--output',type=Path,required=True);a=p.parse_args()
     try:main(a.apk,a.output)
     except Exception as error:
-        ui.write_failure_diagnostics(a.output,error)
+        report=dict(result='FAIL',error=str(error)[:1000],releaseReady=False)
+        if ui.is_emulator():
+            ui.write_failure_diagnostics(a.output,error)
+            try:
+                import xml.etree.ElementTree as ET
+                report['emulatorUiText']=[n.get('text','')[:400] for n in ET.fromstring(ui.dump_ui()).iter('node') if n.get('text')][:35]
+                report['lastCheckpoint']=checkpoint()
+            except Exception as diagnostic:report['checkpointDiagnostic']=str(diagnostic)[:300]
+        a.output.parent.mkdir(parents=True,exist_ok=True)
+        a.output.write_text(json.dumps(report,indent=2)+'\n')
         raise

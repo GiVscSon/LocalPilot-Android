@@ -581,37 +581,62 @@ public final class NesEmulatorActivity extends Activity {
    if(progressBusy&&serial==progressGeneration)stopCpuExperiment("STOP: таймаут заморозки сохранения");
   },5000);
  }
+ private void readProgressChunks(String token,int offset,int length,StringBuilder text,
+     long serial,String epoch,long revision,java.util.function.Consumer<String> complete){
+  if(closed||!resumed||serial!=progressGeneration||!frameEpoch.current(epoch)||harness.stopRevision()!=revision)return;
+  if(offset==length){web.evaluateJavascript("window.retroReleaseSave("+org.json.JSONObject.quote(token)+")",null);complete.accept(text.toString());return;}
+  web.evaluateJavascript("window.retroReadSaveChunk("+org.json.JSONObject.quote(token)+","+offset+")",reply->{
+   if(closed||!resumed||serial!=progressGeneration||!frameEpoch.current(epoch)||harness.stopRevision()!=revision)return;
+   try{
+    Object decoded=new org.json.JSONTokener(reply==null?"null":reply).nextValue();
+    if(!(decoded instanceof String chunk)||chunk.length()!=Math.min(65536,length-offset))throw new IOException("CHUNK_LENGTH");
+    text.append(chunk);readProgressChunks(token,offset+chunk.length(),length,text,serial,epoch,revision,complete);
+   }catch(IOException|org.json.JSONException|RuntimeException invalid){stopCpuExperiment("STOP: неверный фрагмент сохранения NES");}
+  });
+ }
  private void persistProgress(Runnable afterSave){
   if(!progressIdle()||!aiFrozen||activeRomBytes==null){stopCpuExperiment("STOP: неустойчивая граница сохранения");return;}
   final String epoch=frameEpoch.token();final long revision=harness.stopRevision(),serial=++progressGeneration;
+  final String token="save-"+epoch+"-"+serial;
   final int expectedFrame=frames,expectedHash=hash;
   final byte[] rom=activeRomBytes.clone();final long actions=progressVerifiedActions;
   final String policy=studentNet==null?"":studentNet.sha256();final boolean savedDendy=dendy;
   progressBusy=true;
-  web.evaluateJavascript("window.retroSaveState()",reply->{
+  web.evaluateJavascript("window.retroPrepareSave("+org.json.JSONObject.quote(token)+")",reply->{
    if(closed||!resumed||serial!=progressGeneration||!frameEpoch.current(epoch)||harness.stopRevision()!=revision)return;
    try{
-    if(reply==null||reply.length()>4*1024*1024)throw new IOException("NES save response oversized");
-    org.json.JSONObject result=new org.json.JSONObject(reply);
-    if(result.getInt("frame")!=expectedFrame||result.getInt("hash")!=expectedHash||
-       frames!=expectedFrame||hash!=expectedHash)throw new IOException("NES changed during save");
-    NesSaveStore.Save save=new NesSaveStore.Save(rom,reply,expectedFrame,expectedHash,savedDendy,actions,policy);
-    progressIo.execute(()->{
+    org.json.JSONObject meta=new org.json.JSONObject(reply);
+    if(!meta.getBoolean("ready"))throw new IOException("NOT_QUIESCENT");
+    int length=meta.getInt("length");
+    if(length<1||length>4*1024*1024||meta.getInt("frame")!=expectedFrame||meta.getInt("hash")!=expectedHash)
+     throw new IOException("SAVE_METADATA_MISMATCH");
+    readProgressChunks(token,0,length,new StringBuilder(length),serial,epoch,revision,snapshot->{
      try{
-      if(serial!=progressGeneration)return;
-      NesSaveStore.save(progressVault(),save);
-      runOnUiThread(()->{
-       if(closed||!resumed||serial!=progressGeneration||!frameEpoch.current(epoch)||harness.stopRevision()!=revision)return;
-       progressBusy=false;
-       state.setText("Прогресс сохранён · NES кадр "+expectedFrame+" · подтверждённых действий "+actions+
-        " · авто-серий осталось "+autoplayBatchesRemaining+" · PPO-кандидат отдельно от активных весов");
-       afterSave.run();
+      org.json.JSONObject result=new org.json.JSONObject(snapshot);
+      if(result.getInt("frame")!=expectedFrame||result.getInt("hash")!=expectedHash||
+         frames!=expectedFrame||hash!=expectedHash)throw new IOException("NES changed during save");
+      NesSaveStore.Save save=new NesSaveStore.Save(rom,snapshot,expectedFrame,expectedHash,savedDendy,actions,policy);
+      progressIo.execute(()->{
+       try{
+        if(serial!=progressGeneration)return;
+        NesSaveStore.save(progressVault(),save);
+        runOnUiThread(()->{
+         if(closed||!resumed||serial!=progressGeneration||!frameEpoch.current(epoch)||harness.stopRevision()!=revision)return;
+         progressBusy=false;
+         state.setText("Прогресс сохранён · NES кадр "+expectedFrame+" · подтверждённых действий "+actions+
+          " · авто-серий осталось "+autoplayBatchesRemaining+" · PPO-кандидат отдельно от активных весов");
+         afterSave.run();
+        });
+       }catch(IOException|RuntimeException invalid){runOnUiThread(()->{
+        if(serial==progressGeneration)stopCpuExperiment("STOP: сохранение не записано: "+invalid.getClass().getSimpleName());
+       });}
       });
-     }catch(IOException|RuntimeException invalid){runOnUiThread(()->{
-      if(serial==progressGeneration)stopCpuExperiment("STOP: сохранение не записано: "+invalid.getClass().getSimpleName());
-     });}
+     }catch(IOException|org.json.JSONException|RuntimeException invalid){stopCpuExperiment("STOP: собранный снимок NES недостоверен");}
     });
-   }catch(IOException|org.json.JSONException|RuntimeException invalid){stopCpuExperiment("STOP: снимок сохранения недостоверен");}
+   }catch(IOException|org.json.JSONException|RuntimeException invalid){
+    String code=invalid instanceof IOException?invalid.getMessage():invalid.getClass().getSimpleName();
+    stopCpuExperiment("STOP: метаданные сохранения NES: "+code+" · ответ "+(reply==null?-1:reply.length())+" символов");
+   }
   });
   web.postDelayed(()->{
    if(progressBusy&&serial==progressGeneration)stopCpuExperiment("STOP: таймаут сохранения NES");
@@ -636,12 +661,31 @@ public final class NesEmulatorActivity extends Activity {
    });}
   });
  }
+ private void writeRestoreChunks(String token,String text,int offset,long serial,String epoch,
+     long revision,java.util.function.Consumer<String> complete){
+  if(closed||!resumed||serial!=progressGeneration||!frameEpoch.current(epoch)||harness.stopRevision()!=revision)return;
+  if(offset==text.length()){
+   web.evaluateJavascript("window.retroCommitRestore("+org.json.JSONObject.quote(token)+")",complete::accept);return;
+  }
+  int end=Math.min(offset+65536,text.length());
+  web.evaluateJavascript("window.retroWriteRestoreChunk("+org.json.JSONObject.quote(token)+","+offset+","+
+   org.json.JSONObject.quote(text.substring(offset,end))+")",reply->{
+   if(closed||!resumed||serial!=progressGeneration||!frameEpoch.current(epoch)||harness.stopRevision()!=revision)return;
+   if(!"true".equals(reply)){stopCpuExperiment("STOP: NES отверг фрагмент восстановления");return;}
+   writeRestoreChunks(token,text,end,serial,epoch,revision,complete);
+  });
+ }
  private void applyRestoredProgress(NesSaveStore.Save saved,String loadEpoch,boolean auto){
   final long serial=++progressGeneration;progressBusy=true;
-  final String epoch=frameEpoch.begin(); // Never restore the saved episode or any permits.
+  final String epoch=frameEpoch.begin();
   harness.reset(epoch,HarnessCoordinator.Mode.STEP_MODE);
-  web.evaluateJavascript("window.retroRestoreState(JSON.parse("+org.json.JSONObject.quote(saved.coreState())+"),"+
-   org.json.JSONObject.quote(loadEpoch)+","+org.json.JSONObject.quote(epoch)+")",reply->{
+  final long revision=harness.stopRevision();
+  final String token="restore-"+epoch+"-"+serial;
+  web.evaluateJavascript("window.retroBeginRestore("+org.json.JSONObject.quote(token)+","+
+   org.json.JSONObject.quote(loadEpoch)+","+org.json.JSONObject.quote(epoch)+","+saved.coreState().length()+")",begin->{
+   if(closed||!resumed||serial!=progressGeneration||!frameEpoch.current(epoch)||harness.stopRevision()!=revision)return;
+   if(!"true".equals(begin)){stopCpuExperiment("STOP: NES не подготовил восстановление");return;}
+   writeRestoreChunks(token,saved.coreState(),0,serial,epoch,revision,reply->{
    if(closed||!resumed||serial!=progressGeneration||!frameEpoch.current(epoch))return;
    try{
     org.json.JSONObject restored=new org.json.JSONObject(reply);
@@ -658,12 +702,12 @@ public final class NesEmulatorActivity extends Activity {
    }catch(IOException|org.json.JSONException|RuntimeException invalid){
     progressBusy=false;stopCpuExperiment("STOP: восстановление NES не подтверждено");
    }
+   });
   });
   web.postDelayed(()->{
    if(progressBusy&&serial==progressGeneration)stopCpuExperiment("STOP: таймаут восстановления NES");
   },5000);
  }
-
  private void publishEvidence(){
   if(resumed&&demoButton!=null)
    GameLabEvidenceProvider.nes(dendy,frames,hash,touches.get(),demoButton,aButton,bButton);
