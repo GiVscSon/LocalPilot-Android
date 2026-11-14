@@ -149,8 +149,8 @@ public final class HarnessDashboardActivity extends Activity {
   HarnessModelBinding.Assignment binding=HarnessModelBinding.read(this);
   row(model,bound==null?
     (binding!=null&&binding.id().startsWith("student:")?
-      "Экспериментальная student-сеть: "+binding.id()+" · только homebrew":
-      "Для NES не назначена доступная GGUF или student-сеть.") :
+      "Архивная привязка Student 7→12→6: "+binding.id()+" · НЕ участвует в PPO. Отвязать в разделе «Модели»":
+      "Для NES не назначена GGUF. Активная игровая PPO-политика выбирается отдельно в NES.") :
     "Назначена: "+bound.label+" · "+bound.modelSha.substring(0,12));
   try{
    HarnessModelExecutionLog.Summary executions=HarnessModelExecutionLog.summary(getFilesDir().toPath());
@@ -217,8 +217,11 @@ public final class HarnessDashboardActivity extends Activity {
   HarnessModelBinding.Assignment stored=HarnessModelBinding.read(this);
   ModelLabStore.Entry assigned=HarnessModelBinding.resolve(this,list);
   if(stored!=null&&assigned==null)
-   row(intro,"STOP: назначенная модель отсутствует или её SHA изменился.");
-  if(list.isEmpty())row(intro,"Нет GGUF. Можно загрузить GGUF или использовать обученный CPU student.");
+   row(intro,stored.id().startsWith("student:")?
+     "АРХИВ: сохранилась привязка 7→12→6; она не выбирает PPO StudentPolicyNet. "+
+       "Отвязка не удаляет веса и игровые эпизоды.":
+     "STOP: назначенная GGUF отсутствует или её SHA изменился.");
+  if(list.isEmpty())row(intro,"Нет GGUF. NES StudentPolicyNet/PPO работает в своём игровом контуре.");
   for(ModelLabStore.Entry e:list){
    LinearLayout model=card(e.label,e.vision()?"Мультимодальная · требуется совместимый mmproj":
      "Текстовая · без зрения кадра NES");
