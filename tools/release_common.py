@@ -16,8 +16,18 @@ def configuration(root):
             raise ValueError('Expected one literal ' + name + ' in app/build.gradle')
         return matches[0]
     config = {name: int(one(name, r'(\d+)\b')) for name in ('versionCode', 'compileSdk', 'minSdk', 'targetSdk')}
-    for name in ('versionName', 'applicationId', 'applicationIdSuffix', 'versionNameSuffix'):
+    for name in ('versionName', 'applicationId'):
         config[name] = one(name, r"['\"]([^'\"]+)['\"]")
+    # Production releases have no suffix. Development suffixes, when present,
+    # must remain unambiguous literals rather than guessed Gradle expressions.
+    for name in ('applicationIdSuffix', 'versionNameSuffix'):
+        matches = re.findall(r'\b' + name + r'\s+([^\s;{}]+)', source)
+        if not matches:
+            config[name] = ''
+        elif len(matches) == 1 and re.fullmatch(r"['\"][A-Za-z0-9._-]+['\"]", matches[0]):
+            config[name] = matches[0][1:-1]
+        else:
+            raise ValueError('Expected zero or one literal ' + name + ' in app/build.gradle')
     config['package'] = config['applicationId'] + config['applicationIdSuffix']
     config['version'] = config['versionName'] + config['versionNameSuffix']
     if config['versionCode'] <= 0 or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._-]*', config['version']):
