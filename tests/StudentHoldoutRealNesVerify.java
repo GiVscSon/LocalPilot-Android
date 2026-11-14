@@ -79,6 +79,7 @@ public final class StudentHoldoutRealNesVerify {
    if(!trainEpoch.equals(fields[1])||!trainPolicy.equals(fields[3]))
     throw new IllegalArgumentException("Mixed training epoch/weights");
    trainingX.add(Integer.parseInt(fields[9]));
+   trainingX.add(Integer.parseInt(fields[11])); // final next-state is also training data
   }
   var steps=read(holdout);
   for(var step:steps)
@@ -122,6 +123,8 @@ public final class StudentHoldoutRealNesVerify {
     "  \"candidateWins\":"+verdict.candidateWins()+",\n"+
     "  \"activeMeanReturn\":"+verdict.activeMeanReturn()+",\n"+
     "  \"candidateMeanReturn\":"+verdict.candidateMeanReturn()+",\n"+
+    "  \"activeMedianReturn\":"+verdict.activeMedianReturn()+",\n"+
+    "  \"candidateMedianReturn\":"+verdict.candidateMedianReturn()+",\n"+
     "  \"result\":\""+verdict.reason()+"\",\n"+
     "  \"improvedOnCiHomebrew\":"+verdict.accepted()+",\n"+
     "  \"physicalAndroidVerified\":false,\n"+

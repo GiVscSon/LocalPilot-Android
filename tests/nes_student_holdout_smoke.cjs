@@ -32,18 +32,23 @@ function snippet(name){
  return html.slice(start,end+3);
 }
 const trainX=new Set(fs.readFileSync(trainingFile,"utf8").trim().split(/\r?\n/)
-  .map(l=>{const f=l.split("\t");assert.equal(f.length,14);return Number(f[9]);}));
+  .flatMap(l=>{const f=l.split("\t");assert.equal(f.length,14);return [Number(f[9]),Number(f[11])];}));
 const buttons=["LEFT","RIGHT","UP","DOWN","A","B"];
-// Each prefix performs 3,2,1 or 0 complete button steps plus a real
-// 8-frame user-held warmup. The 6502 CPU is actually executed; no RAM edit.
-const scenarios=[
- {id:"left56",dir:"LEFT",full:3},
- {id:"left40",dir:"LEFT",full:2},
- {id:"left24",dir:"LEFT",full:1},
- {id:"right24",dir:"RIGHT",full:1},
- {id:"right40",dir:"RIGHT",full:2},
- {id:"right56",dir:"RIGHT",full:3}
-];
+// Each prefix performs complete button steps plus a real 4..15-frame
+// user-held warmup. The 6502 CPU is actually executed; no RAM edit.
+const scenarios=[];
+// Declared from the task workspace before either model is run. Each starting
+// state comes from real button-driven warmup, never a write into CPU RAM.
+for(let distance=4;distance<=60&&scenarios.length<20;distance++){
+ const tail=distance%16;if(tail<4)continue;
+ for(const dir of ["LEFT","RIGHT"]){
+  const x=128+(dir==="LEFT"?-distance:distance);
+  if(trainX.has(x))continue;
+  scenarios.push({id:"ram-x"+x,dir,full:Math.floor(distance/16),tail});
+  if(scenarios.length===20)break;
+ }
+}
+assert.equal(scenarios.length,20,"20 independently reset paired states required");
 function runScenario(scenario,arm,weights){
  const events=[];
  const env={window:{GameLabBridge:{
@@ -76,12 +81,12 @@ function runScenario(scenario,arm,weights){
  for(let i=0;i<scenario.full;i++)
   assert.equal(authorizedStep(scenario.dir),true,
     "real NES warmup by actual bounded button");
- // The final 8-frame prelude is a physically executed MANUAL button hold;
+ // The final short prelude is an actually emulated MANUAL button hold;
  // it is not training or a Student action and never enters the scoring set.
  const code=jsnes.Controller[env.keyMap[scenario.dir]];
  assert.ok(Number.isInteger(code),"real warmup button");
  assert.equal(env.gamepadLatch.change(scenario.dir,code,true,env.frames),true);
- for(let i=0;i<8;i++){machine.frame();env.gamepadLatch.flush(env.frames);}
+ for(let i=0;i<scenario.tail;i++){machine.frame();env.gamepadLatch.flush(env.frames);}
  assert.equal(env.gamepadLatch.change(scenario.dir,code,false,env.frames),true);
  env.gamepadLatch.flush(env.frames);
  assert.equal(env.gamepadLatch.down.size,0,"no warmup input left held");
@@ -141,7 +146,7 @@ for(const scenario of scenarios){
    "independent emulator resets must start at identical emulated frame");
  lines.push(...baseline.rows,...proposed.rows);pairs++;
 }
-assert.ok(pairs>=5,"insufficient independently reset holdout scenarios");
+assert.ok(pairs>=20,"insufficient independently reset holdout scenarios");
 fs.mkdirSync(path.dirname(output),{recursive:true});
 fs.writeFileSync(output,lines.join("\n")+"\n");
 console.log("NES_REAL_STUDENT_HOLDOUT_CORE_PASS scenarios="+pairs+
