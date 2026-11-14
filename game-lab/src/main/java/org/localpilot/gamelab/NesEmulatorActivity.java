@@ -632,6 +632,7 @@ public final class NesEmulatorActivity extends Activity {
         runOnUiThread(()->{
          if(closed||!resumed||serial!=progressGeneration||!frameEpoch.current(epoch)||harness.stopRevision()!=revision)return;
          progressBusy=false;
+         if(shareTrial!=null&&autoplayBatchesRemaining==0)shareTrial.setEnabled(readyTrial!=null);
          showState("Прогресс сохранён · NES кадр "+expectedFrame+" · подтверждённых действий "+actions+
           " · авто-серий осталось "+autoplayBatchesRemaining+" · PPO-кандидат отдельно от активных весов");
          afterSave.run();
@@ -778,6 +779,7 @@ public final class NesEmulatorActivity extends Activity {
      if(aiObserveButton!=null)aiObserveButton.setEnabled(ready);
      if(studentStepButton!=null)studentStepButton.setEnabled(ready);
      if(studentBatchButton!=null)studentBatchButton.setEnabled(ready);
+     if(shareTrial!=null)shareTrial.setEnabled(readyTrial!=null);
      if(cpuBatchButton!=null)cpuBatchButton.setEnabled(ready&&!aiFrozen);
      if(cpuAgentButton!=null)cpuAgentButton.setEnabled(ready&&!aiFrozen);
      if(state!=null)showState(reason+" · освобождение JS-ввода подтверждено");
@@ -999,7 +1001,7 @@ public final class NesEmulatorActivity extends Activity {
      current.button,current.frame,count,current.xBefore,current.xAfter);
    readyTrial=NesTrial.create(homebrewRom?"HOMEBREW":"USER_ROM",
      current.button,current.frame,count,current.hash,pixelHash);
-   if(shareTrial!=null)shareTrial.setEnabled(true);
+   if(shareTrial!=null)shareTrial.setEnabled(autoplayBatchesRemaining==0&&studentRemaining==0&&autoGgufRemaining==0);
    showState(readyTrial.summary()+" · можно передать в ModelLab");
     if(aiRunning){
      aiRunning=false;
