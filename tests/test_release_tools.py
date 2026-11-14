@@ -95,6 +95,29 @@ class ReleaseToolsTest(unittest.TestCase):
         with patch.object(common.subprocess, 'check_output', side_effect=[outputs[0], subprocess.CalledProcessError(1, 'apksigner')]):
             with self.assertRaises(subprocess.CalledProcessError): common.verify_apk(self.apk(), config, '/fake-sdk')
 
+    def test_tracked_build_inputs_are_reproducibly_packaged(self):
+        needed = ['gradle/wrapper/gradle-wrapper.jar', 'ci/unified081_overlay.zip',
+                  'app/src/main/assets/localpilot-game-script.lps']
+        for name in needed:
+            path = self.root / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(b'fixture for reviewed build input')
+        subprocess.run(['git', '-C', self.root, 'add', *needed], check=True)
+        names = {str(p) for _, p in pack.source_files(self.root)}
+        self.assertTrue(set(needed) <= names)
+        (self.root / 'private.zip').write_bytes(b'private archive')
+        self.assertNotIn('private.zip', {str(p) for _, p in pack.source_files(self.root)})
+
+    def test_partial_unified_tree_is_rejected_before_publishing(self):
+        manifest = self.root / 'app/src/main/AndroidManifest.xml'
+        manifest.parent.mkdir(parents=True, exist_ok=True)
+        manifest.write_text('<manifest />')
+        output = self.root / 'release'
+        with patch.object(pack, 'verify_apk', return_value={}):
+            with self.assertRaisesRegex(ValueError, 'incomplete unified source release'):
+                pack.package(self.root, self.apk(), output)
+        self.assertFalse(output.exists() and list(output.iterdir()))
+
     def test_private_files_excluded_and_local_source_included(self):
         for name in ['fresh.java', 'private.jks', 'private.mp4', '.env', 'localpilot-experience-v1.log', 'weights.npz']:
             (self.root / name).write_text('fixture')
