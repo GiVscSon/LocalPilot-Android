@@ -478,7 +478,9 @@ public final class ModelLabActivity extends Activity {
     return;
    }
    if(selection==null||engine.busy()){
-    nesStatus.setText("Выбери загруженную GGUF-модель; движок должен быть свободен");return;
+    nesStatus.setText("STOP: GGUF-модель не готова или движок занят");
+    if(automatic)cancelConsoleAgent(); // Return unused ticket to the only NES owner.
+    return;
    }
    final int observedFrame=consoleAgentFrame,observedHash=consoleAgentHash;
    final byte[] pixels=rgb==null?null:rgb.clone();
