@@ -304,6 +304,14 @@ def cmd_install(args: argparse.Namespace) -> None:
     print("A signature mismatch is not automatically repaired by uninstalling the app.")
 
 
+def cmd_field_audit(args: argparse.Namespace) -> None:
+    if __package__:
+        from .field_audit import compare
+    else:
+        from field_audit import compare
+    print(json.dumps(compare(args.before, args.after), ensure_ascii=False, indent=2))
+
+
 def cmd_unified_pipeline(args: argparse.Namespace) -> None:
     """Run all selected offline scripts with NO ADB or real game gestures."""
     path = ROOT / "scripts" / "unified_pipeline.py"
@@ -339,6 +347,10 @@ def parser() -> argparse.ArgumentParser:
     stops = sub.add_parser("stop-report", help="Classify STOP/PAUSE/RECOVER from saved script log")
     stops.add_argument("--log", required=True)
     stops.set_defaults(func=cmd_stop_report)
+    field = sub.add_parser("field-audit", help="Compare two local journal exports without ADB")
+    field.add_argument("--before", type=Path, required=True)
+    field.add_argument("--after", type=Path, required=True)
+    field.set_defaults(func=cmd_field_audit)
     unified = sub.add_parser("unified", help="Run scripted contract tests, self-play, model gating and single-APK verification")
     unified.add_argument("stage", choices=("verify", "event-audit", "selfplay", "apk", "all"), nargs="?", default="selfplay")
     unified.add_argument("--output", default="build/reports/unified-script-engine")
