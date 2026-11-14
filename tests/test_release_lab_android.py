@@ -43,6 +43,26 @@ class ReleaseLabChecks(unittest.TestCase):
             self.assertIn(fragment,cli)
         self.assertNotIn("\\",cli)
 
+    def test_release_lab_artifact_uses_repository_root_and_preflight(self):
+        """The Actions ZIP stores BOTH repository-relative files, not a flat APK.
+
+        Downloading to app/build/outputs/apk/debug/ nests app/build inside it,
+        so Android boots but ReleaseLab finds no APK. Reject that workflow.
+        """
+        wf=(SCRIPT.parents[1]/".github/workflows/localpilot-release-lab.yml").read_text()
+        section=wf.split("  isolated-release-lab:",1)[1]
+        self.assertIn("name: LocalPilot-ReleaseLab-X86-TEST-ONLY-${{ github.sha }}", section)
+        self.assertIn("path: .",section)
+        self.assertNotIn("path: app/build/outputs/apk/debug/",section)
+        self.assertIn("Validate downloaded APK before paying for Android emulator startup",section)
+        self.assertIn("test -s \"$APK\"",section)
+        self.assertIn("test -s build/release-lab-elf.json",section)
+        self.assertIn("unzip -t \"$APK\"",section)
+        self.assertIn("lib/x86_64/liblocalpilot_embedded.so",section)
+        self.assertLess(
+            section.index("Validate downloaded APK before paying for Android emulator startup"),
+            section.index("reactivecircus/android-emulator-runner@v2"))
+
     def test_verified_source_and_abi(self):
         with tempfile.TemporaryDirectory() as tmp:
             result=lab.read_source(apk(tmp))
