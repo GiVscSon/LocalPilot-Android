@@ -126,12 +126,12 @@ def run(apk, output):
     source_sha=subprocess.run(['git','rev-parse','HEAD'],check=True,capture_output=True,text=True).stdout.strip()
     inspect_apk(apk,expected_source_sha=source_sha)
     process=ui.one_process()
-    ui.tap_harness_and_verify(); ui.tap_text('Открыть ModelLab');ui.wait_activity(ui.MODEL)
-    ui.tap_text('Вернуться к консольным эмуляторам');ui.wait_activity(ui.GAMELAB)
-    ui.tap_text('Играть в NES / Денди');ui.wait_activity(ui.NES)
-    tap_scroll_control('Запустить тестовую NES-игру')
+    # Navigate through the actual ONE-package Harness control, not an unexported
+    # activity launched directly by adb. The button must start its own ROM.
+    ui.tap_harness_and_verify()
+    ui.tap_text('Играть и учиться: 16 NES-ходов Student')
+    ui.wait_activity(ui.NES)
     time.sleep(1)
-    tap_scroll_control('StudentPolicy · 16 реальных NES-шагов')
     manifest_path=VAULT+'candidates/student-homebrew-v1.manifest.json'
     deadline=time.monotonic()+45
     while True:
@@ -144,6 +144,19 @@ def run(apk, output):
     candidate=private_file(VAULT+'candidates/student-homebrew-v1.weights.bin')
     before,after=verified_manifest(manifest,active,candidate)
     rollout=verify_journal(private_file('files/console-ai-homebrew-goal-v1.log'),manifest)
+    # The on-policy samples must be durable after the JNI/JSNES episode and
+    # contain complete obs64 and old-log probabilities, not only screen hashes.
+    replay_dir='files/localpilot_vault/episodes/onpolicy-v1'
+    listing=ui.adb('shell','run-as',ui.PACKAGE,'ls',replay_dir).splitlines()
+    entries=[name.strip() for name in listing if name.strip()]
+    if len(entries)!=1 or not re.fullmatch(r'[0-9a-f]{64}\.lpr',entries[0]):
+        raise RuntimeError('Expected one immutable on-policy NES replay, got '+str(entries[:5]))
+    replay=private_file(replay_dir+'/'+entries[0],65536)
+    filename_hash=hashlib.sha256(replay).hexdigest()
+    if filename_hash+'.lpr'!=entries[0] or len(replay)<100 or len(replay)>65536 or replay[:4]!=b'LPR1':
+        raise RuntimeError('PPO replay binary magic/sha/bounds mismatch')
+    if int.from_bytes(replay[4:8],'big')!=16 or hashlib.sha256(replay[:-32]).digest()!=replay[-32:]:
+        raise RuntimeError('PPO replay samples or payload hash mismatch')
     ui.tap_text('STOP',swipes=0)
     if ui.one_process()!=process:raise RuntimeError('NES Student changed Android process')
     if hashlib.sha256(private_file(VAULT+'active/student-homebrew-v1.weights.bin')).hexdigest()!=before:
@@ -152,7 +165,8 @@ def run(apk, output):
         api=api,deviceProfile=os.environ.get('LOCALPILOT_EXPECTED_PROFILE','UNSPECIFIED'),
         screenSize=ui.screen_size(),apkSha256=apk_sha,sourceSha=source_sha,
         policyBeforeSha256=before,policyAfterSha256=after,romSha256=manifest['romSha256'],
-        rollout=rollout,changedParameters=manifest['changedParameters'],
+        rollout=rollout,replaySha256=filename_hash,replayBytes=len(replay),
+        replaySamples=16,changedParameters=manifest['changedParameters'],
         runtime='PRODUCTION_ANDROID_WEBVIEW_HARNESS_PPO',singlePackage=True,
         evaluation='NOT_RUN',promotion=manifest['promotion'],
         physicalDevice=False,releaseReady=False)
