@@ -15,6 +15,8 @@ import android.widget.TextView;
 import org.localpilot.shared.ConsoleExperienceMemory;
 import org.localpilot.shared.StudentPolicyNet;
 import org.localpilot.shared.VerifiedReplayFilter;
+import org.localpilot.shared.VerifiedPpoReplayStore;
+import org.localpilot.shared.HarnessDemoWorkflow;
 import org.localpilot.shared.HarnessCoordinator;
 import org.localpilot.shared.ConsoleAgentContract;
 import java.io.IOException;
@@ -143,7 +145,7 @@ public final class HarnessDashboardActivity extends Activity {
   row(system,"Сеанс: "+(live.epoch().isEmpty()?"ROM не запущена":live.epoch()));
   row(system,"Режим: "+live.mode());
   row(system,"Владелец: "+live.owner());
-  row(system,"Ожидает модель: "+live.waiting()+
+  row(system,"Ввод занят/зарезервирован: "+live.waiting()+
     " · действие выполняется: "+live.actionInFlight());
   row(system,"Последний STOP: "+live.lastStopReason()+
     " · ревизия "+live.stopRevision());
@@ -156,6 +158,16 @@ public final class HarnessDashboardActivity extends Activity {
       "Экспериментальная student-сеть: "+binding.id()+" · только homebrew":
       "Для NES не назначена доступная GGUF или student-сеть.") :
     "Назначена: "+bound.label+" · "+bound.modelSha.substring(0,12));
+  try{
+   HarnessModelExecutionLog.Summary executions=HarnessModelExecutionLog.summary(getFilesDir().toPath());
+   row(model,"Реальных вызовов GGUF: "+executions.inferenceCalls()+
+     " · строгих ответов "+executions.validReplies()+
+     " · отказов "+executions.rejectedReplies());
+   if(executions.inferenceCalls()>0)row(model,
+     "Последний инференс: "+executions.lastModelId()+" · "+
+     executions.lastLatencyMs()+" мс · GPU-слоёв "+executions.lastGpuLayers());
+  }catch(IOException damaged){row(model,
+    "STOP: журнал вызовов моделей повреждён, MODEL_USED не подтверждён");}
   row(model,"Бэкенд: "+(BuildConfig.VULKAN_COMPILED?
     "Vulkan собран, работа GPU ещё должна быть доказана":"CPU · Vulkan не собран в этом APK"));
   if(bound!=null){
@@ -177,6 +189,10 @@ public final class HarnessDashboardActivity extends Activity {
   experience.addView(button("Открыть эпизоды",()->{tab="Эпизоды";render();}));
   LinearLayout launch=card("Играть и исследовать","ROM запускается в существующем GameLab.");
   launch.addView(button("Открыть NES / Денди",this::openNES));
+  launch.addView(button("▶ Играть: назначенная GGUF, до 4 проверенных NES-ходов",
+    ()->startTrustedNesWorkflow(HarnessDemoWorkflow.GGUF_PLAY_4)));
+  launch.addView(button("▶ Играть и учиться: 16 NES-ходов Student → PPO-кандидат",
+    ()->startTrustedNesWorkflow(HarnessDemoWorkflow.STUDENT_TRAIN_16)));
   launch.addView(button("Открыть ModelLab",this::openModelLab));
  }
  private ModelLabStore.Entry boundModel(){
@@ -228,6 +244,10 @@ public final class HarnessDashboardActivity extends Activity {
   LinearLayout nes=card("NES / Денди · JSNES",
     "Настоящее ядро. Homebrew: безопасный один ход GGUF, пошаговый режим, свежий кадр.");
   nes.addView(button("Библиотека ROM / NES",this::openNES));
+  nes.addView(button("▶ 4 настоящих GGUF-действия с визуальной и RAM-проверкой",
+    ()->startTrustedNesWorkflow(HarnessDemoWorkflow.GGUF_PLAY_4)));
+  nes.addView(button("▶ 16 StudentPolicy-действий + запись replay + PPO update",
+    ()->startTrustedNesWorkflow(HarnessDemoWorkflow.STUDENT_TRAIN_16)));
   nes.addView(button("Выбор и проверка GGUF",this::openModelLab));
   card("Game Boy / SNES","НЕ ПОДКЛЮЧЕНО. Не выдаём список форматов за работающий эмулятор.");
   card("Другие консоли","Новое ядро появится только после интеграции ROM, кадров, ввода и тестов.");
@@ -291,6 +311,17 @@ public final class HarnessDashboardActivity extends Activity {
    row(train,"STOP: журнал целевой награды повреждён");
   }
   row(train,"Остальные ROM: награда UNKNOWN. PPO / DQN для чужих игр не подключены.");
+  try{
+   VerifiedPpoReplayStore.Summary replay=VerifiedPpoReplayStore.summary(
+     new java.io.File(getFilesDir(),"localpilot_vault").toPath());
+   row(train,"Записано настоящих on-policy NES-серий: "+replay.batches()+
+     " · переходов "+replay.steps()+" · сумма ROM-RAM наград "+replay.rewardSum());
+   if(!replay.latestSha256().isEmpty())row(train,
+     "Контрольная сумма локального replay: "+replay.latestSha256().substring(0,16));
+  }catch(IOException badReplay){row(train,
+   "STOP: replay-журнал повреждён / переполнен; обучение заблокировано");}
+  train.addView(button("▶ NES · собрать 16 проверенных шагов и обновить PPO-кандидат",
+    ()->startTrustedNesWorkflow(HarnessDemoWorkflow.STUDENT_TRAIN_16)));
   row(train,HomebrewStudentStore.status(this));
   row(train,"Сеть 7→12→6 имитирует направление к цели по проверенной памяти ROM. "+
     "Holdout проверяет ошибку классификации на другой ROM-сессии; это не приёмка устройства.");
@@ -389,6 +420,23 @@ public final class HarnessDashboardActivity extends Activity {
    }
    render();
   }));
+ }
+ private void startTrustedNesWorkflow(String mode){
+  if(!HarnessDemoWorkflow.supported(mode)||!BuildConfig.UNIFIED_MODELLAB){
+   info("STOP: этот режим не поддерживается текущим единым APK");return;
+  }
+  HarnessCoordinator.Snapshot running=HarnessCoordinator.nes().snapshot();
+  if(running.waiting()||running.actionInFlight()){
+   info("STOP: сначала заверши текущий NES-эпизод или останови старого агента");return;
+  }
+  if(HarnessDemoWorkflow.GGUF_PLAY_4.equals(mode)&&boundModel()==null){
+   info("STOP: назначь GGUF в Модели и проверь её SHA, затем запускай");return;
+  }
+  Intent game=new Intent(this,org.localpilot.gamelab.NesEmulatorActivity.class)
+    .putExtra(HarnessDemoWorkflow.EXTRA_MODE,mode)
+    .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP|Intent.FLAG_ACTIVITY_SINGLE_TOP);
+  try{startActivity(game);}
+  catch(RuntimeException unavailable){info("STOP: встроенное ядро NES недоступно");}
  }
  private void openNES(){
   startActivity(new Intent(this,org.localpilot.gamelab.RetroLibraryActivity.class));
