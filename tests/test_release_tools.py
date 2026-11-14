@@ -53,6 +53,21 @@ class ReleaseToolsTest(unittest.TestCase):
         self.assertNotEqual('org.localpilot.android.dev', config['package'])
         self.assertEqual('0.8.2-dev-install1081', config['version'])
 
+    def test_no_suffix_production_variant_and_conflicts(self):
+        path = self.root / 'app/build.gradle'
+        source = path.read_text()
+        # Only the unqualified debug defaults count; dynamic build-type
+        # assignment is not the default release identity.
+        source = source.replace("    applicationIdSuffix '.dev.install1081'\n", "")
+        source = source.replace("    versionNameSuffix '-dev-install1081'\n", "")
+        path.write_text(source)
+        config = common.configuration(self.root)
+        self.assertEqual(('org.localpilot.android', '0.8.2'),
+                         (config['package'], config['version']))
+        path.write_text(source + "\napplicationIdSuffix '.first'\napplicationIdSuffix '.second'\n")
+        with self.assertRaises(ValueError):
+            common.configuration(self.root)
+
     def test_missing_or_ambiguous_version_fails(self):
         path = self.root / 'app/build.gradle'
         path.write_text(path.read_text() + "\nversionCode 44\n")
@@ -113,7 +128,8 @@ class ReleaseToolsTest(unittest.TestCase):
         output = self.root / 'release'
         with patch.object(pack, 'verify_apk', return_value={}):
             with self.assertRaises(ValueError): pack.package(self.root, self.apk(), output)
-        self.assertEqual([], list(output.iterdir()))
+        self.assertFalse(output.exists() and list(output.iterdir()),
+                         'No incomplete release directory')
 
 
 if __name__ == '__main__': unittest.main()
