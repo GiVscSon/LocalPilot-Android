@@ -121,12 +121,9 @@ jobs:
           disable-animations: true
           emulator-boot-timeout: 600
           emulator-options: -no-window -gpu software -no-snapshot -noaudio -no-boot-anim -camera-back none
-          script: |
-            python3 tools/release_lab_android.py check \
-              --serial emulator-5554 --api ${{ matrix.api }} \
-              --apk app/build/outputs/apk/debug/app-debug.apk \
-              --expected-source "$GITHUB_SHA" \
-              --output release-lab-evidence/API${{ matrix.api }}-${{ matrix.profile }}
+          # android-emulator-runner uses /bin/sh -c PER SCRIPT LINE; do not split
+          # arguments with backslashes across physical YAML lines.
+          script: python3 tools/release_lab_android.py check --serial emulator-5554 --api ${{ matrix.api }} --apk app/build/outputs/apk/debug/app-debug.apk --expected-source "$GITHUB_SHA" --output release-lab-evidence/API${{ matrix.api }}-${{ matrix.profile }}
       - name: Retain emulator screenshots, UI tree, crash log, source/signature and result
         if: always()
         uses: actions/upload-artifact@v4
