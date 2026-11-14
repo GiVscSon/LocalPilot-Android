@@ -51,6 +51,23 @@ class CanonicalSourceTests(unittest.TestCase):
                         '-c','user.email=test@example.invalid','commit','-qm','secret'],check=True)
         with self.assertRaises(ValueError): produce(self.repo,self.root/'a.zip')
 
+    def test_source_example_is_not_a_secret(self):
+        (self.repo/'README.md').write_text('Example: -----BEGIN PRIVATE KEY----- (not a key)')
+        subprocess.run(['git','-C',str(self.repo),'add','.'],check=True)
+        subprocess.run(['git','-C',str(self.repo),'-c','user.name=Test',
+                        '-c','user.email=test@example.invalid','commit','-qm','example'],check=True)
+        output=self.root/'a.zip'
+        produce(self.repo,output)
+        self.assertTrue(audit(output,repository=self.repo)['gitTreeMatches'])
+
+    def test_real_private_key_block_rejected(self):
+        (self.repo/'README.md').write_text(
+            '-----BEGIN PRIVATE KEY-----'+'\\n'+'A'*120+'\\n-----END PRIVATE KEY-----')
+        subprocess.run(['git','-C',str(self.repo),'add','.'],check=True)
+        subprocess.run(['git','-C',str(self.repo),'-c','user.name=Test',
+                        '-c','user.email=test@example.invalid','commit','-qm','key'],check=True)
+        with self.assertRaises(ValueError): produce(self.repo,self.root/'a.zip')
+
     def test_corrupt_gradle_version_rejected(self):
         (self.repo/'app/build.gradle').write_text("versionName '0.8.2'\nversionName 'other'\nversionCode 54")
         subprocess.run(['git','-C',str(self.repo),'add','.'],check=True)
