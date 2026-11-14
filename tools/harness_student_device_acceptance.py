@@ -149,7 +149,7 @@ def run(apk, output):
     replay_dir='files/localpilot_vault/episodes/onpolicy-v1'
     listing=ui.adb('shell','run-as',ui.PACKAGE,'ls',replay_dir).splitlines()
     entries=[name.strip() for name in listing if name.strip()]
-    if len(entries)!=1 or not re.fullmatch(r'[0-9a-f]{64}\\.lpr',entries[0]):
+    if len(entries)!=1 or not re.fullmatch(r'[0-9a-f]{64}\.lpr',entries[0]):
         raise RuntimeError('Expected one immutable on-policy NES replay, got '+str(entries[:5]))
     replay=private_file(replay_dir+'/'+entries[0],65536)
     filename_hash=hashlib.sha256(replay).hexdigest()
