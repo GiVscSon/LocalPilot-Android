@@ -17,6 +17,7 @@ import org.localpilot.shared.StudentPolicyNet;
 import org.localpilot.shared.VerifiedReplayFilter;
 import org.localpilot.shared.VerifiedPpoReplayStore;
 import org.localpilot.shared.HarnessDemoWorkflow;
+import org.localpilot.shared.NesSaveStore;
 import org.localpilot.shared.HarnessCoordinator;
 import org.localpilot.shared.ConsoleAgentContract;
 import java.io.IOException;
@@ -193,6 +194,15 @@ public final class HarnessDashboardActivity extends Activity {
     ()->startTrustedNesWorkflow(HarnessDemoWorkflow.GGUF_PLAY_4)));
   launch.addView(button("▶ Играть и учиться: 16 NES-ходов Student → PPO-кандидат",
     ()->startTrustedNesWorkflow(HarnessDemoWorkflow.STUDENT_TRAIN_16)));
+  launch.addView(button("▶ Автоигра Student · 256 ходов с сохранением",
+    ()->startTrustedNesWorkflow(HarnessDemoWorkflow.STUDENT_AUTOPLAY)));
+  launch.addView(button("▶ Продолжить сохранённую автоигру",
+    ()->startTrustedNesWorkflow(HarnessDemoWorkflow.RESUME_AUTOPLAY)));
+  try{
+   NesSaveStore.Save saved=NesSaveStore.load(new java.io.File(getFilesDir(),"localpilot_vault").toPath());
+   row(launch,saved==null?"Сохранённой игры пока нет":
+     "Сохранено: NES кадр "+saved.frame()+" · проверенных действий "+saved.verifiedActions()+" · продолжение после перезапуска доступно");
+  }catch(IOException invalid){row(launch,"STOP: сохранение повреждено; файл сохранён для диагностики");}
   launch.addView(button("Открыть ModelLab",this::openModelLab));
  }
  private ModelLabStore.Entry boundModel(){

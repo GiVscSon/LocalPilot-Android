@@ -11,6 +11,8 @@ on:
       - 'tests/HarnessCoordinator*.java'
       - 'tests/nes_controller_framehold.cjs'
       - 'tests/nes_step_mode_smoke.cjs'
+      - 'tests/nes_save_resume_smoke.cjs'
+      - 'shared/src/main/java/org/localpilot/shared/NesSaveStore.java'
       - 'tests/ExportHomebrewNes.java'
       - '.github/workflows/nes-runtime.yml'
       - 'model-lab/**'
@@ -51,6 +53,8 @@ on:
       - 'tests/HarnessCoordinator*.java'
       - 'tests/nes_controller_framehold.cjs'
       - 'tests/nes_step_mode_smoke.cjs'
+      - 'tests/nes_save_resume_smoke.cjs'
+      - 'shared/src/main/java/org/localpilot/shared/NesSaveStore.java'
       - 'tests/ExportHomebrewNes.java'
       - '.github/workflows/nes-runtime.yml'
       - 'model-lab/**'
@@ -106,6 +110,10 @@ jobs:
           node tests/nes_step_mode_smoke.cjs \
             build/test-core/package/dist/jsnes.min.js \
             build/nes-runtime/demo.nes
+      - name: Persist and resume genuine JSNES CPU and PPU with fresh input authority
+        run: |
+          node tests/nes_save_resume_smoke.cjs build/test-core/package/dist/jsnes.min.js build/nes-runtime/demo.nes
+          java tests/NesSaveStoreVerify.java
       - name: Verify homebrew ROM RAM goal semantics (synthetic Java contract)
         run: |
           set -euo pipefail

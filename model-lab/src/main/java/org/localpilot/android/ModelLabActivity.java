@@ -154,6 +154,14 @@ public final class ModelLabActivity extends Activity {
      nesStatus.setText("STOP: невозможно открыть NES для обучения");
     }
    });
+   button(col,"▶ NES · автоигра с сохранением",()->{
+    startActivity(new Intent().setClassName(getPackageName(),"org.localpilot.gamelab.NesEmulatorActivity")
+      .putExtra(HarnessDemoWorkflow.EXTRA_MODE,HarnessDemoWorkflow.STUDENT_AUTOPLAY));
+   });
+   button(col,"▶ NES · продолжить сохранённую автоигру",()->{
+    startActivity(new Intent().setClassName(getPackageName(),"org.localpilot.gamelab.NesEmulatorActivity")
+      .putExtra(HarnessDemoWorkflow.EXTRA_MODE,HarnessDemoWorkflow.RESUME_AUTOPLAY));
+   });
    line(col,"Реальные записанные шаги: "+safeNesLedgerSummary());
   }
   button(col,"Объяснить последний NES-эпизод выбранной нейросетью",()->{

@@ -40,6 +40,7 @@ import org.localpilot.shared.HomebrewGoalReward;
 import org.localpilot.shared.ConsoleAgentContract;
 import org.localpilot.shared.HarnessCoordinator;
 import org.localpilot.shared.HarnessDemoWorkflow;
+import org.localpilot.shared.NesSaveStore;
 import org.localpilot.shared.HomebrewObs64;
 import org.localpilot.shared.StudentPolicyNet;
 import org.localpilot.shared.LearningCoordinator;
@@ -126,6 +127,12 @@ public final class NesEmulatorActivity extends Activity {
  private String requestedAutoWorkflow;
  private boolean autoLaunchArmed,autoStartArmed;
  private int autoGgufRemaining;
+ private boolean progressBusy;
+ private volatile long progressGeneration;
+ private int autoplayBatchesRemaining;
+ private long progressVerifiedActions;
+ private byte[] activeRomBytes;
+ private final ExecutorService progressIo=Executors.newSingleThreadExecutor();
  private boolean resumed;
  private boolean pageLoaded;
  private int frames,hash;
@@ -238,6 +245,21 @@ public final class NesEmulatorActivity extends Activity {
   studentBatchButton.setEnabled(false);
   studentBatchButton.setOnClickListener(v->startStudentBatch());
   actionPanel.addView(studentBatchButton);
+  Button autoplay=new Button(this);
+  autoplay.setText("▶ Автоигра Student · 256 ходов с сохранением (встроенная ROM)");
+  autoplay.setOnClickListener(v->{
+   if(progressBusy||studentRemaining>0||aiRunning||harness.hasPending()||harness.actionInFlight()||
+      studentTraining!=null&&!studentTraining.isDone())return;
+   if(homebrewRom&&frames>=15){autoplayBatchesRemaining=HarnessDemoWorkflow.AUTOPLAY_BATCHES;startStudentBatch();}
+   else {requestedAutoWorkflow=HarnessDemoWorkflow.STUDENT_AUTOPLAY;tryAutoWorkflowLaunch();}
+  });
+  actionPanel.addView(autoplay);
+  Button saveGame=new Button(this);saveGame.setText("Сохранить игру и приостановить");
+  saveGame.setOnClickListener(v->freezeAndSave());actionPanel.addView(saveGame);
+  Button resumeGame=new Button(this);resumeGame.setText("Продолжить сохранённую автоигру");
+  resumeGame.setOnClickListener(v->restoreProgress(true));actionPanel.addView(resumeGame);
+  Button viewSave=new Button(this);viewSave.setText("Загрузить сохранение без автоигры");
+  viewSave.setOnClickListener(v->restoreProgress(false));actionPanel.addView(viewSave);
   Button resumeRealtime=new Button(this);
   resumeRealtime.setText("▶ REALTIME_MODE · продолжить ручную NES");
   resumeRealtime.setOnClickListener(v->{
@@ -521,6 +543,127 @@ public final class NesEmulatorActivity extends Activity {
   root.post(this::publishEvidence);
   web.loadUrl(START_URL);
  }
+ private void queueAutoplayBatch(String epoch,long revision){
+  final long serial=progressGeneration;
+  web.postDelayed(()->{
+   if(!closed&&resumed&&autoplayBatchesRemaining>0&&serial==progressGeneration&&
+      frameEpoch.current(epoch)&&harness.stopRevision()==revision)startStudentBatch();
+  },80);
+ }
+ private Path progressVault(){return new File(getFilesDir(),"localpilot_vault").toPath();}
+ private boolean progressIdle(){
+  return !closed&&resumed&&pageLoaded&&web!=null&&!progressBusy&&
+   pendingTrial==null&&!aiRunning&&!studentStepRequested&&studentRemaining==0&&
+   !experiment.running()&&!harness.hasPending()&&!harness.actionInFlight()&&
+   (studentTraining==null||studentTraining.isDone());
+ }
+ private void freezeAndSave(){
+  if(studentRemaining>0||progressBusy||studentTraining!=null&&!studentTraining.isDone()){
+   autoplayBatchesRemaining=0;state.setText("Приостановлю после записи текущей серии; STOP доступен немедленно");return;
+  }
+  if(!progressIdle()||activeRomBytes==null){state.setText("Сохранение ожидает завершения действия/серии");return;}
+  autoplayBatchesRemaining=0;
+  String epoch=frameEpoch.token();long revision=harness.stopRevision(),serial=++progressGeneration;
+  progressBusy=true;
+  web.evaluateJavascript("window.retroFreezeForSave()",reply->{
+   if(closed||!resumed||serial!=progressGeneration||!frameEpoch.current(epoch)||harness.stopRevision()!=revision)return;
+   progressBusy=false;
+   try{
+    org.json.JSONObject result=new org.json.JSONObject(reply);
+    int f=result.getInt("frame"),h=result.getInt("hash");
+    if(!epoch.equals(result.getString("session"))||f<frames||f<15||h==0||
+       (f>frames&&!frameEpoch.accept(epoch,f))||
+       !harness.changeMode(epoch,HarnessCoordinator.Mode.STEP_MODE))throw new IOException("Freeze invalid");
+    frames=f;hash=h;aiFrozen=true;persistProgress(()->{});
+   }catch(IOException|org.json.JSONException|RuntimeException invalid){stopCpuExperiment("STOP: не удалось заморозить сохранение");}
+  });
+  web.postDelayed(()->{
+   if(progressBusy&&serial==progressGeneration)stopCpuExperiment("STOP: таймаут заморозки сохранения");
+  },5000);
+ }
+ private void persistProgress(Runnable afterSave){
+  if(!progressIdle()||!aiFrozen||activeRomBytes==null){stopCpuExperiment("STOP: неустойчивая граница сохранения");return;}
+  final String epoch=frameEpoch.token();final long revision=harness.stopRevision(),serial=++progressGeneration;
+  final int expectedFrame=frames,expectedHash=hash;
+  final byte[] rom=activeRomBytes.clone();final long actions=progressVerifiedActions;
+  final String policy=studentNet==null?"":studentNet.sha256();final boolean savedDendy=dendy;
+  progressBusy=true;
+  web.evaluateJavascript("window.retroSaveState()",reply->{
+   if(closed||!resumed||serial!=progressGeneration||!frameEpoch.current(epoch)||harness.stopRevision()!=revision)return;
+   try{
+    if(reply==null||reply.length()>4*1024*1024)throw new IOException("NES save response oversized");
+    org.json.JSONObject result=new org.json.JSONObject(reply);
+    if(result.getInt("frame")!=expectedFrame||result.getInt("hash")!=expectedHash||
+       frames!=expectedFrame||hash!=expectedHash)throw new IOException("NES changed during save");
+    NesSaveStore.Save save=new NesSaveStore.Save(rom,reply,expectedFrame,expectedHash,savedDendy,actions,policy);
+    progressIo.execute(()->{
+     try{
+      if(serial!=progressGeneration)return;
+      NesSaveStore.save(progressVault(),save);
+      runOnUiThread(()->{
+       if(closed||!resumed||serial!=progressGeneration||!frameEpoch.current(epoch)||harness.stopRevision()!=revision)return;
+       progressBusy=false;
+       state.setText("Прогресс сохранён · NES кадр "+expectedFrame+" · подтверждённых действий "+actions+
+        " · авто-серий осталось "+autoplayBatchesRemaining+" · PPO-кандидат отдельно от активных весов");
+       afterSave.run();
+      });
+     }catch(IOException|RuntimeException invalid){runOnUiThread(()->{
+      if(serial==progressGeneration)stopCpuExperiment("STOP: сохранение не записано: "+invalid.getClass().getSimpleName());
+     });}
+    });
+   }catch(IOException|org.json.JSONException|RuntimeException invalid){stopCpuExperiment("STOP: снимок сохранения недостоверен");}
+  });
+  web.postDelayed(()->{
+   if(progressBusy&&serial==progressGeneration)stopCpuExperiment("STOP: таймаут сохранения NES");
+  },5000);
+ }
+ private void restoreProgress(boolean auto){
+  if(!progressIdle()){state.setText("Сначала завершите действие/обучение или нажмите STOP");return;}
+  final long serial=++progressGeneration;final String priorEpoch=frameEpoch.token();progressBusy=true;
+  progressIo.execute(()->{
+   try{
+    NesSaveStore.Save saved=NesSaveStore.load(progressVault());
+    if(saved==null)throw new IOException("Нет сохранённой игры");
+    runOnUiThread(()->{
+     if(closed||!resumed||serial!=progressGeneration||!priorEpoch.equals(frameEpoch.token()))return;
+     progressBusy=false;dendy=saved.dendy();
+     boolean homebrew=java.util.Arrays.equals(saved.rom(),HomebrewNes.cartridge());
+     if(auto&&!homebrew){state.setText("Сохранён внешний ROM: загрузите без автоигры; доверенной политики нет");return;}
+     launchRom(saved.rom(),homebrew,saved,auto);
+    });
+   }catch(IOException|RuntimeException invalid){runOnUiThread(()->{
+    if(serial==progressGeneration){progressBusy=false;state.setText("Сохранение не загружено: "+invalid.getClass().getSimpleName());}
+   });}
+  });
+ }
+ private void applyRestoredProgress(NesSaveStore.Save saved,String loadEpoch,boolean auto){
+  final long serial=++progressGeneration;progressBusy=true;
+  final String epoch=frameEpoch.begin(); // Never restore the saved episode or any permits.
+  harness.reset(epoch,HarnessCoordinator.Mode.STEP_MODE);
+  web.evaluateJavascript("window.retroRestoreState(JSON.parse("+org.json.JSONObject.quote(saved.coreState())+"),"+
+   org.json.JSONObject.quote(loadEpoch)+","+org.json.JSONObject.quote(epoch)+")",reply->{
+   if(closed||!resumed||serial!=progressGeneration||!frameEpoch.current(epoch))return;
+   try{
+    org.json.JSONObject restored=new org.json.JSONObject(reply);
+    if(!epoch.equals(restored.getString("session"))||restored.getInt("frame")!=saved.frame()||
+       restored.getInt("hash")!=saved.frameHash()||!frameEpoch.accept(epoch,saved.frame()))throw new IOException("Restored frame mismatch");
+    frames=saved.frame();hash=saved.frameHash();aiFrozen=true;
+    progressVerifiedActions=saved.verifiedActions();progressBusy=false;
+    state.setText("Сохранение загружено · кадр "+frames+" · действия "+progressVerifiedActions+" · новая эпоха");
+    if(auto){
+     if(saved.policySha256().isEmpty()||!activeStudent().sha256().equals(saved.policySha256()))throw new IOException("Active policy differs from saved session");
+     autoplayBatchesRemaining=HarnessDemoWorkflow.AUTOPLAY_BATCHES;
+     queueAutoplayBatch(epoch,harness.stopRevision());
+    }
+   }catch(IOException|org.json.JSONException|RuntimeException invalid){
+    progressBusy=false;stopCpuExperiment("STOP: восстановление NES не подтверждено");
+   }
+  });
+  web.postDelayed(()->{
+   if(progressBusy&&serial==progressGeneration)stopCpuExperiment("STOP: таймаут восстановления NES");
+  },5000);
+ }
+
  private void publishEvidence(){
   if(resumed&&demoButton!=null)
    GameLabEvidenceProvider.nes(dendy,frames,hash,touches.get(),demoButton,aButton,bButton);
@@ -539,14 +682,16 @@ public final class NesEmulatorActivity extends Activity {
    }
    autoGgufRemaining=HarnessDemoWorkflow.GGUF_MAX_STEPS;
   }else autoGgufRemaining=0;
+  if(HarnessDemoWorkflow.RESUME_AUTOPLAY.equals(mode)){restoreProgress(true);return;}
+  autoplayBatchesRemaining=HarnessDemoWorkflow.STUDENT_AUTOPLAY.equals(mode)?HarnessDemoWorkflow.AUTOPLAY_BATCHES:0;
   autoLaunchArmed=true;
   state.setText("Harness: загружаю настоящий встроенный NES-ROM; проверю кадр перед вводом");
   launchRom(HomebrewNes.cartridge(),true);
  }
  private void startCpuExperiment(){
-  if(aiFrozen){state.setText("Сначала выйди из STEP_MODE");return;}
+  if(progressBusy||aiFrozen){state.setText("Сначала выйди из STEP_MODE/сохранения");return;}
   if(experiment.running())return;
-  if(!resumed||!homebrewRom||!pageLoaded||frames<15||hash==0){
+  if(progressBusy||!resumed||!homebrewRom||!pageLoaded||frames<15||hash==0){
    state.setText("Серия доступна только внутри запущенной тестовой NES-игры");
    return;
   }
@@ -557,6 +702,7 @@ public final class NesEmulatorActivity extends Activity {
   runHomebrewCpuAgent();
  }
  private void stopCpuExperiment(String reason){
+  autoplayBatchesRemaining=0;progressBusy=false;++progressGeneration;
   final String stopEpoch=frameEpoch.token();
   final long stopRevision=harness.requestStop(stopEpoch,"STOP_OR_RECOVERY");
   pendingPermit=null;pendingGoal=null;taskObservation=null;
@@ -614,7 +760,7 @@ public final class NesEmulatorActivity extends Activity {
   return studentNet;
  }
  private void startStudentBatch(){
-  if(studentRemaining>0||studentTraining!=null&&!studentTraining.isDone()||
+  if(progressBusy||studentRemaining>0||studentTraining!=null&&!studentTraining.isDone()||
      studentStepRequested||aiRunning||pendingTrial!=null||harness.hasPending()||
      harness.actionInFlight()||experiment.running()||
      !resumed||!homebrewRom||!pageLoaded||frames<15||hash==0){
@@ -643,7 +789,7 @@ public final class NesEmulatorActivity extends Activity {
   if(studentTraining!=null&&!studentTraining.isDone()){
    state.setText("STOP: PPO сохраняет кандидат, новый ввод запрещён");return;
   }
-  if(closed||!resumed||!homebrewRom||!pageLoaded||web==null||
+  if(progressBusy||closed||!resumed||!homebrewRom||!pageLoaded||web==null||
      frames<15||hash==0||pendingTrial!=null||aiRunning||
      experiment.running()||harness.hasPending()&&!harness.ownsEpisode(studentLease)||harness.actionInFlight()||
      studentStepRequested){
@@ -738,7 +884,7 @@ public final class NesEmulatorActivity extends Activity {
  }
 
  private void runHomebrewCpuAgent(){
-  if(aiFrozen){state.setText("Сначала выйди из STEP_MODE");return;}
+  if(progressBusy||aiFrozen){state.setText("Сначала выйди из STEP_MODE/сохранения");return;}
   if(!resumed||!homebrewRom||!pageLoaded||frames<15||hash==0||
      (pendingTrial!=null)){
    if(experiment.running())stopCpuExperiment("STOP: тестовая NES недоступна");
@@ -760,7 +906,7 @@ public final class NesEmulatorActivity extends Activity {
   return beginTrial(key,actor,actor==HarnessCoordinator.Actor.MANUAL?0:ConsoleAgentContract.HOLD_FRAMES);
  }
  private boolean beginTrial(String key,HarnessCoordinator.Actor actor,int holdFrames){
-  if(pendingTrial!=null||frames<15||hash==0)return false;
+  if(progressBusy||pendingTrial!=null||frames<15||hash==0)return false;
   HarnessCoordinator.ActionPermit permit=harness.start(
     actor,frameEpoch.token(),key,frames,hash,
     holdFrames,
@@ -941,6 +1087,7 @@ public final class NesEmulatorActivity extends Activity {
      goal.reward(),VerifiedReplayFilter.RewardSource.VERIFIED_ROM_RAM,
      t.downAck&&t.upAck,true,t.ramProbeSeen,false,batchEnd,false);
    studentRollout.add(step);
+   progressVerifiedActions++;
    studentRemaining--;
    if(studentRemaining>0){
     final String epoch=studentBatchEpoch;
@@ -984,19 +1131,45 @@ public final class NesEmulatorActivity extends Activity {
      VerifiedPpoReplayStore.Receipt receipt=VerifiedPpoReplayStore.append(vault,records);
      if(Thread.currentThread().isInterrupted()||harness.stopRevision()!=revision)
       throw new IllegalStateException("PPO_STOP_AFTER_REPLAY_PERSIST");
-     LearningCoordinator.Candidate candidate=
-       LearningCoordinator.prepare(active,records,vault);
+     Path candidateWeights=vault.resolve("models/candidates/student-homebrew-v1.weights.bin");
+     Path candidateManifest=vault.resolve("models/candidates/student-homebrew-v1.manifest.json");
+     final String trainingNote;
+     if(Files.exists(candidateWeights)||Files.exists(candidateManifest)){
+      // Never overwrite or silently activate a pending candidate to keep autoplay moving.
+      if(!Files.isRegularFile(candidateManifest)||Files.isSymbolicLink(candidateManifest)||
+         Files.isSymbolicLink(candidateWeights)||Files.size(candidateManifest)>4096)
+       throw new IOException("PPO_PENDING_CANDIDATE_INVALID");
+      org.json.JSONObject stored=new org.json.JSONObject(new String(Files.readAllBytes(candidateManifest),java.nio.charset.StandardCharsets.UTF_8));
+      String digest=StudentPolicyNet.load(candidateWeights).sha256();
+      if(!"localpilot-student-candidate-v1".equals(stored.getString("schema"))||
+         !HarnessCoordinator.PPO_TASK.equals(stored.getString("task"))||
+         !records.get(0).observationSchema().equals(stored.getString("observationSchema"))||
+         !digest.equals(stored.getString("policyAfterSha256"))||
+         !active.sha256().equals(stored.getString("policyBeforeSha256"))||
+         !records.get(0).romSha256().equals(stored.getString("romSha256"))||
+         !"NOT_RUN".equals(stored.getString("evaluation"))||
+         !"BLOCKED_UNTIL_INDEPENDENT_EVALUATION".equals(stored.getString("promotion")))
+       throw new IOException("PPO_PENDING_CANDIDATE_IDENTITY_MISMATCH");
+      trainingNote="Кандидат "+digest.substring(0,16)+" сохранён без перезаписи; новые данные записаны, независимая оценка ожидается";
+     }else{
+      LearningCoordinator.Candidate candidate=LearningCoordinator.prepare(active,records,vault);
+      trainingNote="PPO изменил "+candidate.update().changedParameters()+" параметров КАНДИДАТА · SHA "+candidate.update().shaAfter().substring(0,16);
+     }
      runOnUiThread(()->{
       if(closed||!resumed||!frameEpoch.current(epoch)||
          harness.stopRevision()!=revision)return;
       studentRollout.clear();
+      studentTraining=null;
       state.setText("NES: 16 проверенных шагов сохранены · replay SHA "+
         receipt.sha256().substring(0,12)+" · ROM-RAM reward "+receipt.totalReward()+
-        ". PPO изменил "+candidate.update().changedParameters()+
-        " параметров КАНДИДАТА · SHA "+candidate.update().shaAfter().substring(0,16)+
+        ". "+trainingNote+
         " · ОЦЕНКА НЕ ПРОЙДЕНА · активные веса НЕ ЗАМЕНЕНЫ");
+      if(autoplayBatchesRemaining>0)--autoplayBatchesRemaining;
+      persistProgress(()->{
+       if(autoplayBatchesRemaining>0)queueAutoplayBatch(epoch,revision);
+      });
      });
-    }catch(IOException|RuntimeException failed){
+    }catch(IOException|org.json.JSONException|RuntimeException failed){
      runOnUiThread(()->{
       if(closed||!resumed||!frameEpoch.current(epoch)||
          harness.stopRevision()!=revision)return;
@@ -1012,7 +1185,7 @@ public final class NesEmulatorActivity extends Activity {
 
  private boolean aiEligible(){
   return getPackageName().startsWith("org.localpilot.android")&&
-    resumed&&homebrewRom&&pageLoaded&&web!=null&&frames>=15&&hash!=0&&
+    !progressBusy&&resumed&&homebrewRom&&pageLoaded&&web!=null&&frames>=15&&hash!=0&&
     !experiment.running()&&!aiRunning&&pendingTrial==null&&
     studentRemaining==0&&(studentTraining==null||studentTraining.isDone());
  }
@@ -1149,7 +1322,7 @@ public final class NesEmulatorActivity extends Activity {
  }
  private void executeAiMove(){
   String button=queuedAiButton;
-  if(button==null||!resumed)return;
+  if(button==null||!resumed||progressBusy)return;
   queuedAiButton=null;
   if(!aiFrozen||!aiEligible()||!frameEpoch.current(aiEpoch)||hash!=aiExpectedHash||
     SystemClock.elapsedRealtime()-aiIssuedAt>ConsoleAgentContract.TTL_MS){
@@ -1259,7 +1432,8 @@ public final class NesEmulatorActivity extends Activity {
   }finally{temp.delete();}
   return rom;
  }
- private void launchRom(byte[] rom,boolean homebrew){
+ private void launchRom(byte[] rom,boolean homebrew){launchRom(rom,homebrew,null,false);}
+ private void launchRom(byte[] rom,boolean homebrew,NesSaveStore.Save restore,boolean resumeAuto){
   if(!pageLoaded||web==null||rom==null||rom.length>MAX_ROM){
    state.setText("NES-ядро ещё не загружено или ROM недоступен");return;
   }
@@ -1271,6 +1445,9 @@ public final class NesEmulatorActivity extends Activity {
       (preflight.mapper()>=0?" · mapper "+preflight.mapper():""));
    return;
   }
+  ++progressGeneration;progressBusy=false;progressVerifiedActions=0;
+  if(!autoLaunchArmed)autoplayBatchesRemaining=0;
+  activeRomBytes=rom.clone();
   String encoded=Base64.encodeToString(rom,Base64.NO_WRAP);
   String session=frameEpoch.begin();
   harness.reset(session,HarnessCoordinator.Mode.REALTIME_MODE);
@@ -1315,6 +1492,7 @@ public final class NesEmulatorActivity extends Activity {
    if(studentBatchButton!=null)studentBatchButton.setEnabled(launched&&homebrew);
    if(aiObserveButton!=null)aiObserveButton.setEnabled(launched&&homebrew&&
      getPackageName().startsWith("org.localpilot.android"));
+   if(launched&&restore!=null){applyRestoredProgress(restore,session,resumeAuto);return;}
    if(launched&&homebrew&&autoLaunchArmed){
     autoLaunchArmed=false;
     autoStartArmed=true;
@@ -1327,7 +1505,7 @@ public final class NesEmulatorActivity extends Activity {
  }
  private interface InputAck{void result(boolean accepted);}
  private void gamepad(String key,boolean down,InputAck ack){
-  if(web==null||!pageLoaded){ack.result(false);return;}
+  if(web==null||!pageLoaded||(down&&progressBusy)){ack.result(false);return;}
   web.evaluateJavascript("window.retroButton("+org.json.JSONObject.quote(key)+","
    +(down?"true":"false")+")",response->ack.result("true".equals(response)));
  }
@@ -1363,7 +1541,7 @@ public final class NesEmulatorActivity extends Activity {
   }
  }
  @Override protected void onPause(){
-  resumed=false;snapshotGate.cancel();exportTrial=null;
+  resumed=false;autoplayBatchesRemaining=0;progressBusy=false;++progressGeneration;snapshotGate.cancel();exportTrial=null;
   if(shareTrial!=null)shareTrial.setEnabled(readyTrial!=null);
   GameLabEvidenceProvider.clear("nes");
   if(experiment.running()||aiRunning||studentStepRequested||studentRemaining>0||
@@ -1385,7 +1563,7 @@ public final class NesEmulatorActivity extends Activity {
   if(queuedAiButton!=null&&web!=null)web.postDelayed(this::executeAiMove,350);
  }
  @Override protected void onDestroy(){
-  closed=true;harness.stopForEpoch(frameEpoch.token(),"NES_DESTROYED");pendingPermit=null;aiFrozen=false;
+  closed=true;progressBusy=false;++progressGeneration;progressIo.shutdownNow();harness.stopForEpoch(frameEpoch.token(),"NES_DESTROYED");pendingPermit=null;aiFrozen=false;
   queuedAiButton=null;aiRunning=false;studentStepRequested=false;
   frameEpoch.cancel();snapshotGate.cancel();exportTrial=null;
   romDownloads.shutdownNow();studentTrainer.shutdownNow();

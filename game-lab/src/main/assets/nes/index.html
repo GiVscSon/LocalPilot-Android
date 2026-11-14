@@ -207,6 +207,36 @@ window.retroExitStepMode=function(){
  stepMode=false;
  return window.retroResume();
 };
+// Save only a quiescent CPU/PPU boundary. No nonce, epoch or input ownership is serialized.
+window.retroSaveState=function(){
+ if(!nes||!activeRomSession||!paused||!stepMode||agentTrial||!gamepadLatch||
+    gamepadLatch.down.size!==0||frames<15||!validFrame)return null;
+ return {schema:"localpilot-jsnes-save-v1",frame:frames,hash:validFrame|0,machine:nes.toJSON()};
+};
+window.retroFreezeForSave=function(){
+ if(!nes||!activeRomSession||!gamepadLatch||agentTrial||gamepadLatch.down.size!==0)return false;
+ window.retroPause();stepMode=true;
+ return {session:activeRomSession,frame:frames,hash:validFrame|0};
+};
+window.retroRestoreState=function(saved,session,newSession){
+ if(!nes||session!==activeRomSession||typeof newSession!=="string"||newSession===session||
+    !/^[1-9][0-9]{0,18}$/.test(newSession)||!saved||saved.schema!=="localpilot-jsnes-save-v1"||
+    !Number.isInteger(saved.frame)||saved.frame<15||saved.frame>2147483646||
+    !Number.isInteger(saved.hash)||saved.hash===0||!saved.machine||
+    !saved.machine.cpu||!saved.machine.ppu)return false;
+ try{
+  window.retroPause();stepMode=true;
+  nes.fromJSON(saved.machine);
+  // A save file can never restore held buttons or an old action lease.
+  for(let player=1;player<=2;player++)for(const name of Object.values(keyMap))
+   nes.buttonUp(player,jsnes.Controller[name]);
+  gamepadLatch=new FrameHeldButtons(nes,4);agentTrial=null;usedStepNonce="";
+  frames=saved.frame-1;sendFrame(nes.ppu.buffer);
+  if((validFrame|0)!==saved.hash)throw new Error("Saved frame hash mismatch");
+  activeRomSession=newSession;
+  return {frame:frames,hash:validFrame|0,session:activeRomSession};
+ }catch(error){stop();status("STOP: сохранение NES не прошло проверку");return false;}
+};
 let usedStepNonce="";
 window.retroAiStep=function(name,holdFrames,nonce){
  if(!nes||!stepMode||!paused||!homebrewRom||!gamepadLatch||agentTrial||
