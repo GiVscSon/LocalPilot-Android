@@ -33,7 +33,8 @@ public final class StudentEvaluationGateTest {
  private static List<StudentEvaluationGate.Step> rows(StudentPolicyNet active,
    StudentPolicyNet candidate) {
   List<StudentEvaluationGate.Step> list=new ArrayList<>();
-  int[] starts={40,64,96,160,200};
+  // Distinct fixture states; exclude training X=128 and its +/-4 trace neighborhood.
+  int[] starts=java.util.stream.IntStream.iterate(8,x->x+8).filter(x->x!=128).limit(20).toArray();
   int scenario=0;
   for(int x:starts){
    for(var arm:StudentEvaluationGate.Arm.values()){
@@ -67,9 +68,13 @@ public final class StudentEvaluationGateTest {
   var report=StudentEvaluationGate.evaluate(left,right,ROM,Set.of(128),normal,StudentEvaluationGateTest::fixtureReward);
   check(report.accepted()&&report.reason()==StudentEvaluationGate.Reason.ACCEPTED,
     "independent matched fixture with task progress passes");
-  check(report.scenarios()==5&&report.candidateWins()==5,"paired scenarios count");
+  check(report.scenarios()==20&&report.candidateWins()==20,"paired scenarios count");
   check(report.candidateMeanReturn()>report.activeMeanReturn(),"actual arithmetic improvement");
-  check(report.paired().size()==5,"individual scenario evidence preserved");
+  check(report.paired().size()==20,"individual scenario evidence preserved");
+  var shortPilot=normal.subList(0,5*2*StudentEvaluationGate.MIN_STEPS_PER_ARM);
+  check(StudentEvaluationGate.evaluate(left,right,ROM,Set.of(128),shortPilot,
+    StudentEvaluationGateTest::fixtureReward).reason()==StudentEvaluationGate.Reason.INSUFFICIENT_SCENARIOS,
+    "five-scenario pilot is insufficient for RFC evaluation");
   check(left.sha256().equals(report.activeSha256()),"baseline SHA tied to report");
   check(right.sha256().equals(report.candidateSha256()),"candidate SHA tied to report");
   var first=normal.get(0);
@@ -95,6 +100,17 @@ public final class StudentEvaluationGateTest {
   check(StudentEvaluationGate.evaluate(left,right,ROM,Set.of(128),
     changed(normal,0,badAck),StudentEvaluationGateTest::fixtureReward).reason()==StudentEvaluationGate.Reason.UNVERIFIED_CORE_STEP,
     "missing actual emulator input ACK rejected");
+  check(StudentEvaluationGate.evaluate(left,right,ROM,Set.of(128),normal,s->Float.MAX_VALUE).reason()
+    ==StudentEvaluationGate.Reason.INVALID_ROM_REWARD,"finite but impossible task reward cannot overflow return into success");
+  var meanOnly=StudentEvaluationGate.evaluate(left,right,ROM,Set.of(128),normal,s->{
+   // Synthetic gate arithmetic only: 60% wins and improved mean, near-flat median.
+   if(s.arm()==StudentEvaluationGate.Arm.ACTIVE)return 0f;
+   int index=Integer.parseInt(s.scenarioId().substring("independent-".length()));
+   return index<8?0.0025f:index<12?0.25f:-0.025f;
+  });
+  check(meanOnly.candidateMeanReturn()>meanOnly.activeMeanReturn()+0.1f&&
+    !meanOnly.accepted()&&meanOnly.reason()==StudentEvaluationGate.Reason.NO_PROVEN_IMPROVEMENT,
+    "aggregate mean and 60% wins cannot hide a median below the RFC improvement margin");
   var fakeRamJump=new StudentEvaluationGate.Step(
    first.scenarioId(),first.arm(),first.epoch(),first.provenance(),
    first.romSha256(),first.policySha256(),first.sequence(),first.frameBefore(),
@@ -128,7 +144,7 @@ public final class StudentEvaluationGateTest {
    report.paired().clear();
    throw new AssertionError("Report pair list mutable");
   }catch(UnsupportedOperationException expected){checks++;}
-  check(StudentEvaluationGate.MIN_SCENARIOS==5,"minimum evidence independent resets");
+  check(StudentEvaluationGate.MIN_SCENARIOS==20,"minimum evidence independent resets");
   System.out.println("STUDENT_EVALUATION_GATE_FIXTURE_PASS checks="+checks+
     " source=SYNTHETIC_CONTRACT_ONLY realNesHoldout=false");
  }
