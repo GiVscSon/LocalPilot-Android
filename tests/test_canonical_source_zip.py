@@ -62,7 +62,7 @@ class CanonicalSourceTests(unittest.TestCase):
 
     def test_real_private_key_block_rejected(self):
         (self.repo/'README.md').write_text(
-            '-----BEGIN PRIVATE KEY-----'+'\\n'+'A'*120+'\\n-----END PRIVATE KEY-----')
+            '-----BEGIN PRIVATE KEY-----'+'\n'+'A'*120+'\n-----END PRIVATE KEY-----')
         subprocess.run(['git','-C',str(self.repo),'add','.'],check=True)
         subprocess.run(['git','-C',str(self.repo),'-c','user.name=Test',
                         '-c','user.email=test@example.invalid','commit','-qm','key'],check=True)
