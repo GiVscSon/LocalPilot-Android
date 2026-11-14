@@ -1,0 +1,145 @@
+name: LocalPilot ReleaseLab · isolated Android APK acceptance
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'tools/release_lab_android.py'
+      - 'tests/test_release_lab_android.py'
+      - 'docs/LOCALPILOT-RELEASE-LAB.md'
+      - '.github/workflows/localpilot-release-lab.yml'
+      - 'app/**'
+      - 'shared/**'
+      - 'game-lab/**'
+      - 'model-lab/**'
+permissions:
+  contents: read
+concurrency:
+  group: localpilot-release-lab-${{ github.event.pull_request.number || github.ref_name }}
+  cancel-in-progress: true
+jobs:
+  release-lab-contracts:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test fail-closed ReleaseLab host contracts (no emulator results)
+        run: python3 -m unittest discover -s tests -p 'test_release_lab_android.py' -v
+
+  build-emulator-derivative:
+    needs: release-lab-contracts
+    runs-on: ubuntu-24.04
+    timeout-minutes: 80
+    env:
+      LOCALPILOT_BUILD_SOURCE_SHA: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Install pinned SDK components
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
+            'platforms;android-35' 'build-tools;35.0.0' 'cmake;3.22.1' 'ndk;27.2.12479018'
+      - name: Fetch same pinned llama.cpp used in the unified app
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p third_party/llama.cpp
+          cd third_party/llama.cpp
+          git init
+          git remote add origin https://github.com/ggml-org/llama.cpp.git
+          git fetch --depth 1 origin 2b66bfbf7107e43f5cd2fe99802ff6e872e4c4d0
+          git checkout --detach FETCH_HEAD
+          test "$(git rev-parse HEAD)" = 2b66bfbf7107e43f5cd2fe99802ff6e872e4c4d0
+      - name: Build unified TEST-ONLY x86_64 APK, NEVER ARM64 release
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          ./gradlew --no-daemon --max-workers=2 --no-parallel \
+            -Dorg.gradle.jvmargs='-Xmx4096m -XX:MaxMetaspaceSize=768m -Dfile.encoding=UTF-8' \
+            -PunifiedModelLab=true -PunifiedEmulatorAbi=true :app:assembleDebug :app:lintDebug
+          APK=app/build/outputs/apk/debug/app-debug.apk
+          test -s "$APK"
+          unzip -Z1 "$APK" | grep -q '^lib/x86_64/liblocalpilot_embedded.so$'
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" \
+            | grep -q "^package: name='org.localpilot.android.dev.unified' "
+          python3 tools/verify_android_elf.py "$APK" --abi x86_64 --report build/release-lab-elf.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: LocalPilot-ReleaseLab-X86-TEST-ONLY-${{ github.sha }}
+          retention-days: 7
+          if-no-files-found: error
+          path: |
+            app/build/outputs/apk/debug/app-debug.apk
+            build/release-lab-elf.json
+
+  isolated-release-lab:
+    needs: build-emulator-derivative
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {api: 30, target: default, profile: pixel_2}
+          - {api: 35, target: default, profile: pixel_2}
+          - {api: 36, target: google_apis, profile: pixel_2}
+          - {api: 30, target: default, profile: pixel_c}
+          - {api: 35, target: default, profile: pixel_c}
+          - {api: 36, target: google_apis, profile: pixel_c}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/download-artifact@v4
+        with:
+          name: LocalPilot-ReleaseLab-X86-TEST-ONLY-${{ github.sha }}
+          # The multi-file ZIP contains repository-relative app/ and build/ paths.
+          path: .
+      - name: Validate downloaded APK and ELF metadata before AVD startup
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK=app/build/outputs/apk/debug/app-debug.apk
+          test -s "$APK" || { echo '::error title=ReleaseLab APK::Missing reviewed APK in downloaded artifact'; exit 1; }
+          test -s build/release-lab-elf.json
+          unzip -t "$APK" | tail -1 | grep -q 'No errors detected'
+          unzip -Z1 "$APK" | grep -q '^lib/x86_64/liblocalpilot_embedded.so$'
+          sha256sum "$APK"
+      - name: Fail if isolated emulator has no hardware virtualization
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -e /dev/kvm || { echo '::error::Isolated Android AVD requires KVM'; exit 1; }
+          sudo chmod 666 /dev/kvm
+          test -r /dev/kvm && test -w /dev/kvm
+      - name: Install reviewed APK into isolated phone/tablet; collect real Android evidence
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ matrix.api }}
+          arch: x86_64
+          target: ${{ matrix.target }}
+          profile: ${{ matrix.profile }}
+          disable-animations: true
+          emulator-boot-timeout: 600
+          emulator-options: -no-window -gpu software -no-snapshot -noaudio -no-boot-anim -camera-back none
+          # android-emulator-runner uses /bin/sh -c PER SCRIPT LINE; do not split
+          # arguments with backslashes across physical YAML lines.
+          script: python3 tools/release_lab_android.py check --serial emulator-5554 --api ${{ matrix.api }} --apk app/build/outputs/apk/debug/app-debug.apk --expected-source "$GITHUB_SHA" --output release-lab-evidence/API${{ matrix.api }}-${{ matrix.profile }}
+      - name: Retain emulator screenshots, UI tree, crash log, source/signature and result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: LocalPilot-ReleaseLab-API${{ matrix.api }}-${{ matrix.profile }}-${{ github.sha }}
+          retention-days: 14
+          if-no-files-found: warn
+          path: release-lab-evidence/
