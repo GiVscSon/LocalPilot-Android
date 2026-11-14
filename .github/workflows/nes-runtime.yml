@@ -114,6 +114,7 @@ jobs:
         run: |
           node tests/nes_save_resume_smoke.cjs build/test-core/package/dist/jsnes.min.js build/nes-runtime/demo.nes
           java tests/NesSaveStoreVerify.java
+          java tests/HomebrewTaskMaskVerify.java
       - name: Verify homebrew ROM RAM goal semantics (synthetic Java contract)
         run: |
           set -euo pipefail

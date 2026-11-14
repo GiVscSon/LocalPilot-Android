@@ -13,6 +13,17 @@ public final class HomebrewObs64 {
   for(int i=0;i<BUTTONS.length;i++)if(BUTTONS[i].equals(name))return i;
   return -1;
  }
+ /** Task reward excludes 8-bit wrap: remove moves that would cross a RAM edge. */
+ public static int taskMask(int x,int y,int frames){
+  if(x<0||x>255||y<0||y>255||!(frames==4||frames==8||frames==16))
+   throw new IllegalArgumentException("Invalid frozen RAM/task duration");
+  int mask=LEGAL_MASK;
+  if(x<frames)mask&=~(1<<id("LEFT"));
+  if(x>255-frames)mask&=~(1<<id("RIGHT"));
+  if(y<frames)mask&=~(1<<id("UP"));
+  if(y>255-frames)mask&=~(1<<id("DOWN"));
+  return mask; // A/B remain legal even at a corner; no invented movement/reward.
+ }
  public static float[] encode(int x,int y){
   if(x<0||x>255||y<0||y>255)
    throw new IllegalArgumentException("NES RAM must be one byte");
