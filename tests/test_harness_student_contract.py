@@ -35,10 +35,13 @@ class StudentIntegrationContract(unittest.TestCase):
   self.assertNotIn("dispatchGesture(",model)
  def test_panel_shares_weights_and_experiment(self):
   panel=src("app/src/main/java/org/localpilot/android/HarnessDashboardActivity.java")
-  for label in ("HomebrewStudentStore.train(","HomebrewStudentStore.bindSandbox(",
-                "HomebrewStudentStore.status(","Физическая on-policy приёмка"):
+  for label in ("VerifiedPpoReplayStore.summary(","StudentPolicyNet.load(",
+                "HarnessDemoWorkflow.STUDENT_TRAIN_16",
+                "Физическая on-policy приёмка"):
    self.assertIn(label,panel)
-  self.assertIn("trainingWorker.execute(",panel)
-  self.assertIn("trainingWorker.shutdown()",panel)
+  for obsolete in ("HomebrewStudentStore.train(","HomebrewStudentStore.bindSandbox(",
+                   "trainingWorker.execute("):
+   self.assertNotIn(obsolete,panel,"Archive-only 7x12 student must not run beside NES PPO")
+  self.assertIn("Архивный Student 7→12→6",panel)
   self.assertIn("GoalEpisode",src("shared/src/main/java/org/localpilot/shared/ConsoleExperienceMemory.java"))
 if __name__=="__main__":unittest.main()
