@@ -54,13 +54,16 @@ class ReleaseLabChecks(unittest.TestCase):
         self.assertIn("name: LocalPilot-ReleaseLab-X86-TEST-ONLY-${{ github.sha }}", section)
         self.assertIn("path: .",section)
         self.assertNotIn("path: app/build/outputs/apk/debug/",section)
-        self.assertIn("Validate downloaded APK before paying for Android emulator startup",section)
+        self.assertEqual(section.count("reactivecircus/android-emulator-runner@v2"),1)
+        self.assertEqual(section.count("script: python3 tools/release_lab_android.py check"),1)
+        self.assertEqual(section.count("Fail if isolated emulator has no hardware virtualization"),1)
+        self.assertIn("Validate downloaded APK and ELF metadata before AVD startup",section)
         self.assertIn("test -s \"$APK\"",section)
         self.assertIn("test -s build/release-lab-elf.json",section)
         self.assertIn("unzip -t \"$APK\"",section)
         self.assertIn("lib/x86_64/liblocalpilot_embedded.so",section)
         self.assertLess(
-            section.index("Validate downloaded APK before paying for Android emulator startup"),
+            section.index("Validate downloaded APK and ELF metadata before AVD startup"),
             section.index("reactivecircus/android-emulator-runner@v2"))
 
     def test_verified_source_and_abi(self):
