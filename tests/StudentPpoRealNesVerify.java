@@ -72,6 +72,12 @@ public final class StudentPpoRealNesVerify {
   test(result.update().changedParameters()>0,"actual neural parameters updated");
   test(Files.isRegularFile(result.weights()),"candidate file persisted");
   test(Files.isRegularFile(result.manifest()),"candidate manifest persisted");
+  String manifestText=Files.readString(result.manifest());
+  test(manifestText.contains("\"trainingEpisodeId\":\"real-jsnes-student-777\"")&&
+       manifestText.contains("\"trainingEpoch\":\"777\""),"candidate records actual training episode/epoch");
+  test(manifestText.contains("\"trainingInitialFrame\":"+real.get(0).frameBefore())&&
+       manifestText.contains("\"trainingFinalFrame\":"+real.get(real.size()-1).frameAfter()),
+       "candidate pins exact actual training frame range");
   test(StudentPolicyNet.load(result.weights()).sha256().equals(result.update().shaAfter()),
     "candidate bytes match SHA");
   test(Files.readString(result.manifest()).contains("\"promotion\":\"BLOCKED_UNTIL_INDEPENDENT_EVALUATION\""),

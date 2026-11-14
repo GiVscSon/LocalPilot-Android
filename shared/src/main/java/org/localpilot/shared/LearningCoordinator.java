@@ -51,6 +51,10 @@ public final class LearningCoordinator {
     "  \"policyBeforeSha256\":\""+trained.shaBefore()+"\",\n"+
     "  \"policyAfterSha256\":\""+trained.shaAfter()+"\",\n"+
     "  \"verifiedRolloutSteps\":"+trained.eligibleSteps()+",\n"+
+    "  \"trainingEpisodeId\":\""+verifiedSteps.get(0).episodeId()+"\",\n"+
+    "  \"trainingEpoch\":\""+verifiedSteps.get(0).epoch()+"\",\n"+
+    "  \"trainingInitialFrame\":"+verifiedSteps.get(0).frameBefore()+",\n"+
+    "  \"trainingFinalFrame\":"+verifiedSteps.get(verifiedSteps.size()-1).frameAfter()+",\n"+
     "  \"adamSteps\":"+trained.adamUpdates()+",\n"+
     "  \"changedParameters\":"+trained.changedParameters()+",\n"+
     "  \"evaluation\":\"NOT_RUN\",\n"+
