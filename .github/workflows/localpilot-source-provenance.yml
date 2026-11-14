@@ -1,0 +1,35 @@
+name: LocalPilot · Verified Git Source Snapshot
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  source-provenance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Unit tests for source and archive integrity
+        run: |
+          python3 -m unittest discover -s tests -p 'test_external_source_bundle_audit.py' -v
+          python3 -m unittest discover -s tests -p 'test_canonical_source_zip.py' -v
+      - name: Produce immutable Git-tree source ZIP and verify all blobs
+        run: |
+          set -euo pipefail
+          mkdir -p dist/canonical-source
+          python3 tools/build_canonical_source_zip.py --repository . --ref HEAD \
+            --output dist/canonical-source/LocalPilot-Android-${{ github.sha }}-SOURCE-VERIFIED.zip \
+            | tee dist/canonical-source/build-report.json
+          python3 tools/audit_external_source_bundle.py \
+            --source dist/canonical-source/LocalPilot-Android-${{ github.sha }}-SOURCE-VERIFIED.zip \
+            --repository . --ref HEAD --report dist/canonical-source/verification-report.json
+          sha256sum dist/canonical-source/*.zip > dist/canonical-source/SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: LocalPilot-CANONICAL-SOURCE-${{ github.sha }}
+          path: dist/canonical-source/
+          retention-days: 14
+          if-no-files-found: error
