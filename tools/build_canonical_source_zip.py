@@ -20,7 +20,7 @@ PRIVATE_SUFFIXES = {".jks", ".keystore", ".pem", ".p12", ".apk", ".aab", ".key",
 # Match actual complete PEM key blocks, not harmless examples in source code.
 PRIVATE_KEY_BLOCK = re.compile(
     rb"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE" +
-    rb" KEY-----\\s+[A-Za-z0-9+/=\\r\\n]{80,}-----END (?:RSA |EC |OPENSSH )?PRIVATE KEY-----"
+    rb" KEY-----\s+[A-Za-z0-9+/=\r\n]{80,}-----END (?:RSA |EC |OPENSSH )?PRIVATE KEY-----"
 )
 FIXED_TIME = (1980, 1, 1, 0, 0, 0)
 
