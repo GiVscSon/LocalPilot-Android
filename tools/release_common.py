@@ -21,7 +21,7 @@ def configuration(root):
     # Production releases have no suffix. Development suffixes, when present,
     # must remain unambiguous literals rather than guessed Gradle expressions.
     for name in ('applicationIdSuffix', 'versionNameSuffix'):
-        matches = re.findall(r'\b' + name + r'\s+([^\s;{}]+)', source)
+        matches = re.findall(r'(?m)^\s*' + name + r'\s+([^\s;{}]+)', source)
         if not matches:
             config[name] = ''
         elif len(matches) == 1 and re.fullmatch(r"['\"][A-Za-z0-9._-]+['\"]", matches[0]):
