@@ -340,7 +340,7 @@ def parser() -> argparse.ArgumentParser:
     stops.add_argument("--log", required=True)
     stops.set_defaults(func=cmd_stop_report)
     unified = sub.add_parser("unified", help="Run scripted contract tests, self-play, model gating and single-APK verification")
-    unified.add_argument("stage", choices=("verify", "selfplay", "apk", "all"), nargs="?", default="selfplay")
+    unified.add_argument("stage", choices=("verify", "event-audit", "selfplay", "apk", "all"), nargs="?", default="selfplay")
     unified.add_argument("--output", default="build/reports/unified-script-engine")
     unified.add_argument("--apk")
     unified.add_argument("--require-sdk", action="store_true")

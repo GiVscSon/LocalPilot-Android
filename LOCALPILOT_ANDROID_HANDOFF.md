@@ -1,3 +1,25 @@
+# Следующий кандидат: shadow-события и корреляция Bubble ACK · 14.11.2026
+
+База main: `8b6cfca368f991aa6eff28af69b72d77c6b5b304`, 0.8.2/code54.
+Предыдущая матрица шести эмуляторов относится только к этой базе:
+[проверенный отчёт](https://github.com/GiVscSon/LocalPilot-Android/blob/692900b60723f90db941214af220f71bdda74144/docs/validation/0.8.2-8b6cfca/VALIDATION.md).
+Она не доказывает готовность следующих изменений.
+
+[Проверенные источники, схема, эксперименты и ограничения](docs/research/VISUAL-AGENT-EVENT-REWARDS-20261114.ru.md).
+В существующем BubbleSession добавлен shadow-автомат и привязка ACK к action_id.
+STOP терминален до reset, старые ACK не подтверждают новый выстрел.
+Награда остаётся `verifiedReward=null`, `trainingEligible=false`.
+`python3 scripts/localpilot.py unified event-audit` создаёт JSON/CSV/Markdown:
+200 синтетических traces, 1658 assertions, ноль ложных shadow-целей/принятых
+старых ACK/разрешённых BubbleSession.sent после STOP; настоящих переходов 0.
+Локально Bubble 226+1353 assertions и 17 Python tests PASS. Android Java/AndroidTest compile и Lint PASS локально. CI нового SHA проверять
+отдельно, не переносить статус предыдущего APK.
+Нет размеченного реального набора для YOLO, нет независимого улучшения PPO.
+Архив до изменений: `archive/main-before-event-reward-20261114` → `8b6cfca`.
+Постоянная подпись и физическая приёмка остаются блокерами стабильного релиза.
+
+---
+
 # 0.8.2/code54: единый кандидат, новые блокирующие проверки · 13.11.2026
 
 PR #141 в main, ветка integration/harness-ppo-goal-unified-20261113.

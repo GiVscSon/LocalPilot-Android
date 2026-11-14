@@ -58,7 +58,7 @@ public class PilotService extends AccessibilityService {
  private final CaptureTimingTrace captureTiming=new CaptureTimingTrace();
  public String captureTimingReport(){return captureTiming.report();}
  public String exportMetrics(){
-  String bubbleReport=playingGrid&&selectedProfile==9?bubbleSession.report()+" decision="+bubbleDecisionReason:lastBubbleSessionReport;
+  String bubbleReport=playingGrid&&selectedProfile==9?bubbleSession.report()+"\n"+bubbleSession.rewardReport()+" decision="+bubbleDecisionReason:lastBubbleSessionReport;
   String visual=visionV2Snapshot==null?"no_frames":visionV2Snapshot.diagnostics();
   stop("Экспорт замеров: STOP");
   return metrics.report()+"\n"+captureTiming.report()+"\n"+captureCounters()
@@ -275,7 +275,7 @@ public class PilotService extends AccessibilityService {
     .append(" unknown_reason_cells=").append(gridReasonDetails)
     .append(" frame_needed=").append(gridFrameNeeded).append(" retained_frame_at_ms=").append(retainedGridFrameAt)
     .append(" unknown_reasons=").append(gridUnknownReasons).append(" size=").append(gridConfig.rows).append('x').append(gridConfig.cols).append(" goal_color=").append(gridGoal).append(" dispatched=").append(gridMoves).append(" visual_changes=").append(gridVerified);
-  out.append('\n').append(bubbleSession.report()).append(" decision=").append(bubbleDecisionReason);
+  out.append('\n').append(bubbleSession.report()).append('\n').append(bubbleSession.rewardReport()).append(" decision=").append(bubbleDecisionReason);
   if(arcadeState!=null)out.append("\narcade_usable=").append(arcadeState.usable()).append(" confidence=").append(arcadeState.confidence)
     .append(" terminal=").append(arcadeState.terminal).append(" tracked=").append(arcadeState.tracked)
     .append("\nplayer=").append(diagnosticBox(arcadeState.player)).append(" control=").append(diagnosticBox(arcadeState.control))
@@ -741,6 +741,7 @@ public class PilotService extends AccessibilityService {
  private void arm(){stop("Привязка");if(busy){note="Дождитесь завершения жеста";update();return;}AccessibilityNodeInfo r=appRoot();try{if(r==null||!unlocked()){note="Нет активного приложения";update();return;}target=String.valueOf(r.getPackageName());targetLabel=applicationLabel(target);targetIsBrowser=browserTarget();armedBounds=windowBounds(r);if(armedBounds.isEmpty()){note="Нет границ окна";update();return;}retainVisualScope(r);gate.arm(target,r.getWindowId(),armedBounds.width(),armedBounds.height());if(automatic())permit.grantSession(gate.epoch(),SystemClock.elapsedRealtime());note=automatic()?"Окно выбрано · нажмите Старт":"Только наблюдение";update();}finally{if(r!=null)r.recycle();}}
  private String applicationLabel(String packageName){try{return String.valueOf(getPackageManager().getApplicationLabel(getPackageManager().getApplicationInfo(packageName,0)));}catch(Exception e){return packageName;}}
  private void stop(String reason){
+  if(playingGrid&&selectedProfile==9)bubbleSession.stop();
   long stopEpoch=gate.epoch(),stopAt=SystemClock.uptimeMillis();
   boolean stoppedGame=playingJumper||playingGrid||playing2048||playingMini;
   boolean wasArmed=gate.armed();
@@ -765,7 +766,7 @@ public class PilotService extends AccessibilityService {
      +" currentBounds="+currentBounds.toShortString();
   }catch(RuntimeException|OutOfMemoryError ignored){lastSessionReport="Сеанс остановлен; метаданные недоступны";}
   if(playingGrid&&selectedProfile==9)
-   lastBubbleSessionReport=bubbleSession.report()+" decision="+bubbleDecisionReason;
+   lastBubbleSessionReport=bubbleSession.report()+"\n"+bubbleSession.rewardReport()+" decision="+bubbleDecisionReason;
   // Stable, non-identifying event for script-driven Termux/Windows diagnosis.
   // Never log game package, raw user message, screenshot or ROI coordinates.
   android.util.Log.i("LocalPilotStop","STOP code="+AuditStopCode.from(reason)
@@ -1243,9 +1244,11 @@ public class PilotService extends AccessibilityService {
    if(bubbleGeometry.shortRowParity==0)bubbleDecisionReason="REVERSED_STAGGER_READY";
    if(busy||!valid(ticket)||SystemClock.elapsedRealtime()-frameAt>300){bubbleDecisionReason="STALE_TICKET_OR_BUSY";note="Шипучка: жду свежий кадр для выстрела";update();scheduleGrid(epoch);return;}
    long sentBefore=captureSent;bubbleSession.sent(bubbleGeometry,shot,SystemClock.elapsedRealtime());
+   final long bubbleActionId=bubbleSession.rewardEvidence().actionId();
    sendObserved(r.left+bubbleGeometry.launcherX,r.top+bubbleGeometry.launcherY,r.left+shot.aimX,r.top+shot.aimY,ticket,()->{
     if(epoch!=gate.epoch()||!playingGrid||selectedProfile!=9)return;
-    bubbleSession.acknowledge(SystemClock.elapsedRealtime());note="Android завершил жест · проверяю поле";update();scheduleGrid(epoch);
+    if(!bubbleSession.acknowledge(bubbleActionId,SystemClock.elapsedRealtime()))return;
+    note="Android завершил жест · проверяю поле";update();scheduleGrid(epoch);
    },frameAt,220);
    if(captureSent>sentBefore){bubbleDecisionReason="DISPATCHED_AWAITING_VERIFY";gridMoves++;gridSawAction=true;note=(shot.bounces==0?"Прямой выстрел ":"Один рикошет ")+gridMoves+" · ожидается удалений "+shot.removed+", падений "+shot.dropped;update();}
    else if(playingGrid){bubbleDecisionReason="GESTURE_NOT_SENT";bubbleSession.cancelUnsent();scheduleGrid(epoch);}

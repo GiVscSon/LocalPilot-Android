@@ -72,6 +72,59 @@ def verify_contracts() -> dict:
     return {"contract_checks": "PASS", "input_gate_replaced": False}
 
 
+def validate_event_audit(report: dict) -> None:
+    """A synthetic trace gate cannot attest to real frames or trusted rewards."""
+    required = {
+        "schema": "localpilot-bubble-event-audit-v1",
+        "scope": "SYNTHETIC_CONTRACT_ONLY", "traces": 200,
+        "real_transitions_audited": 0, "false_shadow_goals": 0,
+        "actions_accepted_after_stop": 0, "stale_acks_accepted": 0,
+        "trusted_training_rewards": 0, "pixel_benchmark": False,
+        "physical_device": False, "release_ready": False,
+    }
+    for key, value in required.items():
+        if type(report.get(key)) is not type(value) or report[key] != value:
+            raise RuntimeError(f"Invalid event-audit evidence: {key}")
+    if type(report.get("checks")) is not int or report["checks"] < 1600:
+        raise RuntimeError("Incomplete adversarial event audit")
+    if report.get("shadow_goals") != 19:
+        raise RuntimeError("Positive contract coverage missing")
+
+
+def event_audit(out: Path) -> dict:
+    out.mkdir(parents=True, exist_ok=True)
+    classes = out / "classes"
+    classes.mkdir(exist_ok=True)
+    # Never consume old success files after a failed compilation/run.
+    for name in ("event-audit.json", "event-audit.csv", "event-audit.md"):
+        (out / name).unlink(missing_ok=True)
+    package = "app/src/main/java/org/localpilot/android/"
+    execute("javac", "--release", "17", "-d", str(classes),
+            *(package + name + ".java" for name in
+              ("BubbleBoard", "BubblePolicy", "BubbleSession")),
+            "tests/BubbleRewardAudit.java")
+    execute("java", "-cp", str(classes),
+            "org.localpilot.android.BubbleRewardAudit", str(out))
+    report = json.loads(strict_file_bytes(out / "event-audit.json").decode("utf-8"))
+    validate_event_audit(report)
+    report["source_sha"] = execute("git", "rev-parse", "HEAD").strip()
+    report["source_dirty"] = bool(execute("git", "status", "--porcelain").strip())
+    report["real_replay"] = "NOT_RUN"
+    report["csv_sha256"] = hashlib.sha256(
+        strict_file_bytes(out / "event-audit.csv")).hexdigest()
+    (out / "event-audit.json").write_text(
+        json.dumps(report, indent=2) + "\n", encoding="utf-8")
+    (out / "event-audit.md").write_text(
+        "# Bubble event audit\n\n"
+        f"Source: `{report['source_sha']}`; dirty: {report['source_dirty']}.\n\n"
+        "200 synthetic adversarial traces, zero false shadow goals, zero accepted "
+        "actions after STOP, zero accepted stale ACKs. All rewards quarantined.\n\n"
+        "Real recorded transitions: 0. Real replay, labelled pixel benchmark and "
+        "physical acceptance: NOT RUN. This is no release or gameplay proof.\n",
+        encoding="utf-8")
+    return report
+
+
 def play_train(out: Path) -> dict:
     """Repeatable SIM-only self-play, independent baselines and regression gate."""
     out.mkdir(parents=True, exist_ok=True)
@@ -195,7 +248,7 @@ def verify_apk(apk: Path, require_sdk: bool) -> dict:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("stage",
-        choices=("verify", "selfplay", "apk", "all"))
+        choices=("verify", "event-audit", "selfplay", "apk", "all"))
     parser.add_argument("--out", default=str(DEFAULT_OUT))
     parser.add_argument("--apk", default="app/build/outputs/apk/debug/app-debug.apk")
     parser.add_argument("--require-sdk", action="store_true")
@@ -205,13 +258,19 @@ def main() -> int:
         out = ROOT / out
     out.mkdir(parents=True, exist_ok=True)
     state_file = out / "unified-pipeline.json"
-    github_sha = os.environ.get("GITHUB_SHA", "")
+    source_sha = execute("git", "rev-parse", "HEAD").strip()
+    source_dirty = bool(execute("git", "status", "--porcelain").strip())
+    github_sha = os.environ.get("GITHUB_SHA", source_sha)
+    if os.environ.get("GITHUB_ACTIONS") == "true" and (
+            github_sha != source_sha or (source_dirty and opts.stage == "event-audit")):
+        raise RuntimeError("CI event evidence requires a clean checkout of GITHUB_SHA")
     prior_stages = {}
     if state_file.exists():
         try:
             prior = json.loads(state_file.read_text(encoding="utf-8"))
             if (prior.get("schema") != "localpilot-script-orchestrator-v1"
-                    or prior.get("github_sha") != github_sha):
+                    or prior.get("github_sha") != github_sha
+                    or prior.get("source_sha") != source_sha):
                 raise RuntimeError("Old report belongs to a different source revision")
             prior_stages = prior.get("stages", {})
             if not isinstance(prior_stages, dict):
@@ -221,6 +280,7 @@ def main() -> int:
     report = {
         "schema": "localpilot-script-orchestrator-v1",
         "github_sha": github_sha,
+        "source_sha": source_sha, "source_dirty": source_dirty,
         "stages": prior_stages,
         "origin": "GITHUB_OR_LOCAL_SCRIPT",
         "stage": opts.stage,
@@ -236,6 +296,10 @@ def main() -> int:
             current_stage = "verify"
             report["contracts"] = verify_contracts()
             report["stages"]["verify"] = {"status": "PASS", **report["contracts"]}
+        if opts.stage in ("event-audit", "all"):
+            current_stage = "event-audit"
+            report["stages"]["event-audit"] = {
+                "status": "PASS", **event_audit(out / "event-audit")}
         if opts.stage in ("selfplay", "all"):
             current_stage = "selfplay"
             report["selfplay"] = play_train(out / "selfplay")
@@ -257,7 +321,7 @@ def main() -> int:
         return_code = 1
     report["complete"] = all(
         report["stages"].get(name, {}).get("status") == "PASS"
-        for name in ("verify", "selfplay", "apk")
+        for name in ("verify", "event-audit", "selfplay", "apk")
     )
     state_file.write_text(
         json.dumps(report, ensure_ascii=False, indent=2) + "\n",
