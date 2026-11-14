@@ -58,8 +58,9 @@ class ReleaseToolsTest(unittest.TestCase):
         source = path.read_text()
         # Only the unqualified debug defaults count; dynamic build-type
         # assignment is not the default release identity.
-        source = source.replace("    applicationIdSuffix '.dev.install1081'\n", "")
-        source = source.replace("    versionNameSuffix '-dev-install1081'\n", "")
+        source, count_app = re.subn(r"(?m)^[ \\t]*applicationIdSuffix[ \\t]+'\\.dev\\.install1081'[ \\t]*$", "", source)
+        source, count_version = re.subn(r"(?m)^[ \\t]*versionNameSuffix[ \\t]+'-dev-install1081'[ \\t]*$", "", source)
+        self.assertEqual((1, 1), (count_app, count_version))
         path.write_text(source)
         config = common.configuration(self.root)
         self.assertEqual(('org.localpilot.android', '0.8.2'),
