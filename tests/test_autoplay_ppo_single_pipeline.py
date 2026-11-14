@@ -33,7 +33,7 @@ class OneNesAutoplayPpoPipeline(unittest.TestCase):
   self.assertIn("saved.policySha256()",self.nes)
   self.assertIn("harness.stopRevision()",self.nes)
   self.assertIn("HarnessDemoWorkflow.AUTOPLAY_BATCHES",self.nes)
-  self.assertIn("Atomic_MOVE",self.save.upper().replace(" ","_")) # fsync+atomic
+  self.assertIn("ATOMIC_MOVE",self.save.upper()) # check production atomic replace of NES save
   self.assertNotIn("ActionPermit",self.save,"NES save must never persist input ownership")
   self.assertNotIn("Ticket ",self.save,"NES save must never persist old model tickets")
 
