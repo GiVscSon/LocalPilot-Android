@@ -103,7 +103,47 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: LocalPilot-ReleaseLab-X86-TEST-ONLY-${{ github.sha }}
-          path: app/build/outputs/apk/debug/
+          # Artifact contains repository-relative paths for TWO files.
+          # Extract at repository root, not under the APK directory twice.
+          path: .
+      - name: Validate downloaded APK before paying for Android emulator startup
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK=app/build/outputs/apk/debug/app-debug.apk
+          test -s "$APK" || { echo "::error title=ReleaseLab artifact path::No reviewed x86 APK at $APK"; find app/build -maxdepth 8 -type f | head -30; exit 1; }
+          test -s build/release-lab-elf.json
+          unzip -t "$APK" | tail -1 | grep -q 'No errors detected'
+          unzip -Z1 "$APK" | grep -q '^lib/x86_64/liblocalpilot_embedded.so
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -e /dev/kvm || { echo '::error::Isolated Android AVD requires KVM'; exit 1; }
+          sudo chmod 666 /dev/kvm
+          test -r /dev/kvm && test -w /dev/kvm
+      - name: Install reviewed APK into isolated phone/tablet; collect real Android evidence
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ matrix.api }}
+          arch: x86_64
+          target: ${{ matrix.target }}
+          profile: ${{ matrix.profile }}
+          disable-animations: true
+          emulator-boot-timeout: 600
+          emulator-options: -no-window -gpu software -no-snapshot -noaudio -no-boot-anim -camera-back none
+          # android-emulator-runner uses /bin/sh -c PER SCRIPT LINE; do not split
+          # arguments with backslashes across physical YAML lines.
+          script: python3 tools/release_lab_android.py check --serial emulator-5554 --api ${{ matrix.api }} --apk app/build/outputs/apk/debug/app-debug.apk --expected-source "$GITHUB_SHA" --output release-lab-evidence/API${{ matrix.api }}-${{ matrix.profile }}
+      - name: Retain emulator screenshots, UI tree, crash log, source/signature and result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: LocalPilot-ReleaseLab-API${{ matrix.api }}-${{ matrix.profile }}-${{ github.sha }}
+          retention-days: 14
+          if-no-files-found: warn
+          path: release-lab-evidence/
+
+          sha256sum "$APK" > release-lab-artifact.sha256
       - name: Fail if isolated emulator has no hardware virtualization
         shell: bash
         run: |
