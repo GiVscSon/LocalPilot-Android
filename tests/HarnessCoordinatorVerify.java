@@ -8,7 +8,7 @@ class HarnessCoordinatorVerify {
  public static void main(String[] args)throws Exception{
   Path out=Files.createTempDirectory("harness-gate-one");
   int compiled=ToolProvider.getSystemJavaCompiler().run(null,System.out,System.err,
-    "--release","17","-d",out.toString(),
+    "--release","17","--source-path","shared/src/main/java","-d",out.toString(),
     "shared/src/main/java/org/localpilot/shared/ConsoleAgentContract.java",
     "shared/src/main/java/org/localpilot/shared/HarnessCoordinator.java",
     "tests/HarnessCoordinatorTest.java");

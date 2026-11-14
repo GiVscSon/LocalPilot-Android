@@ -21,6 +21,7 @@ const keyMap={LEFT:"BUTTON_LEFT",RIGHT:"BUTTON_RIGHT",UP:"BUTTON_UP",DOWN:"BUTTO
 let nes=null,timer=null,frames=0,validFrame=0,paused=false,sampleRate=44100;
 let activeRomSession=null;
 let stepMode=false;
+let harnessQuiet=false;
 let gamepadLatch=null,agentTrial=null,homebrewRom=false;
 let audioContext=null,audioNode=null;
 const SIZE=32768,ringL=new Float32Array(SIZE),ringR=new Float32Array(SIZE);
@@ -71,7 +72,7 @@ function sendFrame(rgb){
  validFrame=hash;
  // In STEP_MODE, only publish AFTER the action release ACK so Android can
  // verify a coherent transition, never an intermediate frame.
- if(frames%15===0&&!stepMode){
+ if(frames%15===0&&!stepMode&&(typeof harnessQuiet==="undefined"||!harnessQuiet)){
   try{if(window.GameLabBridge)window.GameLabBridge.onFrame(frames,hash|0,activeRomSession);}catch(error){}
  }
 }
@@ -79,6 +80,11 @@ function tick(){
  if(!nes||paused)return;
  try{
   nes.frame();
+  if(typeof harnessRealtimeTrial!=="undefined"&&harnessRealtimeTrial&&frames>=harnessRealtimeTrial.started+16){
+   const trial=harnessRealtimeTrial;harnessRealtimeTrial=null;
+   gamepadLatch.change(trial.name,trial.code,false,frames);gamepadLatch.flush(frames);
+   harnessCompleted={token:trial.token,observation:window.retroHarnessObserve()};
+  }
   // CPU baseline executes only the original homebrew, never user ROMs.
   // Button release is counted against REAL emulated frames, not a timer.
   if(agentTrial&&frames>=agentTrial.started+agentTrial.holdFrames){
@@ -96,6 +102,7 @@ function stop(){
  if(timer!==null){clearInterval(timer);timer=null;}
  if(gamepadLatch){gamepadLatch.clear();gamepadLatch=null;}
  agentTrial=null;homebrewRom=false;activeRomSession=null;stepMode=false;
+ harnessRealtimeTrial=null;harnessCompleted=null;harnessTask=false;
  nes=null;paused=true;audioStop();
 }
 window.retroStop=function(){stop();status("Игра остановлена");};
@@ -108,6 +115,7 @@ window.retroCancelAgent=function(){
 window.retroPause=function(){
  if(gamepadLatch)gamepadLatch.clear();
  agentTrial=null;
+ harnessRealtimeTrial=null;harnessCompleted=null;
  paused=true;
  if(timer!==null){clearInterval(timer);timer=null;}
  if(audioContext)audioContext.suspend();
@@ -207,7 +215,7 @@ window.retroAiStep=function(name,holdFrames){
   if(!gamepadLatch.change(name,code,false,frames))throw Error("Button release failed");
   gamepadLatch.flush(frames);
   if(frames-started!==holdFrames)throw Error("Frame budget violated");
-  if(window.GameLabBridge){
+  if(window.GameLabBridge&&(typeof harnessQuiet==="undefined"||!harnessQuiet)){
    window.GameLabBridge.onAgentAction(name,started,frames,activeRomSession);
    window.GameLabBridge.onFrame(frames,validFrame|0,activeRomSession);
   }
@@ -245,6 +253,69 @@ window.retroSnapshot=function(token){
  }catch(error){return false;}
 };
 window.retroMetrics=function(){return JSON.stringify({frames,pixel_hash:validFrame,running:!!nes&&!paused});};
+// Task profile for the original bundled cartridge ONLY. Its objective is
+// explicitly reach a horizontal coordinate; this is not a commercial game's score.
+let harnessTarget=0,harnessSeed=0,harnessTask=false,harnessRealtimeTrial=null,harnessCompleted=null;
+window.retroHarnessReset=function(encoded,session,seed){
+ if(!Number.isInteger(seed)||seed<0||seed>2147483647)return null;
+ harnessQuiet=true;
+ try{
+  if(!window.retroLoadRom(encoded,false,true,session))return null;
+  window.retroPause();stepMode=true;
+  harnessTask=true;harnessSeed=seed;harnessTarget=[32,64,96,160,192,224][seed%6];
+  for(let i=0;i<45;i++)nes.frame();
+  return window.retroHarnessObserve();
+ }finally{harnessQuiet=false;}
+};
+window.retroHarnessObserve=function(){
+ if(!nes||!homebrewRom||!harnessTask||!gamepadLatch||agentTrial||harnessRealtimeTrial||
+    (stepMode?!paused:paused))return null;
+ let minX=256,minY=240,maxX=-1,maxY=-1,count=0;
+ const p=image.data;
+ for(let y=0;y<240;y++)for(let x=0;x<256;x++){
+  const at=(y*256+x)*4;
+  if(p[at]>=240&&p[at+1]>=240&&p[at+2]>=240){
+   count++;minX=Math.min(minX,x);maxX=Math.max(maxX,x);
+   minY=Math.min(minY,y);maxY=Math.max(maxY,y);
+  }
+ }
+ const ramX=nes.cpu.mem[1]&255,ramY=nes.cpu.mem[2]&255;
+ // PPU may render the state preceding the final CPU controller poll by one pixel.
+ const verified=count===64&&maxX-minX===7&&maxY-minY===7&&
+   Math.abs(minX-ramX)<=1&&Math.abs(minY-(ramY+1))<=1;
+ const png=canvas.toDataURL("image/png");
+ if(!png.startsWith("data:image/png;base64,")||png.length>350000)return null;
+ return {epoch:activeRomSession,seed:harnessSeed,frame:frames,hash:validFrame|0,
+  x:verified?minX:Math.min(248,ramX),y:verified?minY:Math.min(232,ramY+1),
+  target:harnessTarget,mode:stepMode?"STEP_MODE":"REALTIME_MODE",verified,png:png.substring(22)};
+};
+window.retroHarnessStep=function(name){
+ if(!["LEFT","RIGHT"].includes(name))return null;
+ harnessQuiet=true;
+ try{
+  if(!window.retroAiStep(name,16))return null;
+  return window.retroHarnessObserve();
+ }finally{harnessQuiet=false;}
+};
+window.retroHarnessRealtime=function(){
+ if(!harnessTask||!stepMode||!paused||!nes)return null;
+ stepMode=false;if(!window.retroResume())return null;
+ return window.retroHarnessObserve();
+};
+window.retroHarnessBegin=function(name,expectedFrame,epoch,token){
+ if(!harnessTask||stepMode||paused||!nes||harnessRealtimeTrial||agentTrial||
+    !["LEFT","RIGHT"].includes(name)||epoch!==activeRomSession||
+    !Number.isInteger(expectedFrame)||frames<expectedFrame||frames-expectedFrame>2||
+    typeof token!=="string"||!(/^[1-9][0-9]{0,18}$/).test(token))return false;
+ const code=jsnes.Controller[keyMap[name]];
+ if(!gamepadLatch.change(name,code,true,frames))return false;
+ harnessCompleted=null;harnessRealtimeTrial={name,code,token,started:frames};
+ return true;
+};
+window.retroHarnessPoll=function(token){
+ if(!harnessCompleted||harnessCompleted.token!==token)return null;
+ const result=harnessCompleted.observation;harnessCompleted=null;return result;
+};
 document.addEventListener("visibilitychange",function(){
  if(document.hidden)window.retroPause();
  else if(nes)window.retroResume();

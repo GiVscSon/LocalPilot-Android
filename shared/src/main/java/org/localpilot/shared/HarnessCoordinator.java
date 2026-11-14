@@ -12,7 +12,7 @@ import java.util.Base64;
  * preempted by another actor. Stale proposals always fail closed.
  */
 public final class HarnessCoordinator {
- public enum Actor { MANUAL, HEURISTIC, GGUF }
+ public enum Actor { MANUAL, HEURISTIC, GGUF, FAST_POLICY }
  public enum Mode { STEP_MODE, REALTIME_MODE }
 
  public static final class Ticket {
@@ -41,6 +41,19 @@ public final class HarnessCoordinator {
  public static HarnessCoordinator nes(){return PROCESS_NES;}
 
  private final SecureRandom random=new SecureRandom();
+ private final org.localpilot.shared.harness.ModelRouter models=new org.localpilot.shared.harness.ModelRouter();
+ private final org.localpilot.shared.harness.AgentController agentController=new org.localpilot.shared.harness.AgentController(this);
+ private org.localpilot.shared.harness.HarnessRuntime runtime;
+ public org.localpilot.shared.harness.ModelRouter models(){return models;}
+ public org.localpilot.shared.harness.AgentController agentController(){return agentController;}
+ public synchronized void bindRuntime(org.localpilot.shared.harness.HarnessRuntime next){
+  if(waiting!=null||prepared!=null||active!=null||(runtime!=null&&runtime.running()))
+   throw new IllegalStateException("Existing Harness owner must STOP before binding");
+  runtime=next;
+ }
+ public synchronized void unbindRuntime(org.localpilot.shared.harness.HarnessRuntime expected){
+  if(runtime==expected&&!expected.running())runtime=null;
+ }
  private String epoch="";
  private Mode mode=Mode.REALTIME_MODE;
  private Ticket waiting,prepared;
@@ -126,6 +139,8 @@ public final class HarnessCoordinator {
       int afterFrame,int afterHash,boolean downAck,boolean upAck){
   if(permit==null||permit!=active||!matches(expectedEpoch)||
       permit.stopRevision!=stopRevision||!downAck||!upAck||
+      (permit.mode==Mode.STEP_MODE&&permit.holdFrames>0&&
+       afterFrame-permit.beforeFrame!=permit.holdFrames)||
       afterFrame-permit.beforeFrame<15||afterHash==0){
    stop("UNVERIFIED_TRANSITION");
    return false;

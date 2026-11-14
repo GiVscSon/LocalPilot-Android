@@ -67,6 +67,12 @@ public final class HarnessCoordinatorTest {
     "explicit execution mode is bound to permit");
   check(c.complete(scripted,next,106,500,true,true),
     "valid distinct transport ACK and frame advancement");
+  HarnessCoordinator.ActionPermit tooLong=c.start(
+    HarnessCoordinator.Actor.FAST_POLICY,next,"RIGHT",106,500,16,7004);
+  check(!c.complete(tooLong,next,123,789,true,true),"STEP rejects 17 frames for 16-frame permit");
+  HarnessCoordinator.ActionPermit tooShort=c.start(
+    HarnessCoordinator.Actor.FAST_POLICY,next,"RIGHT",123,789,16,7005);
+  check(!c.complete(tooShort,next,138,456,true,true),"STEP rejects 15 frames for 16-frame permit");
   System.out.println("HARNESS_COORDINATOR_PASS checks="+checks);
  }
 }

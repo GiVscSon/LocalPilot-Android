@@ -44,6 +44,7 @@ jobs:
           python3 -m unittest discover -s tests -p 'test_unified_in_app_smoke.py' -v
           java tests/ConsoleAgentContractVerify.java
           java tests/ConsoleExperienceMemoryVerify.java
+          java tests/HarnessCoordinatorVerify.java
           java tests/ModelLabPolicyVerify.java
           java tests/ModelLabComputePolicyVerify.java
           java tests/ModelLabCatalogVerify.java

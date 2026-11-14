@@ -78,6 +78,7 @@ public final class PilotUiInstrumentation extends Instrumentation {
     private Application tracedApplication;
     private Activity resumedActivity;
     private int safeFallbackTouches;
+    private boolean harnessOnly;
     private final Application.ActivityLifecycleCallbacks lifecycleCallbacks=new Application.ActivityLifecycleCallbacks(){
         private void record(Activity activity,String stage){
             String pkg=activity.getPackageName();
@@ -95,10 +96,12 @@ public final class PilotUiInstrumentation extends Instrumentation {
 
     @Override public void onCreate(Bundle arguments) {
         super.onCreate(arguments);
+        harnessOnly=arguments!=null&&"true".equals(arguments.getString("harness_only"));
         start();
     }
 
     @Override public void onStart() {
+        if(harnessOnly){runHarnessOnly();return;}
         started = SystemClock.uptimeMillis();
         limit = started + TEST_LIMIT_MS;
         Bundle result = new Bundle();
@@ -213,6 +216,87 @@ public final class PilotUiInstrumentation extends Instrumentation {
             catch(org.json.JSONException error){result.putString("result","FAIL");passed=false;}
             finish(passed ? Activity.RESULT_OK : Activity.RESULT_CANCELED, result);
         }
+    }
+
+    /** Isolated emulator UI activation, actual WebView CPU/PPU and disk artifacts.
+     * No Accessibility permission, model weights or fabricated episodes are installed.
+     */
+    private void runHarnessOnly(){
+        Bundle result=new Bundle();
+        started=SystemClock.uptimeMillis();limit=started+360_000;
+        try{
+            automation=getUiAutomation(UiAutomation.FLAG_DONT_SUPPRESS_ACCESSIBILITY_SERVICES);
+            java.nio.file.Path root=getTargetContext().getNoBackupFilesDir().toPath().resolve("harness-v1");
+            require(!Files.exists(root),"Harness UI test requires a clean isolated CI install; never delete user experience");
+            Activity activity=startActivitySync(new Intent(getTargetContext(),org.localpilot.gamelab.NesEmulatorActivity.class)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+            launchedActivity=activity;
+            Field runtimeField=activity.getClass().getDeclaredField("learningRuntime");runtimeField.setAccessible(true);
+            Field pageField=activity.getClass().getDeclaredField("pageLoaded");pageField.setAccessible(true);
+            await(()->onMain(()->pageField.getBoolean(activity)),15_000,"Actual NES WebView did not load");
+            pressHarness(activity,"Опыт");
+            await(()->onMain(()->runtimeField.get(activity)!=null),3_000,"UI did not create Harness runtime");
+            await(()->onMain(()->!((org.localpilot.shared.harness.HarnessRuntime)runtimeField.get(activity)).running()),
+                150_000,"Real NES collection did not finish");
+            var replay=new org.localpilot.shared.harness.ExperienceStore(root.resolve("transitions"),root.resolve("frames"));
+            var transitions=replay.readAll();
+            require(transitions.size()>=32,"Actual UI run saved too few transitions");
+            require(transitions.stream().allMatch(org.localpilot.shared.harness.ExperienceStore.Transition::eligible),
+                "UI collection contains unconfirmed task rewards");
+            String baseline=new org.localpilot.shared.harness.Policy().sha256();
+            pressHarness(activity,"Обучить / оценить");
+            await(()->onMain(()->!((org.localpilot.shared.harness.HarnessRuntime)runtimeField.get(activity)).running()),
+                150_000,"Real WebView holdout did not finish");
+            var repository=new org.localpilot.shared.harness.PolicyRepository(root.resolve("policies"));
+            String trained=repository.active().sha256();
+            require(!trained.equals(baseline),"No independently improved active policy artifact from actual WebView");
+            require(Files.isRegularFile(root.resolve("policies").resolve(trained+".evaluation")),"Evaluation report missing");
+            pressHarness(activity,"Policy REALTIME");
+            await(()->onMain(()->!((org.localpilot.shared.harness.HarnessRuntime)runtimeField.get(activity)).running()),
+                30_000,"Realtime policy episode failed to stop within its budget");
+            require(replay.readAll().stream().anyMatch(t->t.before().mode()==org.localpilot.shared.HarnessCoordinator.Mode.REALTIME_MODE),
+                "Actual WebView did not save realtime policy transitions");
+            pressHarness(activity,"Откат");
+            require(repository.active().sha256().equals(baseline),"Rollback did not restore exact predecessor");
+            pressHarness(activity,"Опыт");
+            pressHarness(activity,"STOP · остановить игрового агента");
+            require(onMain(()->!((org.localpilot.shared.harness.HarnessRuntime)runtimeField.get(activity)).running()),
+                "Visible STOP did not stop task runtime");
+            Bitmap screenshot=automation.takeScreenshot();
+            if(screenshot!=null){
+                File image=new File(getTargetContext().getExternalFilesDir(null),"harness-ui.png");
+                try(java.io.FileOutputStream out=new java.io.FileOutputStream(image)){
+                    require(screenshot.compress(Bitmap.CompressFormat.PNG,100,out),"Screenshot save failed");
+                }finally{screenshot.recycle();}
+            }
+            result.putString("result","PASS");
+            result.putString("scope","Android emulator WebView; original homebrew coordinate task; not physical-device/GGUF/Vulkan proof");
+            result.putString("baselineSha",baseline);result.putString("trainedSha",trained);
+            result.putInt("realTransitions",replay.readAll().size());
+            finish(Activity.RESULT_OK,result);
+        }catch(Throwable failure){
+            result.putString("result","FAIL");result.putString("summary",failure.toString());
+            finish(Activity.RESULT_CANCELED,result);
+        }
+    }
+    private void pressHarness(Activity activity,String label)throws Exception{
+        android.widget.Button button=onMain(()->findHarnessButton(activity.getWindow().getDecorView(),label));
+        require(button!=null,"Actual Harness button missing: "+label);
+        onMain(()->{button.requestRectangleOnScreen(new Rect(0,0,button.getWidth(),button.getHeight()),true);return null;});
+        waitForIdleSync();
+        onMain(()->{Rect rect=new Rect();require(button.getGlobalVisibleRect(rect)&&rect.width()>0&&rect.height()>0,
+            "Harness button not visible: "+label);require(button.performClick(),"UI click rejected: "+label);return null;});
+    }
+    private android.widget.Button findHarnessButton(View view,String label){
+        if(view instanceof android.widget.Button&&label.contentEquals(((android.widget.Button)view).getText()))
+            return (android.widget.Button)view;
+        if(view instanceof ViewGroup){
+            ViewGroup group=(ViewGroup)view;
+            for(int i=0;i<group.getChildCount();i++){
+                android.widget.Button result=findHarnessButton(group.getChildAt(i),label);if(result!=null)return result;
+            }
+        }
+        return null;
     }
 
     private void checkOpenRouterAdvisorPicker() throws Exception {

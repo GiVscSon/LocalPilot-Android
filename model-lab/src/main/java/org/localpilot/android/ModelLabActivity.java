@@ -221,8 +221,16 @@ public final class ModelLabActivity extends Activity {
       String agentObservation=(projector!=null?
         "A real 128x120 RGB screenshot is attached. ":"TEXT-ONLY BLIND PROPOSAL: no image understanding. ")+
         instruction+" "+prior;
-      engine.proposeNesButton(weights,projector,agentObservation,pixels,w,h,
-        selectedGpuLayers(selection),callback);
+      org.localpilot.shared.HarnessCoordinator.nes().models().infer(
+        selection.id,selection.modelSha,projector!=null,engine::busy,
+        routed->engine.proposeNesButton(weights,projector,agentObservation,pixels,w,h,
+          selectedGpuLayers(selection),(answer,elapsed)->routed.complete(answer,elapsed,null)),
+        (answer,elapsed,error)->{
+         if(error!=null){
+          nesStatus.setText("STOP: ModelRouter: "+error);cancelConsoleAgent();return;
+         }
+         callback.complete(answer,elapsed);
+        });
       nesStatus.setText(projector!=null?
         "Vision GGUF анализирует NES и учитывает проверенную историю своей модели (без обучения весов)...":
         "Text GGUF выбирает пробный ход без зрения и учитывает свою историю (без обучения весов)...");
@@ -479,6 +487,7 @@ public final class ModelLabActivity extends Activity {
  }
 
  private void cancelConsoleAgent(){
+  org.localpilot.shared.HarnessCoordinator.nes().models().cancel();
   String token=consoleAgentTicket;
   consoleAgentTicket=null;
   if(!inUnifiedApk()||!ConsoleAgentContract.tokenValid(token))return;

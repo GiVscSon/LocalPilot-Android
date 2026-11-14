@@ -66,7 +66,9 @@ jobs:
       disable-animations: true
       emulator-boot-timeout: 300
       emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
-      script: python3 tools/run_device_acceptance.py
+      script: |
+       python3 tools/run_device_acceptance.py
+       python3 tools/run_harness_ui_acceptance.py
    - name: Collect isolated synthetic-device crash evidence
      if: always()
      run: |

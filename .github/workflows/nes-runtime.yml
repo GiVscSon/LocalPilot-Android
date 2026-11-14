@@ -9,6 +9,11 @@ on:
       - 'tests/jsnes_nes_smoke.cjs'
       - 'shared/src/main/java/org/localpilot/shared/HarnessCoordinator.java'
       - 'tests/HarnessCoordinator*.java'
+      - 'shared/src/main/java/org/localpilot/shared/harness/**'
+      - 'tests/Harness*Verify.java'
+      - 'tests/HarnessContractsTest.java'
+      - 'tests/harness_real_nes_rpc.cjs'
+      - 'scripts/verify_harness_learning.sh'
       - 'tests/nes_controller_framehold.cjs'
       - 'tests/nes_step_mode_smoke.cjs'
       - 'tests/ExportHomebrewNes.java'
@@ -34,6 +39,11 @@ on:
       - 'tests/jsnes_nes_smoke.cjs'
       - 'shared/src/main/java/org/localpilot/shared/HarnessCoordinator.java'
       - 'tests/HarnessCoordinator*.java'
+      - 'shared/src/main/java/org/localpilot/shared/harness/**'
+      - 'tests/Harness*Verify.java'
+      - 'tests/HarnessContractsTest.java'
+      - 'tests/harness_real_nes_rpc.cjs'
+      - 'scripts/verify_harness_learning.sh'
       - 'tests/nes_controller_framehold.cjs'
       - 'tests/nes_step_mode_smoke.cjs'
       - 'tests/ExportHomebrewNes.java'
@@ -108,10 +118,17 @@ jobs:
             shared/src/main/java/org/localpilot/shared/NesFrameTransfer.java \
             tests/NesFrameTransferVerify.java
           java -cp build/nes-runtime NesFrameTransferVerify
+      - name: Real NES task learning, independent evaluation, rollback and continuous realtime
+        run: bash scripts/verify_harness_learning.sh build/test-core/package/dist/jsnes.min.js build/nes-runtime/demo.nes
       - name: Store proof from both emulated CPU and Java contract
         if: success()
         uses: actions/upload-artifact@v4
         with:
           name: NES-ModelLab-Real-Emulator-Evidence-${{ github.sha }}
           retention-days: 14
-          path: build/nes-runtime/nes-trial.txt
+          path: |
+            build/nes-runtime/nes-trial.txt
+            build/harness-learning/real-core-report.json
+            build/harness-learning/real-core-candidate.policy
+            build/harness-learning/real-core-candidate.manifest
+            build/harness-learning/real-core-candidate.evaluation

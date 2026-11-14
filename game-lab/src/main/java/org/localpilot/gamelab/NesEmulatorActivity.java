@@ -45,6 +45,8 @@ import org.localpilot.shared.HarnessCoordinator;
  */
 public final class NesEmulatorActivity extends Activity {
  private static final int CHOOSE_ROM=101;
+ private static final int EXPORT_HARNESS=102;
+ private boolean exportingHarness;
  private final ExecutorService romDownloads=Executors.newSingleThreadExecutor();
  private boolean closed;
  private static final int MAX_ROM=3*1024*1024;
@@ -62,6 +64,7 @@ public final class NesEmulatorActivity extends Activity {
  private final NesSnapshotGate snapshotGate=new NesSnapshotGate();
  // Process-wide permit owner shared by the one embedded NES instance.
  private final HarnessCoordinator harness=HarnessCoordinator.nes();
+ private org.localpilot.shared.harness.HarnessRuntime learningRuntime;
  private HarnessCoordinator.ActionPermit pendingPermit;
  private boolean aiSnapshot,aiRunning,aiFrozen;
  private String aiTicketNonce,queuedAiButton,aiModelId="",aiModelSha="",aiEpoch="";
@@ -95,6 +98,7 @@ public final class NesEmulatorActivity extends Activity {
   label.setText(dendy?"LocalPilot · Денди (50 Гц)":"LocalPilot · NES");
   label.setTextColor(HubContract.TEXT);label.setTextSize(21);root.addView(label);
   state=new TextView(this);state.setTextColor(HubContract.WARNING);
+  state.setTextSize(12);state.setMaxLines(4);
   state.setText("Загрузи свой .nes или скачай проверенный homebrew. Эмуляция работает офлайн, сеть нужна только для загрузки файла.");
   root.addView(state);
   Button open=new Button(this);open.setText("Выбрать картридж (.nes)");
@@ -171,12 +175,12 @@ public final class NesEmulatorActivity extends Activity {
   Button resumeRealtime=new Button(this);
   resumeRealtime.setText("▶ REALTIME_MODE · продолжить ручную NES");
   resumeRealtime.setOnClickListener(v->{
-   if(!aiFrozen||!resumed||!pageLoaded||web==null){
+   if(!resumed||!pageLoaded||web==null){
     state.setText("NES уже выполняется в обычном режиме или не запущена");return;
    }
    stopCpuExperiment("STOP: переход STEP → REALTIME");
    String currentEpoch=frameEpoch.token();
-   web.evaluateJavascript("window.retroExitStepMode()",reply->{
+   web.evaluateJavascript("window.retroExitStepMode()||window.retroResume()||JSON.parse(window.retroMetrics()).running",reply->{
     if("true".equals(reply)&&frameEpoch.current(currentEpoch)&&
        harness.changeMode(currentEpoch,HarnessCoordinator.Mode.REALTIME_MODE)){
      aiFrozen=false;
@@ -185,6 +189,25 @@ public final class NesEmulatorActivity extends Activity {
    });
   });
   root.addView(resumeRealtime);
+  TextView learningNote=new TextView(this);learningNote.setTextColor(HubContract.SECONDARY);
+  learningNote.setText("Policy: достичь X в тестовом homebrew. Обучение отдельных CPU-весов; GGUF не изменяется.");
+  learningNote.setTextSize(10);root.addView(learningNote);
+  LinearLayout learningControls=new LinearLayout(this);
+  root.addView(learningControls);
+  String[] learningLabels={"Опыт", "Обучить / оценить", "Policy STEP", "Откат", "Policy REALTIME"};
+  for(int i=0;i<learningLabels.length;i++){
+   final int operation=i;
+   Button command=new Button(this);command.setText(learningLabels[i]);command.setTextSize(10);
+   learningControls.addView(command,new LinearLayout.LayoutParams(0,-2,1));
+   command.setOnClickListener(v->runLearningOperation(operation));
+  }
+  Button exportHarness=new Button(this);exportHarness.setText("Экспорт Harness: кадры, переходы, policy, оценка");
+  root.addView(exportHarness);
+  exportHarness.setOnClickListener(v->{
+   stopCpuExperiment("STOP: подготовка экспорта приватного опыта");
+   startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT).setType("application/zip")
+     .addCategory(Intent.CATEGORY_OPENABLE).putExtra(Intent.EXTRA_TITLE,"LocalPilot-Harness-evidence.zip"),EXPORT_HARNESS);
+  });
   cpuAgentButton=new Button(this);
   cpuAgentButton.setText("CPU NES-агент · тестовый ход A (16 кадров)");
   cpuAgentButton.setEnabled(false);
@@ -207,7 +230,7 @@ public final class NesEmulatorActivity extends Activity {
   cpuBatchButton.setOnClickListener(v->startCpuExperiment());
   root.addView(cpuBatchButton);
   stopCpuButton=new Button(this);
-  stopCpuButton.setText("STOP · немедленно остановить CPU-агента");
+  stopCpuButton.setText("STOP · остановить игрового агента");
   stopCpuButton.setOnClickListener(v->stopCpuExperiment("STOP: агент остановлен пользователем"));
   root.addView(stopCpuButton);
   web=new WebView(this);
@@ -251,7 +274,7 @@ public final class NesEmulatorActivity extends Activity {
       stopCpuExperiment("STOP: ИИ-ход не подтверждён новым NES-кадром");
      completeTrialOnFreshFrame(count,pixelsHash);
      publishEvidence();
-     if(count%60==0)
+     if(count%60==0&&(learningRuntime==null||!learningRuntime.running()))
       state.setText("Кадров "+frames+" · экран CRC="+Integer.toHexString(hash)
        +" · касаний "+touches.get()+" · только эмуляция (не результат Маркета)");
     });
@@ -317,7 +340,15 @@ public final class NesEmulatorActivity extends Activity {
     runOnUiThread(()->state.setText(message));
    }
   },"GameLabBridge");
+  // Keep the framebuffer and STOP visible on phones; task controls can scroll.
+  root.removeView(stopCpuButton);
+  root.removeView(demoButton);root.addView(demoButton,2);
+  LinearLayout panel=new LinearLayout(this);panel.setOrientation(LinearLayout.VERTICAL);
+  while(root.getChildCount()>2){View child=root.getChildAt(2);root.removeViewAt(2);panel.addView(child);}
+  android.widget.ScrollView options=new android.widget.ScrollView(this);options.addView(panel);
+  root.addView(options,new LinearLayout.LayoutParams(-1,0,0.65f));
   root.addView(web,new LinearLayout.LayoutParams(-1,0,1));
+  root.addView(stopCpuButton);
   for(int row=0;row<2;row++){
    LinearLayout controls=new LinearLayout(this);root.addView(controls);
    for(int i=row*4;i<row*4+4;i++){
@@ -328,6 +359,9 @@ public final class NesEmulatorActivity extends Activity {
     btn.setContentDescription("NES "+name+" button");
     btn.setOnTouchListener((view,event)->{
      int type=event.getActionMasked();
+     if(learningRuntime!=null&&learningRuntime.running()){
+      stopCpuExperiment("STOP: ручной ввод отменил task-эпизод");return true;
+     }
      if(aiFrozen){
       state.setText("STEP_MODE заморозил игру; нажми ▶ REALTIME_MODE для ручного управления");
       return true;
@@ -390,6 +424,7 @@ public final class NesEmulatorActivity extends Activity {
   runHomebrewCpuAgent();
  }
  private void stopCpuExperiment(String reason){
+  if(learningRuntime!=null&&learningRuntime.running())learningRuntime.stop(reason);
   harness.stop("STOP_OR_RECOVERY");pendingPermit=null;
   aiTicketNonce=null;aiSnapshot=false;queuedAiButton=null;aiRunning=false;
   snapshotGate.cancel();exportTrial=null;
@@ -404,7 +439,55 @@ public final class NesEmulatorActivity extends Activity {
   if(cpuAgentButton!=null)cpuAgentButton.setEnabled(homebrewRom&&pageLoaded&&resumed);
   if(state!=null)state.setText(reason);
  }
+ private void runLearningOperation(int operation){
+  if(exportingHarness){state.setText("Сначала дождись завершения экспорта опыта");return;}
+  android.os.PowerManager power=getSystemService(android.os.PowerManager.class);
+  if(power!=null&&power.getCurrentThermalStatus()>=android.os.PowerManager.THERMAL_STATUS_SEVERE){
+   state.setText("Пауза: устройство перегрето. Обучение и policy-эпизоды отложены.");return;
+  }
+  if(!resumed||!pageLoaded||web==null){state.setText("Сначала дождись загрузки NES-ядра");return;}
+  if(learningRuntime!=null&&learningRuntime.running()){
+   state.setText("Harness уже выполняет эпизод. Для отмены нажми STOP.");return;
+  }
+  stopCpuExperiment("STOP: подготовка task-профиля встроенного homebrew");
+  try{
+   if(learningRuntime==null){
+    java.nio.file.Path root=getNoBackupFilesDir().toPath().resolve("harness-v1");
+    NesHarnessAdapter adapter=new NesHarnessAdapter(web,harness,root.resolve("frames"),()->{
+     String next=frameEpoch.begin();frames=hash=0;homebrewRom=true;aiFrozen=true;
+     readyTrial=null;if(shareTrial!=null)shareTrial.setEnabled(false);return next;
+    },observation->{
+     frameEpoch.accept(observation.epoch(),observation.frame());
+     frames=observation.frame();hash=observation.pixelHash();
+     aiFrozen=observation.mode()==HarnessCoordinator.Mode.STEP_MODE;publishEvidence();
+    });
+    org.localpilot.shared.harness.HarnessRuntime created=new org.localpilot.shared.harness.HarnessRuntime(harness,adapter,
+      new org.localpilot.shared.harness.ExperienceStore(root.resolve("transitions"),root.resolve("frames")),
+      new org.localpilot.shared.harness.PolicyRepository(root.resolve("policies")),
+      new org.localpilot.shared.harness.HarnessRuntime.Host(){
+       public long now(){return SystemClock.elapsedRealtime();}
+       public void post(Runnable work){web.post(()->{
+        if(learningRuntime==null||!learningRuntime.running())return;
+        android.os.PowerManager manager=getSystemService(android.os.PowerManager.class);
+        if(manager!=null&&manager.getCurrentThermalStatus()>=android.os.PowerManager.THERMAL_STATUS_SEVERE)
+         learningRuntime.stop("STOP: thermal SEVERE; training paused");
+        else work.run();
+       });}
+       public void status(String message){state.setText(message);}
+      });
+    harness.bindRuntime(created);learningRuntime=created;
+   }
+   if(operation==0)learningRuntime.collect();
+   else if(operation==1)learningRuntime.trainAndEvaluate();
+   else if(operation==2)learningRuntime.play();
+   else if(operation==3)learningRuntime.rollback();
+   else learningRuntime.playRealtime();
+  }catch(Exception failure){stopCpuExperiment("STOP: "+failure.getMessage());}
+ }
  private void runHomebrewCpuAgent(){
+  if(learningRuntime!=null&&learningRuntime.running()){
+   state.setText("Другой task-эпизод владеет NES; сначала STOP");return;
+  }
   if(aiFrozen){state.setText("Сначала выйди из STEP_MODE");return;}
   if(!resumed||!homebrewRom||!pageLoaded||frames<15||hash==0||
      (pendingTrial!=null)){
@@ -498,6 +581,7 @@ public final class NesEmulatorActivity extends Activity {
  }
  private boolean aiEligible(){
   return getPackageName().startsWith("org.localpilot.android")&&
+    (learningRuntime==null||!learningRuntime.running())&&
     resumed&&homebrewRom&&pageLoaded&&web!=null&&frames>=15&&hash!=0&&
     !experiment.running()&&!aiRunning&&pendingTrial==null;
  }
@@ -710,6 +794,7 @@ public final class NesEmulatorActivity extends Activity {
   return rom;
  }
  private void launchRom(byte[] rom,boolean homebrew){
+  if(learningRuntime!=null&&learningRuntime.running())learningRuntime.stop("STOP: ROM changed");
   if(!pageLoaded||web==null||rom==null||rom.length>MAX_ROM){
    state.setText("NES-ядро ещё не загружено или ROM недоступен");return;
   }
@@ -752,6 +837,10 @@ public final class NesEmulatorActivity extends Activity {
  }
  @Override protected void onActivityResult(int req,int result,Intent data){
   super.onActivityResult(req,result,data);
+  if(req==EXPORT_HARNESS){
+   if(result==RESULT_OK&&data!=null&&data.getData()!=null)exportHarness(data.getData());
+   return;
+  }
   if(req!=CHOOSE_ROM||result!=RESULT_OK||data==null||data.getData()==null)return;
   Uri uri=data.getData();
   String name=filename(uri);
@@ -775,7 +864,35 @@ public final class NesEmulatorActivity extends Activity {
    Toast.makeText(this,"Неподдерживаемый или слишком большой файл игры",Toast.LENGTH_LONG).show();
   }
  }
+ private void exportHarness(Uri destination){
+  exportingHarness=true;
+  state.setText("Сохраняю приватные кадры, переходы, policy и независимую оценку в выбранный ZIP...");
+  romDownloads.execute(()->{
+   String outcome;
+   try{
+    java.nio.file.Path root=getNoBackupFilesDir().toPath().resolve("harness-v1");
+    try(java.io.OutputStream sink=getContentResolver().openOutputStream(destination,"w")){
+     if(sink==null)throw new IOException("Export destination unavailable");
+     try(java.util.zip.ZipOutputStream zip=new java.util.zip.ZipOutputStream(sink);
+         java.util.stream.Stream<java.nio.file.Path> walk=Files.walk(root)){
+      long bytes=0;int count=0;
+      for(java.nio.file.Path path:walk.sorted().collect(java.util.stream.Collectors.toList())){
+       if(!Files.isRegularFile(path,java.nio.file.LinkOption.NOFOLLOW_LINKS))continue;
+       bytes+=Files.size(path);
+       if(++count>11000||bytes>160L*1024*1024)throw new IOException("Evidence export quota exceeded");
+       zip.putNextEntry(new java.util.zip.ZipEntry(root.relativize(path).toString()));
+       Files.copy(path,zip);zip.closeEntry();
+      }
+     }
+    }
+    outcome="Экспорт Harness завершён. Кадры приватны; не публикуй архив без проверки.";
+   }catch(Exception failure){outcome="Экспорт НЕ завершён: "+failure.getClass().getSimpleName();}
+   final String message=outcome;
+   runOnUiThread(()->{exportingHarness=false;if(!closed)state.setText(message);});
+  });
+ }
  @Override protected void onPause(){
+  if(learningRuntime!=null&&learningRuntime.running())learningRuntime.stop("STOP: NES backgrounded");
   resumed=false;snapshotGate.cancel();exportTrial=null;
   if(shareTrial!=null)shareTrial.setEnabled(readyTrial!=null);
   GameLabEvidenceProvider.clear("nes");
@@ -795,6 +912,8 @@ public final class NesEmulatorActivity extends Activity {
   if(queuedAiButton!=null&&web!=null)web.postDelayed(this::executeAiMove,350);
  }
  @Override protected void onDestroy(){
+  if(learningRuntime!=null&&learningRuntime.running())learningRuntime.stop("STOP: NES destroyed");
+  if(learningRuntime!=null)harness.unbindRuntime(learningRuntime);
   closed=true;harness.stop("NES_DESTROYED");pendingPermit=null;aiFrozen=false;
   queuedAiButton=null;aiRunning=false;
   frameEpoch.cancel();snapshotGate.cancel();exportTrial=null;

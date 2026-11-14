@@ -1,3 +1,15 @@
+# Harness continuation · 2026-11-14
+
+Working candidate: `feat/harness-runtime-learning-20261113`. Main baseline is
+`189b3b0a3edb2f27bb366a4e335d6da013372b83`, preserved and rebuilt locally.
+See [runtime/learning evidence and remaining gates](docs/HARNESS-RUNTIME-LEARNING-20261114.md).
+This candidate adds real CPU task-policy learning/evaluation over the existing
+single NES owner. It is not a release or physical-device acceptance. Current
+candidate SHA and Actions runs are pinned in its PR; prior branches' green runs
+do not attest the new code.
+
+---
+
 # Подпись объединённого APK · 12.11.2026
 
 [Конкретные причины блокировки и доказательства](docs/SIGNING_DIAGNOSIS_2026-11-12.ru.md): окружений GitHub 0, создание защищённого android-signing запрещено подключению (403), подписывающих manual runs 0. PR #106 ещё отсутствует в main; PR #107 исправляет source binding и отдельный pin для checkout при dispatch. Наличие release-ключа вне этой среды не установлено; локально обнаружен только Android Debug. Проверку policy нельзя считать подписанным APK. Новый SHA/CI сверять в PR #107; issue #99 остаётся открыт.
