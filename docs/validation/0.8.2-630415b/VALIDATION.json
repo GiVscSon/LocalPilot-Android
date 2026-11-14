@@ -36,7 +36,7 @@
   "precision_objective": "IMITATION",
   "ppo_independent_improvement": "NOT_PROVEN",
   "external_real_transitions_audited": 0,
-  "permanent_signing": "NOT_CONNECTED",
+  "permanent_signing": "NEW_PERMANENT_IDENTITY_CREATED_AND_BACKED_UP",
   "physical_acceptance": "NOT_RUN",
   "release_ready": false,
   "legacy_pipeline_source_dirty": true,
@@ -46,5 +46,19 @@
     "apkSha256": "1d98c6cbb2529daeaa51ab06150b07f6d7acfdc3355f527c60185ca8dda8fe4f",
     "apkBytes": 11733241
   },
-  "unsigned_workflow": "https://github.com/GiVscSon/LocalPilot-Android/actions/runs/43584538793"
+  "unsigned_workflow": "https://github.com/GiVscSon/LocalPilot-Android/actions/runs/43584538793",
+  "fresh_install_signing": {
+    "user_authorized_new_identity": true,
+    "signature_verified": true,
+    "signer_sha256": "b960ab2feccf7f6c47602779695d13297755f97f654444d9e0f0737d3a1408c2",
+    "apk_sha256": "892f6bf4ad2b9380e93ccbb2b01f7a9c81f06492b382eed5bfb0c542e32fd7fa",
+    "apk_bytes": 11738829,
+    "apk_url": "https://drive.google.com/file/d/1URrvhWOsW2u9cAqGfnqQ7xmnCk8HIFfY/view?usp=drivesdk",
+    "key_backup": "OWNER_ONLY_PRIVATE_DRIVE",
+    "old_certificate_compatibility": "NOT_REQUIRED_USER_APPROVED_FRESH_INSTALL",
+    "signed_payload_identical_to_unsigned": true,
+    "drive_download_sha256_verified": true,
+    "github_asset_upload": "HTTP_401",
+    "ci_signing_automation": "NOT_CONFIGURED"
+  }
 }

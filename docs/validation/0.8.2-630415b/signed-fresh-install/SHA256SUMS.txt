@@ -1,0 +1,3 @@
+892f6bf4ad2b9380e93ccbb2b01f7a9c81f06492b382eed5bfb0c542e32fd7fa  LocalPilot-0.8.2-arm64.apk
+70866dd5361dc81e14ca3dee8ecccededcc9d098e4df4cde0ca6deb16c0d0000  SIGNED-MANIFEST.json
+f844e3eb4677a569b4ecbf8dce2514773a43cfb827a095a4063da8f03baf3999  ELF16K.json

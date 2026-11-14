@@ -1,3 +1,22 @@
+# Новый постоянный signer и APK для чистой установки · 14.11.2026
+
+Пользователь разрешил новую подпись вместо совместимости со старой установкой.
+Подписан тот же проверенный production payload630415b, приложение не пересобиралось.
+[APK](https://drive.google.com/file/d/1URrvhWOsW2u9cAqGfnqQ7xmnCk8HIFfY/view?usp=drivesdk),
+0.8.2/code54, org.localpilot.android, ARM64;11 738 829байт.
+APK SHA256 `892f6bf4ad2b9380e93ccbb2b01f7a9c81f06492b382eed5bfb0c542e32fd7fa`.
+Signer SHA256 `b960ab2feccf7f6c47602779695d13297755f97f654444d9e0f0737d3a1408c2`.
+[Проверки и инструкция](docs/validation/0.8.2-630415b/VALIDATION.md).
+Новый PKCS12 ключ и пароль — только вне Git, в закрытой папке владельца Google Drive
+и /workspace/.localpilot-signing; не печатать/не коммитить их. Повторно использовать
+этот signer для обновлений; автоматическая CI-подпись пока не настроена.
+Подпись v2/v3/source/CRC/ELF+ZIP16KiB и идентичность payload исходному unsigned PASS;
+скачанная из Drive копия имеет тот же SHA256. GitHub asset upload401, доставка Drive.
+Нужные данные экспортировать до удаления старой конфликтующей установки.
+Физическая приёмка остаётся NOT_RUN, stable release_ready=false.
+
+---
+
 # Проверенный main 630415b · 0.8.2/code54 · 14.11.2026
 
 PR #142 merged. Исходный SHA приложения:
