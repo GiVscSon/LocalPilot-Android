@@ -6,7 +6,32 @@ import java.util.Arrays;
 public final class BubbleSession {
  public enum Status { SEARCHING, READY, WAIT_RESPONSE, VERIFIED, PAUSED }
  /** Fixed-size metadata; reasons describe the branch actually taken, never a guessed game outcome. */
- public enum Reason { RESET, SENT, ANDROID_ACK, NULL_SCENE, STALE, BEFORE_ACK, SETTLING, UNSTABLE, GEOMETRY_MISMATCH, CELLS_MISMATCH, EXPIRED, READY, VERIFIED, CONTEXT_INVALIDATED, DISPATCH_NOT_SENT }
+ public enum Reason { RESET, SENT, ANDROID_ACK, NULL_SCENE, STALE, BEFORE_ACK, SETTLING, UNSTABLE, GEOMETRY_MISMATCH, CELLS_MISMATCH, EXPIRED, READY, VERIFIED, CONTEXT_INVALIDATED, DISPATCH_NOT_SENT, STOP }
+ /** This observer grants no input and cannot supply a trusted training reward.
+  * Flight motion is not tracked: a stable expected BOARD transition is the
+  * strongest event currently available. Never call a pixel change motion. */
+ public enum RewardState { UNKNOWN, READY, ACTION_SENT, BOARD_TRANSITION_CONFIRMED, GOAL_CONFIRMED, STOP }
+ public record RewardEvidence(long sessionGeneration,long actionId,RewardState state,
+   long beforeFrame,long afterFrame,boolean androidAck,int predictedRemoved,
+   int predictedDropped,Double shadowGroupReward) {
+  public Double verifiedReward(){return null;}
+  public boolean trainingEligible(){return false;}
+  public String provenance(){return "SHADOW_EXPECTED_NORMAL_BUBBLE_BOARD";}
+ }
+ private long rewardGeneration=1,rewardSerial,rewardActionId,rewardBeforeFrame=-1,rewardAfterFrame=-1;
+ private int rewardRemoved,rewardDropped;
+ private RewardState rewardState=RewardState.UNKNOWN;
+ private boolean rewardContextValid=true,rewardAck;
+ private Double shadowGroupReward;
+ public RewardEvidence rewardEvidence(){return new RewardEvidence(rewardGeneration,rewardActionId,
+   rewardState,rewardBeforeFrame,rewardAfterFrame,rewardAck,rewardRemoved,rewardDropped,shadowGroupReward);}
+ private void unknownReward(){rewardState=RewardState.UNKNOWN;shadowGroupReward=null;rewardAfterFrame=-1;}
+ /** Terminal local STOP; only explicit reset can open another observation. */
+ public void stop(){
+  before=null;expected=null;sentAt=ackAt=-1;lateWaiting=lateRecoveryRevoked=false;
+  rewardContextValid=false;shadowGroupReward=null;rewardState=RewardState.STOP;
+  clearCandidate();observed(Status.PAUSED,Reason.STOP);
+ }
  private static final int VISION_REASON_LIMIT=120;
  private final long responseTimeoutMs,finalTimeoutMs;
  private boolean lateWaiting,lateRecoveryRevoked;
@@ -27,7 +52,10 @@ public final class BubbleSession {
  private long observations,frameAge=-1,sentAge=-1,ackAge=-1,candidateAge=-1;
  private int observedCells=-1,expectedCells=-1,mismatchedCells=-1;
  private String visionReason="none";
- public void reset(){candidate=stable=before=null;expected=null;candidateAt=lastFrame=sentAt=ackAt=-1;verified=0;status=Status.SEARCHING;lateWaiting=lateRecoveryRevoked=false;
+ public void reset(){
+  rewardGeneration=Math.incrementExact(rewardGeneration);rewardActionId=0;
+  rewardBeforeFrame=rewardAfterFrame=-1;rewardRemoved=rewardDropped=0;
+  rewardContextValid=true;rewardAck=false;unknownReward();candidate=stable=before=null;expected=null;candidateAt=lastFrame=sentAt=ackAt=-1;verified=0;status=Status.SEARCHING;lateWaiting=lateRecoveryRevoked=false;
   reason=lastWait=Reason.RESET;Arrays.fill(reasonCounts,0);observations=0;frameAge=sentAge=ackAge=candidateAge=-1;observedCells=expectedCells=mismatchedCells=-1;visionReason="none";}
  public boolean pending(){return before!=null;}
  public boolean paused(){return status==Status.PAUSED;}
@@ -48,6 +76,7 @@ public final class BubbleSession {
  public void invalidateCandidate(){
   clearCandidate();
   if(pending()){
+   rewardContextValid=false;unknownReward();
    lateRecoveryRevoked=true;
    if(lateWaiting){lateWaiting=false;observed(Status.PAUSED,Reason.CONTEXT_INVALIDATED);}
   }
@@ -72,13 +101,24 @@ public final class BubbleSession {
   if(pending()){
    if(!before.sameGeometry(board))return observed(waitingStatus(),Reason.GEOMETRY_MISMATCH);
    if(!Arrays.equals(expected,board.cells()))return observed(waitingStatus(),Reason.CELLS_MISMATCH);
+   if(rewardContextValid&&rewardAck){
+    rewardAfterFrame=frameAt;rewardState=RewardState.BOARD_TRANSITION_CONFIRMED;
+    // A placement is a valid action but not a cleared group or game score.
+    if(rewardRemoved>=3&&before.count()+1-board.count()==rewardRemoved+rewardDropped){
+     rewardState=RewardState.GOAL_CONFIRMED;
+     shadowGroupReward=(double)(rewardRemoved+rewardDropped);
+    }
+   }else unknownReward();
    before=null;expected=null;sentAt=ackAt=-1;lateWaiting=lateRecoveryRevoked=false;verified++;stable=board;return observed(Status.VERIFIED,Reason.VERIFIED);
   }
-  stable=board;return observed(Status.READY,Reason.READY);
+  stable=board;if(rewardActionId==0)rewardState=RewardState.READY;return observed(Status.READY,Reason.READY);
  }
  public void sent(BubbleBoard board,BubblePolicy.Shot shot,long now){
   if(shot==null||!shot.belongsTo(board)||paused()||pending()||stable==null||!stable.same(board)||now<lastFrame||now-lastFrame>300)
    throw new IllegalStateException("fresh stable bubble board required");
+  rewardActionId=rewardSerial=Math.incrementExact(rewardSerial);
+  rewardBeforeFrame=lastFrame;rewardAfterFrame=-1;rewardRemoved=shot.removed;rewardDropped=shot.dropped;
+  rewardAck=false;rewardContextValid=true;shadowGroupReward=null;rewardState=RewardState.ACTION_SENT;
   before=board;expected=shot.expectedCells();lateWaiting=lateRecoveryRevoked=false;sentAt=now;ackAt=-1;clearCandidate();status=Status.WAIT_RESPONSE;
   expectedCells=0;for(int color:expected)if(color>0)expectedCells++;reason=Reason.SENT;ages(lastFrame,now);mismatchedCells=-1;
  }
@@ -90,9 +130,16 @@ public final class BubbleSession {
   if(!pending()||ackAt>=0)throw new IllegalStateException("unacknowledged unsent bubble plan required");
   before=null;expected=null;sentAt=ackAt=-1;lateWaiting=lateRecoveryRevoked=false;clearCandidate();
   expectedCells=mismatchedCells=-1;sentAge=ackAge=candidateAge=-1;
-  observed(Status.SEARCHING,Reason.DISPATCH_NOT_SENT);
+  unknownReward();observed(Status.SEARCHING,Reason.DISPATCH_NOT_SENT);
  }
- public void acknowledge(long now){if(!pending()||paused())return;if(now<sentAt)throw new IllegalArgumentException("ACK before shot");if(now-sentAt>=responseTimeoutMs)return;if(ackAt<0){ackAt=now;clearCandidate();reason=Reason.ANDROID_ACK;ages(lastFrame,now);}}
+ /** Compatibility for local callers; production must retain the sent action ID. */
+ public void acknowledge(long now){acknowledge(rewardActionId,now);}
+ public boolean acknowledge(long actionId,long now){
+  if(actionId<=0||actionId!=rewardActionId||!pending()||paused())return false;
+  if(now<sentAt)throw new IllegalArgumentException("ACK before shot");
+  if(now-sentAt>=responseTimeoutMs||ackAt>=0)return false;
+  rewardAck=true;ackAt=now;clearCandidate();reason=Reason.ANDROID_ACK;ages(lastFrame,now);return true;
+ }
  public String report(){
   StringBuilder out=new StringBuilder("BUBBLE_SESSION: status=").append(status).append(" pending=").append(pending()).append(" android_ack=").append(ackAt>=0).append(" verified_shots=").append(verified).append(" late_waiting=").append(lateWaiting).append(" late_recovery_revoked=").append(lateRecoveryRevoked).append(" final_paused=").append(finalPaused()).append(" response_timeout_ms=").append(responseTimeoutMs).append(" final_timeout_ms=").append(finalTimeoutMs)
    .append(" reason=").append(reason).append(" last_wait=").append(lastWait).append(" frame_age_ms=").append(frameAge).append(" sent_age_ms=").append(sentAge).append(" ack_age_ms=").append(ackAge).append(" candidate_age_ms=").append(candidateAge)
@@ -100,7 +147,15 @@ public final class BubbleSession {
   boolean first=true;for(Reason value:Reason.values())if(reasonCounts[value.ordinal()]>0){if(!first)out.append(',');out.append(value).append(':').append(reasonCounts[value.ordinal()]);first=false;}
   if(first)out.append('-');return out.append(" vision_reason=").append(visionReason).toString();
  }
- private Status observed(Status next,Reason why){reason=why;reasonCounts[why.ordinal()]=increment(reasonCounts[why.ordinal()]);
+ /** Separate versioned metadata keeps the legacy bounded session report intact. */
+ public String rewardReport(){return "BUBBLE_REWARD_V1 state="+rewardState+
+   " action_id="+rewardActionId+" generation="+rewardGeneration+
+   " before_frame="+rewardBeforeFrame+" after_frame="+rewardAfterFrame+
+   " android_ack="+rewardAck+" shadow_group_reward="+shadowGroupReward+
+   " verified_reward=UNKNOWN training_eligible=false provenance=SHADOW_EXPECTED_NORMAL_BUBBLE_BOARD";}
+ private Status observed(Status next,Reason why){
+  if(next!=Status.VERIFIED&&next!=Status.READY&&why!=Reason.ANDROID_ACK&&why!=Reason.STOP)unknownReward();
+  reason=why;reasonCounts[why.ordinal()]=increment(reasonCounts[why.ordinal()]);
   if(next==Status.SEARCHING||next==Status.WAIT_RESPONSE||lateWaiting&&why!=Reason.EXPIRED)lastWait=why;return status=next;}
  private Status waitingStatus(){return lateWaiting?Status.PAUSED:pending()?Status.WAIT_RESPONSE:Status.SEARCHING;}
  /** Ages are sampled at the last observation/send/ACK, so a paused report preserves the failing frame. */

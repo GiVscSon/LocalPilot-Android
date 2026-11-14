@@ -48,6 +48,7 @@ jobs:
       java tests/CaptureMatrixVerify.java
       java tests/PanelDockingVerify.java
       java tests/BubbleVerify.java
+      python3 scripts/localpilot.py unified event-audit
       java tests/FieldSafetyVerify.java
       java tests/LearningVerify.java
       java tests/ProcessExitVerify.java
@@ -134,3 +135,11 @@ jobs:
       name: Android-lint-${{ github.sha }}
       if-no-files-found: ignore
       path: app/build/reports/lint-results-debug.*
+
+   - name: Upload synthetic event audit
+     if: always()
+     uses: actions/upload-artifact@v4
+     with:
+      name: bubble-event-audit-${{ github.sha }}
+      path: build/reports/unified-script-engine/event-audit/event-audit.*
+      if-no-files-found: error
