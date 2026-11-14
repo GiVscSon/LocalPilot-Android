@@ -367,7 +367,7 @@ public final class HarnessDashboardActivity extends Activity {
    if(java.nio.file.Files.isRegularFile(candidate)){
     StudentPolicyNet pending=StudentPolicyNet.load(candidate);
     row(train,"PPO-кандидат на диске: SHA "+pending.sha256().substring(0,16));
-    row(train,"EvaluationGate: НЕ ПРОЙДЕН · активные веса не заменены.");
+    row(train,"EvaluationGate: НЕ ЗАПУЩЕН на этом устройстве · нужны 20 независимых пар и проверка улучшения медианы >5%. Активные веса не заменены.");
    }else row(train,"PPO-кандидат: ещё не создан из 16 реальных StudentPolicy шагов.");
   }catch(IOException invalid){
    row(train,"STOP: PPO-кандидат повреждён; активация невозможна.");
