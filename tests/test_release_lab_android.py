@@ -24,6 +24,25 @@ def apk(root, source="a"*40, native="x86_64", payload=bytes(range(256))*5):
 
 
 class ReleaseLabChecks(unittest.TestCase):
+    def test_github_avd_runner_uses_atomic_command_line(self):
+        """The emulator runner executes one script line at a time with sh -c.
+
+        A YAML multiline command with backslash continuations discarded --apk
+        on all six real Android emulators even though their systems booted.
+        """
+        wf=(SCRIPT.parents[1]/".github/workflows/localpilot-release-lab.yml").read_text()
+        cmds=[line.strip() for line in wf.splitlines()
+              if line.strip().startswith("script:")]
+        self.assertEqual(len(cmds),1,"ReleaseLab must have exactly one runner invocation")
+        cli=cmds[0].removeprefix("script:").strip()
+        self.assertFalse(cli.startswith("|"),"No multiline script for emulator-runner")
+        for fragment in ("python3 tools/release_lab_android.py check",
+                         "--serial emulator-5554", "--api ${{ matrix.api }}",
+                         "--apk app/build/outputs/apk/debug/app-debug.apk",
+                         "--expected-source", "--output"):
+            self.assertIn(fragment,cli)
+        self.assertNotIn("\\",cli)
+
     def test_verified_source_and_abi(self):
         with tempfile.TemporaryDirectory() as tmp:
             result=lab.read_source(apk(tmp))
