@@ -1,0 +1,176 @@
+[
+  {
+    "schema": "localpilot-android-nes-student-v1",
+    "result": "PASS",
+    "api": 30,
+    "deviceProfile": "pixel_c",
+    "screenSize": [
+      2560,
+      1800
+    ],
+    "apkSha256": "6f4bbb17331e023baeb26039271dbe63197d0d069a3dcce61d857a57e326255a",
+    "sourceSha": "630415b0e23f6383c5055cccc5b1af882189db82",
+    "policyBeforeSha256": "78d3c7bfaca942ccf48dc0914b5157131c7e3c7ab1d32a586b617f71079f0b76",
+    "policyAfterSha256": "44ea454281425d8703055bd4b499f068d3d2f2981e7b3b692644c865c246b402",
+    "romSha256": "7bfc5e462c6acddc0fcb7f5ac6cef4d87888a54d5bf788a31aab25320e446372",
+    "rollout": {
+      "steps": 16,
+      "coreFrames": 256,
+      "taskReturn": 1.9375,
+      "rewardSource": "VERIFIED_ROM_RAM",
+      "provenance": "RETRO_EMULATED"
+    },
+    "changedParameters": 4999,
+    "runtime": "PRODUCTION_ANDROID_WEBVIEW_HARNESS_PPO",
+    "singlePackage": true,
+    "evaluation": "NOT_RUN",
+    "promotion": "BLOCKED_UNTIL_INDEPENDENT_EVALUATION",
+    "physicalDevice": false,
+    "releaseReady": false
+  },
+  {
+    "schema": "localpilot-android-nes-student-v1",
+    "result": "PASS",
+    "api": 36,
+    "deviceProfile": "pixel_c",
+    "screenSize": [
+      2560,
+      1800
+    ],
+    "apkSha256": "6f4bbb17331e023baeb26039271dbe63197d0d069a3dcce61d857a57e326255a",
+    "sourceSha": "630415b0e23f6383c5055cccc5b1af882189db82",
+    "policyBeforeSha256": "414a57629508274968a6153a802e7ae8db7acfc952ba4c7b3c1182484b4f271d",
+    "policyAfterSha256": "b3143f2585bcea0453ff0b3168245b90c651162da5aa2d5fbd9ce74802a938b1",
+    "romSha256": "7bfc5e462c6acddc0fcb7f5ac6cef4d87888a54d5bf788a31aab25320e446372",
+    "rollout": {
+      "steps": 16,
+      "coreFrames": 256,
+      "taskReturn": -1.9375,
+      "rewardSource": "VERIFIED_ROM_RAM",
+      "provenance": "RETRO_EMULATED"
+    },
+    "changedParameters": 4999,
+    "runtime": "PRODUCTION_ANDROID_WEBVIEW_HARNESS_PPO",
+    "singlePackage": true,
+    "evaluation": "NOT_RUN",
+    "promotion": "BLOCKED_UNTIL_INDEPENDENT_EVALUATION",
+    "physicalDevice": false,
+    "releaseReady": false
+  },
+  {
+    "schema": "localpilot-android-nes-student-v1",
+    "result": "PASS",
+    "api": 35,
+    "deviceProfile": "pixel_2",
+    "screenSize": [
+      1080,
+      1920
+    ],
+    "apkSha256": "6f4bbb17331e023baeb26039271dbe63197d0d069a3dcce61d857a57e326255a",
+    "sourceSha": "630415b0e23f6383c5055cccc5b1af882189db82",
+    "policyBeforeSha256": "008241e913a048616d235c4f55fa8b5c0f613bdb84a3cfa9803ac282a879701d",
+    "policyAfterSha256": "e04853b08eddf5387922265bbeddb8078f23c4083a2a26e6b135e99e4cb750a9",
+    "romSha256": "7bfc5e462c6acddc0fcb7f5ac6cef4d87888a54d5bf788a31aab25320e446372",
+    "rollout": {
+      "steps": 16,
+      "coreFrames": 256,
+      "taskReturn": -2.8125,
+      "rewardSource": "VERIFIED_ROM_RAM",
+      "provenance": "RETRO_EMULATED"
+    },
+    "changedParameters": 4999,
+    "runtime": "PRODUCTION_ANDROID_WEBVIEW_HARNESS_PPO",
+    "singlePackage": true,
+    "evaluation": "NOT_RUN",
+    "promotion": "BLOCKED_UNTIL_INDEPENDENT_EVALUATION",
+    "physicalDevice": false,
+    "releaseReady": false
+  },
+  {
+    "schema": "localpilot-android-nes-student-v1",
+    "result": "PASS",
+    "api": 36,
+    "deviceProfile": "pixel_2",
+    "screenSize": [
+      1080,
+      1920
+    ],
+    "apkSha256": "6f4bbb17331e023baeb26039271dbe63197d0d069a3dcce61d857a57e326255a",
+    "sourceSha": "630415b0e23f6383c5055cccc5b1af882189db82",
+    "policyBeforeSha256": "f7492f55f9fa1a0bb33d7cb3bd0266b8f5885b742ddfff82bb1ad94f89de210f",
+    "policyAfterSha256": "4b9614fa03f7143ee1fb6470bf97f871d5f94ee591a840d99634a5bfa769a132",
+    "romSha256": "7bfc5e462c6acddc0fcb7f5ac6cef4d87888a54d5bf788a31aab25320e446372",
+    "rollout": {
+      "steps": 16,
+      "coreFrames": 256,
+      "taskReturn": 3.8125,
+      "rewardSource": "VERIFIED_ROM_RAM",
+      "provenance": "RETRO_EMULATED"
+    },
+    "changedParameters": 4999,
+    "runtime": "PRODUCTION_ANDROID_WEBVIEW_HARNESS_PPO",
+    "singlePackage": true,
+    "evaluation": "NOT_RUN",
+    "promotion": "BLOCKED_UNTIL_INDEPENDENT_EVALUATION",
+    "physicalDevice": false,
+    "releaseReady": false
+  },
+  {
+    "schema": "localpilot-android-nes-student-v1",
+    "result": "PASS",
+    "api": 35,
+    "deviceProfile": "pixel_c",
+    "screenSize": [
+      2560,
+      1800
+    ],
+    "apkSha256": "6f4bbb17331e023baeb26039271dbe63197d0d069a3dcce61d857a57e326255a",
+    "sourceSha": "630415b0e23f6383c5055cccc5b1af882189db82",
+    "policyBeforeSha256": "97affb713809a6d514564331eb484c70491e943e610464746cbc6de8e75c41a5",
+    "policyAfterSha256": "455be20008536675b1915b26bc979ce937a21b38cc91486ce0ac74e38e3928e0",
+    "romSha256": "7bfc5e462c6acddc0fcb7f5ac6cef4d87888a54d5bf788a31aab25320e446372",
+    "rollout": {
+      "steps": 16,
+      "coreFrames": 256,
+      "taskReturn": 0.0,
+      "rewardSource": "VERIFIED_ROM_RAM",
+      "provenance": "RETRO_EMULATED"
+    },
+    "changedParameters": 4999,
+    "runtime": "PRODUCTION_ANDROID_WEBVIEW_HARNESS_PPO",
+    "singlePackage": true,
+    "evaluation": "NOT_RUN",
+    "promotion": "BLOCKED_UNTIL_INDEPENDENT_EVALUATION",
+    "physicalDevice": false,
+    "releaseReady": false
+  },
+  {
+    "schema": "localpilot-android-nes-student-v1",
+    "result": "PASS",
+    "api": 30,
+    "deviceProfile": "pixel_2",
+    "screenSize": [
+      1080,
+      1920
+    ],
+    "apkSha256": "6f4bbb17331e023baeb26039271dbe63197d0d069a3dcce61d857a57e326255a",
+    "sourceSha": "630415b0e23f6383c5055cccc5b1af882189db82",
+    "policyBeforeSha256": "4e15dc5695e4278130918791fd98aa2b56dbbdfea94d86d6ecb06a490f715bb5",
+    "policyAfterSha256": "84ba50549975b8fa96b6f7702f6828c863c7e62ce8eb3fa915fe8557ae09dc96",
+    "romSha256": "7bfc5e462c6acddc0fcb7f5ac6cef4d87888a54d5bf788a31aab25320e446372",
+    "rollout": {
+      "steps": 16,
+      "coreFrames": 256,
+      "taskReturn": 1.8125,
+      "rewardSource": "VERIFIED_ROM_RAM",
+      "provenance": "RETRO_EMULATED"
+    },
+    "changedParameters": 4999,
+    "runtime": "PRODUCTION_ANDROID_WEBVIEW_HARNESS_PPO",
+    "singlePackage": true,
+    "evaluation": "NOT_RUN",
+    "promotion": "BLOCKED_UNTIL_INDEPENDENT_EVALUATION",
+    "physicalDevice": false,
+    "releaseReady": false
+  }
+]

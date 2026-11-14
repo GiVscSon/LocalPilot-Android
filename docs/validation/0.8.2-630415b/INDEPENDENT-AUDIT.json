@@ -1,0 +1,20 @@
+{
+  "schema": "localpilot-all-in-one-test-v1",
+  "source": "GitHub Actions candidate",
+  "package": "org.localpilot.android.dev.unified",
+  "versionCode": 54,
+  "versionName": "0.8.2-unified-test-only",
+  "sha256": "e919414b401ebaf1c2496bacffdb1272b28e0470fc6a6b81a87695903f2cce89",
+  "bytes": 21852081,
+  "debugSignerSha256": "38aa5de3ecc6cc80a70fe235ef11213b07c051be2dda0ee3b77f39043e4939d9",
+  "contains": {
+    "LocalPilot": true,
+    "GameLabNES": true,
+    "ModelLabGGUFImport": true,
+    "NativeCpuRuntime": true
+  },
+  "signedRelease": false,
+  "releaseReady": false,
+  "physicalAndroidTest": "NOT_VERIFIED",
+  "upgradeDataPreservation": "NOT_VERIFIED"
+}

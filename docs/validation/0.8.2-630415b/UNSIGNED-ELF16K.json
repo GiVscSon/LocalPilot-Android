@@ -1,0 +1,20 @@
+{
+  "schema": "localpilot-android-elf16k-v1",
+  "status": "ELF_AND_ZIP_16K_PASS",
+  "abi": "arm64-v8a",
+  "apkSha256": "1d98c6cbb2529daeaa51ab06150b07f6d7acfdc3355f527c60185ca8dda8fe4f",
+  "libraries": [
+    {
+      "path": "lib/arm64-v8a/liblocalpilot_embedded.so",
+      "zipDataOffset": 3899392,
+      "extractedAtInstall": false,
+      "elfMachine": 183,
+      "loadSegments": 4,
+      "minimumLoadAlignment": 16384,
+      "sha256": "1756efd03413988a26483f771fee3b471744581a71c2f263c509a23452607608"
+    }
+  ],
+  "physicalDevice": false,
+  "runtimeAcceptance": false,
+  "releaseReady": false
+}

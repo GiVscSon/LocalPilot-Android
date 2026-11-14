@@ -1,0 +1,20 @@
+{
+  "schema": "localpilot-bubble-event-audit-v1",
+  "scope": "SYNTHETIC_CONTRACT_ONLY",
+  "traces": 200,
+  "real_transitions_audited": 0,
+  "checks": 1658,
+  "shadow_goals": 19,
+  "false_shadow_goals": 0,
+  "changed_board_proxy_unattributed_positives": 163,
+  "actions_accepted_after_stop": 0,
+  "stale_acks_accepted": 0,
+  "trusted_training_rewards": 0,
+  "pixel_benchmark": false,
+  "physical_device": false,
+  "release_ready": false,
+  "source_sha": "630415b0e23f6383c5055cccc5b1af882189db82",
+  "source_dirty": false,
+  "real_replay": "NOT_RUN",
+  "csv_sha256": "fb50ad529a416260c5d9f2aa020f0ad37c515e75e6ddcaf6e6cfe69fc2268e61"
+}

@@ -1,3 +1,26 @@
+# Проверенный main 630415b · 0.8.2/code54 · 14.11.2026
+
+PR #142 merged. Исходный SHA приложения:
+`630415b0e23f6383c5055cccc5b1af882189db82` (проверенный merge-коммит).
+[Полный отчёт JSON/CSV/Markdown](docs/validation/0.8.2-630415b/VALIDATION.md).
+30 CI checks SUCCESS; 4 отменённых дубликата заменены успешными.
+Шесть API30/35/36 × Pixel2/PixelC PASS на одном x86 APK; 96 действий,
+1536 NES CPU/PPU кадров, 4999 изменённых PPO-параметров каждого кандидата.
+Это RETRO_EMULATED, не физическая приёмка и не независимое улучшение PPO.
+ARM64 test APK SHA256 `e919414b401ebaf1c2496bacffdb1272b28e0470fc6a6b81a87695903f2cce89`;
+подпись/CRC/source/DEX/assets/ELF+ZIP16K проверены независимо после скачивания.
+Unsigned production SHA256 `1d98c6cbb2529daeaa51ab06150b07f6d7acfdc3355f527c60185ca8dda8fe4f`,
+11 733 241 байт, workflow43584538793 PASS; production подписи пока нет.
+
+Bubble: ACK привязан к action_id, shadow-события не поступают в обучение.
+200 синтетических traces (11 типов), 1658 assertions PASS; настоящих переходов0.
+Схема/источники/план следующих экспериментов — в research-документе ниже.
+Постоянная совместимая подпись, физические phone/tablet+upgrade и реальная
+разметка кадров остаются блокерами. `release_ready=false`.
+Этот commit меняет только отчёты; APK собран из указанного SHA630415b.
+
+---
+
 # Следующий кандидат: shadow-события и корреляция Bubble ACK · 14.11.2026
 
 База main: `8b6cfca368f991aa6eff28af69b72d77c6b5b304`, 0.8.2/code54.
