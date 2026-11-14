@@ -621,6 +621,13 @@ public final class NesEmulatorActivity extends Activity {
    state.setText("STOP: обучение ожидает свободную NES и неподвижный контроллер");return;
   }
   try{
+   try{
+    LearningCoordinator.requireCandidateSlot(new File(getFilesDir(),"localpilot_vault").toPath());
+   }catch(IOException pending){
+    state.setText("Обучение остановлено до начала: уже есть кандидат или неполная запись. " +
+      "Его оценка и применение в приложении пока не реализованы; активная политика не изменена.");
+    return;
+   }
    activeStudent(); // Fail closed if active Student weights are corrupted.
    studentRollout.clear();
    studentRemaining=VerifiedReplayFilter.MIN_STEPS;

@@ -185,7 +185,8 @@ jobs:
             shared/src/main/java/org/localpilot/shared/PpoGaeTrainer.java \
             shared/src/main/java/org/localpilot/shared/LearningCoordinator.java \
             game-lab/src/main/java/org/localpilot/gamelab/HomebrewRamReward.java \
-            tests/StudentPolicyCli.java tests/StudentPpoRealNesVerify.java
+            tests/StudentPolicyCli.java tests/StudentPpoRealNesVerify.java tests/StudentCandidateSlotTest.java
+          java -cp build/real-student org.localpilot.shared.StudentCandidateSlotTest
           java -cp build/real-student org.localpilot.shared.StudentPolicyCli init \
             build/real-student/active.weights.bin
           node tests/nes_student_onpolicy_smoke.cjs \
