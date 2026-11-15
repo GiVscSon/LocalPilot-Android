@@ -59,7 +59,7 @@ class CliPromotionTests(unittest.TestCase):
             cli.promote(self.root)
 
     def test_symlink_candidate_not_accepted(self):
-        external = make_cli(self.root, "cli22", "22.0")
+        external = make_cli(self.root / "isolated_fixture", "cli22", "22.0")
         base = self.root / "cmdline-tools"
         (base / "latest-2").symlink_to(external, target_is_directory=True)
         with self.assertRaisesRegex(ValueError, "No complete newer"):
