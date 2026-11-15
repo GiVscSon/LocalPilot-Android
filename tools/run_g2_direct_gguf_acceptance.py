@@ -34,6 +34,9 @@ def main(apk,output):
         try:
             inference=private_file('files/harness-model-execution-v1.log',131072)
             episodes=private_file('files/console-ai-experience-v2.log',131072)
+            # Public fixture metadata only; preserve the real decisions on failure.
+            (output.parent/'gguf-inference.log').write_bytes(inference)
+            (output.parent/'gguf-transitions.log').write_bytes(episodes)
             checked=correlate(inference,episodes,EXPECTED_SHA256)
             if checked['matchedTransitions']>=4:break
         except (EvidencePending,ValueError) as pending:last=str(pending)

@@ -719,8 +719,8 @@ public final class NesEmulatorActivity extends Activity {
    try{
     org.json.JSONObject restored=new org.json.JSONObject(reply);
     if(!epoch.equals(restored.getString("session"))||restored.getInt("frame")!=saved.frame()||
-       restored.getInt("hash")!=saved.frameHash()||!frameEpoch.accept(epoch,saved.frame()))throw new IOException("Restored frame mismatch");
-    frames=saved.frame();hash=saved.frameHash();aiFrozen=true;
+       restored.getInt("savedHash")!=saved.frameHash()||restored.getInt("hash")==0||!frameEpoch.accept(epoch,saved.frame()))throw new IOException("Restored frame mismatch");
+    frames=saved.frame();hash=restored.getInt("hash");aiFrozen=true;
     progressVerifiedActions=saved.verifiedActions();progressBusy=false;
     showState("Сохранение загружено · кадр "+frames+" · действия "+progressVerifiedActions+" · новая эпоха");
     if(auto){
