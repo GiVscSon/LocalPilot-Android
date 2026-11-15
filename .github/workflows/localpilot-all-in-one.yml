@@ -238,6 +238,8 @@ jobs:
         with:
           name: LocalPilot-Runtime-Contract-Test-Only-${{ github.sha }}
           path: app/build/outputs/apk/androidTest/debug/
+      - name: Prepare SHA-verified public GGUF fixture on host
+        run: python3 tools/bundle_embedded_gguf.py prepare
       - name: Require isolated KVM
         run: |
           test -c /dev/kvm
@@ -254,7 +256,7 @@ jobs:
           emulator-options: -no-window -gpu software -no-snapshot -noaudio -no-boot-anim -camera-back none
           script: |
             python3 tools/run_harness_runtime_acceptance.py --apk app/build/outputs/apk/debug/app-debug.apk --test-apk app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk --output runtime-contract-evidence/report.json
-            python3 tools/run_g2_direct_gguf_acceptance.py --apk app/build/outputs/apk/debug/app-debug.apk --output runtime-contract-evidence/g2-direct-gguf.json
+            python3 tools/run_g2_direct_gguf_acceptance.py --apk app/build/outputs/apk/debug/app-debug.apk --gguf build/embedded-model-assets/models/MNN-Pocket-0.3B-Instruct-Q4_1.gguf --output runtime-contract-evidence/g2-direct-gguf.json
       - uses: actions/upload-artifact@v4
         if: always()
         with:
