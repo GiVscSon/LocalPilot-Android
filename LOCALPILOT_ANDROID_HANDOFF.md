@@ -1,3 +1,15 @@
+# Актуальная точка · локальный Android-стенд · 15.11.2026
+
+Интеграция `2c97623faa6e1643def4fd7a8db9e40ddd462b47`,0.8.4/code56,
+включает проверенный mainfbbbeb9 и новый Control Tower. Перед изменениями прочитать
+[Issue159](https://github.com/GiVscSon/LocalPilot-Android/issues/159) и
+[общий handoff](docs/LOCALPILOT-AGENT-HANDOFF.md). Предыдущая3-API матрица ce71fec — PASS. [PR155](https://github.com/GiVscSon/LocalPilot-Android/pull/155)
+исправляет подписанный NES fingerprint и проверку сохранённых пикселей.
+[Стенд, доказательства, FAIL и следующие шаги](docs/LOCAL_ANDROID_RUNTIME_VALIDATION_2026-11-15.ru.md).
+Холодная автоигра на локальном программном AVD остановлена по TTL; полной готовности
+Harness, физической проверки, нового подтверждённого улучшения и promotion нет.
+Ниже сохранена предыдущая точка; при продолжении сверять текущий origin/main.
+
 # Кандидат0.8.3: автоигра и настоящее NES-сохранение · 14.11.2026
 
 База main379cb74b4ca02559b9dcd83a3a4422597abe6f1c сверена по GitHub;
