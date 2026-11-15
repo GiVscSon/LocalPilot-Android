@@ -69,6 +69,10 @@ fi
 
 echo "Installing/verifying Android SDK stable-channel packages..."
 "$MANAGER" --sdk_root="$ROOT" --channel=0 "${PACKAGES[@]}"
+# Update the SDK *manager itself* last, after using the existing binary to
+# upgrade Android API packages. This package is officially cmdline-tools;latest.
+# Google stable Command-line Tools 22.0 contains the new Android CLI.
+"$MANAGER" --sdk_root="$ROOT" --channel=0 'cmdline-tools;latest'
 print_state
 if [[ "$MODE" == "--install-emulator" && ! -c /dev/kvm ]]; then
   echo "Android Emulator binaries may be installed, but /dev/kvm is absent."
