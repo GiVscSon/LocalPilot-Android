@@ -1,0 +1,572 @@
+[
+  {
+    "schema": "localpilot-release-lab-v1",
+    "result": "EMULATOR_PASS",
+    "releaseReady": false,
+    "physicalAndroidVerified": false,
+    "scope": "ISOLATED_EMULATOR_APK_INSTALL_LAUNCH_RESTART_ONLY",
+    "checks": [
+      {
+        "name": "emulator_identity",
+        "result": "PASS",
+        "evidence": {
+          "serial": "emulator-5554",
+          "api": 35,
+          "abi": "x86_64",
+          "model": "Android SDK built for x86_64",
+          "isolatedEmulator": true
+        }
+      },
+      {
+        "name": "apk_crc_source_signature",
+        "result": "PASS",
+        "evidence": {
+          "sha256": "49f7f6d314de2f03e78e4b5497c5fae041ca79d36c34b2659cbedc02a13c5fc4",
+          "sourcePinned": true,
+          "signerPinned": false
+        }
+      },
+      {
+        "name": "candidate_install_exact_bytes",
+        "result": "PASS",
+        "evidence": "49f7f6d314de2f03e78e4b5497c5fae041ca79d36c34b2659cbedc02a13c5fc4"
+      },
+      {
+        "name": "launch_real_android_ui",
+        "result": "PASS",
+        "evidence": {
+          "width": 1080,
+          "height": 1920,
+          "pngSha256": "079dd3796dc57c073191e983537e848797c227d545bc0baf065225a933b0dc17",
+          "bytes": 225255
+        }
+      },
+      {
+        "name": "no_app_crash_on_launch",
+        "result": "PASS",
+        "evidence": "CRASH_BUFFER_CHECKED"
+      },
+      {
+        "name": "process_force_stop",
+        "result": "PASS",
+        "evidence": "NO_NES_INPUT_REPLAY_OR_AUTOLAUNCH_ASSERTED"
+      },
+      {
+        "name": "restart_real_android_ui",
+        "result": "PASS",
+        "evidence": {
+          "width": 1080,
+          "height": 1920,
+          "pngSha256": "079dd3796dc57c073191e983537e848797c227d545bc0baf065225a933b0dc17",
+          "bytes": 225255
+        }
+      },
+      {
+        "name": "restart_new_process",
+        "result": "PASS",
+        "evidence": {
+          "oldPid": "2180",
+          "newPid": "2259"
+        }
+      }
+    ],
+    "candidate": {
+      "sourceSha": "1413aadc7760459d9e1fc5311b51f5e7cfc6a927",
+      "apkSha256": "49f7f6d314de2f03e78e4b5497c5fae041ca79d36c34b2659cbedc02a13c5fc4",
+      "apkSizeBytes": 23036806,
+      "nativeAbis": [
+        "x86_64"
+      ],
+      "package": "org.localpilot.android.dev.unified",
+      "versionCode": "55",
+      "versionName": "0.8.3-unified-test-only",
+      "signerSha256": "8098f62187d1724c4badd4b7110f7fe6d126af82dd15b8f07f55f9686e2a6d2c",
+      "sourcePinned": true,
+      "signerPinned": false,
+      "path": "/home/runner/work/LocalPilot-Android/LocalPilot-Android/app/build/outputs/apk/debug/app-debug.apk"
+    },
+    "baseline": null,
+    "device": {
+      "serial": "emulator-5554",
+      "api": 35,
+      "abi": "x86_64",
+      "model": "Android SDK built for x86_64",
+      "isolatedEmulator": true
+    }
+  },
+  {
+    "schema": "localpilot-release-lab-v1",
+    "result": "EMULATOR_PASS",
+    "releaseReady": false,
+    "physicalAndroidVerified": false,
+    "scope": "ISOLATED_EMULATOR_APK_INSTALL_LAUNCH_RESTART_ONLY",
+    "checks": [
+      {
+        "name": "emulator_identity",
+        "result": "PASS",
+        "evidence": {
+          "serial": "emulator-5554",
+          "api": 36,
+          "abi": "x86_64",
+          "model": "sdk_gphone64_x86_64",
+          "isolatedEmulator": true
+        }
+      },
+      {
+        "name": "apk_crc_source_signature",
+        "result": "PASS",
+        "evidence": {
+          "sha256": "49f7f6d314de2f03e78e4b5497c5fae041ca79d36c34b2659cbedc02a13c5fc4",
+          "sourcePinned": true,
+          "signerPinned": false
+        }
+      },
+      {
+        "name": "candidate_install_exact_bytes",
+        "result": "PASS",
+        "evidence": "49f7f6d314de2f03e78e4b5497c5fae041ca79d36c34b2659cbedc02a13c5fc4"
+      },
+      {
+        "name": "launch_real_android_ui",
+        "result": "PASS",
+        "evidence": {
+          "width": 2560,
+          "height": 1800,
+          "pngSha256": "efc0c6ef34a764ad81b7c60169b060d6a96a67cacd659a39cece8c5cd725307d",
+          "bytes": 291251
+        }
+      },
+      {
+        "name": "no_app_crash_on_launch",
+        "result": "PASS",
+        "evidence": "CRASH_BUFFER_CHECKED"
+      },
+      {
+        "name": "process_force_stop",
+        "result": "PASS",
+        "evidence": "NO_NES_INPUT_REPLAY_OR_AUTOLAUNCH_ASSERTED"
+      },
+      {
+        "name": "restart_real_android_ui",
+        "result": "PASS",
+        "evidence": {
+          "width": 2560,
+          "height": 1800,
+          "pngSha256": "efc0c6ef34a764ad81b7c60169b060d6a96a67cacd659a39cece8c5cd725307d",
+          "bytes": 291251
+        }
+      },
+      {
+        "name": "restart_new_process",
+        "result": "PASS",
+        "evidence": {
+          "oldPid": "2043",
+          "newPid": "2519"
+        }
+      }
+    ],
+    "candidate": {
+      "sourceSha": "1413aadc7760459d9e1fc5311b51f5e7cfc6a927",
+      "apkSha256": "49f7f6d314de2f03e78e4b5497c5fae041ca79d36c34b2659cbedc02a13c5fc4",
+      "apkSizeBytes": 23036806,
+      "nativeAbis": [
+        "x86_64"
+      ],
+      "package": "org.localpilot.android.dev.unified",
+      "versionCode": "55",
+      "versionName": "0.8.3-unified-test-only",
+      "signerSha256": "8098f62187d1724c4badd4b7110f7fe6d126af82dd15b8f07f55f9686e2a6d2c",
+      "sourcePinned": true,
+      "signerPinned": false,
+      "path": "/home/runner/work/LocalPilot-Android/LocalPilot-Android/app/build/outputs/apk/debug/app-debug.apk"
+    },
+    "baseline": null,
+    "device": {
+      "serial": "emulator-5554",
+      "api": 36,
+      "abi": "x86_64",
+      "model": "sdk_gphone64_x86_64",
+      "isolatedEmulator": true
+    }
+  },
+  {
+    "schema": "localpilot-release-lab-v1",
+    "result": "EMULATOR_PASS",
+    "releaseReady": false,
+    "physicalAndroidVerified": false,
+    "scope": "ISOLATED_EMULATOR_APK_INSTALL_LAUNCH_RESTART_ONLY",
+    "checks": [
+      {
+        "name": "emulator_identity",
+        "result": "PASS",
+        "evidence": {
+          "serial": "emulator-5554",
+          "api": 30,
+          "abi": "x86_64",
+          "model": "Android SDK built for x86_64",
+          "isolatedEmulator": true
+        }
+      },
+      {
+        "name": "apk_crc_source_signature",
+        "result": "PASS",
+        "evidence": {
+          "sha256": "49f7f6d314de2f03e78e4b5497c5fae041ca79d36c34b2659cbedc02a13c5fc4",
+          "sourcePinned": true,
+          "signerPinned": false
+        }
+      },
+      {
+        "name": "candidate_install_exact_bytes",
+        "result": "PASS",
+        "evidence": "49f7f6d314de2f03e78e4b5497c5fae041ca79d36c34b2659cbedc02a13c5fc4"
+      },
+      {
+        "name": "launch_real_android_ui",
+        "result": "PASS",
+        "evidence": {
+          "width": 1080,
+          "height": 1920,
+          "pngSha256": "8543bdda6c7eba80c2a69763b2cfd8cd29296177de9df14a8f345276fbf7345c",
+          "bytes": 226543
+        }
+      },
+      {
+        "name": "no_app_crash_on_launch",
+        "result": "PASS",
+        "evidence": "CRASH_BUFFER_CHECKED"
+      },
+      {
+        "name": "process_force_stop",
+        "result": "PASS",
+        "evidence": "NO_NES_INPUT_REPLAY_OR_AUTOLAUNCH_ASSERTED"
+      },
+      {
+        "name": "restart_real_android_ui",
+        "result": "PASS",
+        "evidence": {
+          "width": 1080,
+          "height": 1920,
+          "pngSha256": "8543bdda6c7eba80c2a69763b2cfd8cd29296177de9df14a8f345276fbf7345c",
+          "bytes": 226543
+        }
+      },
+      {
+        "name": "restart_new_process",
+        "result": "PASS",
+        "evidence": {
+          "oldPid": "2321",
+          "newPid": "2399"
+        }
+      }
+    ],
+    "candidate": {
+      "sourceSha": "1413aadc7760459d9e1fc5311b51f5e7cfc6a927",
+      "apkSha256": "49f7f6d314de2f03e78e4b5497c5fae041ca79d36c34b2659cbedc02a13c5fc4",
+      "apkSizeBytes": 23036806,
+      "nativeAbis": [
+        "x86_64"
+      ],
+      "package": "org.localpilot.android.dev.unified",
+      "versionCode": "55",
+      "versionName": "0.8.3-unified-test-only",
+      "signerSha256": "8098f62187d1724c4badd4b7110f7fe6d126af82dd15b8f07f55f9686e2a6d2c",
+      "sourcePinned": true,
+      "signerPinned": false,
+      "path": "/home/runner/work/LocalPilot-Android/LocalPilot-Android/app/build/outputs/apk/debug/app-debug.apk"
+    },
+    "baseline": null,
+    "device": {
+      "serial": "emulator-5554",
+      "api": 30,
+      "abi": "x86_64",
+      "model": "Android SDK built for x86_64",
+      "isolatedEmulator": true
+    }
+  },
+  {
+    "schema": "localpilot-release-lab-v1",
+    "result": "EMULATOR_PASS",
+    "releaseReady": false,
+    "physicalAndroidVerified": false,
+    "scope": "ISOLATED_EMULATOR_APK_INSTALL_LAUNCH_RESTART_ONLY",
+    "checks": [
+      {
+        "name": "emulator_identity",
+        "result": "PASS",
+        "evidence": {
+          "serial": "emulator-5554",
+          "api": 35,
+          "abi": "x86_64",
+          "model": "Android SDK built for x86_64",
+          "isolatedEmulator": true
+        }
+      },
+      {
+        "name": "apk_crc_source_signature",
+        "result": "PASS",
+        "evidence": {
+          "sha256": "49f7f6d314de2f03e78e4b5497c5fae041ca79d36c34b2659cbedc02a13c5fc4",
+          "sourcePinned": true,
+          "signerPinned": false
+        }
+      },
+      {
+        "name": "candidate_install_exact_bytes",
+        "result": "PASS",
+        "evidence": "49f7f6d314de2f03e78e4b5497c5fae041ca79d36c34b2659cbedc02a13c5fc4"
+      },
+      {
+        "name": "launch_real_android_ui",
+        "result": "PASS",
+        "evidence": {
+          "width": 2560,
+          "height": 1800,
+          "pngSha256": "c84c105871a78a15c814b07f8d01f143a176707aac44070638e193fa4ac1cafb",
+          "bytes": 311619
+        }
+      },
+      {
+        "name": "no_app_crash_on_launch",
+        "result": "PASS",
+        "evidence": "CRASH_BUFFER_CHECKED"
+      },
+      {
+        "name": "process_force_stop",
+        "result": "PASS",
+        "evidence": "NO_NES_INPUT_REPLAY_OR_AUTOLAUNCH_ASSERTED"
+      },
+      {
+        "name": "restart_real_android_ui",
+        "result": "PASS",
+        "evidence": {
+          "width": 2560,
+          "height": 1800,
+          "pngSha256": "c84c105871a78a15c814b07f8d01f143a176707aac44070638e193fa4ac1cafb",
+          "bytes": 311619
+        }
+      },
+      {
+        "name": "restart_new_process",
+        "result": "PASS",
+        "evidence": {
+          "oldPid": "2197",
+          "newPid": "2298"
+        }
+      }
+    ],
+    "candidate": {
+      "sourceSha": "1413aadc7760459d9e1fc5311b51f5e7cfc6a927",
+      "apkSha256": "49f7f6d314de2f03e78e4b5497c5fae041ca79d36c34b2659cbedc02a13c5fc4",
+      "apkSizeBytes": 23036806,
+      "nativeAbis": [
+        "x86_64"
+      ],
+      "package": "org.localpilot.android.dev.unified",
+      "versionCode": "55",
+      "versionName": "0.8.3-unified-test-only",
+      "signerSha256": "8098f62187d1724c4badd4b7110f7fe6d126af82dd15b8f07f55f9686e2a6d2c",
+      "sourcePinned": true,
+      "signerPinned": false,
+      "path": "/home/runner/work/LocalPilot-Android/LocalPilot-Android/app/build/outputs/apk/debug/app-debug.apk"
+    },
+    "baseline": null,
+    "device": {
+      "serial": "emulator-5554",
+      "api": 35,
+      "abi": "x86_64",
+      "model": "Android SDK built for x86_64",
+      "isolatedEmulator": true
+    }
+  },
+  {
+    "schema": "localpilot-release-lab-v1",
+    "result": "EMULATOR_PASS",
+    "releaseReady": false,
+    "physicalAndroidVerified": false,
+    "scope": "ISOLATED_EMULATOR_APK_INSTALL_LAUNCH_RESTART_ONLY",
+    "checks": [
+      {
+        "name": "emulator_identity",
+        "result": "PASS",
+        "evidence": {
+          "serial": "emulator-5554",
+          "api": 30,
+          "abi": "x86_64",
+          "model": "Android SDK built for x86_64",
+          "isolatedEmulator": true
+        }
+      },
+      {
+        "name": "apk_crc_source_signature",
+        "result": "PASS",
+        "evidence": {
+          "sha256": "49f7f6d314de2f03e78e4b5497c5fae041ca79d36c34b2659cbedc02a13c5fc4",
+          "sourcePinned": true,
+          "signerPinned": false
+        }
+      },
+      {
+        "name": "candidate_install_exact_bytes",
+        "result": "PASS",
+        "evidence": "49f7f6d314de2f03e78e4b5497c5fae041ca79d36c34b2659cbedc02a13c5fc4"
+      },
+      {
+        "name": "launch_real_android_ui",
+        "result": "PASS",
+        "evidence": {
+          "width": 2560,
+          "height": 1800,
+          "pngSha256": "a8418a9623662a2b59a8d6e077c53365c5767c34ee4391449db349decf983402",
+          "bytes": 290738
+        }
+      },
+      {
+        "name": "no_app_crash_on_launch",
+        "result": "PASS",
+        "evidence": "CRASH_BUFFER_CHECKED"
+      },
+      {
+        "name": "process_force_stop",
+        "result": "PASS",
+        "evidence": "NO_NES_INPUT_REPLAY_OR_AUTOLAUNCH_ASSERTED"
+      },
+      {
+        "name": "restart_real_android_ui",
+        "result": "PASS",
+        "evidence": {
+          "width": 2560,
+          "height": 1800,
+          "pngSha256": "a8418a9623662a2b59a8d6e077c53365c5767c34ee4391449db349decf983402",
+          "bytes": 290738
+        }
+      },
+      {
+        "name": "restart_new_process",
+        "result": "PASS",
+        "evidence": {
+          "oldPid": "2323",
+          "newPid": "2395"
+        }
+      }
+    ],
+    "candidate": {
+      "sourceSha": "1413aadc7760459d9e1fc5311b51f5e7cfc6a927",
+      "apkSha256": "49f7f6d314de2f03e78e4b5497c5fae041ca79d36c34b2659cbedc02a13c5fc4",
+      "apkSizeBytes": 23036806,
+      "nativeAbis": [
+        "x86_64"
+      ],
+      "package": "org.localpilot.android.dev.unified",
+      "versionCode": "55",
+      "versionName": "0.8.3-unified-test-only",
+      "signerSha256": "8098f62187d1724c4badd4b7110f7fe6d126af82dd15b8f07f55f9686e2a6d2c",
+      "sourcePinned": true,
+      "signerPinned": false,
+      "path": "/home/runner/work/LocalPilot-Android/LocalPilot-Android/app/build/outputs/apk/debug/app-debug.apk"
+    },
+    "baseline": null,
+    "device": {
+      "serial": "emulator-5554",
+      "api": 30,
+      "abi": "x86_64",
+      "model": "Android SDK built for x86_64",
+      "isolatedEmulator": true
+    }
+  },
+  {
+    "schema": "localpilot-release-lab-v1",
+    "result": "EMULATOR_PASS",
+    "releaseReady": false,
+    "physicalAndroidVerified": false,
+    "scope": "ISOLATED_EMULATOR_APK_INSTALL_LAUNCH_RESTART_ONLY",
+    "checks": [
+      {
+        "name": "emulator_identity",
+        "result": "PASS",
+        "evidence": {
+          "serial": "emulator-5554",
+          "api": 36,
+          "abi": "x86_64",
+          "model": "sdk_gphone64_x86_64",
+          "isolatedEmulator": true
+        }
+      },
+      {
+        "name": "apk_crc_source_signature",
+        "result": "PASS",
+        "evidence": {
+          "sha256": "49f7f6d314de2f03e78e4b5497c5fae041ca79d36c34b2659cbedc02a13c5fc4",
+          "sourcePinned": true,
+          "signerPinned": false
+        }
+      },
+      {
+        "name": "candidate_install_exact_bytes",
+        "result": "PASS",
+        "evidence": "49f7f6d314de2f03e78e4b5497c5fae041ca79d36c34b2659cbedc02a13c5fc4"
+      },
+      {
+        "name": "launch_real_android_ui",
+        "result": "PASS",
+        "evidence": {
+          "width": 1080,
+          "height": 1920,
+          "pngSha256": "f4e296a89b88b37dcf707fb24e95a18a4a9dac9608bcce14b406c448e1e20e3f",
+          "bytes": 226140
+        }
+      },
+      {
+        "name": "no_app_crash_on_launch",
+        "result": "PASS",
+        "evidence": "CRASH_BUFFER_CHECKED"
+      },
+      {
+        "name": "process_force_stop",
+        "result": "PASS",
+        "evidence": "NO_NES_INPUT_REPLAY_OR_AUTOLAUNCH_ASSERTED"
+      },
+      {
+        "name": "restart_real_android_ui",
+        "result": "PASS",
+        "evidence": {
+          "width": 1080,
+          "height": 1920,
+          "pngSha256": "aa167e0b6b26e8f5391cd383ddcdd5acbf86861db28131d9cd766d0ae2502f53",
+          "bytes": 223479
+        }
+      },
+      {
+        "name": "restart_new_process",
+        "result": "PASS",
+        "evidence": {
+          "oldPid": "2270",
+          "newPid": "2903"
+        }
+      }
+    ],
+    "candidate": {
+      "sourceSha": "1413aadc7760459d9e1fc5311b51f5e7cfc6a927",
+      "apkSha256": "49f7f6d314de2f03e78e4b5497c5fae041ca79d36c34b2659cbedc02a13c5fc4",
+      "apkSizeBytes": 23036806,
+      "nativeAbis": [
+        "x86_64"
+      ],
+      "package": "org.localpilot.android.dev.unified",
+      "versionCode": "55",
+      "versionName": "0.8.3-unified-test-only",
+      "signerSha256": "8098f62187d1724c4badd4b7110f7fe6d126af82dd15b8f07f55f9686e2a6d2c",
+      "sourcePinned": true,
+      "signerPinned": false,
+      "path": "/home/runner/work/LocalPilot-Android/LocalPilot-Android/app/build/outputs/apk/debug/app-debug.apk"
+    },
+    "baseline": null,
+    "device": {
+      "serial": "emulator-5554",
+      "api": 36,
+      "abi": "x86_64",
+      "model": "sdk_gphone64_x86_64",
+      "isolatedEmulator": true
+    }
+  }
+]

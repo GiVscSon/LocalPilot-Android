@@ -1,3 +1,28 @@
+# Проверенный кандидат0.8.3 · 15.11.2026
+
+PR #148 MERGED; main/source SHA `1413aadc7760459d9e1fc5311b51f5e7cfc6a927`.
+[Проверки, APK и ограничения](docs/validation/0.8.3-1413aadc/VALIDATION.ru.md).
+41 SUCCESS, 6/6 реальная Android/WebView автоигра/STOP/save/force-stop/resume
+API30/35/36×Pixel2/PixelC; ещё6 ReleaseLab launch/restart PASS. Метаданные скачаны
+и проверены; это эмуляторы, не физические устройства. Source SHA один, x86 TEST-ONLY
+APK и production ARM64 — разные бинарные варианты, не приписывать x86 runtime ARM64.
+Подписанный ARM64 org.localpilot.android0.8.3/code55: SHA256
+`6dd518b64f0d78fc3601174ba0ee0436fae48f15e8219552f5ed7b67e481d84b`.
+[APK в Drive](https://drive.google.com/file/d/1GQhOGwer79JmPkvqi42OWilNNK0e7wFC/view)
+повторно скачан, SHA совпал. Подписьv2/v3, прежний постоянный сертификат,
+versionCode55>54, CRC/JNI/ELF+ZIP16KiB/source provenance PASS.
+Автоигра только для встроенной тестовой NES-ROM. RAM-журнал256записей суммарно,
+replay64серии, бюджет рассчитывается до ввода. Bulk-export/ротация не подключены.
+Кандидат PPO не продвигается и не перезаписывается до экзамена; улучшение не доказано.
+GGUF4хода; импортированные ROM — ручная игра/save/load. Физическая приёмка,
+10внешних игр, Vulkan runtime NOT_RUN. Stable release_ready=false.
+Продолжать с main, не со старых APK: следующий шаг — bulk-export/управление
+историей, независимый экзамен именно on-device PPO-кандидата и профили реальных ROM.
+Сначала сверить HEAD: другие чаты могут изменить main. Не создавать ещё один signer.
+Архив перед слиянием: archive/main-before-autoplay-083-20261115 →3a14729.
+
+---
+
 # Кандидат0.8.3: автоигра и настоящее NES-сохранение · 14.11.2026
 
 База main379cb74b4ca02559b9dcd83a3a4422597abe6f1c сверена по GitHub;
