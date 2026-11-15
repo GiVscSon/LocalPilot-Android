@@ -20,15 +20,24 @@ def main(apk,output):
     if not ui.is_emulator():raise RuntimeError('Isolated AVD required')
     with zipfile.ZipFile(apk) as z:source=json.loads(z.read('assets/localpilot-source.json'))['sourceSha']
     output.parent.mkdir(parents=True,exist_ok=True)
-    raw=command('adb','shell','am','instrument','-w','-e','mode','import-pinned-pocket',PACKAGE+'.test/org.localpilot.android.HarnessRuntimeAcceptanceInstrumentation',timeout=600)
-    (output.parent/'model-import-instrumentation.txt').write_text(raw)
     prefix='INSTRUMENTATION_RESULT: evidence_json='
-    setup=json.loads(next(s[len(prefix):] for s in raw.splitlines() if s.startswith(prefix)))
+    for attempt in range(3):
+        raw=command('adb','shell','am','instrument','-w','-e','mode','import-pinned-pocket',PACKAGE+'.test/org.localpilot.android.HarnessRuntimeAcceptanceInstrumentation',timeout=600)
+        (output.parent/f'model-import-attempt-{attempt+1}.txt').write_text(raw)
+        setup=json.loads(next(s[len(prefix):] for s in raw.splitlines() if s.startswith(prefix)))
+        # A freshly booted AVD may not have DNS yet. Retry setup only; never
+        # retry model actions or turn an invalid model/result into a success.
+        if setup.get('result')=='FAIL' and 'UnknownHostException' in setup.get('error','') and attempt<2:
+            time.sleep(5*(attempt+1));continue
+        break
+    (output.parent/'model-import-instrumentation.txt').write_text(raw)
     if setup.get('result')!='MODEL_IMPORT_PASS_NOT_INFERENCE' or setup.get('modelSha256')!=EXPECTED_SHA256 or setup.get('modelBytes')!=EXPECTED_BYTES:
         raise RuntimeError('Pinned production model import failed: '+str(setup))
     ui.adb('shell','am','start','-W','-n',PACKAGE+'/'+ui.MAIN);ui.wait_activity(ui.MAIN)
     ui.tap_harness_and_verify();ui.tap_text('Играть: назначенная GGUF');ui.wait_activity(ui.NES)
-    last='NO_TRACE';deadline=time.monotonic()+240;checked=None
+    # Measured CPU calls take70-74s on this AVD. Allow FOUR independent
+    #120s requests plus30s transport; each original controller TTL is unchanged.
+    last='NO_TRACE';deadline=time.monotonic()+4*120+30;checked=None
     while time.monotonic()<deadline:
         if PACKAGE+'/'+ui.NES not in ui.resumed_activity():raise RuntimeError('Automatic GGUF inference switched away from NES')
         try:
@@ -38,6 +47,7 @@ def main(apk,output):
             (output.parent/'gguf-inference.log').write_bytes(inference)
             (output.parent/'gguf-transitions.log').write_bytes(episodes)
             checked=correlate(inference,episodes,EXPECTED_SHA256)
+            last=f"MATCHED_{checked['matchedTransitions']}_OF_4"
             if checked['matchedTransitions']>=4:break
         except (EvidencePending,ValueError) as pending:last=str(pending)
         time.sleep(.5)
