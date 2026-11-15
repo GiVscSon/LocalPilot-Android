@@ -15,6 +15,15 @@ CANONICAL = {
     "EmbeddedGgufRuntime.java": "app/src/main/java/org/localpilot/android/EmbeddedGgufRuntime.java",
 }
 
+# Known standalone ModelLab and host-JVM JNI fixture variants are not shipped as
+# duplicate engines in the unified APK. Reject any NEW fourth source copy.
+ALLOWED_VARIANTS = {
+    "EmbeddedGgufRuntime.java": {
+        "app/src/main/java/org/localpilot/android/EmbeddedGgufRuntime.java",
+        "model-lab/src/main/java/org/localpilot/android/EmbeddedGgufRuntime.java",
+        "tests/native/org/localpilot/android/EmbeddedGgufRuntime.java",
+    }
+}
 DASHBOARD = "app/src/main/java/org/localpilot/android/HarnessDashboardActivity.java"
 
 
@@ -23,8 +32,9 @@ def violations(tracked: list[str], dashboard: str) -> list[str]:
     paths = [PurePosixPath(item) for item in tracked if item]
     for name, expected in CANONICAL.items():
         matches = sorted(str(p) for p in paths if p.name == name)
-        if matches != [expected]:
-            failures.append(f"Unique owner {name}: expected only {expected}; found {matches}")
+        allowed = ALLOWED_VARIANTS.get(name, {expected})
+        if set(matches) != allowed:
+            failures.append(f"Runtime owner/known variants {name}: expected {sorted(allowed)}; found {matches}")
     if not any(str(p) == DASHBOARD for p in paths):
         failures.append("Harness dashboard source missing")
     if "new HarnessCoordinator(" in dashboard:
@@ -46,7 +56,7 @@ def main() -> int:
         print("SINGLE_RUNTIME_FAIL: " + error, file=sys.stderr)
     if errors:
         return 1
-    print("SINGLE_RUNTIME_STRUCTURE_PASS: canonical Harness/NES/Learning/GGUF entrypoints are unique")
+    print("SINGLE_RUNTIME_STRUCTURE_PASS: canonical runtime owners and explicit standalone/test JNI variants verified")
     print("Reminder: source uniqueness does not prove on-device execution, learned improvement or release.")
     return 0
 
