@@ -1,0 +1,54 @@
+name: LocalPilot Control Tower status dispatcher
+on:
+  workflow_run:
+    workflows:
+      - "LocalPilot All-in-One · GameLab + ModelLab (test-only)"
+      - "LocalPilot unified organism evidence"
+      - "Build Android debug APK"
+      - "LocalPilot One APK scripted games and training (candidate)"
+      - "LocalPilot · Verified Git Source Snapshot"
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: "Update the single Control Tower bot comment (default: dry-run)"
+        required: false
+        type: boolean
+        default: false
+permissions:
+  contents: read
+  actions: read
+  issues: write
+concurrency:
+  group: localpilot-control-tower-issue-159
+  cancel-in-progress: false
+jobs:
+  control-tower:
+    if: github.repository == 'GiVscSon/LocalPilot-Android'
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Test dispatcher idempotency, bot-only edits and stale-run fencing
+        run: python3 -m unittest discover -s tests -p 'test_control_tower_dispatcher.py' -v
+      - name: Build or update bounded status from trusted GitHub API only
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TRIGGER_ID: ${{ github.event.workflow_run.id }}
+          APPLY_MANUAL: ${{ inputs.apply }}
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_EVENT_NAME" == "workflow_run" ]]; then
+            python3 tools/control_tower_dispatcher.py --run-id "$TRIGGER_ID" --apply
+          elif [[ "$APPLY_MANUAL" == "true" ]]; then
+            python3 tools/control_tower_dispatcher.py --apply
+          else
+            python3 tools/control_tower_dispatcher.py
+          fi
