@@ -52,3 +52,33 @@ jobs:
           else
             python3 tools/control_tower_dispatcher.py
           fi
+
+  read-only-inventory:
+    if: github.repository == 'GiVscSon/LocalPilot-Android'
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Validate snapshot schema and negative cases
+        run: python3 -m unittest discover -s tests -p 'test_control_tower_snapshot.py' -v
+      - name: Collect exact-SHA PR/issue/workflow inventory from trusted GitHub API
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python3 tools/control_tower_snapshot.py --output build/control-tower-snapshot.json
+      - name: Retain immutable snapshot independently from bot comment
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: LocalPilot-Control-Tower-Snapshot-${{ github.run_id }}
+          path: build/control-tower-snapshot.json
+          retention-days: 14
+          if-no-files-found: warn
