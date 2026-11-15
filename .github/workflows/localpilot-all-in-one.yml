@@ -11,6 +11,10 @@ on:
       - 'tools/verify_g0_chain.py'
       - 'tests/test_verify_harness_apk.py'
       - 'tests/test_verify_g0_chain.py'
+      - 'tools/android_sdk_update.sh'
+      - 'tools/android_sdk_inventory.py'
+      - 'tools/bootstrap_android_sdk.sh'
+      - 'tests/test_android_sdk_inventory.py'
       - 'tools/verify_android_elf.py'
       - 'tests/test_android_elf.py'
       - 'tools/unified_in_app_smoke.py'
@@ -58,15 +62,19 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
-      - name: Install SDK + pinned native toolchain
+      - name: Refresh stable Android SDK, ADB and pinned native toolchain
         run: |
           set -euo pipefail
-          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
-            'platforms;android-35' 'build-tools;35.0.0' 'cmake;3.22.1' 'ndk;27.2.12479018'
+          bash tools/android_sdk_update.sh --update-ci
+          python3 tools/android_sdk_inventory.py \
+            --sdk-root "${ANDROID_SDK_ROOT:-$ANDROID_HOME}" --require-ci \
+            --output build/all-in-one/SDK-TOOLCHAIN.json
+          "${ANDROID_SDK_ROOT:-$ANDROID_HOME}/platform-tools/adb" version
       - name: Test one-APK source contract, fail closed
         run: |
           set -euo pipefail
           python3 -m unittest discover -s tests -p 'test_localpilot_all_in_one.py' -v
+          python3 -m unittest discover -s tests -p 'test_android_sdk_inventory.py' -v
           python3 -m unittest discover -s tests -p 'test_verify_harness_apk.py' -v
           python3 -m unittest discover -s tests -p 'test_verify_g0_chain.py' -v
           python3 -m unittest discover -s tests -p 'test_android_elf.py' -v
@@ -133,11 +141,12 @@ jobs:
             --output build/all-in-one/G0-CANDIDATE-EVIDENCE.json
           mkdir -p dist/all-in-one
           cp build/all-in-one/ELF16K.json dist/all-in-one/
+          cp build/all-in-one/SDK-TOOLCHAIN.json dist/all-in-one/
           cp build/all-in-one/APK-PACKAGING.json dist/all-in-one/
           cp build/all-in-one/G0-CANDIDATE-EVIDENCE.json dist/all-in-one/
           cp "$APK" dist/all-in-one/LocalPilot-All-in-One-TEST-ONLY.apk
           cp build/all-in-one/TEST-ONLY-MANIFEST.json dist/all-in-one/
-          (cd dist/all-in-one && sha256sum LocalPilot-All-in-One-TEST-ONLY.apk TEST-ONLY-MANIFEST.json APK-PACKAGING.json G0-CANDIDATE-EVIDENCE.json ELF16K.json > SHA256SUMS.txt)
+          (cd dist/all-in-one && sha256sum LocalPilot-All-in-One-TEST-ONLY.apk TEST-ONLY-MANIFEST.json APK-PACKAGING.json G0-CANDIDATE-EVIDENCE.json ELF16K.json SDK-TOOLCHAIN.json > SHA256SUMS.txt)
       - name: Upload candidate only, NEVER publish as stable
         uses: actions/upload-artifact@v4
         with:
@@ -170,11 +179,13 @@ jobs:
           test -s dist/original-arm64/LocalPilot-All-in-One-TEST-ONLY.apk
           test -s dist/original-arm64/TEST-ONLY-MANIFEST.json
           grep -q '"releaseReady": false' dist/original-arm64/TEST-ONLY-MANIFEST.json
-      - name: Install native SDK for x86_64 emulator-only derivative
+      - name: Refresh stable SDK for x86_64 emulator-only derivative
         run: |
           set -euo pipefail
-          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
-            'platforms;android-35' 'build-tools;35.0.0' 'cmake;3.22.1' 'ndk;27.2.12479018'
+          bash tools/android_sdk_update.sh --update-ci
+          python3 tools/android_sdk_inventory.py \
+            --sdk-root "${ANDROID_SDK_ROOT:-$ANDROID_HOME}" --require-ci \
+            --output build/x86-sdk-toolchain.json
       - name: Fetch identical pinned llama.cpp commit
         run: |
           set -euo pipefail
