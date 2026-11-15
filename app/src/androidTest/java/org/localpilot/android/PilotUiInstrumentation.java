@@ -45,6 +45,7 @@ import java.util.regex.Pattern;
  * 2048 progress is independently read from real screenshots, never Android ACK.
  */
 public final class PilotUiInstrumentation extends Instrumentation {
+    private boolean fingerprintOnly;
     private static final long TEST_LIMIT_MS = 240_000;
     private static final Pattern SCORE = Pattern.compile("^Счёт:\\s*(\\d+)");
 
@@ -95,10 +96,17 @@ public final class PilotUiInstrumentation extends Instrumentation {
 
     @Override public void onCreate(Bundle arguments) {
         super.onCreate(arguments);
+        fingerprintOnly=arguments!=null&&"nes-fingerprint".equals(arguments.getString("scenario"));
         start();
     }
 
     @Override public void onStart() {
+        if(fingerprintOnly){
+            Bundle result=new Bundle();int code=1;
+            try{result.putString("evidence_json",NesFingerprintCheck.verify(this).put("result","PASS").toString());code=-1;}
+            catch(Throwable failure){result.putString("result","FAIL");result.putString("failure",failure.toString());}
+            finish(code,result);return;
+        }
         started = SystemClock.uptimeMillis();
         limit = started + TEST_LIMIT_MS;
         Bundle result = new Bundle();
@@ -145,6 +153,7 @@ public final class PilotUiInstrumentation extends Instrumentation {
                     "PilotService is not connected; enable its Accessibility service first");
             service = onMain(() -> PilotService.instance);
 
+            addCheck("NES WebView signed fingerprint arithmetic",NesFingerprintCheck.verify(this));
             checkLauncherAndPicker();
             checkOpenRouterAdvisorPicker();
             checkLocalEnglishCore();

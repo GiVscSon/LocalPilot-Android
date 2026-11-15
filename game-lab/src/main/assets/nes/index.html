@@ -65,14 +65,20 @@ function sendFrame(rgb){
  if(typeof stepPaintCountdown!=="undefined"&&stepPaintCountdown>0)stepPaintCountdown--;
  frames++;
  // Latest fingerprint belongs to the rendered frame, even while frozen.
- let hash=2166136261>>>0;
- for(let i=0;i<256*240;i+=241)hash=Math.imul(hash^rgb[i],16777619)>>>0;
+ const hash=frameFingerprint(rgb);
  validFrame=hash;
  // In STEP_MODE, only publish AFTER the action release ACK so Android can
  // verify a coherent transition, never an intermediate frame.
  if(frames%15===0&&!stepMode){
   try{if(window.GameLabBridge)window.GameLabBridge.onFrame(frames,hash|0,activeRomSession);}catch(error){}
  }
+}
+function frameFingerprint(rgb){
+ // FNV-1a's signed 32-bit form avoids unsigned-to-signed narrowing in old
+ // WebViews; the bits are identical to the unsigned reference algorithm.
+ let hash=-2128831035;
+ for(let i=0;i<256*240;i+=241)hash=Math.imul(hash^rgb[i],16777619);
+ return hash;
 }
 function paintFrame(rgb){
  const data=image.data;
@@ -221,6 +227,7 @@ window.retroExitStepMode=function(){
 window.retroSaveState=function(){
  if(!nes||!activeRomSession||!paused||!stepMode||agentTrial||!gamepadLatch||
     gamepadLatch.down.size!==0||frames<15||!validFrame)return null;
+ if(frameFingerprint(nes.ppu.buffer)!==(validFrame|0))return null;
  return {schema:"localpilot-jsnes-save-v1",frame:frames,hash:validFrame|0,machine:nes.toJSON()};
 };
 // Keep large CPU/PPU graphs inside JS. Android receives small, bounded JSON chunks.

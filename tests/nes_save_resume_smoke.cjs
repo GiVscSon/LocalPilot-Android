@@ -22,12 +22,16 @@ function boot(session){
  const tick=n=>{for(let i=0;i<n;i++)for(const fn of [...timers.values()])fn();};tick(45);
  return {c,tick,metrics:()=>JSON.parse(c.retroMetrics()),pixels:()=>crypto.createHash('sha256').update(pixels).digest('hex'),
   step(button,s=session){lease={session:s,nonce:String(++serial).padStart(22,'p'),frames:16};return c.retroAiStep(button,16,lease.nonce);},
-  revoke(){lease=null;},held:()=>vm.runInContext('gamepadLatch.down.size',page)};
+  revoke(){lease=null;},held:()=>vm.runInContext('gamepadLatch.down.size',page),
+  corruptFingerprint:()=>vm.runInContext('validFrame^=1',page)};
 }
 const first=boot('11');assert.equal(first.c.retroSaveState(),null,'never serialize realtime state');
 assert.equal(first.c.retroEnterStepMode(),true);
 for(let i=0;i<40;i++)assert.equal(first.step(i%3?'RIGHT':'A'),true);
 const saved=JSON.parse(JSON.stringify(first.c.retroSaveState()));assert(saved.machine.cpu.mem);
+first.corruptFingerprint();
+assert.equal(first.c.retroSaveState(),null,'never persist a fingerprint inconsistent with the actual PPU buffer');
+first.corruptFingerprint();
 const token='save-11-1',meta=first.c.retroPrepareSave(token);
 assert.equal(meta.ready,true);assert.equal(first.c.retroReadSaveChunk('save-11-2',0),null,'foreign snapshot token rejected');
 let transfer='';for(let offset=0;offset<meta.length;offset+=65536){
