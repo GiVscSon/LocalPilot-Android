@@ -26,6 +26,7 @@ public final class VerifiedPpoReplayStore {
  private static final int MAGIC=0x4c505231; // LPR1
  public static final int STEPS=VerifiedReplayFilter.MIN_STEPS;
  private static final int MAX_RECORD_BYTES=64*1024,MAX_RECORDS=64;
+ public static final int MAX_BATCHES=MAX_RECORDS;
  private static final String DIR="episodes/onpolicy-v1";
  public record Receipt(String filename,String sha256,int steps,float totalReward) {}
  public record Summary(int batches,int steps,float rewardSum,String latestSha256) {}

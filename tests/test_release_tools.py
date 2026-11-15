@@ -48,10 +48,14 @@ class ReleaseToolsTest(unittest.TestCase):
         self.assertEqual(('8.9.10-dev-install1081', 987), (config['version'], config['versionCode']))
 
     def test_standalone_is_distinct_from_existing_dev_installation(self):
+        # Package isolation must survive a production version bump. Pin the
+        # input fixture, rather than accidentally pinning the project's release.
+        path = self.root / 'app/build.gradle'
+        path.write_text(re.sub(r"versionName\s+'[^']+'", "versionName '3.2.1'", path.read_text()))
         config = common.configuration(self.root)
         self.assertEqual('org.localpilot.android.dev.install1081', config['package'])
         self.assertNotEqual('org.localpilot.android.dev', config['package'])
-        self.assertEqual('0.8.2-dev-install1081', config['version'])
+        self.assertEqual('3.2.1-dev-install1081', config['version'])
 
     def test_missing_or_ambiguous_version_fails(self):
         path = self.root / 'app/build.gradle'

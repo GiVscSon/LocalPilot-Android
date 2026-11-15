@@ -21,7 +21,7 @@ const keyMap={LEFT:"BUTTON_LEFT",RIGHT:"BUTTON_RIGHT",UP:"BUTTON_UP",DOWN:"BUTTO
 let nes=null,timer=null,frames=0,validFrame=0,paused=false,sampleRate=44100;
 let activeRomSession=null;
 let stepMode=false;
-let gamepadLatch=null,agentTrial=null,homebrewRom=false;
+let gamepadLatch=null,agentTrial=null,homebrewRom=false,pendingSave=null,pendingRestore=null;
 let audioContext=null,audioNode=null;
 const SIZE=32768,ringL=new Float32Array(SIZE),ringR=new Float32Array(SIZE);
 let writeAt=0,readAt=0;
@@ -93,6 +93,7 @@ function tick(){
  }catch(error){stop();status("Ошибка игры: "+String(error.message||error));}
 }
 function stop(){
+ pendingSave=null;pendingRestore=null;
  if(timer!==null){clearInterval(timer);timer=null;}
  if(gamepadLatch){gamepadLatch.clear();gamepadLatch=null;}
  agentTrial=null;homebrewRom=false;activeRomSession=null;stepMode=false;
@@ -100,6 +101,7 @@ function stop(){
 }
 window.retroStop=function(){stop();status("Игра остановлена");};
 window.retroCancelAgent=function(){
+ pendingSave=null;pendingRestore=null;
  agentTrial=null;
  if(gamepadLatch)gamepadLatch.clear();
  return !gamepadLatch||gamepadLatch.down.size===0;
@@ -206,6 +208,78 @@ window.retroExitStepMode=function(){
  if(!nes||!stepMode||!paused)return false;
  stepMode=false;
  return window.retroResume();
+};
+// Save only a quiescent CPU/PPU boundary. No nonce, epoch or input ownership is serialized.
+window.retroSaveState=function(){
+ if(!nes||!activeRomSession||!paused||!stepMode||agentTrial||!gamepadLatch||
+    gamepadLatch.down.size!==0||frames<15||!validFrame)return null;
+ return {schema:"localpilot-jsnes-save-v1",frame:frames,hash:validFrame|0,machine:nes.toJSON()};
+};
+// Keep large CPU/PPU graphs inside JS. Android receives small, bounded JSON chunks.
+window.retroPrepareSave=function(token){
+ pendingSave=null;
+ if(typeof token!=="string"||!/^save-[0-9]+-[0-9]+$/.test(token))return null;
+ const saved=window.retroSaveState();
+ if(!saved)return {ready:false,paused,stepMode,held:gamepadLatch?gamepadLatch.down.size:-1,frame:frames};
+ const text=JSON.stringify(saved);
+ if(text.length>4*1024*1024)return null;
+ pendingSave={token,text};
+ return {ready:true,frame:saved.frame,hash:saved.hash,length:text.length};
+};
+window.retroReadSaveChunk=function(token,offset){
+ if(!pendingSave||pendingSave.token!==token||!paused||!stepMode||
+    !Number.isInteger(offset)||offset<0||offset>=pendingSave.text.length)return null;
+ return pendingSave.text.slice(offset,offset+65536);
+};
+window.retroReleaseSave=function(token){
+ if(pendingSave&&pendingSave.token===token)pendingSave=null;
+};
+window.retroFreezeForSave=function(){
+ if(!nes||!activeRomSession||!gamepadLatch||agentTrial||gamepadLatch.down.size!==0)return false;
+ window.retroPause();stepMode=true;
+ return {session:activeRomSession,frame:frames,hash:validFrame|0};
+};
+window.retroBeginRestore=function(token,session,newSession,length){
+ pendingRestore=null;
+ if(typeof token!=="string"||!/^restore-[0-9]+-[0-9]+$/.test(token)||
+    !nes||session!==activeRomSession||typeof newSession!=="string"||
+    newSession===session||!/^[1-9][0-9]{0,18}$/.test(newSession)||
+    !Number.isInteger(length)||length<1||length>4*1024*1024)return false;
+ window.retroPause();stepMode=true;
+ pendingRestore={token,session,newSession,length,received:0,chunks:[]};return true;
+};
+window.retroWriteRestoreChunk=function(token,offset,text){
+ const restore=pendingRestore;
+ if(!restore||restore.token!==token||activeRomSession!==restore.session||!paused||!stepMode||
+    offset!==restore.received||typeof text!=="string"||text.length<1||text.length>65536||
+    offset+text.length>restore.length)return false;
+ restore.chunks.push(text);restore.received+=text.length;return true;
+};
+window.retroCommitRestore=function(token){
+ const restore=pendingRestore;
+ if(!restore||restore.token!==token||restore.received!==restore.length)return false;
+ pendingRestore=null;
+ try{return window.retroRestoreState(JSON.parse(restore.chunks.join("")),restore.session,restore.newSession);}
+ catch(error){stop();return false;}
+};
+window.retroRestoreState=function(saved,session,newSession){
+ if(!nes||session!==activeRomSession||typeof newSession!=="string"||newSession===session||
+    !/^[1-9][0-9]{0,18}$/.test(newSession)||!saved||saved.schema!=="localpilot-jsnes-save-v1"||
+    !Number.isInteger(saved.frame)||saved.frame<15||saved.frame>2147483646||
+    !Number.isInteger(saved.hash)||saved.hash===0||!saved.machine||
+    !saved.machine.cpu||!saved.machine.ppu)return false;
+ try{
+  window.retroPause();stepMode=true;
+  nes.fromJSON(saved.machine);
+  // A save file can never restore held buttons or an old action lease.
+  for(let player=1;player<=2;player++)for(const name of Object.values(keyMap))
+   nes.buttonUp(player,jsnes.Controller[name]);
+  gamepadLatch=new FrameHeldButtons(nes,4);agentTrial=null;usedStepNonce="";
+  frames=saved.frame-1;sendFrame(nes.ppu.buffer);
+  if((validFrame|0)!==saved.hash)throw new Error("Saved frame hash mismatch");
+  activeRomSession=newSession;
+  return {frame:frames,hash:validFrame|0,session:activeRomSession};
+ }catch(error){stop();status("STOP: сохранение NES не прошло проверку");return false;}
 };
 let usedStepNonce="";
 window.retroAiStep=function(name,holdFrames,nonce){
