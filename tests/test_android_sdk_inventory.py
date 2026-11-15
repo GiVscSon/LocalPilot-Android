@@ -35,6 +35,19 @@ class AndroidSdkInventoryTests(unittest.TestCase):
         self.assertEqual("NOT_TESTED", result["checks"]["emulatorBoot"])
         self.assertEqual("NOT_TESTED", result["checks"]["physicalPoco"])
 
+    def test_outdated_sdk_manager_12_is_rejected(self):
+        (self.root / "cmdline-tools/latest/source.properties").write_text(
+            "Pkg.Revision = 12.0\n")
+        result = inventory.inventory(self.root, require_ci=True)
+        self.assertEqual("FAIL", result["status"])
+        self.assertTrue(any("cmdline-tools/latest" in error for error in result["errors"]))
+
+    def test_missing_android_cli_executable_is_rejected(self):
+        (self.root / "cmdline-tools/latest/bin/android").unlink()
+        result = inventory.inventory(self.root, require_ci=True)
+        self.assertEqual("FAIL", result["status"])
+        self.assertTrue(any("bin/android" in error for error in result["errors"]))
+
     def test_old_platform_tools_not_accepted(self):
         (self.root / "platform-tools/source.properties").write_text("Pkg.Revision=36.0.2\n")
         result = inventory.inventory(self.root, require_ci=True)
