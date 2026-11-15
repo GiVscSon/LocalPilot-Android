@@ -22,7 +22,7 @@ print_state() {
     local prop="$ROOT/$name/source.properties"
     if [[ -f "$prop" ]]; then
       local rev
-      rev="$(sed -n 's/^Pkg.Revision=//p' "$prop" | head -n 1)"
+      rev="$(awk -F= '/^[[:space:]]*Pkg\.Revision[[:space:]]*=/ {gsub(/[[:space:]]/, "", $2); print $2; exit}' "$prop")"
       printf '  %-46s %s\n' "$name" "${rev:-installed}"
     else
       printf '  %-46s MISSING\n' "$name"
@@ -44,7 +44,7 @@ fi
 # existing SHA-256 pinned official Android command-line-tools bootstrap.
 if [[ ! -x "$MANAGER" ]]; then
   echo "SDK manager absent; attempting checksum-verified official bootstrap."
-  if ! bash "$HERE/bootstrap_android_sdk.sh" --install-sdk; then
+  if ! ANDROID_SDK_ROOT="$ROOT" bash "$HERE/bootstrap_android_sdk.sh" --install-sdk; then
     echo "Android SDK download is unavailable. Check DNS/network access and" >&2
     echo "the Android SDK license state. This host may block Google endpoints." >&2
     exit 3
