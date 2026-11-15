@@ -1,5 +1,7 @@
 # LocalPilot · handoff for fresh ChatGPT / Codex / Gemini agents
 
+**Single synchronization pointer:** [LOCALPILOT-SYNC-POINT.md](LOCALPILOT-SYNC-POINT.md), with immutable [2026-11-15 checkpoint](checkpoints/LOCALPILOT-CHECKPOINT-2026-11-15.md). Each chat/agent must read it explicitly; no cross-thread push exists.
+
 **Live index:** [Control Tower #159](https://github.com/GiVscSon/LocalPilot-Android/issues/159), including ONE continuously updated `github-actions[bot]` CI status comment. **Implementation authority:** [main](https://github.com/GiVscSon/LocalPilot-Android/tree/main), not the latest chat or draft PR. **Architecture:** [single source of truth](LOCALPILOT-SINGLE-SOURCE-OF-TRUTH.md), [staged acceptance](LOCALPILOT-CONTROL-TOWER-STAGES.md), [RFC](LOCALPILOT-HARNESS-RFC-v1.md).
 
 ## First five minutes of a fresh session
