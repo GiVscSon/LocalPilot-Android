@@ -1,0 +1,27 @@
+name: LocalPilot singleton runtime guard
+on:
+  pull_request:
+    paths:
+      - 'shared/**'
+      - 'game-lab/**'
+      - 'model-lab/**'
+      - 'app/**'
+      - 'tools/verify_single_runtime.py'
+      - 'tests/test_verify_single_runtime.py'
+      - '.github/workflows/single-runtime-guard.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  one-runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify source-level singleton guard tests
+        run: python3 -m unittest discover -s tests -p 'test_verify_single_runtime.py' -v
+      - name: Enforce only the existing Harness, NES, Trainer and GGUF entrypoints
+        run: python3 tools/verify_single_runtime.py
