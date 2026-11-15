@@ -3,6 +3,8 @@ on:
   pull_request:
     paths:
       - 'tools/verify_unified_organism.py'
+      - 'tools/verify_g2_trace.py'
+      - 'tests/test_verify_g2_trace.py'
       - 'tests/test_harness_live_cycle.py'
       - 'tests/HarnessCoordinator*.java'
       - 'tests/VerifiedPpoReplayStore*.java'
@@ -29,7 +31,9 @@ jobs:
           distribution: temurin
           java-version: '17'
       - name: Run unified source and JVM evidence suite
-        run: python3 tools/verify_unified_organism.py --output build/unified-organism-evidence.json
+        run: |
+          python3 -m unittest discover -s tests -p 'test_verify_g2_trace.py' -v
+          python3 tools/verify_unified_organism.py --output build/unified-organism-evidence.json
       - name: Preserve evidence even on failure
         if: always()
         uses: actions/upload-artifact@v4
