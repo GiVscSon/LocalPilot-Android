@@ -32,8 +32,11 @@ public final class StudentEvaluationGateTest {
 
  private static List<StudentEvaluationGate.Step> rows(StudentPolicyNet active,
    StudentPolicyNet candidate) {
+  return rows(active,candidate,new int[]{40,64,96,160,200});
+ }
+ private static List<StudentEvaluationGate.Step> rows(StudentPolicyNet active,
+   StudentPolicyNet candidate,int[] starts) {
   List<StudentEvaluationGate.Step> list=new ArrayList<>();
-  int[] starts={40,64,96,160,200};
   int scenario=0;
   for(int x:starts){
    for(var arm:StudentEvaluationGate.Arm.values()){
@@ -46,9 +49,9 @@ public final class StudentEvaluationGateTest {
      list.add(new StudentEvaluationGate.Step(
        "independent-"+scenario,arm,"holdout-"+scenario+"-"+arm,
        StudentEvaluationGate.Provenance.RETRO_EMULATED,ROM,model.sha256(),
-       i,startFrame+i*16,startFrame+(i+1)*16,current,112,current+delta,112,
+       i,startFrame+i*16,startFrame+(i+1)*16,current,112,(current+delta+256)%256,112,
        choice,true,true,true));
-     current+=delta;
+     current=(current+delta+256)%256;
     }
    }
    scenario++;
@@ -64,6 +67,9 @@ public final class StudentEvaluationGateTest {
  public static void main(String[] args){
   StudentPolicyNet left=forced(0),right=forced(1);
   var normal=rows(left,right);
+  check(StudentEvaluationGate.evaluate(left,right,ROM,Set.of(128),
+    rows(left,right,new int[]{0,64,96,160,200}),StudentEvaluationGateTest::fixtureReward).reason()
+    ==StudentEvaluationGate.Reason.ACTION_MISMATCH,"unmasked edge action rejected before rewarding wrap");
   var report=StudentEvaluationGate.evaluate(left,right,ROM,Set.of(128),normal,StudentEvaluationGateTest::fixtureReward);
   check(report.accepted()&&report.reason()==StudentEvaluationGate.Reason.ACCEPTED,
     "independent matched fixture with task progress passes");

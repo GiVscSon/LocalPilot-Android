@@ -37,6 +37,9 @@ public final class LearningCoordinator {
   // Do not overwrite an unexamined previous candidate or crash-partial file.
   if(Files.exists(candidate)||Files.exists(manifest))
    throw new IOException("PPO_PENDING_CANDIDATE_MUST_BE_EVALUATED");
+  // Idempotent with the foreground producer. The manifest binds this exact
+  // immutable rollout, even after the working journal is archived/rotated.
+  VerifiedPpoReplayStore.Receipt replay=VerifiedPpoReplayStore.append(appPrivateVault,verifiedSteps);
   PpoGaeTrainer.Report trained=PpoGaeTrainer.updateCandidate(
     active,verifiedSteps,candidate,PpoGaeTrainer.DEFAULT);
   if(Thread.currentThread().isInterrupted())throw new IOException("STOP_AFTER_TRAINING");
@@ -48,6 +51,8 @@ public final class LearningCoordinator {
     "  \"task\":\"builtin-homebrew-right-progress-v1\",\n"+
     "  \"observationSchema\":\""+verifiedSteps.get(0).observationSchema()+"\",\n"+
     "  \"romSha256\":\""+verifiedSteps.get(0).romSha256()+"\",\n"+
+    "  \"trainingReplaySha256\":\""+replay.sha256()+"\",\n"+
+    "  \"trainingEpoch\":\""+verifiedSteps.get(0).epoch()+"\",\n"+
     "  \"policyBeforeSha256\":\""+trained.shaBefore()+"\",\n"+
     "  \"policyAfterSha256\":\""+trained.shaAfter()+"\",\n"+
     "  \"verifiedRolloutSteps\":"+trained.eligibleSteps()+",\n"+
