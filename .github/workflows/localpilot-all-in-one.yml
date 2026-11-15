@@ -17,6 +17,7 @@ on:
       - 'tools/nes_autoplay_resume_acceptance.py'
       - 'tools/nes_sustained_256_acceptance.py'
       - 'tests/test_nes_sustained_256_acceptance.py'
+      - 'tests/test_adb_private_file_retry.py'
       - 'tools/nes_experience_archive_acceptance.py'
       - 'tools/summarize_android_matrix.py'
       - 'tests/test_summarize_android_matrix.py'
@@ -71,6 +72,7 @@ jobs:
           python3 -m unittest discover -s tests -p 'test_harness_student_candidate_evaluation.py' -v
           python3 -m unittest discover -s tests -p 'test_nes_autoplay_resume_acceptance.py' -v
           python3 -m unittest discover -s tests -p 'test_nes_sustained_256_acceptance.py' -v
+          python3 -m unittest discover -s tests -p 'test_adb_private_file_retry.py' -v
           python3 -m unittest discover -s tests -p 'test_nes_experience_archive_acceptance.py' -v
           java tests/NesSaveStoreVerify.java
           python3 -m unittest discover -s tests -p 'test_harness_single_panel.py' -v
