@@ -47,7 +47,7 @@ const scenarios=[
 // Preset fallback recipes, never chosen by reward or whether the candidate wins.
 // Actual on-device exploration can overlap a fixed reset. Only replay leakage
 // and duplicate initial X can exclude a recipe; select the first six valid pairs.
-for(const full of [1,2,3])for(const warm of [2,4,6,10,12])for(const dir of ["LEFT","RIGHT"])
+for(const full of [1,2,3])for(const warm of [4,6,10,12])for(const dir of ["LEFT","RIGHT"])
  scenarios.push({id:dir.toLowerCase()+"-"+full+"-"+warm,dir,full,warm});
 function runScenario(scenario,arm,weights){
  const events=[];
