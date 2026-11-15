@@ -36,7 +36,8 @@ def inspect(apk: Path, source_sha: str, packaging: dict,
     require(bool(SHA40.fullmatch(source_sha)), "EXPECTED_SOURCE_SHA_INVALID")
     require(apk.is_file() and 1024 < apk.stat().st_size < 45 * 1024 * 1024,
             "APK_ABSENT_OR_OUT_OF_BOUNDS")
-    data_sha = hashlib.file_digest(apk.open("rb"), "sha256").hexdigest()
+    with apk.open("rb") as stream:
+        data_sha = hashlib.file_digest(stream, "sha256").hexdigest()
     require(bool(SHA64.fullmatch(data_sha)), "APK_HASH_INVALID")
     require(packaging.get("schema") == "localpilot-apk-packaging-audit-v1"
             and packaging.get("status") == "PACKAGING_PASS", "ZIP_AUDIT_NOT_PASSED")
