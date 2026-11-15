@@ -47,7 +47,7 @@ class SustainedProofTest(unittest.TestCase):
             module.verify_sustained_goals(make_journal(16), POLICY, ROM, 32)
 
     def test_reject_modified_hash(self):
-        damaged = make_journal().replace(b"RIGHT", b"LEFT ", 1)
+        damaged = make_journal().replace(b"RIGHT", b"LEFT", 1)
         with self.assertRaisesRegex(ValueError, "SUSTAINED_HASH_CHAIN_BROKEN"):
             module.verify_sustained_goals(damaged, POLICY, ROM, 32)
 
