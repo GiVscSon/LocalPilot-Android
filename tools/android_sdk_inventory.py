@@ -13,7 +13,7 @@ import re
 import sys
 
 PACKAGES = {
-    "cmdline-tools/latest": None,
+    "cmdline-tools/latest": "22.0",
     "platform-tools": "37.0.1",
     "platforms/android-30": None,
     "platforms/android-35": None,
@@ -24,6 +24,7 @@ PACKAGES = {
 }
 EXECUTABLES = (
     "cmdline-tools/latest/bin/sdkmanager",
+    "cmdline-tools/latest/bin/android",
     "platform-tools/adb",
     "build-tools/35.0.0/aapt",
     "build-tools/35.0.0/apksigner",
