@@ -16,6 +16,8 @@ on:
       - 'tests/AndroidCandidateReplayExport.java'
       - 'tools/nes_autoplay_resume_acceptance.py'
       - 'tools/nes_experience_archive_acceptance.py'
+      - 'tools/summarize_android_matrix.py'
+      - 'tests/test_summarize_android_matrix.py'
       - 'tests/test_nes_experience_archive_acceptance.py'
       - 'tests/NesExperienceArchive*.java'
       - 'tests/test_nes_autoplay_resume_acceptance.py'
@@ -250,3 +252,48 @@ jobs:
           retention-days: 14
           if-no-files-found: warn
           path: unified-device-evidence/
+
+  unified-matrix-evidence:
+    if: ${{ always() }}
+    needs: [unified-ui-emulator]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run negative unit tests for six-device aggregation
+        run: python3 -m unittest discover -s tests -p 'test_summarize_android_matrix.py' -v
+      - name: Download each isolated emulator proof (missing data remains FAIL)
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          pattern: LocalPilot-One-APK-Emulator-UI-API*-${{ github.sha }}
+          path: build/emulator-reports/
+          merge-multiple: false
+      - name: Reconcile exact API30/35/36 × phone/tablet results
+        run: |
+          python3 tools/summarize_android_matrix.py \
+            --artifacts-root build/emulator-reports/ \
+            --source-sha "$GITHUB_SHA" \
+            --output build/unified-android-matrix.json \
+            --summary build/unified-android-matrix.md
+      - name: Publish bounded status in Actions summary
+        if: always()
+        shell: bash
+        run: |
+          if [[ -s build/unified-android-matrix.md ]]; then
+            cat build/unified-android-matrix.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo 'No verifiable Android matrix report (UNKNOWN, never PASS).' >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Save source-bound matrix evidence even on failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: LocalPilot-Unified-Android-Matrix-${{ github.sha }}
+          retention-days: 14
+          if-no-files-found: warn
+          path: |
+            build/unified-android-matrix.json
+            build/unified-android-matrix.md
