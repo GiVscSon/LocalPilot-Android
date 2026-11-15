@@ -141,7 +141,8 @@ def dispatch(api, trigger_id=None, apply=False):
         selected = max(latest.values(), key=lambda run: run["id"])
     branch = api.call("/branches/main")
     main_sha = (branch.get("commit") or {}).get("sha")
-    jobs_doc = api.call(f"/actions/runs/{selected['id']}/jobs?per_page=100")
+    current = max(latest.values(), key=lambda run: run["id"])
+    jobs_doc = api.call(f"/actions/runs/{current['id']}/jobs?per_page=100")
     jobs = jobs_doc.get("jobs")
     if not isinstance(jobs, list):
         raise ValueError("Missing job evidence")
