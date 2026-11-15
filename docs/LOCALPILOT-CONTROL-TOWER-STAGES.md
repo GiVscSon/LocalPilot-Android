@@ -68,3 +68,17 @@ G0–G6 are **not replaced** by C0–C3. Prioritize first failing gate; independ
 ## Current next action
 
 Implement **C0 inventory + snapshot schema/tests** from current main; then C1 dry-run dispatcher. Track each milestone in #159. Do not interpret this plan itself as implementation or CI evidence.
+
+## System-level integration contract: one operational product
+
+**Single runtime graph:** `GameLab/Console/ModelLab/Play/Learn/Evidence UI -> existing HarnessCoordinator -> EnvironmentAdapter (real JSNES or safe Android capture) -> ObservationPipeline -> ModelRouter (existing GGUF JNI + fast StudentPolicy) -> AgentController/ActionGate/InputPermit -> verified environment step -> TransitionVerifier -> ExperienceStore -> LearningCoordinator -> EvaluationGate -> ModelRouter`. UI is a projection of this graph, not independent state.
+
+**Shared identity:** every screen, command, model inference and journal record refers to one `episodeId`, `epoch`, `frameId`, `romSha256`, `modelSha256`, `policySha256`, `stopRevision`, `sourceKind` and `evidenceRef`. Missing/contradictory identifiers cause `UNKNOWN` and no action. Exactly one active input owner; changing ROM/profile or STOP invalidates stale proposals and releases held buttons.
+
+**Proof of real integration:** an end-to-end acceptance test must launch a verified ROM in the **existing** emulator, bind a model through the **existing** registry, capture a fresh observation, obtain a genuine model decision, validate the legal action, execute it through the single coordinator, independently verify frame/RAM advancement, persist the immutable transition, train only on eligible reward-bearing evidence, evaluate candidate on disjoint holdouts, and either atomically promote or roll back. Negative tests: delayed GGUF response after STOP, epoch mismatch, missing reward, no model backend, unchanged frame, duplicate input owner, incompatible mmproj, candidate worse than baseline. Every test labels which links are real and which are mocks.
+
+**Product UI acceptance:** selecting a ROM and model in the Library must change the actual active Play session, and the Episodes/Learn/Diagnostics views must show the same episode and model hashes. No status ACTIVE, PLAYING, TRAINED, IMPROVED, DEVICE_PASS or RELEASED is inferred from file presence, UI animation, synthetic frame or ACK. Unknown/unsupported capabilities are disabled with an explicit reason, not fake controls.
+
+**No two control planes:** GitHub Control Tower coordinates development and evidence; Android HarnessCoordinator alone coordinates gameplay. CI workflows cannot send device inputs or change live model weights. Real-time emulator input must remain independent of slow GitHub/LLM calls.
+
+**Release acceptance:** a single APK with real integrated screens and shared runtime state, on-device verification of the full loop, same-source-SHA CI, stable signer and non-destructive upgrade. Keep any unverified capabilities in explicit SHADOW/UNAVAILABLE mode rather than separate mock applications.
