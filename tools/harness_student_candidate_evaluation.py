@@ -77,6 +77,7 @@ def main(apk, output):
         run('java','-cp',classes,'org.localpilot.shared.StudentHoldoutRealNesVerify',rom_path,active_path,
             candidate_path,train,holdout,report,'EXPECT_EVALUATION')
         result=json.loads(report.read_text())
+        selection=json.loads(Path(str(holdout)+'.selection.json').read_text())
     if (result['activePolicySha256']!=before or result['candidatePolicySha256']!=after or
         result['trainingEpoch']!=manifest['trainingEpoch']):raise RuntimeError('Independent exam identity differs')
     for path,raw in ((VAULT+'active/student-homebrew-v1.weights.bin',active),
@@ -86,6 +87,7 @@ def main(apk, output):
     result.update(sourceSha=source,apkSha256=apk_sha,api=int(ui.adb('shell','getprop','ro.build.version.sdk')),
         candidateOrigin='PRODUCTION_ANDROID_WEBVIEW_PPO',evaluationRuntime='HOST_REAL_JSNES_NOT_ANDROID',
         trainingBinaryReplaySha256=replay_sha,taskMask='homebrew-task-mask-v1',
+        scenarioSelection=selection,
         androidWeightsAndManifestUnchanged=True,releaseReady=False)
     output.parent.mkdir(parents=True,exist_ok=True);output.write_text(json.dumps(result,indent=2)+'\n')
     print('ANDROID_CANDIDATE_INDEPENDENT_EXAM_COMPLETE '+json.dumps(result))

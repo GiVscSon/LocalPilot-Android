@@ -44,6 +44,11 @@ const scenarios=[
  {id:"right40",dir:"RIGHT",full:2},
  {id:"right56",dir:"RIGHT",full:3}
 ];
+// Preset fallback recipes, never chosen by reward or whether the candidate wins.
+// Actual on-device exploration can overlap a fixed reset. Only replay leakage
+// and duplicate initial X can exclude a recipe; select the first six valid pairs.
+for(const full of [1,2,3])for(const warm of [2,4,6,10,12])for(const dir of ["LEFT","RIGHT"])
+ scenarios.push({id:dir.toLowerCase()+"-"+full+"-"+warm,dir,full,warm});
 function runScenario(scenario,arm,weights){
  const events=[];
  const env={window:{GameLabBridge:{
@@ -76,18 +81,17 @@ function runScenario(scenario,arm,weights){
  for(let i=0;i<scenario.full;i++)
   assert.equal(authorizedStep(scenario.dir),true,
     "real NES warmup by actual bounded button");
- // The final 8-frame prelude is a physically executed MANUAL button hold;
+ // The final bounded prelude is a physically executed MANUAL button hold;
  // it is not training or a Student action and never enters the scoring set.
  const code=jsnes.Controller[env.keyMap[scenario.dir]];
  assert.ok(Number.isInteger(code),"real warmup button");
  assert.equal(env.gamepadLatch.change(scenario.dir,code,true,env.frames),true);
- for(let i=0;i<8;i++){machine.frame();env.gamepadLatch.flush(env.frames);}
+ for(let i=0;i<(scenario.warm||8);i++){machine.frame();env.gamepadLatch.flush(env.frames);}
  assert.equal(env.gamepadLatch.change(scenario.dir,code,false,env.frames),true);
  env.gamepadLatch.flush(env.frames);
  assert.equal(env.gamepadLatch.down.size,0,"no warmup input left held");
  const initial=env.window.retroHomebrewState();
  assert.ok(initial&&initial.frame>=45,"genuine emulated initial RAM state");
- if(trainX.has(initial.x))throw Error("HOLDOUT_TRAINING_X_LEAKAGE "+scenario.id+" x="+initial.x);
  assert.ok(initial.x>=66&&initial.x<=188,"avoid wrap-around under 4 held-out steps");
  const rows=[];
  for(let i=0;i<4;i++){
@@ -129,22 +133,33 @@ function runScenario(scenario,arm,weights){
  }
  return {initial,rows,final:env.window.retroHomebrewState()};
 }
-const lines=[];let pairs=0;
+const lines=[],selection={protocol:"first-six-preset-pairs-excluding-training-X-v1",selected:[],excluded:[]};
+const seenX=new Set();let pairs=0,resets=0;
 for(const scenario of scenarios){
  const baseline=runScenario(scenario,"ACTIVE",activeWeights);
  const proposed=runScenario(scenario,"CANDIDATE",candidateWeights);
+ resets+=2;
  assert.equal(proposed.initial.x,baseline.initial.x,
    "independent emulator resets must start with identical RAM X");
  assert.equal(proposed.initial.y,baseline.initial.y,
    "independent emulator resets must start with identical RAM Y");
  assert.equal(proposed.initial.frame,baseline.initial.frame,
    "independent emulator resets must start at identical emulated frame");
+ const overlap=[...baseline.rows,...proposed.rows].some(line=>{
+  const f=line.split("\t");return trainX.has(Number(f[8]))||trainX.has(Number(f[10]));
+ });
+ if(overlap||seenX.has(baseline.initial.x)){
+  selection.excluded.push({id:scenario.id,reason:overlap?"TRAINING_X_OVERLAP":"DUPLICATE_INITIAL_X"});continue;
+ }
+ seenX.add(baseline.initial.x);selection.selected.push({id:scenario.id,initialX:baseline.initial.x});
  lines.push(...baseline.rows,...proposed.rows);pairs++;
+ if(pairs===6)break;
 }
 assert.ok(pairs>=5,"insufficient independently reset holdout scenarios");
 fs.mkdirSync(path.dirname(output),{recursive:true});
 fs.writeFileSync(output,lines.join("\n")+"\n");
+fs.writeFileSync(output+".selection.json",JSON.stringify({...selection,independentResets:resets},null,2)+"\n");
 console.log("NES_REAL_STUDENT_HOLDOUT_CORE_PASS scenarios="+pairs+
  " pairedActions="+lines.length+" romSha="+romSha.slice(0,12)+
- " independentResets="+(pairs*2)+" trainingReplayReused=false"+
+ " independentResets="+resets+" trainingReplayReused=false"+
  " promotionNotPerformed=true");
