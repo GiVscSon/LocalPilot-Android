@@ -6,6 +6,8 @@ on:
       - 'tools/android_sdk_inventory.py'
       - 'tools/bootstrap_android_sdk.sh'
       - 'tests/test_android_sdk_inventory.py'
+      - 'tools/promote_android_cli.py'
+      - 'tests/test_promote_android_cli.py'
       - '.github/workflows/android-sdk-toolchain.yml'
   workflow_dispatch:
     inputs:
@@ -27,7 +29,9 @@ jobs:
           distribution: temurin
           java-version: '21'
       - name: Validate SDK inventory negative and positive tests
-        run: python3 -m unittest discover -s tests -p 'test_android_sdk_inventory.py' -v
+        run: |
+          python3 -m unittest discover -s tests -p 'test_android_sdk_inventory.py' -v
+          python3 -m unittest discover -s tests -p 'test_promote_android_cli.py' -v
       - name: Refresh stable SDK packages and verify binaries
         shell: bash
         run: |
