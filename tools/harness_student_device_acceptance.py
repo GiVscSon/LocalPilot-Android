@@ -44,7 +44,15 @@ def private_file(path, limit=100000):
             if not 0 < len(result.stdout) <= limit:
                 raise RuntimeError('Generated homebrew evidence size outside bound')
             return result.stdout
-        diagnostic = result.stderr.decode('utf-8', errors='replace')[-500:]
+        # Some ADB versions send remote cat/run-as errors to stdout with no
+        # stderr. Inspect only small printable text, never dump a binary ROM.
+        stderr = result.stderr.decode('utf-8', errors='replace')[-500:]
+        printable = (len(result.stdout) <= 500 and
+                     all(ch in b'\\t\\r\\n' or 32 <= ch <= 126
+                         for ch in result.stdout))
+        stdout_error = (result.stdout.decode('ascii', errors='replace')
+                        if not stderr and printable else '')
+        diagnostic = stderr or stdout_error
         if ('No such file or directory' in diagnostic and
             ('cat:' in diagnostic or path in diagnostic)):
             raise EvidencePending('Generated homebrew evidence not written yet: ' + path)
