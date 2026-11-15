@@ -1,0 +1,61 @@
+name: LocalPilot Android SDK stable toolchain
+on:
+  pull_request:
+    paths:
+      - 'tools/android_sdk_update.sh'
+      - 'tools/android_sdk_inventory.py'
+      - 'tools/bootstrap_android_sdk.sh'
+      - 'tests/test_android_sdk_inventory.py'
+      - '.github/workflows/android-sdk-toolchain.yml'
+  workflow_dispatch:
+    inputs:
+      include_emulator:
+        description: "Also install and verify stable Android Emulator/API35 x86_64 image"
+        type: boolean
+        required: false
+        default: false
+permissions:
+  contents: read
+jobs:
+  sdk-update:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Validate SDK inventory negative and positive tests
+        run: python3 -m unittest discover -s tests -p 'test_android_sdk_inventory.py' -v
+      - name: Refresh stable SDK packages and verify binaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n tools/android_sdk_update.sh tools/bootstrap_android_sdk.sh
+          bash tools/android_sdk_update.sh --update-ci
+          python3 tools/android_sdk_inventory.py \
+            --sdk-root "${ANDROID_SDK_ROOT:-$ANDROID_HOME}" \
+            --require-ci --output build/sdk-update-inventory.json
+          "${ANDROID_SDK_ROOT:-$ANDROID_HOME}/platform-tools/adb" version
+      - name: Optionally refresh installed Emulator and image (no boot claimed)
+        if: inputs.include_emulator == true
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash tools/android_sdk_update.sh --install-emulator
+          python3 tools/android_sdk_inventory.py \
+            --sdk-root "${ANDROID_SDK_ROOT:-$ANDROID_HOME}" \
+            --require-ci --require-emulator \
+            --output build/sdk-update-with-emulator.json
+          "${ANDROID_SDK_ROOT:-$ANDROID_HOME}/emulator/emulator" -version
+      - name: Upload exact installed versions regardless of result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: LocalPilot-Android-SDK-Inventory-${{ github.sha }}
+          retention-days: 14
+          if-no-files-found: warn
+          path: |
+            build/sdk-update-inventory.json
+            build/sdk-update-with-emulator.json
