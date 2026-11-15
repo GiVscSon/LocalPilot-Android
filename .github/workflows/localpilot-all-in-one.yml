@@ -7,6 +7,10 @@ on:
       - 'game-lab/**'
       - 'shared/**'
       - 'tools/verify_all_in_one.py'
+      - 'tools/verify_harness_apk.py'
+      - 'tools/verify_g0_chain.py'
+      - 'tests/test_verify_harness_apk.py'
+      - 'tests/test_verify_g0_chain.py'
       - 'tools/verify_android_elf.py'
       - 'tests/test_android_elf.py'
       - 'tools/unified_in_app_smoke.py'
@@ -63,6 +67,8 @@ jobs:
         run: |
           set -euo pipefail
           python3 -m unittest discover -s tests -p 'test_localpilot_all_in_one.py' -v
+          python3 -m unittest discover -s tests -p 'test_verify_harness_apk.py' -v
+          python3 -m unittest discover -s tests -p 'test_verify_g0_chain.py' -v
           python3 -m unittest discover -s tests -p 'test_android_elf.py' -v
           python3 -m unittest discover -s tests -p 'test_unified_in_app_smoke.py' -v
           python3 -m unittest discover -s tests -p 'test_harness_student_device_acceptance.py' -v
@@ -113,11 +119,25 @@ jobs:
             --apksigner "$ANDROID_HOME/build-tools/35.0.0/apksigner" \
             --output build/all-in-one/TEST-ONLY-MANIFEST.json
           python3 tools/verify_android_elf.py "$APK" --report build/all-in-one/ELF16K.json
+          # Cross-validate the real ZIP/DEX/provenance audit, aapt/apksigner
+          # and ELF report against the exact same APK and checkout source.
+          SOURCE_SHA="$(git rev-parse HEAD)"
+          python3 tools/verify_harness_apk.py "$APK" \
+            --expected-source-sha "$SOURCE_SHA" \
+            --report build/all-in-one/APK-PACKAGING.json
+          python3 tools/verify_g0_chain.py --apk "$APK" \
+            --source-sha "$SOURCE_SHA" \
+            --packaging build/all-in-one/APK-PACKAGING.json \
+            --signed-manifest build/all-in-one/TEST-ONLY-MANIFEST.json \
+            --elf build/all-in-one/ELF16K.json \
+            --output build/all-in-one/G0-CANDIDATE-EVIDENCE.json
           mkdir -p dist/all-in-one
           cp build/all-in-one/ELF16K.json dist/all-in-one/
+          cp build/all-in-one/APK-PACKAGING.json dist/all-in-one/
+          cp build/all-in-one/G0-CANDIDATE-EVIDENCE.json dist/all-in-one/
           cp "$APK" dist/all-in-one/LocalPilot-All-in-One-TEST-ONLY.apk
           cp build/all-in-one/TEST-ONLY-MANIFEST.json dist/all-in-one/
-          (cd dist/all-in-one && sha256sum LocalPilot-All-in-One-TEST-ONLY.apk TEST-ONLY-MANIFEST.json ELF16K.json > SHA256SUMS.txt)
+          (cd dist/all-in-one && sha256sum LocalPilot-All-in-One-TEST-ONLY.apk TEST-ONLY-MANIFEST.json APK-PACKAGING.json G0-CANDIDATE-EVIDENCE.json ELF16K.json > SHA256SUMS.txt)
       - name: Upload candidate only, NEVER publish as stable
         uses: actions/upload-artifact@v4
         with:
