@@ -15,6 +15,8 @@ on:
       - 'tests/test_harness_student_candidate_evaluation.py'
       - 'tests/AndroidCandidateReplayExport.java'
       - 'tools/nes_autoplay_resume_acceptance.py'
+      - 'tools/nes_sustained_256_acceptance.py'
+      - 'tests/test_nes_sustained_256_acceptance.py'
       - 'tools/nes_experience_archive_acceptance.py'
       - 'tools/summarize_android_matrix.py'
       - 'tests/test_summarize_android_matrix.py'
@@ -68,6 +70,7 @@ jobs:
           python3 -m unittest discover -s tests -p 'test_harness_student_device_acceptance.py' -v
           python3 -m unittest discover -s tests -p 'test_harness_student_candidate_evaluation.py' -v
           python3 -m unittest discover -s tests -p 'test_nes_autoplay_resume_acceptance.py' -v
+          python3 -m unittest discover -s tests -p 'test_nes_sustained_256_acceptance.py' -v
           python3 -m unittest discover -s tests -p 'test_nes_experience_archive_acceptance.py' -v
           java tests/NesSaveStoreVerify.java
           python3 -m unittest discover -s tests -p 'test_harness_single_panel.py' -v
@@ -297,3 +300,48 @@ jobs:
           path: |
             build/unified-android-matrix.json
             build/unified-android-matrix.md
+
+  sustained-nes-256:
+    needs: unified-emulator-build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/download-artifact@v4
+        with:
+          name: LocalPilot-One-APK-X86-TEST-ONLY-${{ github.sha }}
+          path: app/build/outputs/apk/debug/
+      - name: Require KVM for actual emulator gameplay
+        run: |
+          set -euo pipefail
+          test -c /dev/kvm
+          sudo chmod 666 /dev/kvm
+          test -r /dev/kvm && test -w /dev/kvm
+      - name: Verify 256 consecutive on-device NES decisions, replay and STOP
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: default
+          profile: pixel_2
+          disable-animations: true
+          emulator-boot-timeout: 600
+          emulator-options: -no-window -gpu software -no-snapshot -noaudio -no-boot-anim -camera-back none
+          script: |
+            python3 tools/nes_sustained_256_acceptance.py \
+              --apk app/build/outputs/apk/debug/app-debug.apk \
+              --output sustained-nes-evidence/nes-256-real-emulator.json
+      - name: Preserve evidence on success or failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: LocalPilot-NES-256-Emulator-API35-${{ github.sha }}
+          retention-days: 14
+          if-no-files-found: warn
+          path: sustained-nes-evidence/
