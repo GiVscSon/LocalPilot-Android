@@ -1,0 +1,590 @@
+[
+  {
+    "schema": "localpilot-student-independent-evaluation-v1",
+    "source": "REAL_JSNES_6502_CI_NOT_PHYSICAL_ANDROID",
+    "romSha256": "7bfc5e462c6acddc0fcb7f5ac6cef4d87888a54d5bf788a31aab25320e446372",
+    "trainingEpoch": "1",
+    "trainingReplaySha256": "3173882202f7797787ea85a26c871bc166c70fb1560ee18cdf86c65e8ccf5e7d",
+    "heldoutCoreEvidenceSha256": "877f6f251942a6656ef09fb630df3fc5e11229b8865d68ec8edcdff1b06158c3",
+    "activePolicySha256": "610f3a206a592d1a16f4e321419a63ebca5847450dfef1836d4c72711be4af51",
+    "candidatePolicySha256": "4face33f3dfb42b6b69d79b7426783b735b4f5d7a55b983ff516906aec9369b2",
+    "scenarioCount": 6,
+    "candidateWins": 0,
+    "activeMeanReturn": 0.0,
+    "candidateMeanReturn": 0.0,
+    "result": "NO_PROVEN_IMPROVEMENT",
+    "improvedOnCiHomebrew": false,
+    "physicalAndroidVerified": false,
+    "promotion": "BLOCKED_UNTIL_DEVICE_HOLDOUT_AND_ROLLBACK",
+    "pairedScenarios": [
+      {
+        "scenario": "left24",
+        "startX": 105,
+        "activeReturn": 0.0,
+        "candidateReturn": 0.0
+      },
+      {
+        "scenario": "left40",
+        "startX": 90,
+        "activeReturn": 0.0,
+        "candidateReturn": 0.0
+      },
+      {
+        "scenario": "left56",
+        "startX": 74,
+        "activeReturn": 0.0,
+        "candidateReturn": 0.0
+      },
+      {
+        "scenario": "right24",
+        "startX": 151,
+        "activeReturn": 0.0,
+        "candidateReturn": 0.0
+      },
+      {
+        "scenario": "right40",
+        "startX": 166,
+        "activeReturn": 0.0,
+        "candidateReturn": 0.0
+      },
+      {
+        "scenario": "right56",
+        "startX": 182,
+        "activeReturn": 0.0,
+        "candidateReturn": 0.0
+      }
+    ],
+    "sourceSha": "3ab42116fbd04661e0a3ed1d588c1d0625cbb35d",
+    "apkSha256": "2d595240e2f3d1753b155c2cff2870115f1ec371800ebfed064946edaea7f7fc",
+    "api": 30,
+    "candidateOrigin": "PRODUCTION_ANDROID_WEBVIEW_PPO",
+    "evaluationRuntime": "HOST_REAL_JSNES_NOT_ANDROID",
+    "trainingBinaryReplaySha256": "192463ab42befbec4f4bb9b570ac060c170060f3051111724a6ab5ef02cd70cf",
+    "taskMask": "homebrew-task-mask-v1",
+    "scenarioSelection": {
+      "protocol": "first-six-preset-pairs-excluding-training-X-v1",
+      "selected": [
+        {
+          "id": "left56",
+          "initialX": 74
+        },
+        {
+          "id": "left40",
+          "initialX": 90
+        },
+        {
+          "id": "left24",
+          "initialX": 105
+        },
+        {
+          "id": "right24",
+          "initialX": 151
+        },
+        {
+          "id": "right40",
+          "initialX": 166
+        },
+        {
+          "id": "right56",
+          "initialX": 182
+        }
+      ],
+      "excluded": [],
+      "independentResets": 12
+    },
+    "androidWeightsAndManifestUnchanged": true,
+    "releaseReady": false,
+    "deviceProfile": "pixel_2",
+    "artifactId": 14162001924
+  },
+  {
+    "schema": "localpilot-student-independent-evaluation-v1",
+    "source": "REAL_JSNES_6502_CI_NOT_PHYSICAL_ANDROID",
+    "romSha256": "7bfc5e462c6acddc0fcb7f5ac6cef4d87888a54d5bf788a31aab25320e446372",
+    "trainingEpoch": "1",
+    "trainingReplaySha256": "f78ba416e627bfe7e3fd06356458f33c66206cef91ef577c1f147880ac9c0be5",
+    "heldoutCoreEvidenceSha256": "ebdd545d7d6df7ffb3a1c1841279fa4451db52c7bd21bb7f805ca2de04d53f50",
+    "activePolicySha256": "a9e411120d4e65fd4cd28e61d60936a6c92ff71b52845442e180e0921af217d3",
+    "candidatePolicySha256": "980b1bfb61176b997b2568947ce1a943c5873e082e9fb5b3790adb322fc14c33",
+    "scenarioCount": 6,
+    "candidateWins": 0,
+    "activeMeanReturn": 0.0,
+    "candidateMeanReturn": 0.0,
+    "result": "NO_PROVEN_IMPROVEMENT",
+    "improvedOnCiHomebrew": false,
+    "physicalAndroidVerified": false,
+    "promotion": "BLOCKED_UNTIL_DEVICE_HOLDOUT_AND_ROLLBACK",
+    "pairedScenarios": [
+      {
+        "scenario": "left24",
+        "startX": 105,
+        "activeReturn": 0.0,
+        "candidateReturn": 0.0
+      },
+      {
+        "scenario": "left40",
+        "startX": 90,
+        "activeReturn": 0.0,
+        "candidateReturn": 0.0
+      },
+      {
+        "scenario": "left56",
+        "startX": 74,
+        "activeReturn": 0.0,
+        "candidateReturn": 0.0
+      },
+      {
+        "scenario": "right24",
+        "startX": 151,
+        "activeReturn": 0.0,
+        "candidateReturn": 0.0
+      },
+      {
+        "scenario": "right40",
+        "startX": 166,
+        "activeReturn": 0.0,
+        "candidateReturn": 0.0
+      },
+      {
+        "scenario": "right56",
+        "startX": 182,
+        "activeReturn": 0.0,
+        "candidateReturn": 0.0
+      }
+    ],
+    "sourceSha": "3ab42116fbd04661e0a3ed1d588c1d0625cbb35d",
+    "apkSha256": "2d595240e2f3d1753b155c2cff2870115f1ec371800ebfed064946edaea7f7fc",
+    "api": 30,
+    "candidateOrigin": "PRODUCTION_ANDROID_WEBVIEW_PPO",
+    "evaluationRuntime": "HOST_REAL_JSNES_NOT_ANDROID",
+    "trainingBinaryReplaySha256": "234ba129e581fa041fb1aab8c5944f930b2f17676d2eb75c55cbaa68ffe4a9cb",
+    "taskMask": "homebrew-task-mask-v1",
+    "scenarioSelection": {
+      "protocol": "first-six-preset-pairs-excluding-training-X-v1",
+      "selected": [
+        {
+          "id": "left56",
+          "initialX": 74
+        },
+        {
+          "id": "left40",
+          "initialX": 90
+        },
+        {
+          "id": "left24",
+          "initialX": 105
+        },
+        {
+          "id": "right24",
+          "initialX": 151
+        },
+        {
+          "id": "right40",
+          "initialX": 166
+        },
+        {
+          "id": "right56",
+          "initialX": 182
+        }
+      ],
+      "excluded": [],
+      "independentResets": 12
+    },
+    "androidWeightsAndManifestUnchanged": true,
+    "releaseReady": false,
+    "deviceProfile": "pixel_c",
+    "artifactId": 14162451991
+  },
+  {
+    "schema": "localpilot-student-independent-evaluation-v1",
+    "source": "REAL_JSNES_6502_CI_NOT_PHYSICAL_ANDROID",
+    "romSha256": "7bfc5e462c6acddc0fcb7f5ac6cef4d87888a54d5bf788a31aab25320e446372",
+    "trainingEpoch": "1",
+    "trainingReplaySha256": "215e2999bb0b74a294924ff664510c106f2fcc59e918e5c809f570edc2577d39",
+    "heldoutCoreEvidenceSha256": "d1ece81c46749d2e0f7b70a755a099f51a090afaea297848fe9e69474d82afd2",
+    "activePolicySha256": "090e8083c0469692ac97013233bde0ba2333d7ec317f5048e08caf049f39d21c",
+    "candidatePolicySha256": "bc559d1c211db4b22ed829bd21eab6c751cc650848160f2f4b523e0003500ae4",
+    "scenarioCount": 6,
+    "candidateWins": 0,
+    "activeMeanReturn": 0.0,
+    "candidateMeanReturn": 0.0,
+    "result": "NO_PROVEN_IMPROVEMENT",
+    "improvedOnCiHomebrew": false,
+    "physicalAndroidVerified": false,
+    "promotion": "BLOCKED_UNTIL_DEVICE_HOLDOUT_AND_ROLLBACK",
+    "pairedScenarios": [
+      {
+        "scenario": "left24",
+        "startX": 105,
+        "activeReturn": 0.0,
+        "candidateReturn": 0.0
+      },
+      {
+        "scenario": "left40",
+        "startX": 90,
+        "activeReturn": 0.0,
+        "candidateReturn": 0.0
+      },
+      {
+        "scenario": "left56",
+        "startX": 74,
+        "activeReturn": 0.0,
+        "candidateReturn": 0.0
+      },
+      {
+        "scenario": "right24",
+        "startX": 151,
+        "activeReturn": 0.0,
+        "candidateReturn": 0.0
+      },
+      {
+        "scenario": "right40",
+        "startX": 166,
+        "activeReturn": 0.0,
+        "candidateReturn": 0.0
+      },
+      {
+        "scenario": "right56",
+        "startX": 182,
+        "activeReturn": 0.0,
+        "candidateReturn": 0.0
+      }
+    ],
+    "sourceSha": "3ab42116fbd04661e0a3ed1d588c1d0625cbb35d",
+    "apkSha256": "2d595240e2f3d1753b155c2cff2870115f1ec371800ebfed064946edaea7f7fc",
+    "api": 35,
+    "candidateOrigin": "PRODUCTION_ANDROID_WEBVIEW_PPO",
+    "evaluationRuntime": "HOST_REAL_JSNES_NOT_ANDROID",
+    "trainingBinaryReplaySha256": "f09f41733afc271da433f220a378c1d66c1e442cd72bce1cfe6fe403198be84a",
+    "taskMask": "homebrew-task-mask-v1",
+    "scenarioSelection": {
+      "protocol": "first-six-preset-pairs-excluding-training-X-v1",
+      "selected": [
+        {
+          "id": "left56",
+          "initialX": 74
+        },
+        {
+          "id": "left40",
+          "initialX": 90
+        },
+        {
+          "id": "left24",
+          "initialX": 105
+        },
+        {
+          "id": "right24",
+          "initialX": 151
+        },
+        {
+          "id": "right40",
+          "initialX": 166
+        },
+        {
+          "id": "right56",
+          "initialX": 182
+        }
+      ],
+      "excluded": [],
+      "independentResets": 12
+    },
+    "androidWeightsAndManifestUnchanged": true,
+    "releaseReady": false,
+    "deviceProfile": "pixel_2",
+    "artifactId": 14162351235
+  },
+  {
+    "schema": "localpilot-student-independent-evaluation-v1",
+    "source": "REAL_JSNES_6502_CI_NOT_PHYSICAL_ANDROID",
+    "romSha256": "7bfc5e462c6acddc0fcb7f5ac6cef4d87888a54d5bf788a31aab25320e446372",
+    "trainingEpoch": "1",
+    "trainingReplaySha256": "8bd2262bf8dce5520ad373cab577c474e78e32fe003607d31ac52f8df6298a0f",
+    "heldoutCoreEvidenceSha256": "434066038a9b57ba10c5b2f9928d906d90c27a69599130fe5058357b82957c60",
+    "activePolicySha256": "2b9fba793397eff2f4f5d9159876a62918662eded3895c1e63edce051f7f36f7",
+    "candidatePolicySha256": "4ce990c65402caac4a162e785a710361634e5443c87fcab9cb895c1ad6e2844b",
+    "scenarioCount": 6,
+    "candidateWins": 0,
+    "activeMeanReturn": 0.0,
+    "candidateMeanReturn": 0.0,
+    "result": "NO_PROVEN_IMPROVEMENT",
+    "improvedOnCiHomebrew": false,
+    "physicalAndroidVerified": false,
+    "promotion": "BLOCKED_UNTIL_DEVICE_HOLDOUT_AND_ROLLBACK",
+    "pairedScenarios": [
+      {
+        "scenario": "left24",
+        "startX": 105,
+        "activeReturn": 0.0,
+        "candidateReturn": 0.0
+      },
+      {
+        "scenario": "left40",
+        "startX": 90,
+        "activeReturn": 0.0,
+        "candidateReturn": 0.0
+      },
+      {
+        "scenario": "left56",
+        "startX": 74,
+        "activeReturn": 0.0,
+        "candidateReturn": 0.0
+      },
+      {
+        "scenario": "right24",
+        "startX": 151,
+        "activeReturn": 0.0,
+        "candidateReturn": 0.0
+      },
+      {
+        "scenario": "right40",
+        "startX": 166,
+        "activeReturn": 0.0,
+        "candidateReturn": 0.0
+      },
+      {
+        "scenario": "right56",
+        "startX": 182,
+        "activeReturn": 0.0,
+        "candidateReturn": 0.0
+      }
+    ],
+    "sourceSha": "3ab42116fbd04661e0a3ed1d588c1d0625cbb35d",
+    "apkSha256": "2d595240e2f3d1753b155c2cff2870115f1ec371800ebfed064946edaea7f7fc",
+    "api": 35,
+    "candidateOrigin": "PRODUCTION_ANDROID_WEBVIEW_PPO",
+    "evaluationRuntime": "HOST_REAL_JSNES_NOT_ANDROID",
+    "trainingBinaryReplaySha256": "f56defcd01f202877ae3c2b459098bfb38d7d984376dfdde3ef45f0e07cd078c",
+    "taskMask": "homebrew-task-mask-v1",
+    "scenarioSelection": {
+      "protocol": "first-six-preset-pairs-excluding-training-X-v1",
+      "selected": [
+        {
+          "id": "left56",
+          "initialX": 74
+        },
+        {
+          "id": "left40",
+          "initialX": 90
+        },
+        {
+          "id": "left24",
+          "initialX": 105
+        },
+        {
+          "id": "right24",
+          "initialX": 151
+        },
+        {
+          "id": "right40",
+          "initialX": 166
+        },
+        {
+          "id": "right56",
+          "initialX": 182
+        }
+      ],
+      "excluded": [],
+      "independentResets": 12
+    },
+    "androidWeightsAndManifestUnchanged": true,
+    "releaseReady": false,
+    "deviceProfile": "pixel_c",
+    "artifactId": 14162651470
+  },
+  {
+    "schema": "localpilot-student-independent-evaluation-v1",
+    "source": "REAL_JSNES_6502_CI_NOT_PHYSICAL_ANDROID",
+    "romSha256": "7bfc5e462c6acddc0fcb7f5ac6cef4d87888a54d5bf788a31aab25320e446372",
+    "trainingEpoch": "1",
+    "trainingReplaySha256": "bab1ab420e50e002addbb9ed752cd89997f9af42a04e679913a96f03430dbc9b",
+    "heldoutCoreEvidenceSha256": "64df889a257ae5fc1b6411793345c5b9092c72f394876fc8dde0d5be56342ba7",
+    "activePolicySha256": "0d3b57dece9c14c31a5b0f3c28828804565944aa44f5101ec0967c1910e350e6",
+    "candidatePolicySha256": "27310cf777a85c07400fcf57d20de08057417bd1dae7b5655a77eb6cffa046f9",
+    "scenarioCount": 6,
+    "candidateWins": 0,
+    "activeMeanReturn": 0.0,
+    "candidateMeanReturn": 0.0,
+    "result": "NO_PROVEN_IMPROVEMENT",
+    "improvedOnCiHomebrew": false,
+    "physicalAndroidVerified": false,
+    "promotion": "BLOCKED_UNTIL_DEVICE_HOLDOUT_AND_ROLLBACK",
+    "pairedScenarios": [
+      {
+        "scenario": "left24",
+        "startX": 105,
+        "activeReturn": 0.0,
+        "candidateReturn": 0.0
+      },
+      {
+        "scenario": "left40",
+        "startX": 90,
+        "activeReturn": 0.0,
+        "candidateReturn": 0.0
+      },
+      {
+        "scenario": "left56",
+        "startX": 74,
+        "activeReturn": 0.0,
+        "candidateReturn": 0.0
+      },
+      {
+        "scenario": "right24",
+        "startX": 151,
+        "activeReturn": 0.0,
+        "candidateReturn": 0.0
+      },
+      {
+        "scenario": "right40",
+        "startX": 166,
+        "activeReturn": 0.0,
+        "candidateReturn": 0.0
+      },
+      {
+        "scenario": "right56",
+        "startX": 182,
+        "activeReturn": 0.0,
+        "candidateReturn": 0.0
+      }
+    ],
+    "sourceSha": "3ab42116fbd04661e0a3ed1d588c1d0625cbb35d",
+    "apkSha256": "2d595240e2f3d1753b155c2cff2870115f1ec371800ebfed064946edaea7f7fc",
+    "api": 36,
+    "candidateOrigin": "PRODUCTION_ANDROID_WEBVIEW_PPO",
+    "evaluationRuntime": "HOST_REAL_JSNES_NOT_ANDROID",
+    "trainingBinaryReplaySha256": "f9d0b4d5473ba797d5e946c6a2798f8cc499d04249c9541c039eaeb513571b35",
+    "taskMask": "homebrew-task-mask-v1",
+    "scenarioSelection": {
+      "protocol": "first-six-preset-pairs-excluding-training-X-v1",
+      "selected": [
+        {
+          "id": "left56",
+          "initialX": 74
+        },
+        {
+          "id": "left40",
+          "initialX": 90
+        },
+        {
+          "id": "left24",
+          "initialX": 105
+        },
+        {
+          "id": "right24",
+          "initialX": 151
+        },
+        {
+          "id": "right40",
+          "initialX": 166
+        },
+        {
+          "id": "right56",
+          "initialX": 182
+        }
+      ],
+      "excluded": [],
+      "independentResets": 12
+    },
+    "androidWeightsAndManifestUnchanged": true,
+    "releaseReady": false,
+    "deviceProfile": "pixel_2",
+    "artifactId": 14162112967
+  },
+  {
+    "schema": "localpilot-student-independent-evaluation-v1",
+    "source": "REAL_JSNES_6502_CI_NOT_PHYSICAL_ANDROID",
+    "romSha256": "7bfc5e462c6acddc0fcb7f5ac6cef4d87888a54d5bf788a31aab25320e446372",
+    "trainingEpoch": "1",
+    "trainingReplaySha256": "36b4f26a524103c10f3d47e48a9a25b93ca5d98b26ca076bb74ab9bd94a4e1a8",
+    "heldoutCoreEvidenceSha256": "5383c04d58f1a855c7ddf566f1523a5011a9ee20ce74817a21466f2faf23740e",
+    "activePolicySha256": "8d4c79031f9d66dd96158350a2f44ef792d04779f5cb089dc2e35f378f53b989",
+    "candidatePolicySha256": "4c0be9b15b20a3a922b760e5a40b621e64b789d7362e6a4f118e3b76adfbe098",
+    "scenarioCount": 6,
+    "candidateWins": 6,
+    "activeMeanReturn": -3.3333333,
+    "candidateMeanReturn": 3.8125,
+    "result": "ACCEPTED",
+    "improvedOnCiHomebrew": true,
+    "physicalAndroidVerified": false,
+    "promotion": "BLOCKED_UNTIL_DEVICE_HOLDOUT_AND_ROLLBACK",
+    "pairedScenarios": [
+      {
+        "scenario": "left24",
+        "startX": 105,
+        "activeReturn": -3.8125,
+        "candidateReturn": 3.8125
+      },
+      {
+        "scenario": "left40",
+        "startX": 90,
+        "activeReturn": -2.875,
+        "candidateReturn": 3.8125
+      },
+      {
+        "scenario": "left56",
+        "startX": 74,
+        "activeReturn": -1.875,
+        "candidateReturn": 3.8125
+      },
+      {
+        "scenario": "right24",
+        "startX": 151,
+        "activeReturn": -3.8125,
+        "candidateReturn": 3.8125
+      },
+      {
+        "scenario": "right40",
+        "startX": 166,
+        "activeReturn": -3.8125,
+        "candidateReturn": 3.8125
+      },
+      {
+        "scenario": "right56",
+        "startX": 182,
+        "activeReturn": -3.8125,
+        "candidateReturn": 3.8125
+      }
+    ],
+    "sourceSha": "3ab42116fbd04661e0a3ed1d588c1d0625cbb35d",
+    "apkSha256": "2d595240e2f3d1753b155c2cff2870115f1ec371800ebfed064946edaea7f7fc",
+    "api": 36,
+    "candidateOrigin": "PRODUCTION_ANDROID_WEBVIEW_PPO",
+    "evaluationRuntime": "HOST_REAL_JSNES_NOT_ANDROID",
+    "trainingBinaryReplaySha256": "dab60df310d7d2b700c2a2be4ddd7389921c1a0ebbf27d4596eba0365f1e321e",
+    "taskMask": "homebrew-task-mask-v1",
+    "scenarioSelection": {
+      "protocol": "first-six-preset-pairs-excluding-training-X-v1",
+      "selected": [
+        {
+          "id": "left56",
+          "initialX": 74
+        },
+        {
+          "id": "left40",
+          "initialX": 90
+        },
+        {
+          "id": "left24",
+          "initialX": 105
+        },
+        {
+          "id": "right24",
+          "initialX": 151
+        },
+        {
+          "id": "right40",
+          "initialX": 166
+        },
+        {
+          "id": "right56",
+          "initialX": 182
+        }
+      ],
+      "excluded": [],
+      "independentResets": 12
+    },
+    "androidWeightsAndManifestUnchanged": true,
+    "releaseReady": false,
+    "deviceProfile": "pixel_c",
+    "artifactId": 14162307309
+  }
+]

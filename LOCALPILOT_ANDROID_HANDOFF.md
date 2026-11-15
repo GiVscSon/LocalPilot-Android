@@ -1,3 +1,34 @@
+# Проверенный кандидат0.8.4 · 15.11.2026
+
+PR #154 MERGED; app/source `3ab42116fbd04661e0a3ed1d588c1d0625cbb35d`.
+[Отчёт, APK, JSON/CSV](docs/validation/0.8.4-3ab42116/VALIDATION.ru.md).
+39 SUCCESS, 6/6 Android API30/35/36×phone/tablet подтвердили archive→отмена SAF→
+экспорт→readback SHA→продолжение игры с новым опытом. Автоигра/CPU/PPU save/resume
+и сохранность весов также6/6 PASS. x86 TEST-ONLY runtime не является ARM64 физической приёмкой.
+APK0.8.4/code56 подписан прежним постоянным сертификатом, CRC/JNI/ELF16KiB PASS;
+SHA256 `ed0d044a5a839064d229cdc5df491509a11325384964f90e524312ab1150d3b7`.
+[APK](https://drive.google.com/file/d/1DXLCmCJuT49Q-YG4tPdTbBXNkVTnrKhD/view)
+повторно скачан из Drive и проверен. Старый0.8.3/code55/ключ/сохранения не удалять.
+Рабочие RAM/replay лимиты прежние; можно сохранить до8 ZIP по6MiB, затем SAF export.
+Оригиналы удаляются только после sealed archive + fsync/readback/fsync каталогов.
+MaintenanceLease блокирует новый ввод на время IO, STOP остаётся немедленным.
+Game save и веса не архивируются/не очищаются. .pending после аварии требует диагностики.
+Manifest нового PPO-кандидата привязан к replay SHA и epoch. CI экзаменует именно
+Android-produced candidate на хосте с настоящим JSNES,6 независимых пар и taskMask16.
+API36 PixelC:−3.3333333→3.8125,6/6 wins, CI ACCEPTED. Остальные5:0→0,
+NO_PROVEN_IMPROVEMENT. Это ограниченный результат конкретных CI weights, не готовая
+пользовательская политика/физический экзамен. Активация во всех6случаях заблокирована.
+Старые unbound кандидаты сохраняются, не получают автоматический допуск.
+Автоигра только встроенной homebrew; импортированные ROM — ручная игра/save/load.
+GGUF4хода; promotion/rollback и экзамен в самом приложении, импорт архивов,
+реальные10внешних игр, POCO/физический планшет/Vulkan runtime NOT_RUN.
+Stable release_ready=false. Следующий блок: normal-ROM typed adapters и полный
+on-device candidate lifecycle без обхода STOP, с сохранением старых моделей.
+Архив базы: archive/main-before-experience-export-20261115 →1413aadc.
+Перед продолжением сверить фактический main/версию; новый signer не создавать.
+
+---
+
 # Проверенный кандидат0.8.3 · 15.11.2026
 
 PR #148 MERGED; main/source SHA `1413aadc7760459d9e1fc5311b51f5e7cfc6a927`.
