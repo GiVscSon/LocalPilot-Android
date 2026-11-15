@@ -193,6 +193,7 @@ jobs:
             shared/src/main/java/org/localpilot/shared/HomebrewObs64.java \
             shared/src/main/java/org/localpilot/shared/PpoGaeTrainer.java \
             shared/src/main/java/org/localpilot/shared/LearningCoordinator.java \
+            shared/src/main/java/org/localpilot/shared/VerifiedPpoReplayStore.java \
             game-lab/src/main/java/org/localpilot/gamelab/HomebrewRamReward.java \
             tests/StudentPolicyCli.java tests/StudentPpoRealNesVerify.java
           java -cp build/real-student org.localpilot.shared.StudentPolicyCli init \

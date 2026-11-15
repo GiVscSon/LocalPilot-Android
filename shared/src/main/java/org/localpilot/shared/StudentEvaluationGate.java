@@ -144,7 +144,7 @@ public final class StudentEvaluationGate {
                     activeSha,candidateSha,scenarios);
      if(row.actionId()<0||row.actionId()>=HomebrewObs64.ACTIONS||
         net.argmax(HomebrewObs64.encode(row.xBefore(),row.yBefore()),
-                   HomebrewObs64.LEGAL_MASK)!=row.actionId())
+                   HomebrewObs64.taskMask(row.xBefore(),row.yBefore(),16))!=row.actionId())
       return reject(Reason.ACTION_MISMATCH,scenarios.size(),0,0,0,
                     activeSha,candidateSha,scenarios);
      if(!row.inputAck()||!row.freshFrame()||!row.coreVerified())

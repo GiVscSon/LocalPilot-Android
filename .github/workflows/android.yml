@@ -78,6 +78,7 @@ jobs:
       java tests/SimExperienceVerify.java
       java tests/GameLabCoachVerify.java
       java tests/VerifiedPpoReplayStoreVerify.java
+      java tests/NesExperienceArchiveVerify.java
       java tests/NesSaveStoreVerify.java
       java tests/HomebrewTaskMaskVerify.java
       java tests/HarnessModelExecutionLogVerify.java

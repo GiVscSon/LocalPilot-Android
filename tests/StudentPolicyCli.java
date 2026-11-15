@@ -32,7 +32,7 @@ public final class StudentPolicyCli {
    if(policy.actionCount!=HomebrewObs64.ACTIONS)
     throw new IllegalArgumentException("Wrong holdout action vocabulary");
    System.out.println(policy.argmax(HomebrewObs64.encode(x,y),
-                      HomebrewObs64.LEGAL_MASK)+"\t"+policy.sha256());
+                      HomebrewObs64.taskMask(x,y,16))+"\t"+policy.sha256());
    return;
   }
   // Explicitly labeled CI-only bias probes. Never packaged as trained models.
