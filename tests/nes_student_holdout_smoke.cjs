@@ -32,7 +32,7 @@ function snippet(name){
  return html.slice(start,end+3);
 }
 const trainX=new Set(fs.readFileSync(trainingFile,"utf8").trim().split(/\r?\n/)
-  .map(l=>{const f=l.split("\t");assert.equal(f.length,14);return Number(f[9]);}));
+  .flatMap(l=>{const f=l.split("\t");assert.equal(f.length,14);return [Number(f[9]),Number(f[11])];}));
 const buttons=["LEFT","RIGHT","UP","DOWN","A","B"];
 // Each prefix performs 3,2,1 or 0 complete button steps plus a real
 // 8-frame user-held warmup. The 6502 CPU is actually executed; no RAM edit.
