@@ -39,12 +39,15 @@ class ArchiveEvidenceTests(unittest.TestCase):
 
     def test_cancel_navigates_only_verified_documents_windows(self):
         import nes_experience_archive_acceptance as module
-        dash=module.ui.PACKAGE+'/'+module.ui.DASH
-        with patch.object(module.ui,'resumed_activity',side_effect=['','',dash]), \
-             patch.object(module.ui,'dump_ui',return_value='<hierarchy><node package="com.android.documentsui"/></hierarchy>'), \
+        documents='<hierarchy><node package="com.android.documentsui"/></hierarchy>'
+        app='<hierarchy><node package="'+module.ui.PACKAGE+'"/></hierarchy>'
+        with patch.object(module.ui,'resumed_activity',side_effect=RuntimeError('No resumed activity in the installed LocalPilot test package')), \
+             patch.object(module.ui,'dump_ui',side_effect=[documents,documents,app]), \
+             patch.object(module.ui,'wait_activity') as resumed, \
              patch.object(module.ui,'adb') as adb,patch.object(module.time,'sleep'):
             cancel_documents_picker()
         self.assertEqual(adb.call_count,2)
+        resumed.assert_called_once_with(module.ui.DASH)
 
     def test_cancel_refuses_unknown_foreground(self):
         import nes_experience_archive_acceptance as module

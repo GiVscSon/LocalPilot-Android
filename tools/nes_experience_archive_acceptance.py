@@ -54,9 +54,11 @@ def cancel_documents_picker():
     # Back first closes the IME, then traverses the document hierarchy. Only
     # verified DocumentsUI windows may receive these bounded navigation keys.
     for _ in range(4):
-        if ui.PACKAGE+'/'+ui.DASH in ui.resumed_activity():return
-        nodes=ET.fromstring(ui.dump_ui()).iter('node')
-        if not any(n.get('package','') in ('com.android.documentsui','com.google.android.documentsui') for n in nodes):
+        packages={n.get('package','') for n in ET.fromstring(ui.dump_ui()).iter('node')}
+        documents=bool(packages&{'com.android.documentsui','com.google.android.documentsui'})
+        if not documents and ui.PACKAGE in packages:
+            ui.wait_activity(ui.DASH);return
+        if not documents:
             raise RuntimeError('Unexpected foreground window while cancelling document export')
         ui.adb('shell','input','keyevent','KEYCODE_BACK');time.sleep(.4)
     ui.wait_activity(ui.DASH)
