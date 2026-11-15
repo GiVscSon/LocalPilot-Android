@@ -3,6 +3,8 @@
 import argparse
 import datetime as dt
 import json
+import os
+import re
 import pathlib
 import subprocess
 import sys
@@ -32,7 +34,7 @@ def run(output: pathlib.Path) -> int:
     report = {
         "schema": "localpilot-unified-organism-evidence-v1",
         "generatedAt": dt.datetime.now(dt.timezone.utc).isoformat(),
-        "sourceSha": None,  # CI must bind the actual checkout SHA, never guess it
+        "sourceSha": (os.environ.get("GITHUB_SHA") if re.fullmatch(r"[0-9a-f]{40}", os.environ.get("GITHUB_SHA", "")) else None),  # GitHub checkout SHA, never inferred
         "result": "SOURCE_AND_JVM_PASS" if passed else "FAIL",
         "scope": "source contract and local JVM tests only",
         "checks": checks,
