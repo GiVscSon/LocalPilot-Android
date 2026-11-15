@@ -2,6 +2,7 @@
 
 **Checkpoint type:** immutable evidence handoff, **not** a released APK and **not** an automatic synchronization of historical chats.
 
+- Frozen source backup branch: https://github.com/GiVscSon/LocalPilot-Android/tree/checkpoint/localpilot-unified-lab-20261115 (points to pinned main SHA below; preserve branch without rebasing)
 - Canonical repository: https://github.com/GiVscSon/LocalPilot-Android
 - Verified `main` at checkpoint capture: `fbbbeb9cb4ffa54ecc26582e4a640b963b80b8d3`
 - Single control hub: https://github.com/GiVscSon/LocalPilot-Android/issues/159
