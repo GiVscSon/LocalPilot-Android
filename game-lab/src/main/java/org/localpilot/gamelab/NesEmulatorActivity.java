@@ -1300,6 +1300,7 @@ public final class NesEmulatorActivity extends Activity {
    HarnessCoordinator.Ticket ticket=harness.begin(
      frameEpoch.token(),frames,hash,SystemClock.elapsedRealtime());
    aiObservationTicket=ticket;
+   aiIssuedAt=ticket.issuedAt; // Keep the original frame age through inference AND the queued gesture.
    aiTicketNonce=ticket.nonce;
    aiExpectedHash=ticket.hash;
    String token=snapshotGate.begin();
@@ -1441,7 +1442,6 @@ public final class NesEmulatorActivity extends Activity {
    showState("ИИ выбрал NONE: ввод не выполнялся");return;
   }
   queuedAiButton=button;aiEpoch=frameEpoch.token();aiExpectedHash=hash;
-  aiIssuedAt=SystemClock.elapsedRealtime();
   if(resumed&&web!=null)web.postDelayed(this::executeAiMove,350);
  }
  private void executeAiMove(){
