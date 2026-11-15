@@ -57,14 +57,13 @@ function audioWrite(l,r){
  if(writeAt-readAt>=SIZE)readAt=writeAt-SIZE+1;
  const at=writeAt%SIZE;ringL[at]=l;ringR[at]=r;writeAt++;
 }
+let stepPaintCountdown=0;
 function sendFrame(rgb){
- const data=image.data;
- for(let i=0;i<256*240;i++){
-  const value=rgb[i],at=i*4;
-  data[at]=(value>>>16)&255;data[at+1]=(value>>>8)&255;
-  data[at+2]=value&255;data[at+3]=255;
- }
- ctx.putImageData(image,0,0);frames++;
+ // Every CPU/PPU frame still runs. During a synchronous bounded step only
+ // the final framebuffer needs conversion/upload; realtime paints every frame.
+ if(typeof stepPaintCountdown==="undefined"||stepPaintCountdown<=1)paintFrame(rgb);
+ if(typeof stepPaintCountdown!=="undefined"&&stepPaintCountdown>0)stepPaintCountdown--;
+ frames++;
  // Latest fingerprint belongs to the rendered frame, even while frozen.
  let hash=2166136261>>>0;
  for(let i=0;i<256*240;i+=241)hash=Math.imul(hash^rgb[i],16777619)>>>0;
@@ -74,6 +73,15 @@ function sendFrame(rgb){
  if(frames%15===0&&!stepMode){
   try{if(window.GameLabBridge)window.GameLabBridge.onFrame(frames,hash|0,activeRomSession);}catch(error){}
  }
+}
+function paintFrame(rgb){
+ const data=image.data;
+ for(let i=0;i<256*240;i++){
+  const value=rgb[i],at=i*4;
+  data[at]=(value>>>16)&255;data[at+1]=(value>>>8)&255;
+  data[at+2]=value&255;data[at+3]=255;
+ }
+ ctx.putImageData(image,0,0);
 }
 function tick(){
  if(!nes||paused)return;
@@ -304,6 +312,7 @@ window.retroAiStep=function(name,holdFrames,nonce){
  if(typeof code!=="number"||!gamepadLatch.change(name,code,true,frames))return false;
  let revoked=false;
  try{
+  stepPaintCountdown=holdFrames;
   for(let i=0;i<holdFrames;i++){
    if(!window.GameLabBridge.allowStep(activeRomSession,nonce,holdFrames)){revoked=true;throw Error("STOP revoked lease");}
    nes.frame(); // PPU framebuffer + real CPU side-effects, not a timer guess.
@@ -331,9 +340,16 @@ window.retroAiStep=function(name,holdFrames,nonce){
   return true;
  }catch(error){
   if(gamepadLatch)gamepadLatch.clear();
+  // Keep a cancelled partial observation coherent too, without advancing
+  // another frame or emitting action/goal evidence for the interrupted step.
+  if(revoked&&nes&&nes.ppu&&typeof paintFrame==="function"){
+   try{paintFrame(nes.ppu.buffer);}catch(ignored){/* STOP must still pause/release input. */}
+  }
   if(revoked){window.retroPause();status("STOP: разрешение отозвано; шаг truncated без награды");}
   else{stop();status("STOP: ошибка пошаговой эмуляции");}
   return false;
+ }finally{
+  stepPaintCountdown=0;
  }
 };
 window.retroButton=function(name,down){
