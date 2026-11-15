@@ -45,8 +45,9 @@ def installed_revision(root: Path, package: str) -> str | None:
         raise ValueError("Oversize SDK source.properties")
     text = properties.read_text(encoding="utf-8", errors="replace")
     for line in text.splitlines():
-        if line.startswith("Pkg.Revision="):
-            value = line.partition("=")[2].strip()
+        matched = re.match(r"^\s*Pkg\.Revision\s*=\s*(.*?)\s*$", line)
+        if matched:
+            value = matched.group(1)
             if VERSION.fullmatch(value):
                 return value
             raise ValueError("Invalid package revision: " + package)
