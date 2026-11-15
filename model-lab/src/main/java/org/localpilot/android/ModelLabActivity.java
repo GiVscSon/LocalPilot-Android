@@ -30,6 +30,7 @@ import org.localpilot.shared.ConsoleAgentContract;
 import org.localpilot.shared.ConsoleExperienceMemory;
 import org.localpilot.shared.HarnessDemoWorkflow;
 import org.localpilot.shared.VerifiedPpoReplayStore;
+import org.localpilot.shared.LearningCoordinator;
 
 /**
  * Independent on-device AI laboratory. No LocalPilot service/gestures are present.
@@ -580,7 +581,12 @@ public final class ModelLabActivity extends Activity {
     " · GGUF inference: "+inference.inferenceCalls()+
     " / ответов "+inference.validReplies()+" / отказов "+inference.rejectedReplies()+
     "; последний "+inference.lastLatencyMs()+" мс, GPU-слоёв "+inference.lastGpuLayers()+
-    " · PPO replay: "+replay.batches()+" серий / "+replay.steps()+" настоящих переходов";
+    " · PPO replay: "+replay.batches()+" серий / "+replay.steps()+" настоящих переходов"+
+    " · PPO кандидат: "+switch(LearningCoordinator.candidateSlot(new File(getFilesDir(),"localpilot_vault").toPath())){
+     case EMPTY -> "нет";
+     case INCOMPLETE -> "неполная запись; обучение остановлено";
+     case COMPLETE_UNVERIFIED -> "файлы есть; оценка и применение не подтверждены";
+    };
   }catch(java.io.IOException damaged){return "STOP: общий журнал повреждён";}
  }
  private void cancelConsoleAgent(){

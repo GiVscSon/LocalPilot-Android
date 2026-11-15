@@ -19,6 +19,22 @@ import java.util.List;
 public final class LearningCoordinator {
  private LearningCoordinator(){}
  public record Candidate(Path weights,Path manifest,PpoGaeTrainer.Report update) {}
+ public enum CandidateSlot { EMPTY, COMPLETE_UNVERIFIED, INCOMPLETE }
+ /** File presence only; COMPLETE_UNVERIFIED does not certify contents or evaluation. */
+ public static CandidateSlot candidateSlot(Path vault){
+  if(vault==null)throw new IllegalArgumentException("Missing local learning vault");
+  Path directory=vault.resolve("models/candidates");
+  boolean weights=Files.exists(directory.resolve("student-homebrew-v1.weights.bin"));
+  boolean manifest=Files.exists(directory.resolve("student-homebrew-v1.manifest.json"));
+  return weights&&manifest?CandidateSlot.COMPLETE_UNVERIFIED:
+    weights||manifest?CandidateSlot.INCOMPLETE:CandidateSlot.EMPTY;
+ }
+ /** Check before collecting a rollout as well as immediately before writing. */
+ public static void requireCandidateSlot(Path appPrivateVault)throws IOException{
+  if(appPrivateVault==null)throw new IllegalArgumentException("Missing local learning vault");
+  if(candidateSlot(appPrivateVault)!=CandidateSlot.EMPTY)
+   throw new IOException("PPO_PENDING_CANDIDATE_MUST_BE_EVALUATED");
+ }
  public static Candidate prepare(StudentPolicyNet active,
        List<VerifiedReplayFilter.Step> verifiedSteps,Path appPrivateVault)throws IOException{
   if(active==null||verifiedSteps==null||appPrivateVault==null)
@@ -35,8 +51,7 @@ public final class LearningCoordinator {
   Path candidate=directory.resolve("student-homebrew-v1.weights.bin");
   Path manifest=directory.resolve("student-homebrew-v1.manifest.json");
   // Do not overwrite an unexamined previous candidate or crash-partial file.
-  if(Files.exists(candidate)||Files.exists(manifest))
-   throw new IOException("PPO_PENDING_CANDIDATE_MUST_BE_EVALUATED");
+  requireCandidateSlot(appPrivateVault);
   PpoGaeTrainer.Report trained=PpoGaeTrainer.updateCandidate(
     active,verifiedSteps,candidate,PpoGaeTrainer.DEFAULT);
   if(Thread.currentThread().isInterrupted())throw new IOException("STOP_AFTER_TRAINING");
