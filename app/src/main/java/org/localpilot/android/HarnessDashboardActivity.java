@@ -19,6 +19,7 @@ import org.localpilot.shared.VerifiedPpoReplayStore;
 import org.localpilot.shared.HarnessDemoWorkflow;
 import org.localpilot.shared.HarnessCoordinator;
 import org.localpilot.shared.ConsoleAgentContract;
+import org.localpilot.shared.LearningCoordinator;
 import java.io.IOException;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
@@ -215,7 +216,7 @@ public final class HarnessDashboardActivity extends Activity {
   ModelLabStore.Entry assigned=HarnessModelBinding.resolve(this,list);
   if(stored!=null&&assigned==null)
    row(intro,"STOP: назначенная модель отсутствует или её SHA изменился.");
-  if(list.isEmpty())row(intro,"Нет GGUF. Можно загрузить GGUF или использовать обученный CPU student.");
+  if(list.isEmpty())row(intro,"Нет GGUF. Можно загрузить GGUF или запустить CPU Student в учебной NES.");
   for(ModelLabStore.Entry e:list){
    LinearLayout model=card(e.label,e.vision()?"Мультимодальная · требуется совместимый mmproj":
      "Текстовая · без зрения кадра NES");
@@ -376,10 +377,14 @@ public final class HarnessDashboardActivity extends Activity {
   try{
    java.nio.file.Path candidate=new java.io.File(getFilesDir(),
      "localpilot_vault/models/candidates/student-homebrew-v1.weights.bin").toPath();
-   if(java.nio.file.Files.isRegularFile(candidate)){
+   LearningCoordinator.CandidateSlot slot=LearningCoordinator.candidateSlot(
+     new java.io.File(getFilesDir(),"localpilot_vault").toPath());
+   if(slot==LearningCoordinator.CandidateSlot.INCOMPLETE){
+    row(train,"STOP: неполная запись PPO-кандидата; новая серия заблокирована. Файлы сохранены.");
+   }else if(slot==LearningCoordinator.CandidateSlot.COMPLETE_UNVERIFIED){
     StudentPolicyNet pending=StudentPolicyNet.load(candidate);
     row(train,"PPO-кандидат на диске: SHA "+pending.sha256().substring(0,16));
-    row(train,"EvaluationGate: НЕ ПРОЙДЕН · активные веса не заменены.");
+    row(train,"Файлы кандидата есть; проверка манифеста и оценка в приложении не выполнены. EvaluationGate: НЕ ПРОЙДЕН · активные веса не заменены.");
    }else row(train,"PPO-кандидат: ещё не создан из 16 реальных StudentPolicy шагов.");
   }catch(IOException invalid){
    row(train,"STOP: PPO-кандидат повреждён; активация невозможна.");
