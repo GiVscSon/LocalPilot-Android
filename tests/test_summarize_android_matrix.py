@@ -30,7 +30,10 @@ def populate(root):
                                     'evaluation': 'NOT_RUN', 'policyBeforeSha256': POLICY_BEFORE,
                                     'policyAfterSha256': POLICY_AFTER, 'apkSha256': APK},
                 matrix.REPORTS[2]: {'sourceSha': SHA, 'api': api, 'releaseReady': False,
-                                    'result': 'NO_PROVEN_IMPROVEMENT', 'scenarioCount': 20,
+                                    'result': 'NO_PROVEN_IMPROVEMENT', 'scenarioCount': 6,
+                                    'pairedScenarios': [{'scenario': 'smoke'+str(i)} for i in range(6)],
+                                    'physicalAndroidVerified': False,
+                                    'promotion': 'BLOCKED_UNTIL_DEVICE_HOLDOUT_AND_ROLLBACK',
                                     'androidWeightsAndManifestUnchanged': True,
                                     'evaluationRuntime': 'HOST_REAL_JSNES_NOT_ANDROID',
                                     'activePolicySha256': POLICY_BEFORE,
@@ -85,6 +88,22 @@ class MatrixEvidenceTest(unittest.TestCase):
         file = first / matrix.REPORTS[2]
         row = json.loads(file.read_text())
         row['result'] = 'FAKE_ACCEPTED'
+        file.write_text(json.dumps(row))
+        self.assertEqual('FAIL', matrix.inspect(self.root, SHA)['result'])
+
+    def test_holdout_missing_scenarios_is_fail(self):
+        first = next(iter(self.root.iterdir()))
+        file = first / matrix.REPORTS[2]
+        row = json.loads(file.read_text())
+        row['pairedScenarios'] = row['pairedScenarios'][:3]
+        file.write_text(json.dumps(row))
+        self.assertEqual('FAIL', matrix.inspect(self.root, SHA)['result'])
+
+    def test_holdout_cannot_claim_promoted_without_evaluation(self):
+        first = next(iter(self.root.iterdir()))
+        file = first / matrix.REPORTS[2]
+        row = json.loads(file.read_text())
+        row['promotion'] = 'PROMOTED'
         file.write_text(json.dumps(row))
         self.assertEqual('FAIL', matrix.inspect(self.root, SHA)['result'])
 
