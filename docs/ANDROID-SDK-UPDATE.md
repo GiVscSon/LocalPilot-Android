@@ -4,12 +4,13 @@
 
 ## Версии и политика
 
+- Android SDK Command-line Tools / Android CLI: **22.0 или новее в Stable**. Старые GitHub runner images имели 12.0; обновляйте через `cmdline-tools;latest`.
 - Android SDK Platform-Tools / ADB: **37.0.1 или новее в Stable**, не Canary 37.0.3.
 - Android Emulator: Stable, актуальный ориентир на 15.11.2026 **37.2.12 или новее в Stable**. Эмулятор может быть обновлён отдельно от APK.
 - SDK Platforms API **30 / 35 / 36** для проверок LocalPilot.
 - Android Build Tools: сохранить **35.0.0**, пока Gradle, APK/signature и эмуляторы не пройдут совместимую матрицу для более новой версии.
 - NDK: сохранить **27.2.12479018**; CMake: **3.22.1**; Java Temurin 21; Gradle 8.9.
-- Командные инструменты Linux: существующий `tools/bootstrap_android_sdk.sh` получает официальный Google ZIP `commandlinetools-linux-15859902_latest.zip` и проверяет фиксированный SHA-256.
+- Командные инструменты Linux: существующий `tools/bootstrap_android_sdk.sh` получает официальный Google ZIP `commandlinetools-linux-15859902_latest.zip` и проверяет фиксированный SHA-256. Менеджер также обновляет существующую CLI до 22.0 через `cmdline-tools;latest`.
 
 Официальные страницы: https://developer.android.com/tools/releases/platform-tools, https://developer.android.com/studio/releases/emulator, https://developer.android.com/tools/sdkmanager, https://developer.android.com/studio.
 
@@ -49,7 +50,7 @@ python3 tools/android_sdk_inventory.py \
 ```powershell
 $SDK = "$env:LOCALAPPDATA\Android\Sdk"
 $env:ANDROID_SDK_ROOT = $SDK
-& "$SDK\cmdline-tools\latest\bin\sdkmanager.bat" --channel=0 "platform-tools" "platforms;android-30" "platforms;android-35" "platforms;android-36" "build-tools;35.0.0"
+& "$SDK\cmdline-tools\latest\bin\sdkmanager.bat" --channel=0 "platform-tools" "platforms;android-30" "platforms;android-35" "platforms;android-36" "build-tools;35.0.0" "cmdline-tools;latest"
 & "$SDK\platform-tools\adb.exe" version
 ```
 
