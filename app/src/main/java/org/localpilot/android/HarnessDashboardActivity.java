@@ -188,22 +188,23 @@ public final class HarnessDashboardActivity extends Activity {
    row(experience,ConsoleExperienceMemory.goalSummary(getFilesDir().toPath()));
   }catch(IOException invalid){row(experience,"STOP: целостность опыта или игровой награды не пройдена.");}
   experience.addView(button("Открыть эпизоды",()->{tab="Эпизоды";render();}));
-  LinearLayout launch=card("Играть и исследовать","ROM запускается в существующем GameLab.");
+  LinearLayout launch=card("Играть и продолжать","Автоигра Student — встроенная NES-ROM. Свои ROM доступны для ручной игры.");
+  launch.addView(button("▶ Автоигра Student · 256 ходов с сохранением",
+    ()->startTrustedNesWorkflow(HarnessDemoWorkflow.STUDENT_AUTOPLAY)));
+  launch.addView(button("▶ Продолжить сохранённую автоигру",
+    ()->startTrustedNesWorkflow(HarnessDemoWorkflow.RESUME_AUTOPLAY)));
   launch.addView(button("Открыть NES / Денди",this::openNES));
   launch.addView(button("▶ Играть: назначенная GGUF, до 4 проверенных NES-ходов",
     ()->startTrustedNesWorkflow(HarnessDemoWorkflow.GGUF_PLAY_4)));
   launch.addView(button("▶ Играть и учиться: 16 NES-ходов Student → PPO-кандидат",
     ()->startTrustedNesWorkflow(HarnessDemoWorkflow.STUDENT_TRAIN_16)));
-  launch.addView(button("▶ Автоигра Student · 256 ходов с сохранением",
-    ()->startTrustedNesWorkflow(HarnessDemoWorkflow.STUDENT_AUTOPLAY)));
-  launch.addView(button("▶ Продолжить сохранённую автоигру",
-    ()->startTrustedNesWorkflow(HarnessDemoWorkflow.RESUME_AUTOPLAY)));
   try{
    NesSaveStore.Save saved=NesSaveStore.load(new java.io.File(getFilesDir(),"localpilot_vault").toPath());
    row(launch,saved==null?"Сохранённой игры пока нет":
      "Сохранено: NES кадр "+saved.frame()+" · проверенных действий "+saved.verifiedActions()+" · продолжение после перезапуска доступно");
   }catch(IOException invalid){row(launch,"STOP: сохранение повреждено; файл сохранён для диагностики");}
   launch.addView(button("Открыть ModelLab",this::openModelLab));
+  content.removeView(launch);content.addView(launch,0);
  }
  private ModelLabStore.Entry boundModel(){
   if(!BuildConfig.UNIFIED_MODELLAB)return null;

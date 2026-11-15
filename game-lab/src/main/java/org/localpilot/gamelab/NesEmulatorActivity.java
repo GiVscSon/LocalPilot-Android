@@ -252,7 +252,7 @@ public final class NesEmulatorActivity extends Activity {
   autoplay.setOnClickListener(v->{
    if(progressBusy||studentRemaining>0||aiRunning||harness.hasPending()||harness.actionInFlight()||
       studentTraining!=null&&!studentTraining.isDone())return;
-   if(homebrewRom&&frames>=15){autoplayBatchesRemaining=HarnessDemoWorkflow.AUTOPLAY_BATCHES;startStudentBatch();}
+   if(homebrewRom&&frames>=15){if(armAutoplay())startStudentBatch();}
    else {requestedAutoWorkflow=HarnessDemoWorkflow.STUDENT_AUTOPLAY;tryAutoWorkflowLaunch();}
   });
   actionPanel.addView(autoplay);
@@ -552,6 +552,21 @@ public final class NesEmulatorActivity extends Activity {
   if(autoplayBatchesRemaining>0&&!message.startsWith("STOP")&&now-lastStatusUiAt<2000)return;
   lastStatusUiAt=now;state.setText(message);
  }
+ private boolean armAutoplay(){
+  try{
+   int goals=ConsoleExperienceMemory.readHomebrewGoals(getFilesDir().toPath()).size();
+   int replay=VerifiedPpoReplayStore.summary(progressVault()).batches();
+   autoplayBatchesRemaining=Math.min(HarnessDemoWorkflow.AUTOPLAY_BATCHES,
+     Math.min((ConsoleExperienceMemory.HOMEBREW_GOAL_MAX_ROWS-goals)/VerifiedReplayFilter.MIN_STEPS,
+       VerifiedPpoReplayStore.MAX_BATCHES-replay));
+   if(autoplayBatchesRemaining<=0){
+    autoplayBatchesRemaining=0;
+    showState("Опыт сохранён, журнал заполнен: перед новой автоигрой требуется экспорт. Ручная игра и загрузка сохранения доступны.");
+    return false;
+   }
+   return true;
+  }catch(IOException|RuntimeException invalid){stopCpuExperiment("STOP: свободное место журнала не подтверждено");return false;}
+ }
  private void queueAutoplayBatch(String epoch,long revision){
   final long serial=progressGeneration;
   web.postDelayed(()->{
@@ -706,8 +721,7 @@ public final class NesEmulatorActivity extends Activity {
     showState("Сохранение загружено · кадр "+frames+" · действия "+progressVerifiedActions+" · новая эпоха");
     if(auto){
      if(saved.policySha256().isEmpty()||!activeStudent().sha256().equals(saved.policySha256()))throw new IOException("Active policy differs from saved session");
-     autoplayBatchesRemaining=HarnessDemoWorkflow.AUTOPLAY_BATCHES;
-     queueAutoplayBatch(epoch,harness.stopRevision());
+     if(armAutoplay())queueAutoplayBatch(epoch,harness.stopRevision());
     }
    }catch(IOException|org.json.JSONException|RuntimeException invalid){
     progressBusy=false;stopCpuExperiment("STOP: восстановление NES не подтверждено");
@@ -737,7 +751,8 @@ public final class NesEmulatorActivity extends Activity {
    autoGgufRemaining=HarnessDemoWorkflow.GGUF_MAX_STEPS;
   }else autoGgufRemaining=0;
   if(HarnessDemoWorkflow.RESUME_AUTOPLAY.equals(mode)){restoreProgress(true);return;}
-  autoplayBatchesRemaining=HarnessDemoWorkflow.STUDENT_AUTOPLAY.equals(mode)?HarnessDemoWorkflow.AUTOPLAY_BATCHES:0;
+  autoplayBatchesRemaining=0;
+  if(HarnessDemoWorkflow.STUDENT_AUTOPLAY.equals(mode)&&!armAutoplay())return;
   autoLaunchArmed=true;
   showState("Harness: загружаю настоящий встроенный NES-ROM; проверю кадр перед вводом");
   launchRom(HomebrewNes.cartridge(),true);

@@ -281,6 +281,7 @@ public final class ConsoleExperienceMemory {
   *
   * No record here has StudentPolicy obs64/oldLogProb; PPO remains BLOCKED.
   */
+ public static final int HOMEBREW_GOAL_MAX_ROWS=256;
  public static final String HOMEBREW_GOAL_FILE="console-ai-homebrew-goal-v1.log";
  private static final String RIGHT_PROGRESS_SCHEMA="LOCALPILOT_HOMEBREW_GOAL_V1";
  private static final String GOAL_TASK="builtin-homebrew-right-progress-v1";
@@ -320,7 +321,7 @@ public final class ConsoleExperienceMemory {
   if(!Files.isRegularFile(file)||Files.isSymbolicLink(file)||Files.size(file)>MAX_BYTES)
    throw new IOException("Unsafe or oversized homebrew goal journal");
   List<String> lines=Files.readAllLines(file,StandardCharsets.UTF_8);
-  if(lines.size()>256)throw new IOException("Homebrew goal journal row quota");
+  if(lines.size()>HOMEBREW_GOAL_MAX_ROWS)throw new IOException("Homebrew goal journal row quota");
   List<HomebrewGoal> parsed=new ArrayList<>();
   String previous="0";
   for(String line:lines){
@@ -367,7 +368,7 @@ public final class ConsoleExperienceMemory {
   Files.createDirectories(directory);
   Path journal=directory.resolve(HOMEBREW_GOAL_FILE);
   List<HomebrewGoal> prior=loadGoals(journal);
-  if(prior.size()>=256)throw new IOException("RAM goal journal row quota");
+  if(prior.size()>=HOMEBREW_GOAL_MAX_ROWS)throw new IOException("RAM goal journal row quota");
   String previous="0";
   StringBuilder text=new StringBuilder();
   for(HomebrewGoal old:prior){
