@@ -1,3 +1,5 @@
+**Сохранённый код (отдельная ветка):** https://github.com/GiVscSon/LocalPilot-Android/tree/checkpoint/localpilot-unified-lab-20261115 (коммит `fbbbeb9cb4ffa54ecc26582e4a640b963b80b8d3`, не перемещать)
+
 # LocalPilot · единая точка синхронизации
 
 **Адрес для всех новых и продолжаемых сессий ChatGPT, Codex, Gemini, GitHub CI:** https://github.com/GiVscSon/LocalPilot-Android/issues/159
