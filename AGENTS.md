@@ -1,3 +1,17 @@
+# ОБЯЗАТЕЛЬНАЯ КООРДИНАЦИЯ · LOCALPILOT CONTROL TOWER (15.11.2026)
+
+**Все исполнители, включая ChatGPT, Codex, Gemini и новые чаты, перед любым изменением проекта должны проверить [Control Tower #159](https://github.com/GiVscSon/LocalPilot-Android/issues/159), текущий `main`, открытые PR и их точные SHA.** Это общая точка задач, блокеров и handoff, а не автоматическая синхронизация историй чатов.
+
+- [Единый реестр прогресса, Draft PR #158](https://github.com/GiVscSon/LocalPilot-Android/pull/158) и `docs/LOCALPILOT-SINGLE-SOURCE-OF-TRUTH.md` (пока только в PR #158).
+- Архитектура: `docs/LOCALPILOT-HARNESS-RFC-v1.md`, `docs/LOCALPILOT-HARNESS-EXECUTION-PLAN.md`. [План связных контрактов, Draft PR #157](https://github.com/GiVscSon/LocalPilot-Android/pull/157).
+- **PR #146 уже merged**: единая NES/ModelLab/Harness цепочка и PPO-кандидат; не создавайте повторно второй эмулятор, HarnessCoordinator, JNI или тренер. **PR #150** сообщает `NO_PROVEN_IMPROVEMENT` на 20 парах, автоматическая активация не подтверждена. **PR #155** оптимизирует рендер. **PR #156/#157** основаны на устаревшей ветке #124, не сливать их ancestry поверх текущего main.
+- Работа по одному измеримому gate из #159; фиксировать base/head SHA, изменённые файлы, тесты, CI, APK/cert, статус доказательства и блокер в PR и #159.
+- Никаких заявлений о DEVICE_PASS, стабильном релизе, безопасном upgrade, GPU или успешном обучении без соответствующего фактического доказательства. STOP, TTL, InputPermit, epoch, Fail-Closed обязательны.
+
+**Если старый текст ниже расходится с более свежим подтверждённым `main`/Control Tower, сначала перепроверьте его как исторический, не считайте текущим состоянием.**
+
+---
+
 # АКТУАЛЬНЫЙ ПРИОРИТЕТ · 05.11.2026
 
 **LocalPilot-Android: новые версии являются ОСНОВНОЙ линией разработки в `main`, не отдельным экспериментальным продуктом.**
