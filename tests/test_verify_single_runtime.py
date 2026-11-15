@@ -7,13 +7,19 @@ path = Path(__file__).resolve().parents[1] / "tools/verify_single_runtime.py"
 spec = importlib.util.spec_from_file_location("single", path)
 single = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(single)
-FILES = [*single.CANONICAL.values(), single.DASHBOARD]
+FILES = [*single.CANONICAL.values(), single.DASHBOARD,
+         'model-lab/src/main/java/org/localpilot/android/EmbeddedGgufRuntime.java',
+         'tests/native/org/localpilot/android/EmbeddedGgufRuntime.java']
 DASH = "HarnessCoordinator.nes().snapshot();"
 
 
 class SingleRuntimeTests(unittest.TestCase):
     def test_existing_runtime_wiring_passes(self):
         self.assertEqual([], single.violations(FILES, DASH))
+
+    def test_fourth_gguf_engine_copy_fails(self):
+        files = FILES + ['more/src/EmbeddedGgufRuntime.java']
+        self.assertTrue(single.violations(files, DASH))
 
     def test_second_owner_fails(self):
         files = FILES + ["another/src/HarnessCoordinator.java"]
