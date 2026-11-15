@@ -79,6 +79,7 @@ public final class StudentHoldoutRealNesVerify {
    if(!trainEpoch.equals(fields[1])||!trainPolicy.equals(fields[3]))
     throw new IllegalArgumentException("Mixed training epoch/weights");
    trainingX.add(Integer.parseInt(fields[9]));
+   trainingX.add(Integer.parseInt(fields[11]));
   }
   var steps=read(holdout);
   for(var step:steps)

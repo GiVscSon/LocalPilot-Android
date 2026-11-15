@@ -155,6 +155,23 @@ public final class HarnessCoordinatorTest {
   check(!c.ownsEpisode(lease)&&!c.consume(t.nonce,"1200",62,123,11012),"STOP invalidates pending episode observation");
   check(c.confirmStop("1200",revision),"PPO STOP still needs release ACK");
   check(c.startEpisodeStep(lease,sha,"RIGHT",62,123,11013)==null,"old episode cannot resurrect after ACK");
+  c.reset("1300",HarnessCoordinator.Mode.STEP_MODE);
+  t=c.begin("1300",30,123,12000);
+  check(c.beginMaintenance()==null,"maintenance cannot steal observation or action owner");
+  c.stop();
+  var maintenance=c.beginMaintenance();
+  check(maintenance!=null&&c.hasPending(),"maintenance reserves controller without any input permit");
+  check(c.beginMaintenance()==null,"only one maintenance owner");
+  check(c.start(HarnessCoordinator.Actor.MANUAL,"1300","A",30,123,0,12001)==null,"maintenance blocks manual dispatch");
+  check(c.reserveEpisode("1300",HarnessCoordinator.PPO_TASK,sha,1)==null,"maintenance blocks new autoplay");
+  boolean refused=false;try{c.begin("1300",30,123,12002);}catch(IllegalStateException expected){refused=true;}
+  check(refused,"maintenance blocks new observation tickets");
+  long beforeStop=c.stopRevision();c.stop("USER_STOP_DURING_ARCHIVE");
+  check(c.stopRevision()>beforeStop&&c.lastStopReason().equals("USER_STOP_DURING_ARCHIVE"),"STOP remains immediate during disk maintenance");
+  c.reset("1301",HarnessCoordinator.Mode.STEP_MODE);
+  check(c.start(HarnessCoordinator.Actor.MANUAL,"1301","A",30,123,0,12003)==null,"ROM reset cannot bypass maintenance");
+  check(!c.endMaintenance(null)&&c.endMaintenance(maintenance)&&!c.endMaintenance(maintenance),"only exact lease releases maintenance once");
+  check(!c.hasPending()&&!c.consume(t.nonce,"1301",30,123,12004),"maintenance release does not restore old input authority");
   System.out.println("HARNESS_COORDINATOR_PASS checks="+checks);
  }
 }

@@ -72,6 +72,8 @@ public final class StudentPpoRealNesVerify {
   test(result.update().changedParameters()>0,"actual neural parameters updated");
   test(Files.isRegularFile(result.weights()),"candidate file persisted");
   test(Files.isRegularFile(result.manifest()),"candidate manifest persisted");
+  test(Files.readString(result.manifest()).contains("\"trainingReplaySha256\":\""+
+    VerifiedPpoReplayStore.summary(vault).latestSha256()+"\""),"candidate binds immutable replay before journal rotation");
   test(StudentPolicyNet.load(result.weights()).sha256().equals(result.update().shaAfter()),
     "candidate bytes match SHA");
   test(Files.readString(result.manifest()).contains("\"promotion\":\"BLOCKED_UNTIL_INDEPENDENT_EVALUATION\""),
