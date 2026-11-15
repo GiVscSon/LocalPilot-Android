@@ -82,10 +82,18 @@ def inspect(root: Path, sha: str) -> dict:
                 evaluation = results[REPORTS[2]]
                 require(evaluation.get('result') in ('ACCEPTED', 'NO_PROVEN_IMPROVEMENT'),
                         'Independent holdout evaluation absent or invalid')
-                require(evaluation.get('scenarioCount', 0) >= 20 and
+                require(isinstance(evaluation.get('scenarioCount'), int) and
+                        evaluation['scenarioCount'] >= 6 and
+                        isinstance(evaluation.get('pairedScenarios'), list) and
+                        len(evaluation['pairedScenarios']) == evaluation['scenarioCount'] and
+                        evaluation.get('physicalAndroidVerified') is False and
                         evaluation.get('androidWeightsAndManifestUnchanged') is True and
                         evaluation.get('evaluationRuntime') == 'HOST_REAL_JSNES_NOT_ANDROID',
-                        'Holdout provenance or separation invalid')
+                        'Host-only holdout sample count or provenance invalid')
+                # Six verified host scenarios are a smoke evaluation, NOT the >=20-pair
+                # promotion gate. No release or auto-promotion follows from this result.
+                require(str(evaluation.get('promotion', '')).startswith('BLOCKED_'),
+                        'Unreviewed candidate may not replace active weights')
                 require(evaluation.get('activePolicySha256') == before and
                         evaluation.get('candidatePolicySha256') == after,
                         'Holdout uses different weights than device training')
@@ -114,6 +122,7 @@ def inspect(root: Path, sha: str) -> dict:
                 entry['status'] = 'PASS'
                 entry['evaluation'] = evaluation['result']
                 entry['verifiedStudentSteps'] = student['replaySamples']
+                entry['holdoutScenarios'] = evaluation['scenarioCount']
             except (OSError, ValueError, TypeError, AttributeError, KeyError) as error:
                 entry['errors'].append(str(error)[:500])
             entries.append(entry)
@@ -133,7 +142,9 @@ def inspect(root: Path, sha: str) -> dict:
             'longPlayStopSaveResume': 'PASS' if all_green else 'UNKNOWN',
             'holdoutCandidateImprovement': (
                 'PROVEN_ON_HOST_HOLDOUT_ONLY' if all_green and all(
-                    r == 'ACCEPTED' for r in candidate_results) else 'NOT_PROVEN'),
+                    r == 'ACCEPTED' for r in candidate_results) and all(
+                    e.get('holdoutScenarios', 0) >= 20 for e in entries if 'api' in e)
+                 else 'NOT_PROVEN'),
             'realGgufInferenceOnDevice': 'UNKNOWN',
             'physicalPoco': 'UNKNOWN',
             'vulkanOnPoco': 'UNKNOWN',
