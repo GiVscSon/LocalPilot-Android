@@ -66,6 +66,12 @@ public final class NesExperienceArchiveTest {
   NesExperienceArchive.retireExported(files,receipt.name(),hash(zip));
   check(NesExperienceArchive.list(files).isEmpty(),"verified external readback permits local retirement");
   check(ConsoleExperienceMemory.readHomebrewGoals(files).size()==1,"external retirement keeps new active rows");
+  byte[] beforeSyncFailure=Files.readAllBytes(goal);
+  refuses(()->NesExperienceArchive.archiveAndRotate(files,dirToSync->{throw new java.io.IOException("injected directory fsync failure");}),"failed directory fsync blocks retirement after seal");
+  check(Arrays.equals(beforeSyncFailure,Files.readAllBytes(goal))&&ConsoleExperienceMemory.readHomebrewGoals(files).size()==1,"source retained if archive rename durability fails");
+  check(NesExperienceArchive.list(files).size()==1,"sealed recovery copy retained on failed directory fsync");
+  String recovery=NesExperienceArchive.list(files).get(0);
+  NesExperienceArchive.retireExported(files,recovery,hash(NesExperienceArchive.read(files,recovery)));
   Path corrupt=seed(),bad=corrupt.resolve("console-ai-homebrew-goal-v1.log");
   Files.writeString(bad,"corrupt-private-evidence");
   refuses(()->NesExperienceArchive.archiveAndRotate(corrupt),"corrupt source cannot be rotated");

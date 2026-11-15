@@ -479,7 +479,17 @@ public final class HarnessDashboardActivity extends Activity {
     HarnessCoordinator coordinator=HarnessCoordinator.nes();
     HarnessCoordinator.MaintenanceLease lease=coordinator.beginMaintenance();
     if(lease==null)throw new IOException("Сначала останови NES-эпизод");
-    try{receipt=NesExperienceArchive.archiveAndRotate(getFilesDir().toPath());}
+    try{receipt=NesExperienceArchive.archiveAndRotate(getFilesDir().toPath(),directory->{
+     try{
+      java.io.FileDescriptor fd=android.system.Os.open(directory.toString(),
+        android.system.OsConstants.O_RDONLY|android.system.OsConstants.O_CLOEXEC,0);
+      try{
+       if(!android.system.OsConstants.S_ISDIR(android.system.Os.fstat(fd).st_mode))
+        throw new IOException("Archive fsync target is not a directory");
+       android.system.Os.fsync(fd);
+      }finally{android.system.Os.close(fd);}
+     }catch(android.system.ErrnoException failed){throw new IOException("Archive directory fsync failed",failed);}
+    });}
     finally{coordinator.endMaintenance(lease);}
     result="Архив проверен: "+receipt.goalRows()+" RAM-записей, "+receipt.replayBatches()+
       " replay-серий. Рабочий журнал свободен; игра и веса сохранены.";

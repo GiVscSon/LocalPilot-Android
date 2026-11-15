@@ -30,6 +30,7 @@ public final class NesExperienceArchive {
  private static final String GOALS="console-ai-homebrew-goal-v1.log";
  private static final String NAME="experience-[0-9a-f]{32}\\.zip";
  public record Receipt(String name,String sha256,int goalRows,int replayBatches){}
+ @FunctionalInterface public interface DirectorySync {void sync(Path directory)throws IOException;}
  private static String sha(byte[] bytes){
   try{
    StringBuilder s=new StringBuilder();
@@ -109,7 +110,16 @@ public final class NesExperienceArchive {
   Files.delete(directory(files).resolve(name));
  }
  public static synchronized Receipt archiveAndRotate(Path files)throws IOException{
+  return archiveAndRotate(files,dir->{
+   try(java.nio.channels.FileChannel channel=java.nio.channels.FileChannel.open(dir,java.nio.file.StandardOpenOption.READ)){
+    channel.force(true);
+   }
+  });
+ }
+ /** Android supplies Os.open/fstat/fsync; JVM uses FileChannel. */
+ public static synchronized Receipt archiveAndRotate(Path files,DirectorySync sync)throws IOException{
   synchronized(ConsoleExperienceMemory.class){synchronized(VerifiedPpoReplayStore.class){
+   if(sync==null)throw new IOException("Archive directory fsync is required");
    if(Thread.currentThread().isInterrupted())throw new IOException("Archive cancelled before commit");
    if(list(files).size()>=MAX_ARCHIVES)throw new IOException("Export a saved archive before making another");
    var goals=ConsoleExperienceMemory.readHomebrewGoals(files);
@@ -147,6 +157,11 @@ public final class NesExperienceArchive {
    // Seal and verify before the first deletion. On an I/O failure, never delete
    // the sealed archive: it is the recovery copy even if rotation was partial.
    read(files,name);
+   // Persist the renamed archive and newly created parent directories BEFORE
+   // deleting active records. If fsync fails, keep both copies for recovery.
+   for(Path p=dir;;p=p.getParent()){
+    sync.sync(p);if(p.equals(files))break;
+   }
    if(Thread.currentThread().isInterrupted())throw new IOException("Archive saved; rotation cancelled");
    for(var e:originals.entrySet())if(!MessageDigest.isEqual(e.getValue(),bounded(e.getKey(),131072)))
     throw new IOException("Experience changed; archive saved, rotation refused");
