@@ -3,7 +3,9 @@ import hashlib
 import importlib.util
 from pathlib import Path
 import struct
+import sys
 import unittest
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'tools'))
 
 path = Path(__file__).resolve().parents[1] / "tools/nes_sustained_256_acceptance.py"
 spec = importlib.util.spec_from_file_location("sustained", path)
