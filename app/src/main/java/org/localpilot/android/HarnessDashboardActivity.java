@@ -20,6 +20,7 @@ import org.localpilot.shared.HarnessDemoWorkflow;
 import org.localpilot.shared.NesSaveStore;
 import org.localpilot.shared.HarnessCoordinator;
 import org.localpilot.shared.ConsoleAgentContract;
+import org.localpilot.shared.NesExperienceArchive;
 import java.io.IOException;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
@@ -37,6 +38,9 @@ public final class HarnessDashboardActivity extends Activity {
  private String tab="Обзор";
  private boolean destroyed;
  private volatile boolean trainingBusy;
+ private volatile boolean archiveBusy;
+ private String pendingExport;
+ private static final int EXPORT_NES_EXPERIENCE=6035;
  private final ExecutorService trainingWorker=Executors.newSingleThreadExecutor(job->{
   Thread thread=new Thread(job,"LocalPilot-GoalStudent-Training");
   thread.setDaemon(true);return thread;
@@ -45,6 +49,7 @@ public final class HarnessDashboardActivity extends Activity {
 
  @Override public void onCreate(Bundle saved){
   super.onCreate(saved);
+  if(saved!=null){pendingExport=saved.getString("nesArchiveExport");archiveBusy=pendingExport!=null;}
   if(!BuildConfig.UNIFIED_MODELLAB){finish();return;}
   getWindow().setStatusBarColor(BG);
   getWindow().setNavigationBarColor(BG);
@@ -264,6 +269,14 @@ public final class HarnessDashboardActivity extends Activity {
   card("Другие консоли","Новое ядро появится только после интеграции ROM, кадров, ввода и тестов.");
  }
  private void episodes(){
+  LinearLayout retention=card("Архив опыта NES",
+    "Архив сохраняет RAM-журнал и PPO replay. Игра и веса остаются на месте.");
+  try{
+   List<String> archives=NesExperienceArchive.list(getFilesDir().toPath());
+   row(retention,"Локальных архивов: "+archives.size()+" / "+NesExperienceArchive.MAX_ARCHIVES);
+   retention.addView(button("Архивировать опыт · освободить рабочий журнал",this::archiveExperience));
+   if(!archives.isEmpty())retention.addView(button("Экспортировать архив в файл",()->exportArchive(archives.get(0))));
+  }catch(IOException invalid){row(retention,"STOP: архивы недоступны; исходные файлы не удаляются");}
   LinearLayout summary=card("Проверенные эпизоды NES",
     "Исход: PIXELS_DIFFER или NO_VISUAL_CHANGE. Reward = UNKNOWN.");
   List<ConsoleExperienceMemory.Episode> all;
@@ -338,6 +351,7 @@ public final class HarnessDashboardActivity extends Activity {
     "Holdout проверяет ошибку классификации на другой ROM-сессии; это не приёмка устройства.");
   train.addView(button(trainingBusy?"Обучение выполняется...":
     "Обучить CPU student на проверенных NES-эпизодах",()->{
+    if(archiveBusy){info("Сначала заверши сохранение архива опыта");return;}
     if(trainingBusy){info("Уже обучаю candidate; дождись завершения");return;}
     trainingBusy=true;info("Обучаю отдельные веса на CPU; другие NES-режимы не запускаю");
     trainingWorker.execute(()->{
@@ -433,6 +447,7 @@ public final class HarnessDashboardActivity extends Activity {
   }));
  }
  private void startTrustedNesWorkflow(String mode){
+  if(archiveBusy){info("Сначала заверши сохранение архива опыта");return;}
   if(!HarnessDemoWorkflow.supported(mode)||!BuildConfig.UNIFIED_MODELLAB){
    info("STOP: этот режим не поддерживается текущим единым APK");return;
   }
@@ -450,9 +465,72 @@ public final class HarnessDashboardActivity extends Activity {
   catch(RuntimeException unavailable){info("STOP: встроенное ядро NES недоступно");}
  }
  private void openNES(){
+  if(archiveBusy){info("Сначала заверши сохранение архива опыта");return;}
   startActivity(new Intent(this,org.localpilot.gamelab.RetroLibraryActivity.class));
  }
- private void openModelLab(){startActivity(new Intent(this,ModelLabActivity.class));}
+ private void openModelLab(){if(archiveBusy){info("Сначала заверши сохранение архива опыта");return;}startActivity(new Intent(this,ModelLabActivity.class));}
+ private void archiveExperience(){
+  if(archiveBusy||trainingBusy){info("Дождись завершения текущей записи/обучения");return;}
+  archiveBusy=true;info("Проверяю и сохраняю архив; рабочие записи пока на месте");
+  trainingWorker.execute(()->{
+   String result;
+   try{
+    NesExperienceArchive.Receipt receipt;
+    HarnessCoordinator coordinator=HarnessCoordinator.nes();
+    HarnessCoordinator.MaintenanceLease lease=coordinator.beginMaintenance();
+    if(lease==null)throw new IOException("Сначала останови NES-эпизод");
+    try{receipt=NesExperienceArchive.archiveAndRotate(getFilesDir().toPath());}
+    finally{coordinator.endMaintenance(lease);}
+    result="Архив проверен: "+receipt.goalRows()+" RAM-записей, "+receipt.replayBatches()+
+      " replay-серий. Рабочий журнал свободен; игра и веса сохранены.";
+   }catch(Exception failed){result="STOP: архивирование: "+failed.getMessage()+". Сохранённые архивы не удалены.";}
+   final String message=result;
+   runOnUiThread(()->{archiveBusy=false;if(!destroyed){render();info(message);}});
+  });
+ }
+ private void exportArchive(String name){
+  if(archiveBusy||trainingBusy){info("Дождись завершения текущей записи/обучения");return;}
+  pendingExport=name;archiveBusy=true;
+  Intent create=new Intent(Intent.ACTION_CREATE_DOCUMENT).setType("application/zip")
+    .addCategory(Intent.CATEGORY_OPENABLE).putExtra(Intent.EXTRA_TITLE,"LocalPilot-"+name)
+    .putExtra(android.provider.DocumentsContract.EXTRA_INITIAL_URI,
+      android.net.Uri.parse("content://com.android.externalstorage.documents/document/primary%3ADownload"));
+  try{startActivityForResult(create,EXPORT_NES_EXPERIENCE);}
+  catch(RuntimeException unavailable){pendingExport=null;archiveBusy=false;info("Нет приложения для сохранения файла; архив оставлен локально");}
+ }
+ @Override protected void onActivityResult(int request,int result,Intent data){
+  super.onActivityResult(request,result,data);
+  if(request!=EXPORT_NES_EXPERIENCE)return;
+  final String name=pendingExport;pendingExport=null;
+  if(result!=RESULT_OK||data==null||data.getData()==null||name==null){
+   archiveBusy=false;info("Экспорт отменён; локальный архив сохранён");return;
+  }
+  final android.net.Uri uri=data.getData();
+  trainingWorker.execute(()->{
+   String message;
+   try{
+    byte[] bytes=NesExperienceArchive.read(getFilesDir().toPath(),name);
+    try(java.io.OutputStream out=getContentResolver().openOutputStream(uri,"wt")){
+     if(out==null)throw new IOException("Не удалось открыть файл назначения");out.write(bytes);out.flush();
+    }
+    java.security.MessageDigest sha=java.security.MessageDigest.getInstance("SHA-256");int total=0;
+    try(java.io.InputStream in=getContentResolver().openInputStream(uri)){
+     if(in==null)throw new IOException("Файл нельзя перечитать для проверки");
+     byte[] chunk=new byte[8192];int n;
+     while((n=in.read(chunk))!=-1){total+=n;if(total>NesExperienceArchive.MAX_BYTES)throw new IOException("Экспорт превышает лимит");sha.update(chunk,0,n);}
+    }
+    if(total!=bytes.length)throw new IOException("Размер экспортированного файла отличается");
+    StringBuilder digest=new StringBuilder();for(byte b:sha.digest())digest.append(String.format(java.util.Locale.ROOT,"%02x",b&255));
+    NesExperienceArchive.retireExported(getFilesDir().toPath(),name,digest.toString());
+    message="Экспорт перечитан, SHA-256 совпал. Локальный архив освобождён; файл сохранён в выбранном месте.";
+   }catch(Exception failed){message="STOP: экспорт не подтверждён: "+failed.getMessage()+". Локальный архив сохранён.";}
+   final String outcome=message;
+   runOnUiThread(()->{archiveBusy=false;if(!destroyed){render();info(outcome);}});
+  });
+ }
+ @Override protected void onSaveInstanceState(Bundle out){
+  super.onSaveInstanceState(out);if(pendingExport!=null)out.putString("nesArchiveExport",pendingExport);
+ }
  @Override protected void onResume(){super.onResume();render();}
  @Override protected void onDestroy(){destroyed=true;trainingWorker.shutdown();super.onDestroy();}
 }

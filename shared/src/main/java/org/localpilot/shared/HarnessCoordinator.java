@@ -52,8 +52,20 @@ public final class HarnessCoordinator {
   }
  }
  private EpisodeLease episode;
+ /** Maintenance blocks new input without holding the monitor during disk I/O.
+  * STOP/reset remain immediate and never grant permission when maintenance ends. */
+ public static final class MaintenanceLease { private MaintenanceLease(){} }
+ private MaintenanceLease maintenance;
+ public synchronized MaintenanceLease beginMaintenance(){
+  if(maintenance!=null||hasPending()||active!=null)return null;
+  stop("EXPERIENCE_MAINTENANCE");maintenance=new MaintenanceLease();return maintenance;
+ }
+ public synchronized boolean endMaintenance(MaintenanceLease lease){
+  if(lease==null||lease!=maintenance)return false;
+  maintenance=null;return true;
+ }
  public synchronized EpisodeLease reserveEpisode(String session,String task,String sha,int steps){
-  if(stopPending||!matches(session)||episode!=null||waiting!=null||prepared!=null||active!=null||
+  if(maintenance!=null||stopPending||!matches(session)||episode!=null||waiting!=null||prepared!=null||active!=null||
      !PPO_TASK.equals(task)||sha==null||!sha.matches("[0-9a-f]{64}")||steps<1||steps>16)return null;
   episode=new EpisodeLease(epoch,task,sha,stopRevision,steps);return episode;
  }
@@ -103,7 +115,7 @@ public final class HarnessCoordinator {
   return beginObservation(expectedEpoch,frame,hash,now);
  }
  private Ticket beginObservation(String expectedEpoch,int frame,int hash,long now){
-  if(stopPending||!matches(expectedEpoch)||waiting!=null||prepared!=null||active!=null||
+  if(maintenance!=null||stopPending||!matches(expectedEpoch)||waiting!=null||prepared!=null||active!=null||
      frame<15||hash==0||now<0)
    throw new IllegalStateException("Another NES input owner or unready observation");
   byte[] bytes=new byte[16];random.nextBytes(bytes);
@@ -118,16 +130,16 @@ public final class HarnessCoordinator {
     ticket.stopRevision==stopRevision;
  }
  public synchronized boolean changeMode(String expectedEpoch,Mode next){
-  if(stopPending||episode!=null||!matches(expectedEpoch)||next==null||waiting!=null||
+  if(maintenance!=null||stopPending||episode!=null||!matches(expectedEpoch)||next==null||waiting!=null||
      prepared!=null||active!=null)return false;
   mode=next;return true;
  }
  public synchronized Snapshot snapshot(){
   return new Snapshot(epoch,mode.name(),
     active==null?(episode==null?"NONE":"PPO_STUDENT"):active.actor.name(),
-    stopPending||episode!=null||waiting!=null||prepared!=null,active!=null,stopRevision,stopReason);
+    maintenance!=null||stopPending||episode!=null||waiting!=null||prepared!=null,active!=null,stopRevision,stopReason);
  }
- public synchronized boolean hasPending(){return stopPending||episode!=null||waiting!=null||prepared!=null;}
+ public synchronized boolean hasPending(){return maintenance!=null||stopPending||episode!=null||waiting!=null||prepared!=null;}
  public synchronized boolean actionInFlight(){return active!=null;}
  public synchronized long stopRevision(){return stopRevision;}
  public synchronized String lastStopReason(){return stopReason;}
@@ -165,7 +177,7 @@ public final class HarnessCoordinator {
   return issue(actor,expectedEpoch,button,frame,hash,holdFrames,now);
  }
  private ActionPermit issue(Actor actor,String expectedEpoch,String button,int frame,int hash,int holdFrames,long now){
-  if(stopPending||actor==null||!matches(expectedEpoch)||active!=null||waiting!=null||
+  if(maintenance!=null||stopPending||actor==null||!matches(expectedEpoch)||active!=null||waiting!=null||
       !(actor==Actor.MANUAL?ConsoleAgentContract.manualPlayable(button):ConsoleAgentContract.playable(button))||frame<15||hash==0||now<0)
    return null;
   if(actor==Actor.GGUF||actor==Actor.STUDENT||actor==Actor.PPO_STUDENT){
