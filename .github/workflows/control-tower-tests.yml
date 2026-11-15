@@ -1,0 +1,26 @@
+name: LocalPilot Control Tower contract tests
+on:
+  pull_request:
+    paths:
+      - 'tools/control_tower_dispatcher.py'
+      - 'tools/control_tower_snapshot.py'
+      - 'tests/test_control_tower_snapshot.py'
+      - 'tests/test_control_tower_dispatcher.py'
+      - '.github/workflows/control-tower.yml'
+      - '.github/workflows/control-tower-tests.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test-control-tower:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify dispatcher cannot fake release or duplicate comments
+        run: |
+          python3 -m unittest discover -s tests -p 'test_control_tower_dispatcher.py' -v
+          python3 -m unittest discover -s tests -p 'test_control_tower_snapshot.py' -v

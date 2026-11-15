@@ -1,0 +1,43 @@
+name: LocalPilot unified organism evidence
+on:
+  pull_request:
+    paths:
+      - 'tools/verify_unified_organism.py'
+      - 'tools/verify_g2_trace.py'
+      - 'tests/test_verify_g2_trace.py'
+      - 'tests/test_harness_live_cycle.py'
+      - 'tests/HarnessCoordinator*.java'
+      - 'tests/VerifiedPpoReplayStore*.java'
+      - 'tests/HarnessModelExecutionLog*.java'
+      - 'shared/**'
+      - 'game-lab/**'
+      - 'model-lab/**'
+      - 'app/**'
+      - '.github/workflows/unified-organism-evidence.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify-integration-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Run unified source and JVM evidence suite
+        run: |
+          python3 -m unittest discover -s tests -p 'test_verify_g2_trace.py' -v
+          python3 tools/verify_unified_organism.py --output build/unified-organism-evidence.json
+      - name: Preserve evidence even on failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unified-organism-evidence
+          path: build/unified-organism-evidence.json
+          if-no-files-found: warn
