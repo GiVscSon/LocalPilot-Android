@@ -28,6 +28,9 @@ class SingleRuntimeTests(unittest.TestCase):
     def test_second_ppo_fails(self):
         self.assertTrue(single.violations(FILES + ["mirror/LearningCoordinator.java"], DASH))
 
+    def test_second_model_composition_owner_fails(self):
+        self.assertTrue(single.violations(FILES + ["mirror/HarnessModelRuntime.java"], DASH))
+
     def test_second_emulator_fails(self):
         self.assertTrue(single.violations(FILES + ["other/NesEmulatorActivity.java"], DASH))
 

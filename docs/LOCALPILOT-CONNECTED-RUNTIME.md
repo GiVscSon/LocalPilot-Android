@@ -85,3 +85,28 @@ G1 longplay уже занят PR #168; не дублировать его. PR #1
 
 Откат первого этапа — архивная ветка archive/main-before-connected-runtime-20261115
 на fbbbeb9. Ключ подписи, модели, ROM и пользовательский опыт не очищаются.
+
+## Реализация этапа1 в PR #170
+
+IMPLEMENTED / CI_PENDING, версия кандидата0.8.5/code57:
+
+- `NesModelHost` — типизированный Application-port: настоящий Ticket, ROM SHA,
+  выбранная модель/SHA, RAM и ограниченный PNG; ответ не может поменять binding.
+- `HarnessModelRuntime` — один владелец прежних ModelLabStore/EmbeddedGgufRuntime
+  в PilotApplication/ModelLabApp. Activity хранит только ссылки на этот объект.
+- Автоматические GGUF4хода вызывают порт прямо из NesEmulatorActivity, оставаясь
+  в той же Activity. Ручной явно запрошенный анализ через ModelLab сохранён.
+- STOP/фон/смена binding/TTL отменяют или отбрасывают ответ. Очередь не признаёт
+  JNI свободным раньше завершения. Последний binding проверяется перед вводом.
+  Маска встроенной RAM-задачи отсекает переход через8-битный край.
+- Console и ModelLab читают общую фазу запроса/engine/catalog; модель не получает
+  ActionPermit и не исполняет кнопки. Прежние replay/PPO/архив не заменены.
+
+Локально:22 JVM негативных/положительных контрактов порта,83 Harness assertions,
+3 Python proof-label tests и9 single-runtime guard tests PASS; основной и отдельный
+ModelLab Java/AndroidTest compile/Lint PASS. Это не настоящий GGUF инференс.
+В существующий All-in-One CI добавлены Android recreation/no-model/duplicate/STOP
+контракты на том же x86APK и отдельный положительный GGUF→JNI→4NESшага без
+переключения Activity. Последний тест загружает только закреплённый публичный
+Pocket GGUF через production ModelLabStore, не подставляет ответы. Результат CI
+ещё требуется; INFERENCE_PASS/ACTION_PASS/TRANSITION_PASS сейчас UNKNOWN.

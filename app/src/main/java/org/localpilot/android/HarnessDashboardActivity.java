@@ -176,6 +176,11 @@ public final class HarnessDashboardActivity extends Activity {
     "STOP: журнал вызовов моделей повреждён, MODEL_USED не подтверждён");}
   row(model,"Бэкенд: "+(BuildConfig.VULKAN_COMPILED?
     "Vulkan собран, работа GPU ещё должна быть доказана":"CPU · Vulkan не собран в этом APK"));
+  if(getApplication() instanceof org.localpilot.shared.NesModelHost host){
+   var shared=host.nesModelState();
+   row(model,"Общий запрос модели: "+shared.phase()+
+     (shared.frame()>0?" · NES кадр "+shared.frame()+" · эпоха "+shared.epoch():""));
+  }
   if(bound!=null){
    try{
     int used=0;
@@ -214,7 +219,7 @@ public final class HarnessDashboardActivity extends Activity {
  private ModelLabStore.Entry boundModel(){
   if(!BuildConfig.UNIFIED_MODELLAB)return null;
   try{
-   return HarnessModelBinding.resolve(this,ModelLabActivity.harnessStore(this).list());
+   return HarnessModelBinding.resolve(this,HarnessModelRuntime.from(this).store().list());
   }catch(RuntimeException invalid){return null;}
  }
  private void models(){
@@ -222,7 +227,7 @@ public final class HarnessDashboardActivity extends Activity {
    "Назначение выбирает GGUF для следующего NES-наблюдения. Веса не входят в APK.");
   intro.addView(button("Загрузить / импортировать / проверить GGUF",this::openModelLab));
   List<ModelLabStore.Entry> list;
-  try{list=ModelLabActivity.harnessStore(this).list();}
+  try{list=HarnessModelRuntime.from(this).store().list();}
   catch(RuntimeException error){
    row(intro,"STOP: хранилище моделей не открылось: "+error.getClass().getSimpleName());
    return;
@@ -423,7 +428,7 @@ public final class HarnessDashboardActivity extends Activity {
   row(device,"ABI: "+String.join(", ",android.os.Build.SUPPORTED_ABIS));
   row(device,"Доступно процессоров: "+Runtime.getRuntime().availableProcessors());
   row(device,"Vulkan в этом APK: "+(BuildConfig.VULKAN_COMPILED?"СОБРАН":"НЕТ"));
-  row(device,"GPU-слоёв в действующей модели: "+ModelLabActivity.harnessGpuLayers());
+  row(device,"GPU-слоёв в действующей модели: "+HarnessModelRuntime.from(this).lastGpuLayers());
   row(device,"Физический сравнительный GPU/CPU тест: НЕ ПОДТВЕРЖДЁН");
   LinearLayout stop=card("STOP · единый контур безопасности",
    "Не разрешает модельный ввод и не меняет Accessibility. Отзыв разрешений принадлежит HarnessCoordinator.");

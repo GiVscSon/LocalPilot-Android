@@ -11,6 +11,7 @@ import sys
 CANONICAL = {
     "HarnessCoordinator.java": "shared/src/main/java/org/localpilot/shared/HarnessCoordinator.java",
     "LearningCoordinator.java": "shared/src/main/java/org/localpilot/shared/LearningCoordinator.java",
+    "HarnessModelRuntime.java": "model-lab/src/main/java/org/localpilot/android/HarnessModelRuntime.java",
     "NesEmulatorActivity.java": "game-lab/src/main/java/org/localpilot/gamelab/NesEmulatorActivity.java",
     "EmbeddedGgufRuntime.java": "app/src/main/java/org/localpilot/android/EmbeddedGgufRuntime.java",
 }

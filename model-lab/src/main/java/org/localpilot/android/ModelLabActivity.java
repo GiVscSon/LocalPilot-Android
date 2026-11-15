@@ -32,23 +32,16 @@ import org.localpilot.shared.HarnessDemoWorkflow;
 import org.localpilot.shared.VerifiedPpoReplayStore;
 
 /**
- * Independent on-device AI laboratory. No LocalPilot service/gestures are present.
- * Only explicit user clicks import models, start evaluation or share an image.
+ * View of the Application-owned model catalog and native inference runtime.
+ * Standalone test packaging uses the same ownership pattern. This screen has
+ * no LocalPilot gesture authority and never becomes the NES input executor.
  */
 public final class ModelLabActivity extends Activity {
- // One process-local lab runtime shared by rotated unified-APK activities.
- // The standalone ModelLab still uses ModelLabApp's own app-scoped objects.
- private static EmbeddedGgufRuntime unifiedEngine;
- private static ModelLabStore unifiedStore;
  /** One shared catalog instance; panel and ModelLab use the same registry. */
  static synchronized ModelLabStore harnessStore(android.content.Context ctx){
   if(!ctx.getPackageName().startsWith("org.localpilot.android"))
    throw new IllegalStateException("Unified model catalog unavailable");
-  if(unifiedStore==null)unifiedStore=new ModelLabStore(ctx.getApplicationContext());
-  return unifiedStore;
- }
- static synchronized int harnessGpuLayers(){
-  return unifiedEngine==null?0:unifiedEngine.lastGpuLayers();
+  return HarnessModelRuntime.from(ctx).store();
  }
  private boolean inUnifiedApk(){return getPackageName().startsWith("org.localpilot.android");}
  private static final int OPEN_MODEL=820,OPEN_PROJECTOR=821,OPEN_IMAGE=822;
@@ -104,11 +97,8 @@ public final class ModelLabActivity extends Activity {
     ModelLabApp app=(ModelLabApp)getApplication();
     store=app.store();engine=app.engine();
    }else if(inUnifiedApk()){
-    synchronized(ModelLabActivity.class){
-     store=harnessStore(this);
-     if(unifiedEngine==null)unifiedEngine=new EmbeddedGgufRuntime(getApplicationContext());
-     engine=unifiedEngine;
-    }
+    store=harnessStore(this);
+    engine=HarnessModelRuntime.from(this).engine();
    }else throw new IllegalStateException("Unknown ModelLab Application host");
   }catch(Exception failure){
    status.setText("Ошибка локального каталога: "+failure.getMessage());return;
@@ -583,12 +573,16 @@ public final class ModelLabActivity extends Activity {
    HarnessModelExecutionLog.Summary inference=HarnessModelExecutionLog.summary(getFilesDir().toPath());
    VerifiedPpoReplayStore.Summary replay=VerifiedPpoReplayStore.summary(
      new File(getFilesDir(),"localpilot_vault").toPath());
+   String shared="";
+   if(getApplication() instanceof org.localpilot.shared.NesModelHost host){
+    var live=host.nesModelState();shared=" · общий запрос: "+live.phase()+" / кадр "+live.frame();
+   }
    return ConsoleExperienceMemory.summary(getFilesDir().toPath())+" · "+
     ConsoleExperienceMemory.goalSummary(getFilesDir().toPath())+
     " · GGUF inference: "+inference.inferenceCalls()+
     " / ответов "+inference.validReplies()+" / отказов "+inference.rejectedReplies()+
     "; последний "+inference.lastLatencyMs()+" мс, GPU-слоёв "+inference.lastGpuLayers()+
-    " · PPO replay: "+replay.batches()+" серий / "+replay.steps()+" настоящих переходов";
+    " · PPO replay: "+replay.batches()+" серий / "+replay.steps()+" настоящих переходов"+shared;
   }catch(java.io.IOException damaged){return "STOP: общий журнал повреждён";}
  }
  private void cancelConsoleAgent(){
