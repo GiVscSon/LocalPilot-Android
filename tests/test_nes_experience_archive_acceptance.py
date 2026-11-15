@@ -3,10 +3,11 @@ import io
 from pathlib import Path
 import sys
 import unittest
+from unittest.mock import patch
 import zipfile
 
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'tools'))
-from nes_experience_archive_acceptance import verify_archive
+from nes_experience_archive_acceptance import verify_archive, cancel_documents_picker
 
 
 class ArchiveEvidenceTests(unittest.TestCase):
@@ -35,3 +36,20 @@ class ArchiveEvidenceTests(unittest.TestCase):
 
     def test_unexpected_entry(self):
         with self.assertRaises(RuntimeError):verify_archive(self.archive({'original':b'good','extra':b'x'}),{'original':b'good'})
+
+    def test_cancel_navigates_only_verified_documents_windows(self):
+        import nes_experience_archive_acceptance as module
+        dash=module.ui.PACKAGE+'/'+module.ui.DASH
+        with patch.object(module.ui,'resumed_activity',side_effect=['','',dash]), \
+             patch.object(module.ui,'dump_ui',return_value='<hierarchy><node package="com.android.documentsui"/></hierarchy>'), \
+             patch.object(module.ui,'adb') as adb,patch.object(module.time,'sleep'):
+            cancel_documents_picker()
+        self.assertEqual(adb.call_count,2)
+
+    def test_cancel_refuses_unknown_foreground(self):
+        import nes_experience_archive_acceptance as module
+        with patch.object(module.ui,'resumed_activity',return_value=''), \
+             patch.object(module.ui,'dump_ui',return_value='<hierarchy><node package="unrelated.app"/></hierarchy>'), \
+             patch.object(module.ui,'adb') as adb:
+            with self.assertRaises(RuntimeError):cancel_documents_picker()
+        adb.assert_not_called()

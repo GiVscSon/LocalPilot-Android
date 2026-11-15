@@ -11,6 +11,7 @@ from pathlib import Path
 import re
 import time
 import zipfile
+import xml.etree.ElementTree as ET
 import unified_in_app_smoke as ui
 from harness_student_device_acceptance import private_file
 from nes_autoplay_resume_acceptance import ACTIVE, CANDIDATE, GOALS, SAVE, checkpoint, wait_progress
@@ -49,6 +50,18 @@ def wait_until(test, message, seconds=60):
     raise RuntimeError(message)
 
 
+def cancel_documents_picker():
+    # Back first closes the IME, then traverses the document hierarchy. Only
+    # verified DocumentsUI windows may receive these bounded navigation keys.
+    for _ in range(4):
+        if ui.PACKAGE+'/'+ui.DASH in ui.resumed_activity():return
+        nodes=ET.fromstring(ui.dump_ui()).iter('node')
+        if not any(n.get('package','') in ('com.android.documentsui','com.google.android.documentsui') for n in nodes):
+            raise RuntimeError('Unexpected foreground window while cancelling document export')
+        ui.adb('shell','input','keyevent','KEYCODE_BACK');time.sleep(.4)
+    ui.wait_activity(ui.DASH)
+
+
 def main(apk, output):
     if not ui.is_emulator():raise RuntimeError('Isolated AVD required')
     with zipfile.ZipFile(apk) as z:source=json.loads(z.read('assets/localpilot-source.json'))['sourceSha']
@@ -76,7 +89,7 @@ def main(apk, output):
     # Private goal file is atomically retired, while unrelated files must be exact.
     for p,b in protected.items():
         if private_file(p,7*1024*1024+4096)!=b:raise RuntimeError('Archive changed game or model')
-    ui.tap_text('Экспортировать архив в файл');time.sleep(1);ui.adb('shell','input','keyevent','KEYCODE_BACK')
+    ui.tap_text('Экспортировать архив в файл');time.sleep(1);cancel_documents_picker()
     ui.wait_activity(ui.DASH)
     if private_file(ARCHIVES+'/'+name,LIMIT)!=raw:raise RuntimeError('Cancel discarded local archive')
     ui.tap_text('Экспортировать архив в файл');time.sleep(1);ui.tap_text('Save',swipes=0)
