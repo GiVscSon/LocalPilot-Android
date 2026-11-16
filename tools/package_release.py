@@ -16,6 +16,20 @@ EXCLUDED = {'.git', '.gradle', '.build', 'build', 'release', 'evidence', '.idea'
 PRIVATE_SUFFIXES = {'.jks', '.keystore', '.pem', '.key', '.p12', '.apk', '.aab', '.pyc',
                     '.mp4', '.mov', '.webm', '.jpg', '.jpeg', '.png', '.log',
                     '.zip', '.csv', '.npz', '.npy', '.pt', '.pth', '.safetensors'}
+# Reviewed binary inputs needed to reproduce the Gradle and CI build.
+# Private user files, recordings and model weights are never bundled.
+TRACKED_BUILD_BINARIES = {'gradle/wrapper/gradle-wrapper.jar', 'ci/unified081_overlay.zip'}
+REQUIRED_UNIFIED_SOURCES = {
+    'app/src/main/java/org/localpilot/android/HarnessDashboardActivity.java',
+    'app/src/main/cpp/localpilot_embedded.cpp',
+    'game-lab/src/main/java/org/localpilot/gamelab/NesEmulatorActivity.java',
+    'game-lab/src/main/assets/nes/index.html',
+    'model-lab/src/main/java/org/localpilot/android/ModelLabActivity.java',
+    'shared/src/main/java/org/localpilot/shared/HarnessCoordinator.java',
+    'shared/src/main/java/org/localpilot/shared/HomebrewStudentNetwork.java',
+    'gradle/wrapper/gradle-wrapper.jar',
+    'ci/unified081_overlay.zip',
+}
 SECRETS = re.compile(rb'-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----|ghp_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9_]{60,}|AKIA[A-Z0-9]{16}')
 
 
@@ -37,7 +51,11 @@ def source_files(root, excluded_output=None):
             raise ValueError('Source symlink: ' + str(relative))
         if path.name == 'local.properties' or path.name == '.env' or path.name.startswith('.env.'):
             continue
-        if path.suffix.lower() in PRIVATE_SUFFIXES or path.name.startswith('localpilot-'):
+        allowed_binary = relative.as_posix() in TRACKED_BUILD_BINARIES and raw in tracked
+        if path.suffix.lower() in PRIVATE_SUFFIXES and not allowed_binary:
+            continue
+        # Tracked localpilot-* assets and schemas are actual build inputs.
+        if path.name.startswith('localpilot-') and raw not in tracked:
             continue
         if any(p.lower() in {'recordings', 'captures', 'checkpoints', 'datasets', 'user-data'} for p in relative.parts):
             continue
@@ -63,13 +81,22 @@ def package(root, apk, output, sdk=None, expected_certificate=None):
     output.mkdir(parents=True, exist_ok=True)
     if destination.exists():
         raise FileExistsError('Release already exists; choose another --output directory')
+    sources = list(source_files(root, output))
+    if (root / 'app/src/main/AndroidManifest.xml').is_file():
+        included = {rel.as_posix() for _, rel in sources}
+        missing = REQUIRED_UNIFIED_SOURCES - included
+        if missing:
+            raise ValueError('Refusing incomplete unified source release: ' + ', '.join(sorted(missing)))
+        metadata['unifiedSourceInputsVerified'] = True
+    else:
+        metadata['unifiedSourceInputsVerified'] = False
     with tempfile.TemporaryDirectory(prefix='.package-', dir=output) as temporary:
         staging = Path(temporary)
         apk_name = config['name'] + '.apk'
         shutil.copyfile(apk, staging / apk_name)
         source_name = config['name'] + '_source.zip'
         with zipfile.ZipFile(staging / source_name, 'w', zipfile.ZIP_DEFLATED) as archive:
-            for path, relative in source_files(root, output):
+            for path, relative in sources:
                 archive.write(path, 'LocalPilot-Android/' + relative.as_posix())
         with zipfile.ZipFile(staging / source_name) as archive:
             if archive.testzip() is not None:
