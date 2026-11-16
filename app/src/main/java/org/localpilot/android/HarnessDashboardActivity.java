@@ -22,8 +22,6 @@ import org.localpilot.shared.HarnessCoordinator;
 import org.localpilot.shared.ConsoleAgentContract;
 import java.io.IOException;
 import java.util.List;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 /** Single-app native view of existing HarnessCoordinator, NES and ModelLab.
  * No parallel neural backend, emulator, trainer or input owner is created.
@@ -36,11 +34,6 @@ public final class HarnessDashboardActivity extends Activity {
  private LinearLayout content;
  private String tab="Обзор";
  private boolean destroyed;
- private volatile boolean trainingBusy;
- private final ExecutorService trainingWorker=Executors.newSingleThreadExecutor(job->{
-  Thread thread=new Thread(job,"LocalPilot-GoalStudent-Training");
-  thread.setDaemon(true);return thread;
- });
  private TextView notice;
 
  @Override public void onCreate(Bundle saved){
@@ -156,8 +149,8 @@ public final class HarnessDashboardActivity extends Activity {
   HarnessModelBinding.Assignment binding=HarnessModelBinding.read(this);
   row(model,bound==null?
     (binding!=null&&binding.id().startsWith("student:")?
-      "Экспериментальная student-сеть: "+binding.id()+" · только homebrew":
-      "Для NES не назначена доступная GGUF или student-сеть.") :
+      "Архивная привязка Student 7→12→6: "+binding.id()+" · НЕ участвует в PPO. Отвязать в разделе «Модели»":
+      "Для NES не назначена GGUF. Активная игровая PPO-политика выбирается отдельно в NES.") :
     "Назначена: "+bound.label+" · "+bound.modelSha.substring(0,12));
   try{
    HarnessModelExecutionLog.Summary executions=HarnessModelExecutionLog.summary(getFilesDir().toPath());
@@ -225,8 +218,11 @@ public final class HarnessDashboardActivity extends Activity {
   HarnessModelBinding.Assignment stored=HarnessModelBinding.read(this);
   ModelLabStore.Entry assigned=HarnessModelBinding.resolve(this,list);
   if(stored!=null&&assigned==null)
-   row(intro,"STOP: назначенная модель отсутствует или её SHA изменился.");
-  if(list.isEmpty())row(intro,"Нет GGUF. Можно загрузить GGUF или использовать обученный CPU student.");
+   row(intro,stored.id().startsWith("student:")?
+     "АРХИВ: сохранилась привязка 7→12→6; она не выбирает PPO StudentPolicyNet. "+
+       "Отвязка не удаляет веса и игровые эпизоды.":
+     "STOP: назначенная GGUF отсутствует или её SHA изменился.");
+  if(list.isEmpty())row(intro,"Нет GGUF. NES StudentPolicyNet/PPO работает в своём игровом контуре.");
   for(ModelLabStore.Entry e:list){
    LinearLayout model=card(e.label,e.vision()?"Мультимодальная · требуется совместимый mmproj":
      "Текстовая · без зрения кадра NES");
@@ -244,8 +240,9 @@ public final class HarnessDashboardActivity extends Activity {
     render();
    }));
   }
-  row(intro,HomebrewStudentStore.status(this));
-  intro.addView(button("Открыть обучение CPU student",()->{tab="Обучение";render();}));
+  row(intro,"Игровая PPO-политика StudentPolicyNet доступна в разделе «Обучение». "+
+    "Архивная сеть 7→12→6 не участвует в новой PPO-цепочке.");
+  intro.addView(button("Открыть обучение NES / PPO",()->{tab="Обучение";render();}));
   intro.addView(button("Отвязать выбранную модель",()->{
    try{HarnessModelBinding.clear(this);render();}
    catch(RuntimeException failure){info("STOP: не удалось отозвать назначение");}
@@ -333,29 +330,10 @@ public final class HarnessDashboardActivity extends Activity {
    "STOP: replay-журнал повреждён / переполнен; обучение заблокировано");}
   train.addView(button("▶ NES · собрать 16 проверенных шагов и обновить PPO-кандидат",
     ()->startTrustedNesWorkflow(HarnessDemoWorkflow.STUDENT_TRAIN_16)));
-  row(train,HomebrewStudentStore.status(this));
-  row(train,"Сеть 7→12→6 имитирует направление к цели по проверенной памяти ROM. "+
-    "Holdout проверяет ошибку классификации на другой ROM-сессии; это не приёмка устройства.");
-  train.addView(button(trainingBusy?"Обучение выполняется...":
-    "Обучить CPU student на проверенных NES-эпизодах",()->{
-    if(trainingBusy){info("Уже обучаю candidate; дождись завершения");return;}
-    trainingBusy=true;info("Обучаю отдельные веса на CPU; другие NES-режимы не запускаю");
-    trainingWorker.execute(()->{
-     String outcome;
-     try{outcome=HomebrewStudentStore.train(getApplicationContext());}
-     catch(Exception invalid){outcome="STOP: нет допустимого набора для обучения: "+
-       invalid.getClass().getSimpleName()+" · "+invalid.getMessage();}
-     final String result=outcome;
-     runOnUiThread(()->{trainingBusy=false;if(!destroyed){render();info(result);}});
-    });
-  }));
-  train.addView(button("Назначить проверенного student для одного NES-шага",()->{
-   try{
-    String outcome=HomebrewStudentStore.bindSandbox(this);
-    render();info(outcome);
-   }catch(Exception failure){info("STOP: student не прошёл offline gate: "+
-      failure.getClass().getSimpleName()+" · "+failure.getMessage());}
-  }));
+  // Historical 7→12→6 student is kept on disk for explicit rollback,
+  // but no longer offered as a competing trainer/controller in primary UI.
+  row(train,"Архивный Student 7→12→6: сохранён для совместимости, "+
+    "новые обучения и назначения выполняются только через NES StudentPolicyNet / PPO.");
   row(train,"Физическая on-policy приёмка и автоматическое продвижение: НЕ ПОДТВЕРЖДЕНЫ.");
   try{
    List<ConsoleExperienceMemory.HomebrewGoal> goals=
@@ -390,7 +368,7 @@ public final class HarnessDashboardActivity extends Activity {
    if(java.nio.file.Files.isRegularFile(candidate)){
     StudentPolicyNet pending=StudentPolicyNet.load(candidate);
     row(train,"PPO-кандидат на диске: SHA "+pending.sha256().substring(0,16));
-    row(train,"EvaluationGate: НЕ ПРОЙДЕН · активные веса не заменены.");
+    row(train,"EvaluationGate: НЕ ЗАПУЩЕН на этом устройстве · нужны 20 независимых пар и проверка улучшения медианы >5%. Активные веса не заменены.");
    }else row(train,"PPO-кандидат: ещё не создан из 16 реальных StudentPolicy шагов.");
   }catch(IOException invalid){
    row(train,"STOP: PPO-кандидат повреждён; активация невозможна.");
@@ -454,5 +432,5 @@ public final class HarnessDashboardActivity extends Activity {
  }
  private void openModelLab(){startActivity(new Intent(this,ModelLabActivity.class));}
  @Override protected void onResume(){super.onResume();render();}
- @Override protected void onDestroy(){destroyed=true;trainingWorker.shutdown();super.onDestroy();}
+ @Override protected void onDestroy(){destroyed=true;super.onDestroy();}
 }

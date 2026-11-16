@@ -48,8 +48,9 @@ class SingleNativeHarnessConsole(unittest.TestCase):
   self.assertIn("Допущено из RAM-журнала к PPO: 0",self.dash)
   self.assertIn("Общих игровых побед/счётов NES: НЕ ПОДТВЕРЖДЕНО",self.dash)
   self.assertIn("PPO/GAE: доступен в NES после 16 on-policy ходов",self.dash)
-  self.assertIn("EvaluationGate: НЕ ПРОЙДЕН",self.dash)
-  self.assertIn("активные веса не заменены",self.dash)
+  self.assertIn("EvaluationGate: НЕ ЗАПУЩЕН на этом устройстве",self.dash)
+  self.assertIn("нужны 20 независимых пар",self.dash)
+  self.assertIn("Активные веса не заменены",self.dash)
   self.assertNotIn("reward=1",self.dash)
   self.assertIn("STOP: журнал повреждён",self.dash)
  def test_nes_viewport_and_stop_are_not_pushed_offscreen_by_student_controls(self):

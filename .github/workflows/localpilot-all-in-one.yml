@@ -17,6 +17,7 @@ on:
       - 'tests/test_unified_in_app_smoke.py'
       - 'tests/test_localpilot_all_in_one.py'
       - 'tests/test_harness_single_panel.py'
+      - 'tests/test_autoplay_ppo_single_pipeline.py'
       - 'tests/test_harness_live_cycle.py'
       - 'tests/VerifiedPpoReplayStore*.java'
       - 'tests/HarnessModelExecutionLog*.java'
@@ -62,6 +63,7 @@ jobs:
           java tests/NesSaveStoreVerify.java
           python3 -m unittest discover -s tests -p 'test_harness_single_panel.py' -v
           python3 -m unittest discover -s tests -p 'test_harness_live_cycle.py' -v
+          python3 -m unittest discover -s tests -p 'test_autoplay_ppo_single_pipeline.py' -v
           java tests/VerifiedPpoReplayStoreVerify.java
           java tests/HarnessModelExecutionLogVerify.java
           java tests/HarnessCoordinatorVerify.java

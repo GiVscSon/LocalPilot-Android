@@ -31,6 +31,7 @@ on:
       - 'tests/test_harness_student_contract.py'
       - 'tests/HarnessCoordinator*.java'
       - 'tests/test_harness_single_panel.py'
+      - 'tests/test_autoplay_ppo_single_pipeline.py'
       - 'tests/NesExperimentPolicyTest.java'
       - 'game-lab/src/main/java/org/localpilot/gamelab/NesExperimentPolicy.java'
       - 'tests/nes_controller_framehold.cjs'
@@ -163,6 +164,7 @@ jobs:
           python3 -m unittest discover -s tests -p 'test_harness_student_contract.py' -v
           java tests/HarnessCoordinatorVerify.java
           python3 -m unittest discover -s tests -p 'test_harness_single_panel.py' -v
+          python3 -m unittest discover -s tests -p 'test_autoplay_ppo_single_pipeline.py' -v
           java tests/ModelLabPolicyVerify.java
           python3 tools/verify_modellab_cancel.py
           java tests/ModelLabComputePolicyVerify.java
