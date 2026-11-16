@@ -35,7 +35,8 @@ def main(apk,gguf,output):
     if setup.get('result')!='MODEL_IMPORT_PASS_NOT_INFERENCE' or setup.get('modelSha256')!=EXPECTED_SHA256 or setup.get('modelBytes')!=EXPECTED_BYTES:
         raise RuntimeError('Pinned production model import failed: '+str(setup))
     ui.adb('shell','am','start','-W','-n',PACKAGE+'/'+ui.MAIN);ui.wait_activity(ui.MAIN)
-    ui.tap_harness_and_verify();ui.tap_text('Играть: назначенная GGUF');ui.wait_activity(ui.NES)
+    ui.tap_text('Рабочее окно · игра и агент');ui.wait_activity(ui.NES)
+    ui.tap_text('Запустить выбранного агента NES',swipes=0)
     # Measured CPU calls take70-74s on this AVD. Allow FOUR independent
     #120s requests plus30s transport; each original controller TTL is unchanged.
     last='NO_TRACE';deadline=time.monotonic()+4*120+30;checked=None
@@ -58,7 +59,7 @@ def main(apk,gguf,output):
     if before!=private_file('files/console-ai-experience-v2.log',131072):raise RuntimeError('A new action completed after STOP')
     checked.update(result='EMULATOR_GGUF_ACTION_TRANSITION_PASS',sourceSha=source,
         apkSha256=hashlib.sha256(apk.read_bytes()).hexdigest(),api=int(ui.adb('shell','getprop','ro.build.version.sdk')),
-        foregroundStayedNes=True,modelImport=setup,stopBlocksFurtherTransitions=True,
+        foregroundStayedNes=True,compactWorkspaceLaunch=True,modelImport=setup,stopBlocksFurtherTransitions=True,
         modelKind='TEXT_ONLY_CPU_NO_MMPROJ',physicalDevice=False,releaseReady=False)
     output.write_text(json.dumps(checked,indent=2)+'\n');print('G2_DIRECT_GGUF_ANDROID_PASS '+json.dumps(checked))
 

@@ -68,6 +68,11 @@ public final class NesEmulatorActivity extends Activity {
  private WebView web;
  private TextView state;
  private TextView learningResult;
+ private android.widget.Spinner compactModels;
+ private boolean compactModelsInitialized;
+ private android.widget.ScrollView detailsPanel;
+ private List<NesModelHost.ModelChoice> compactChoices=List.of();
+
  private Button demoButton,aButton,bButton,shareTrial,cpuAgentButton,cpuBatchButton,stopCpuButton,aiObserveButton,studentStepButton,studentBatchButton;
  private CheckBox exploratoryStopSwitch;
  private final NesExperimentPolicy experiment=new NesExperimentPolicy();
@@ -160,18 +165,20 @@ public final class NesEmulatorActivity extends Activity {
   label.setTextColor(HubContract.TEXT);label.setTextSize(21);root.addView(label);
   state=new TextView(this);state.setTextColor(HubContract.WARNING);
   showState("Загрузи свой .nes или скачай проверенный homebrew. Эмуляция работает офлайн, сеть нужна только для загрузки файла.");
-  state.setMaxLines(3);state.setEllipsize(android.text.TextUtils.TruncateAt.END);
-  root.addView(state,new LinearLayout.LayoutParams(-1,(int)(64*getResources().getDisplayMetrics().density)));
+  state.setMaxLines(2);state.setEllipsize(android.text.TextUtils.TruncateAt.END);
+  root.addView(state,new LinearLayout.LayoutParams(-1,(int)(40*getResources().getDisplayMetrics().density)));
   learningResult=new TextView(this);learningResult.setTextColor(HubContract.TEXT);
   learningResult.setText("Учебный ROM: квадрат — управляемый объект. PPO учится движению вправо по RAM; импортированные игры требуют своих адаптеров награды.");
-  root.addView(learningResult);
+
   // Fixed-height scrolling controls preserve the real NES viewport on API
   // 30/35/36, while leaving the STOP button and physical controller visible.
   android.widget.ScrollView actionScroll=new android.widget.ScrollView(this);
+  detailsPanel=actionScroll;actionScroll.setVisibility(getPackageName().startsWith("org.localpilot.android")?View.GONE:View.VISIBLE);
   actionScroll.setFillViewport(false);
   LinearLayout actionPanel=new LinearLayout(this);
   actionPanel.setOrientation(LinearLayout.VERTICAL);
   actionScroll.addView(actionPanel);
+  actionPanel.addView(learningResult);
   root.addView(actionScroll,new LinearLayout.LayoutParams(-1,
     (int)(160*getResources().getDisplayMetrics().density)));
   Button open=new Button(this);open.setText("Выбрать картридж (.nes)");
@@ -308,8 +315,46 @@ public final class NesEmulatorActivity extends Activity {
   cpuBatchButton.setEnabled(false);
   cpuBatchButton.setOnClickListener(v->startCpuExperiment());
   actionPanel.addView(cpuBatchButton);
+  if(getPackageName().startsWith("org.localpilot.android")){
+   Button modelTools=new Button(this);modelTools.setText("Импорт и проверка моделей");
+   modelTools.setOnClickListener(v->startActivity(new Intent().setClassName(getPackageName(),"org.localpilot.android.ModelLabActivity")));
+   actionPanel.addView(modelTools);
+   Button journal=new Button(this);journal.setText("Журнал и диагностика");
+   journal.setOnClickListener(v->startActivity(new Intent().setClassName(getPackageName(),"org.localpilot.android.HarnessDashboardActivity")));
+   actionPanel.addView(journal);
+  }
+  LinearLayout compact=new LinearLayout(this);compact.setOrientation(LinearLayout.VERTICAL);
+  LinearLayout selectionRow=new LinearLayout(this);
+  compactModels=new android.widget.Spinner(this);compactModels.setContentDescription("Модель агента NES");
+  selectionRow.addView(compactModels,new LinearLayout.LayoutParams(0,-2,1));
+  Button more=new Button(this);more.setText("Ещё");more.setContentDescription("Открыть дополнительные настройки");
+  more.setOnClickListener(v->{boolean expanded=actionScroll.getVisibility()!=View.VISIBLE;
+   actionScroll.setVisibility(expanded?View.VISIBLE:View.GONE);
+   more.setText(expanded?"Свернуть":"Ещё");more.setContentDescription(expanded?"Скрыть дополнительные настройки":"Открыть дополнительные настройки");
+  });selectionRow.addView(more);compact.addView(selectionRow);
+  LinearLayout actions=new LinearLayout(this);
+  Button gameMenu=new Button(this);gameMenu.setText("Игра");
+  gameMenu.setOnClickListener(v->{android.widget.PopupMenu menu=new android.widget.PopupMenu(this,gameMenu);
+   menu.getMenu().add("VOID LANCER").setOnMenuItemClickListener(item->{if(download.isEnabled())download.performClick();return true;});
+   menu.getMenu().add("Продолжить сохранение").setOnMenuItemClickListener(item->{viewSave.performClick();return true;});
+   menu.getMenu().add("Открыть .nes").setOnMenuItemClickListener(item->{open.performClick();return true;});
+   menu.getMenu().add("Учебный ROM").setOnMenuItemClickListener(item->{demo.performClick();return true;});menu.show();
+  });actions.addView(gameMenu,new LinearLayout.LayoutParams(0,-2,1));
+  Button run=new Button(this);run.setText("Агент");run.setContentDescription("Запустить выбранного агента NES");
+  run.setOnClickListener(v->{
+   int pos=compactModels.getSelectedItemPosition();
+   if(pos==0)requestCompactWorkflow(HarnessDemoWorkflow.STUDENT_AUTOPLAY,null);
+   else if(pos>0&&pos<=compactChoices.size())requestCompactWorkflow(HarnessDemoWorkflow.GGUF_PLAY_4,compactChoices.get(pos-1).identity());
+  });actions.addView(run,new LinearLayout.LayoutParams(0,-2,1));
+  Button train=new Button(this);train.setText("Учить Student");train.setTextSize(11);
+  train.setOnClickListener(v->requestCompactWorkflow(HarnessDemoWorkflow.STUDENT_TRAIN_16,null));
+  actions.addView(train,new LinearLayout.LayoutParams(0,-2,1));
+  Button save=new Button(this);save.setText("Сохранить");save.setTextSize(11);save.setOnClickListener(v->freezeAndSave());
+  actions.addView(save,new LinearLayout.LayoutParams(0,-2,1));compact.addView(actions);
+  TextView scope=new TextView(this);scope.setText("Агент и обучение: только учебный ROM · CPU");scope.setTextColor(HubContract.SECONDARY);scope.setTextSize(11);compact.addView(scope);
+  if(getPackageName().startsWith("org.localpilot.android"))root.addView(compact,2);
   stopCpuButton=new Button(this);
-  stopCpuButton.setText("STOP · немедленно остановить CPU-агента");
+  stopCpuButton.setText(getPackageName().startsWith("org.localpilot.android")?"STOP":"STOP · немедленно остановить CPU-агента");
   stopCpuButton.setOnClickListener(v->stopCpuExperiment("STOP: агент остановлен пользователем"));
   root.addView(stopCpuButton); // Always visible, never hidden by scrolling
   web=new WebView(this);
@@ -1636,6 +1681,44 @@ public final class NesEmulatorActivity extends Activity {
    }
   });
  }
+ private void refreshCompactModels(){
+  if(compactModels==null)return;
+  String selected=compactModels.getSelectedItemPosition()>0&&compactModels.getSelectedItemPosition()<=compactChoices.size()?
+    compactChoices.get(compactModels.getSelectedItemPosition()-1).identity().id():null;
+  try{
+   if(!compactModelsInitialized&&getApplication() instanceof NesModelHost host){
+    var bound=host.nesBoundModel();if(bound!=null)selected=bound.id();
+   }
+   compactChoices=getApplication() instanceof NesModelHost host?List.copyOf(host.nesModels()):List.of();
+   compactModelsInitialized=true;
+   List<String> labels=new ArrayList<>();labels.add("Student · CPU");
+   for(var choice:compactChoices)labels.add(choice.label());
+   compactModels.setAdapter(new android.widget.ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,labels));
+   int index=0;for(int i=0;i<compactChoices.size();i++)if(compactChoices.get(i).identity().id().equals(selected))index=i+1;
+   compactModels.setSelection(index);
+  }catch(RuntimeException invalid){showState("STOP: каталог моделей недоступен");}
+ }
+ private boolean compactWorkflowBusy(){
+  return progressBusy||studentRemaining>0||aiRunning||experiment.running()||harness.hasPending()||harness.actionInFlight()||
+    autoStartArmed||autoLaunchArmed||autoGgufRemaining>0||autoplayBatchesRemaining>0||studentTraining!=null&&!studentTraining.isDone();
+ }
+ private void requestCompactWorkflow(String mode,NesModelHost.ModelIdentity model){
+  if(compactWorkflowBusy()){
+   showState("Сначала останови или заверши текущий сеанс");return;
+  }
+  Runnable launch=()->{
+   if(!resumed||closed||!pageLoaded){showState("Подожди загрузки NES");return;}
+   if(compactWorkflowBusy()){showState("STOP: другой сеанс уже выполняется");return;}
+   if(model!=null&&(!(getApplication() instanceof NesModelHost host)||!host.selectNesModel(model))){
+    showState("STOP: выбранная модель недоступна или движок занят");return;
+   }
+   requestedAutoWorkflow=mode;tryAutoWorkflowLaunch();
+  };
+  if(activeRomBytes!=null&&!homebrewRom)new AlertDialog.Builder(this).setTitle("Перейти в учебный ROM?")
+   .setMessage("Агент и PPO пока работают только в учебном ROM. Текущая игра будет заменена; при необходимости сначала сохрани её.")
+   .setPositiveButton("Запустить",(dialog,which)->launch.run()).setNegativeButton("Отмена",null).show();
+  else launch.run();
+ }
  private interface InputAck{void result(boolean accepted);}
  private void gamepad(String key,boolean down,InputAck ack){
   if(web==null||!pageLoaded||(down&&progressBusy)){ack.result(false);return;}
@@ -1688,6 +1771,7 @@ public final class NesEmulatorActivity extends Activity {
  }
  @Override protected void onResume(){
   super.onResume();resumed=true;
+  refreshCompactModels();
   tryAutoWorkflowLaunch();
   if(demoButton!=null)demoButton.post(this::publishEvidence);
   if(web!=null){web.onResume();

@@ -10,6 +10,21 @@ smoke=importlib.util.module_from_spec(spec)
 spec.loader.exec_module(smoke)
 
 class UnifiedUiSmokeContract(unittest.TestCase):
+    def test_compact_disclosure_opens_only_in_known_localpilot_window(self):
+        xml='<hierarchy><node text="Ещё" content-desc="Открыть дополнительные настройки" bounds="[0,0][100,80]" clickable="true"/></hierarchy>'
+        with patch.object(smoke,"resumed_activity",return_value=smoke.PACKAGE+"/"+smoke.NES), patch.object(smoke,"adb") as adb:
+            self.assertTrue(smoke.expand_compact_details(xml))
+            adb.assert_called_once_with("shell","input","tap","50","40")
+        with patch.object(smoke,"resumed_activity",return_value="other/package"), patch.object(smoke,"adb") as adb:
+            with self.assertRaises(RuntimeError):smoke.expand_compact_details(xml)
+            adb.assert_not_called()
+
+    def test_expanded_disclosure_is_not_toggled_back_by_search(self):
+        xml='<hierarchy><node content-desc="Скрыть дополнительные настройки" bounds="[0,0][100,80]"/></hierarchy>'
+        with patch.object(smoke,"adb") as adb:
+            self.assertFalse(smoke.expand_compact_details(xml))
+            adb.assert_not_called()
+
     def setUp(self):
         smoke.HARNESS_NAVIGATION.clear()
         smoke.LAST_HARNESS_UI = ""

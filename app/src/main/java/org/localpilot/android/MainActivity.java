@@ -17,6 +17,16 @@ public class MainActivity extends Activity {
   // cannot first become touchable underneath Home or a display cutout.
   scroll.setOnApplyWindowInsetsListener((view,insets)->{android.graphics.Insets safe=insets.getInsets(android.view.WindowInsets.Type.systemBars()|android.view.WindowInsets.Type.displayCutout());if(view.getPaddingLeft()!=safe.left||view.getPaddingTop()!=safe.top||view.getPaddingRight()!=safe.right||view.getPaddingBottom()!=safe.bottom)view.setPadding(safe.left,safe.top,safe.right,safe.bottom);return insets;});setContentView(scroll);scroll.requestApplyInsets();
   TextView title=new TextView(this);title.setText("LocalPilot Android"+(getPackageName().contains(".install10")?" Standalone":getPackageName().endsWith(".dev")?" Dev":"")+" · "+CrashDiagnostics.buildLabel(this)+"\nКонсольная ИИ-лаборатория · NES и локальные модели");title.setTextSize(24);title.setTextColor(HubContract.TEXT);box.addView(title);
+  if(BuildConfig.UNIFIED_MODELLAB){
+   LinearLayout allSections=new LinearLayout(this);allSections.setOrientation(LinearLayout.VERTICAL);
+   allSections.setVisibility(android.view.View.GONE);
+   button(box,"Рабочее окно · игра и агент",()->startActivity(new Intent(this,org.localpilot.gamelab.NesEmulatorActivity.class)));
+   Button more=new Button(this);more.setText("Ещё");more.setContentDescription("Открыть дополнительные настройки");
+   more.setOnClickListener(v->{boolean open=allSections.getVisibility()!=android.view.View.VISIBLE;
+    allSections.setVisibility(open?android.view.View.VISIBLE:android.view.View.GONE);
+    more.setText(open?"Свернуть":"Ещё");more.setContentDescription(open?"Скрыть дополнительные настройки":"Открыть дополнительные настройки");});
+   box.addView(more);box.addView(allSections);box=allSections;
+  }
   TextView help=new TextView(this);help.setText("1. Откройте игру и выберите её профиль: «Игра».\n2. Нажмите «Окно» и выберите приложение с игрой.\n3. Нажмите «Старт» и разрешите показ экрана.\n\nSTOP останавливает игру агента. В первый раз включите управление кнопкой ниже.");box.addView(help);
   section(box,"01 · Системное управление · дополнительные возможности");
   button(box,"Включить управление",()->startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)));
