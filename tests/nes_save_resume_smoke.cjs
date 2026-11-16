@@ -24,6 +24,30 @@ function boot(session){
   step(button,s=session){lease={session:s,nonce:String(++serial).padStart(22,'p'),frames:16};return c.retroAiStep(button,16,lease.nonce);},
   revoke(){lease=null;},held:()=>vm.runInContext('gamepadLatch.down.size',page)};
 }
+// Regression: sparse sampling missed the third/fourth real RIGHT movement.
+const visual=boot('8');assert.equal(visual.c.retroEnterStepMode(),true);
+let sparseMisses=0;
+function sparse(saved){let h=2166136261;const rgb=saved.machine.ppu.buffer;
+ for(let i=0;i<rgb.length;i+=241)h=Math.imul(h^rgb[i],16777619)>>>0;return h|0;}
+for(let i=0;i<4;i++){
+ const before=visual.c.retroSaveState(),pixels=visual.pixels(),ram=visual.c.retroHomebrewState();
+ assert.equal(visual.step('RIGHT'),true);
+ const after=visual.c.retroSaveState();
+ assert.notEqual(visual.c.retroHomebrewState().x,ram.x,'real CPU movement');
+ assert.notEqual(visual.pixels(),pixels,'real framebuffer movement');
+ assert.notEqual(after.hash,before.hash,'every movement must change full-frame fingerprint');
+ if(sparse(before)===sparse(after))sparseMisses++;
+}
+assert(sparseMisses>0,'fixture must reproduce the original missed-pixel defect');
+const legacy=JSON.parse(JSON.stringify(visual.c.retroSaveState()));
+legacy.hash=sparse(legacy);delete legacy.hashAlgorithm;
+const migrated=boot('9'),migration=migrated.c.retroRestoreState(legacy,'9','10');
+assert(migration,'existing sparse-checksum saves must remain readable');
+assert.equal(migration.savedHash,legacy.hash,'validate the original archived checksum');
+assert.equal(migration.hash,migrated.c.retroSaveState().hash,'new epoch uses full-frame hash');
+assert.equal(migrated.pixels(),visual.pixels(),'migration preserves exact rendered state');
+const unknown=JSON.parse(JSON.stringify(legacy));unknown.hashAlgorithm='unverified';
+assert.equal(boot('12').c.retroRestoreState(unknown,'12','13'),false,'unknown hash scheme fails closed');
 const first=boot('11');assert.equal(first.c.retroSaveState(),null,'never serialize realtime state');
 assert.equal(first.c.retroEnterStepMode(),true);
 for(let i=0;i<40;i++)assert.equal(first.step(i%3?'RIGHT':'A'),true);

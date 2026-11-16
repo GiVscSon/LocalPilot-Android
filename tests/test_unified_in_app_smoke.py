@@ -10,6 +10,60 @@ smoke=importlib.util.module_from_spec(spec)
 spec.loader.exec_module(smoke)
 
 class UnifiedUiSmokeContract(unittest.TestCase):
+    def setUp(self):
+        smoke.HARNESS_NAVIGATION.clear()
+        smoke.LAST_HARNESS_UI = ""
+
+    def test_cold_launch_noop_retries_known_main_once_and_requires_dashboard(self):
+        with patch.object(smoke,"tap_text") as click, \
+             patch.object(smoke,"dump_ui",return_value='<hierarchy><node text="Harness Console" bounds="[0,0][200,100]"/></hierarchy>'), \
+             patch.object(smoke,"wait_activity",side_effect=[RuntimeError("still Main"),None,None]), \
+             patch.object(smoke,"resumed_activity",return_value=smoke.PACKAGE+"/"+smoke.MAIN), \
+             patch.object(smoke,"adb") as adb:
+            self.assertEqual(smoke.tap_harness_and_verify(),1)
+            self.assertEqual(click.call_count,2)
+            adb.assert_not_called()  # No BACK or hidden Activity launch on Main.
+
+    def test_two_noop_navigation_attempts_fail_instead_of_passing(self):
+        with patch.object(smoke,"tap_text") as click, \
+             patch.object(smoke,"dump_ui",return_value='<hierarchy><node text="Harness Console" bounds="[0,0][200,100]"/></hierarchy>'), \
+             patch.object(smoke,"wait_activity",side_effect=[RuntimeError("still Main"),None,RuntimeError("still Main")]), \
+             patch.object(smoke,"resumed_activity",return_value=smoke.PACKAGE+"/"+smoke.MAIN):
+            with self.assertRaisesRegex(RuntimeError,"two fresh UI taps"):
+                smoke.tap_harness_and_verify()
+            self.assertEqual(click.call_count,2)
+
+    def test_main_anr_or_missing_button_is_not_retried(self):
+        for xml in ('<hierarchy><node text="LocalPilot isn\'t responding"/></hierarchy>',
+                    '<hierarchy><node text="other content"/></hierarchy>'):
+            with self.subTest(xml=xml), patch.object(smoke,"tap_text") as click, \
+                 patch.object(smoke,"dump_ui",return_value=xml), \
+                 patch.object(smoke,"wait_activity",side_effect=RuntimeError("no dashboard")), \
+                 patch.object(smoke,"resumed_activity",return_value=smoke.PACKAGE+"/"+smoke.MAIN), \
+                 patch.object(smoke,"adb") as adb:
+                with self.assertRaisesRegex(RuntimeError,"no retry"):smoke.tap_harness_and_verify()
+                self.assertEqual(click.call_count,1)
+                adb.assert_not_called()
+
+    def test_unknown_route_and_lost_app_are_not_retried(self):
+        for outcome in ("foreign.pkg/OtherActivity",RuntimeError("app process lost")):
+            with self.subTest(outcome=str(outcome)), patch.object(smoke,"tap_text") as click, \
+                 patch.object(smoke,"wait_activity",side_effect=RuntimeError("no dashboard")), \
+                 patch.object(smoke,"resumed_activity",**(
+                     {"side_effect":outcome} if isinstance(outcome,Exception) else {"return_value":outcome})), \
+                 patch.object(smoke,"adb") as adb:
+                with self.assertRaises(RuntimeError):smoke.tap_harness_and_verify()
+                self.assertEqual(click.call_count,1)
+                adb.assert_not_called()
+
+    def test_actual_fresh_tap_geometry_is_retained_for_failure_diagnostics(self):
+        xml='<hierarchy><node text="Harness Console" clickable="true" bounds="[20,60][220,140]"/></hierarchy>'
+        with patch.object(smoke,"dump_ui",return_value=xml), patch.object(smoke,"adb") as adb:
+            smoke.tap_text("Harness Console")
+            adb.assert_called_once_with("shell","input","tap","120","100")
+        self.assertEqual(smoke.HARNESS_NAVIGATION[-1]['point'],[120,100])
+        self.assertEqual(smoke.LAST_HARNESS_UI,xml)
+
     def test_clickable_harness_target_wins_over_non_clickable_label(self):
         xml=('<hierarchy><node text="Harness Console" clickable="false" '
              'bounds="[0,10][100,40]"/><node text="Harness Console" '
@@ -132,12 +186,16 @@ class UnifiedUiSmokeContract(unittest.TestCase):
         import tempfile, json
         with tempfile.TemporaryDirectory() as folder:
             report=Path(folder)/"evidence.json"
+            smoke.LAST_HARNESS_UI='<hierarchy><node text="Harness Console"/></hierarchy>'
+            smoke.HARNESS_NAVIGATION.append({"event":"fresh_harness_tap","point":[120,100]})
             with patch.object(smoke,"adb",return_value="emulator test state"), \
                  patch.object(smoke.subprocess,"run",side_effect=OSError("no screenshot")):
                 smoke.write_failure_diagnostics(report,RuntimeError("specific failure"))
             evidence=json.loads((report.parent/"failure-diagnostics.json").read_text())
             self.assertIs(evidence["releaseReady"],False)
             self.assertIn("specific failure",evidence["exception"])
+            self.assertEqual(evidence["harness_navigation"][0]["point"],[120,100])
+            self.assertEqual((report.parent/"last-harness-ui.xml").read_text(),smoke.LAST_HARNESS_UI)
 
     def test_ci_requires_hardware_virtualization_for_real_ui(self):
         workflow=(ROOT/".github/workflows/localpilot-all-in-one.yml").read_text(encoding="utf-8")

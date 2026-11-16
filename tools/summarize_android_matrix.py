@@ -83,15 +83,15 @@ def inspect(root: Path, sha: str) -> dict:
                 require(evaluation.get('result') in ('ACCEPTED', 'NO_PROVEN_IMPROVEMENT'),
                         'Independent holdout evaluation absent or invalid')
                 require(isinstance(evaluation.get('scenarioCount'), int) and
-                        evaluation['scenarioCount'] >= 6 and
+                        evaluation['scenarioCount'] >= 20 and
                         isinstance(evaluation.get('pairedScenarios'), list) and
                         len(evaluation['pairedScenarios']) == evaluation['scenarioCount'] and
                         evaluation.get('physicalAndroidVerified') is False and
                         evaluation.get('androidWeightsAndManifestUnchanged') is True and
                         evaluation.get('evaluationRuntime') == 'HOST_REAL_JSNES_NOT_ANDROID',
                         'Host-only holdout sample count or provenance invalid')
-                # Six verified host scenarios are a smoke evaluation, NOT the >=20-pair
-                # promotion gate. No release or auto-promotion follows from this result.
+                # Twenty verified host pairs still cannot authorize Android
+                # promotion or certify physical-device/rollback acceptance.
                 require(str(evaluation.get('promotion', '')).startswith('BLOCKED_'),
                         'Unreviewed candidate may not replace active weights')
                 require(evaluation.get('activePolicySha256') == before and

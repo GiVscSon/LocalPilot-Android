@@ -32,7 +32,7 @@ public final class StudentHoldoutRealNesVerify {
  }
  private static List<StudentEvaluationGate.Step> read(Path evidence)throws Exception {
   List<String> lines=Files.readAllLines(evidence,StandardCharsets.UTF_8);
-  if(lines.size()<40||lines.size()>512)
+  if(lines.size()<2*StudentEvaluationGate.MIN_SCENARIOS*StudentEvaluationGate.MIN_STEPS_PER_ARM||lines.size()>512)
    throw new IllegalArgumentException("Expected bounded real-core holdout");
   List<StudentEvaluationGate.Step> steps=new ArrayList<>();
   for(String line:lines){
@@ -123,6 +123,8 @@ public final class StudentHoldoutRealNesVerify {
     "  \"candidateWins\":"+verdict.candidateWins()+",\n"+
     "  \"activeMeanReturn\":"+verdict.activeMeanReturn()+",\n"+
     "  \"candidateMeanReturn\":"+verdict.candidateMeanReturn()+",\n"+
+    "  \"activeMedianReturn\":"+verdict.activeMedianReturn()+",\n"+
+    "  \"candidateMedianReturn\":"+verdict.candidateMedianReturn()+",\n"+
     "  \"result\":\""+verdict.reason()+"\",\n"+
     "  \"improvedOnCiHomebrew\":"+verdict.accepted()+",\n"+
     "  \"physicalAndroidVerified\":false,\n"+
@@ -137,6 +139,8 @@ public final class StudentHoldoutRealNesVerify {
     " reason="+verdict.reason()+" candidateWins="+verdict.candidateWins()+
     " activeMean="+verdict.activeMeanReturn()+
     " candidateMean="+verdict.candidateMeanReturn()+
+    " activeMedian="+verdict.activeMedianReturn()+
+    " candidateMedian="+verdict.candidateMedianReturn()+
     " weightsUnchanged=true autoPromotion=false physicalDevice=false");
  }
 }

@@ -61,7 +61,7 @@ class SingleNativeHarnessConsole(unittest.TestCase):
   self.assertIn("root.addView(controls)",self.nes)
  def test_gpu_is_real_backend_status_not_fake_benchmark(self):
   self.assertIn("BuildConfig.VULKAN_COMPILED",self.dash)
-  self.assertIn("ModelLabActivity.harnessGpuLayers()",self.dash)
+  self.assertIn("HarnessModelRuntime.from(this).lastGpuLayers()",self.dash)
   self.assertIn("НЕ ПОДТВЕРЖДЁН",self.dash)
   self.assertNotIn("gpuScore",self.dash)
  def test_console_sectors_and_android_navigation(self):
