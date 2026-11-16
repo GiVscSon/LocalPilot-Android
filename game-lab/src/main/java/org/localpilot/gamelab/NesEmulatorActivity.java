@@ -240,7 +240,11 @@ public final class NesEmulatorActivity extends Activity {
   });
   demoButton=new Button(this);Button demo=demoButton;
   demo.setText("Запустить тестовую NES-игру");
-  actionPanel.addView(demo);
+  // A standalone GameLab launch must have real, OS-visible touch bounds.
+  // Do not put this entry below the clipped 160dp diagnostics ScrollView.
+  // In the unified APK the original advanced control remains available.
+  if(getPackageName().startsWith("org.localpilot.android"))actionPanel.addView(demo);
+  else root.addView(demo,2);
   demo.setOnClickListener(v->launchRom(HomebrewNes.cartridge(),true));
   shareTrial=new Button(this);
   shareTrial.setText("NES → ModelLab · передать проверенный эпизод");
