@@ -33,6 +33,22 @@ public final class WindowRebindTest {
   check(java.util.Arrays.equals(WindowFocus.visibleSelection(50,70,900,1800,1080,1920),new int[]{50,70,900,1800}),"in-display window remains exact");
   check(WindowFocus.visibleSelection(1080,0,1100,100,1080,1920)==null,"off-display window cannot be selected");
   check(WindowFocus.visibleSelection(0,0,1080,1920,0,1920)==null,"unknown display cannot be selected");
-  System.out.println("Window rebind stability, focus grace and visible selection: 25 assertions PASS");
+  // Captured API30 failure: run42237951606 attempt2, window83. The same
+  // focused window was 1080x1920, but the picker snapshot was 1082x1922.
+  ActionGate gate=new ActionGate();
+  gate.arm("org.localpilot.gamelab",83,selected[2]-selected[0],selected[3]-selected[1]);
+  check(gate.matches("org.localpilot.gamelab",83,1080,1920),"normalized real snapshot binds actual display");
+  check(!gate.matches("org.localpilot.gamelab",83,1082,1922),"raw oversized geometry is not authorized");
+  check("TARGET_WINDOW_CHANGED".equals(gate.identityRejection("org.localpilot.gamelab",84,1080,1920)),"normalization never accepts another window");
+  check("TARGET_APP_CHANGED".equals(gate.identityRejection("other.app",83,1080,1920)),"normalization never accepts another package");
+  check("TARGET_BOUNDS_CHANGED".equals(gate.identityRejection("org.localpilot.gamelab",83,1079,1920)),"in-display geometry change still rejected");
+  ActionGate.Ticket ticket=gate.offer(1000);
+  check(gate.valid(ticket,1001,"org.localpilot.gamelab",83,1080,1920),"normalized binding permits a current ticket");
+  check("TICKET_EXPIRED".equals(gate.rejection(ticket,1701,"org.localpilot.gamelab",83,1080,1920)),"normalized binding preserves 700ms TTL");
+  gate.stop();
+  check(!gate.valid(ticket,1002,"org.localpilot.gamelab",83,1080,1920),"STOP revokes normalized binding");
+  gate.arm("org.localpilot.gamelab",83,1080,1920);
+  check("SESSION_CHANGED".equals(gate.rejection(ticket,1003,"org.localpilot.gamelab",83,1080,1920)),"rearm never restores a prior epoch ticket");
+  System.out.println("Window rebind stability, focus grace and visible selection: 34 assertions PASS");
  }
 }
