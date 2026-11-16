@@ -8,6 +8,7 @@ perform game gestures, access private files or certify a stable release.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from pathlib import Path
 import re
@@ -23,6 +24,8 @@ GAMELAB = "org.localpilot.gamelab.RetroLibraryActivity"
 NES = "org.localpilot.gamelab.NesEmulatorActivity"
 UI_PATH = "/data/local/tmp/localpilot-unified-smoke.xml"
 BOUNDS = re.compile(r"^\[(\d+),(\d+)\]\[(\d+),(\d+)\]$")
+HARNESS_NAVIGATION: list[dict] = []
+LAST_HARNESS_UI = ""
 
 
 def adb(*argv: str, timeout: int = 45) -> str:
@@ -143,6 +146,9 @@ def write_failure_diagnostics(output: Path, error: Exception) -> None:
     directory.mkdir(parents=True, exist_ok=True)
     evidence = {"result": "FAIL", "exception": str(error)[:1800],
                 "source": "isolated Android CI emulator", "releaseReady": False}
+    evidence["harness_navigation"] = HARNESS_NAVIGATION[-8:]
+    if LAST_HARNESS_UI:
+        (directory / "last-harness-ui.xml").write_text(LAST_HARNESS_UI, encoding="utf-8")
     for name, args in (
         ("focus", ("shell", "dumpsys", "window")),
         ("activity", ("shell", "dumpsys", "activity", "activities")),
@@ -174,9 +180,16 @@ def scroll_up() -> None:
 
 
 def tap_text(label: str, swipes: int = 6) -> None:
+    global LAST_HARNESS_UI
     for index in range(swipes + 1):
-        bounds = target_bounds(dump_ui(), label)
+        xml = dump_ui()
+        bounds = target_bounds(xml, label)
         if bounds is not None:
+            if label == "Harness Console":
+                LAST_HARNESS_UI = xml if len(xml) <= 131072 else ""
+                HARNESS_NAVIGATION.append({"event": "fresh_harness_tap", "point": list(bounds),
+                    "ui_sha256": hashlib.sha256(xml.encode("utf-8")).hexdigest()})
+                del HARNESS_NAVIGATION[:-8]
             adb("shell", "input", "tap", str(bounds[0]), str(bounds[1]))
             return
         if index < swipes:
@@ -188,7 +201,7 @@ def tap_text(label: str, swipes: int = 6) -> None:
 def tap_harness_and_verify() -> int:
     """Test the real dashboard intent, not a neighboring ModelLab tap.
 
-    One bounded retry is permitted after a verified WRONG neighbor activity.
+    One bounded retry is permitted only on the verified MAIN or MODEL route.
     Every retry has to re-dump the fresh clickable node and actually open DASH.
     No fallback to explicit am start of an unexported activity, and no false PASS.
     """
@@ -202,6 +215,20 @@ def tap_harness_and_verify() -> int:
                 raise RuntimeError("Harness button did not open native dashboard after "
                                    "two fresh UI taps: " + str(error))
             current = resumed_activity()
+            HARNESS_NAVIGATION.append({"event": "dashboard_not_resumed", "activity": current[:500]})
+            del HARNESS_NAVIGATION[:-8]
+            if PACKAGE + "/" + MAIN in current:
+                # Observed cold-launch no-op: Main is still resumed. Re-read the
+                # actual visible button once; no game action has been requested.
+                visible = dump_ui()
+                text = " ".join(n.attrib.get("text", "").casefold()
+                                for n in ET.fromstring(visible).iter("node"))
+                if "isn't responding" in text or "is not responding" in text:
+                    raise RuntimeError("App ANR during Harness navigation; no retry")
+                if target_bounds(visible, "Harness Console") is None:
+                    raise RuntimeError("Main resumed without visible Harness button; no retry")
+                wait_activity(MAIN)
+                continue
             if PACKAGE + "/" + MODEL not in current:
                 raise RuntimeError("Unexpected app route after Harness click: " + current)
             # Only recover an actual neighboring ModelLab navigation;
@@ -278,7 +305,7 @@ def verify(apk: Path, output: Path) -> dict:
     if target_bounds(dump_ui(), "LocalPilot · Harness Console") is None:
         raise RuntimeError("Native unified Harness console did not render")
     checks.append({"name": "native_harness_console_screen", "status": "PASS",
-                   "boundedWrongNeighborRetries": harness_navigation_retries})
+                   "boundedNavigationRetries": harness_navigation_retries})
 
     tap_text("Открыть ModelLab")
     wait_activity(MODEL)
@@ -324,6 +351,7 @@ def verify(apk: Path, output: Path) -> dict:
         "separateGameLabInstalled": False,
         "separateModelLabInstalled": False,
         "checks": checks,
+        "harnessNavigation": HARNESS_NAVIGATION[-8:],
         "realGameMotion": "NOT_TESTED",
         "modelGeneration": "NOT_TESTED",
         "physicalAndroidTest": "NOT_VERIFIED",

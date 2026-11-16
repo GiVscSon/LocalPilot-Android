@@ -92,6 +92,35 @@ candidate. Synthetic contract20 assertions and Android matrix9 tests also PASS.
 
 ## Reproduction and scope
 
+### First new matrix failure: navigation before sustained play
+
+At head7df5f14 / tested merge58de9e3, All-in-One run43846086850
+job133228961525 failed before any game action: after the Harness navigation tap,
+MainActivity remained resumed and the test refused `Unexpected app route`.
+Artifact14216095729 SHA256
+`51146c843f893a0fd84f20776fc01378bb6d1f0a2b6f47fda68bb42541bf301a`
+was downloaded, CRC checked and extracted. The screenshot shows the actual Main
+screen and Harness button; bounded crash log is empty. Pre-tap UI/coordinates
+were not retained, so the low-level reason for the first no-op remains UNKNOWN.
+It is not evidence of a broken Student loop or a verified application crash.
+
+The exact x86 APK2061c671d2220261b6159e194503bc639db44976a297273a17d9a6f1821ee740
+was installed only into previously absent `org.localpilot.android.dev.unified`
+in the local API30 software AVD, preserving existing0.8.4 data/package. Three cold
+Main→Harness taps succeeded on their first attempt. This is scoped local
+navigation evidence, not reproduction of the API35 failure or game acceptance.
+
+The test-only recovery now treats this observed Main no-op like its pre-existing
+known ModelLab-neighbor recovery: at most one new UI navigation attempt, only
+after verifying Main, visible Harness and no app ANR. Each tap uses a fresh dump;
+actual Dashboard resume is still mandatory. Foreign routes, missing app/button,
+ANR or a second no-op fail. No hidden Activity launch, game-action retry, timeout
+increase or production app/STOP/input change is introduced.26 negative/positive
+UI contract tests pass. Successful/failed reports now retain bounded tap
+coordinates/route metadata; failure also retains the pre-tap XML outside Git.
+This fixes the test's missing known-route recovery, not an asserted compositor
+or application cause. Full CI on the follow-up head is required again.
+
 Use the existing `.github/workflows/nes-runtime.yml` for real training plus
 20-pair holdout, and `.github/workflows/localpilot-all-in-one.yml` for actual
 ARM64 packaging, identical x86 acceptance APK, sustained256, GGUF and six AVDs.

@@ -93,7 +93,7 @@ def run(apk: Path, output: Path):
     ui.adb("shell", "am", "start", "-W", "-n", ui.PACKAGE + "/" + ui.MAIN)
     ui.wait_activity(ui.MAIN)
     process = ui.one_process()
-    ui.tap_harness_and_verify()
+    navigation_retries = ui.tap_harness_and_verify()
     ui.tap_text("Автоигра Student · 256 ходов с сохранением")
     ui.wait_activity(ui.NES)
     checkpoints = []
@@ -132,6 +132,8 @@ def run(apk: Path, output: Path):
         "result": "EMULATOR_SUSTAINED_256_PASS",
         "sourceSha": source, "apkSha256": apk_sha, "api": api,
         "deviceProfile": "pixel_2", "singleProcess": True,
+        "boundedNavigationRetries": navigation_retries,
+        "harnessNavigation": ui.HARNESS_NAVIGATION[-8:],
         "checkpoints": checkpoints, "proof": proof,
         "immutableReplayBatches": len(names),
         "activePolicyPreserved": True, "candidateSha256": candidate_sha,
