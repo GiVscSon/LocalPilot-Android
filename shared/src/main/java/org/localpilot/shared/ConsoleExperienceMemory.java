@@ -25,6 +25,56 @@ public final class ConsoleExperienceMemory {
  private static final long MAX_BYTES=131072;
  private static final int MAX_CONTEXT=6;
  private static final int MAX_LINE=350;
+ private static final String GENERIC="console-ai-user-rom-v1.log",GENERIC_OLD="console-ai-user-rom-v1.previous.log";
+ /** User-ROM evidence never enters the homebrew reward/PPO journals. */
+ public record GenericEpisode(String romSha,String epoch,String modelId,String modelSha,NesTrial trial) {
+  public GenericEpisode {
+   if(!sha(romSha)||epoch==null||!epoch.matches("[1-9][0-9]{0,18}")||!id(modelId)||!sha(modelSha)||
+       trial==null||!"USER_ROM".equals(trial.scenario)||!ConsoleAgentContract.playable(trial.button))
+    throw new IllegalArgumentException("Invalid user-ROM evidence identity");
+   NesTrial.parse(trial.serialize());
+  }
+ }
+ private static GenericEpisode decodeGeneric(String line){
+  if(line==null||line.length()>800)throw new IllegalArgumentException("Generic row size");
+  int end=line.lastIndexOf('|');
+  if(end<0||!digest(line.substring(0,end)).equals(line.substring(end+1)))throw new IllegalArgumentException("Generic checksum");
+  String[] p=line.substring(0,end).split("\\|",8);
+  if(p.length!=8||!"NES_USER_ROM_V1".equals(p[0])||!"RETRO_EMULATED".equals(p[5])||!"NULL".equals(p[6]))
+   throw new IllegalArgumentException("Generic provenance/reward");
+  return new GenericEpisode(p[1],p[2],p[3],p[4],NesTrial.parse(p[7]));
+ }
+ public static synchronized List<GenericEpisode> readGeneric(Path directory)throws IOException{
+  List<GenericEpisode> all=new ArrayList<>();
+  for(String name:List.of(GENERIC_OLD,GENERIC)){
+   Path path=directory.resolve(name);
+   if(Files.isSymbolicLink(path))throw new IOException("Unsafe generic journal");
+   if(!Files.exists(path))continue;
+   if(!Files.isRegularFile(path)||Files.size(path)>MAX_BYTES)throw new IOException("Generic journal quota");
+   for(String line:Files.readAllLines(path,StandardCharsets.UTF_8))try{all.add(decodeGeneric(line));}
+    catch(IllegalArgumentException invalid){throw new IOException("Generic evidence integrity failed",invalid);}
+  }
+  return List.copyOf(all);
+ }
+ public static synchronized void appendGeneric(Path directory,GenericEpisode row)throws IOException{
+  if(row==null)throw new IllegalArgumentException("Missing generic evidence");
+  String body="NES_USER_ROM_V1|"+row.romSha()+"|"+row.epoch()+"|"+row.modelId()+"|"+row.modelSha()+
+    "|RETRO_EMULATED|NULL|"+row.trial().serialize();
+  String line=body+"|"+digest(body);decodeGeneric(line);
+  Files.createDirectories(directory);readGeneric(directory);
+  Path journal=directory.resolve(GENERIC);byte[] encoded=(line+"\n").getBytes(StandardCharsets.UTF_8);
+  if(Files.exists(journal)&&Files.size(journal)+encoded.length>MAX_BYTES)
+   Files.move(journal,directory.resolve(GENERIC_OLD),StandardCopyOption.REPLACE_EXISTING);
+  try(FileOutputStream out=new FileOutputStream(journal.toFile(),true)){out.write(encoded);out.getFD().sync();}
+ }
+ public static String genericContext(Path directory,String romSha,String modelId,String modelSha)throws IOException{
+  if(!sha(romSha)||!id(modelId)||!sha(modelSha))throw new IllegalArgumentException("Generic context identity");
+  List<GenericEpisode> rows=new ArrayList<>();
+  for(var row:readGeneric(directory))if(row.romSha().equals(romSha)&&row.modelId().equals(modelId)&&row.modelSha().equals(modelSha))rows.add(row);
+  StringBuilder result=new StringBuilder("Past observations for this exact ROM and model. Reward, score and success UNKNOWN: ");
+  for(int i=Math.max(0,rows.size()-MAX_CONTEXT);i<rows.size();i++)result.append(rows.get(i).trial().button).append(':').append(rows.get(i).trial().status).append("; ");
+  return result.toString();
+ }
 
  public record Episode(String modelId,String modelSha,String button,int beforeFrame,
     int afterFrame,int beforeHash,int afterHash,String status){}

@@ -8,6 +8,14 @@ public final class NesModelHostTest {
   boolean failed=false;try{operation.run();}catch(IllegalArgumentException expected){failed=true;}check(failed,message);
  }
  public static void main(String[] args){
+  for(int budget:HarnessDemoWorkflow.GGUF_BUDGETS){
+   check(HarnessDemoWorkflow.ggufSteps(HarnessDemoWorkflow.ggufMode(budget))==budget,"exact bounded GGUF budget");
+   check(HarnessDemoWorkflow.supported(HarnessDemoWorkflow.ggufMode(budget)),"explicit GGUF budget is supported");
+  }
+  refuses(()->HarnessDemoWorkflow.ggufMode(0),"zero budget refused");
+  refuses(()->HarnessDemoWorkflow.ggufMode(257),"unbounded budget refused");
+  check(HarnessDemoWorkflow.ggufSteps("GGUF_PLAY_99999999999999999999")==0,"unknown budget intent cannot start input");
+  check(HarnessDemoWorkflow.ggufSteps(null)==0,"absent intent cannot start input");
   HarnessCoordinator h=new HarnessCoordinator();h.reset("1",HarnessCoordinator.Mode.STEP_MODE);
   var model=new NesModelHost.ModelIdentity("gguf:test","b".repeat(64));
   var t=h.begin("1",15,123,1000);
@@ -20,6 +28,8 @@ public final class NesModelHostTest {
   refuses(()->new NesModelHost.Observation(t,"a".repeat(64),model,-1,112,null),"partial RAM observation refused");
   refuses(()->new NesModelHost.Observation(t,"a".repeat(64),model,256,112,null),"invalid RAM observation refused");
   refuses(()->new NesModelHost.Observation(t,"a".repeat(64),model,128,112,new byte[100]),"fake PNG refused");
+  refuses(()->new NesModelHost.Observation(t,"a".repeat(64),model,-1,-1,null,NesModelHost.TaskProfile.VISION_EXPLORATION),"generic vision never runs without pixels");
+  refuses(()->new NesModelHost.Observation(t,"a".repeat(64),model,128,112,null,NesModelHost.TaskProfile.VISION_EXPLORATION),"generic profile cannot invent homebrew RAM");
   var proposal=new NesModelHost.Reply(o,NesModelHost.Status.PROPOSAL,"gguf:test","b".repeat(64),"RIGHT",3);
   check(proposal.observation().ticket()==t,"reply keeps original one-use ticket identity");
   check(h.consume(t.nonce,"1",15,123,1002),"only controller may consume the observation");

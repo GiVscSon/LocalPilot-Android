@@ -13,11 +13,17 @@ public interface NesModelHost {
     throw new IllegalArgumentException("Invalid model binding");
   }
  }
- record Observation(HarnessCoordinator.Ticket ticket,String romSha256,ModelIdentity binding,int ramX,int ramY,byte[] png) {
+ enum TaskProfile { HOMEBREW_RAM, VISION_EXPLORATION }
+ record Observation(HarnessCoordinator.Ticket ticket,String romSha256,ModelIdentity binding,int ramX,int ramY,byte[] png,TaskProfile profile) {
+  public Observation(HarnessCoordinator.Ticket ticket,String romSha256,ModelIdentity binding,int ramX,int ramY,byte[] png){
+   this(ticket,romSha256,binding,ramX,ramY,png,TaskProfile.HOMEBREW_RAM);
+  }
   public Observation {
-   if(ticket==null||binding==null||romSha256==null||!romSha256.matches("[0-9a-f]{64}")||
+   if(ticket==null||binding==null||profile==null||romSha256==null||!romSha256.matches("[0-9a-f]{64}")||
       !((ramX==-1&&ramY==-1)||(ramX>=0&&ramX<=255&&ramY>=0&&ramY<=255)))
     throw new IllegalArgumentException("Invalid typed NES observation");
+   if(profile==TaskProfile.VISION_EXPLORATION&&(ramX!=-1||ramY!=-1||png==null))
+    throw new IllegalArgumentException("Generic NES requires pixels and UNKNOWN RAM");
    if(png!=null){NesFrameTransfer.verify(png);png=png.clone();}
   }
   @Override public byte[] png(){return png==null?null:png.clone();}
@@ -45,6 +51,9 @@ public interface NesModelHost {
  }
  default java.util.List<ModelChoice> nesModels(){return java.util.List.of();}
  default boolean selectNesModel(ModelIdentity identity){return false;}
+ default boolean nesVisionModel(ModelIdentity identity){return false;}
+ /** Internal x86 acceptance only; never enabled in the user ARM64 APK. */
+ default boolean nesTestFixturesAllowed(){return false;}
 
  /** File/catalog operations have no input authority and never start inference. */
  enum LibraryOperation { IMPORT_MODEL, IMPORT_PROJECTOR, DOWNLOAD_PRESET, VERIFY, DELETE, UNBIND }

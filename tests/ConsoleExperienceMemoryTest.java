@@ -98,6 +98,21 @@ public final class ConsoleExperienceMemoryTest {
     .digest(oldBody.getBytes(StandardCharsets.UTF_8)));
   Files.writeString(goal,oldBody+"|"+oldHash+"\n",StandardCharsets.UTF_8);
   require(ConsoleExperienceMemory.readGoals(temp).get(0).reward()==16,"Legacy V1 task journal remains readable");
+  Path generic=Files.createTempDirectory("user-rom-memory-test");
+  NesTrial user=NesTrial.create("USER_ROM","RIGHT",20,36,44,55);
+  ConsoleExperienceMemory.appendGeneric(generic,new ConsoleExperienceMemory.GenericEpisode(sha,"1234","import:alpha",other,user));
+  require(ConsoleExperienceMemory.readGeneric(generic).size()==1,"user-ROM evidence persisted");
+  require(ConsoleExperienceMemory.read(generic).isEmpty()&&ConsoleExperienceMemory.readGoals(generic).isEmpty()&&
+    ConsoleExperienceMemory.readHomebrewGoals(generic).isEmpty(),"unknown generic reward cannot enter any trusted homebrew stream");
+  require(ConsoleExperienceMemory.genericContext(generic,sha,"import:alpha",other).contains("RIGHT:PIXELS_DIFFER"),"same exact ROM/model receives its observations");
+  require(!ConsoleExperienceMemory.genericContext(generic,other,"import:alpha",other).contains("RIGHT"),"another ROM cannot receive that history");
+  expectFailure(()->new ConsoleExperienceMemory.GenericEpisode(sha,"1234","import:alpha",other,changed));
+  Path genericFile=generic.resolve("console-ai-user-rom-v1.log");
+  String originalGeneric=Files.readString(genericFile);Files.writeString(genericFile,originalGeneric.replace("|NULL|","|1|"));
+  byte[] brokenGeneric=Files.readAllBytes(genericFile);boolean refusedGeneric=false;
+  try{ConsoleExperienceMemory.appendGeneric(generic,new ConsoleExperienceMemory.GenericEpisode(sha,"1234","import:alpha",other,user));}
+  catch(IOException invalid){refusedGeneric=true;}
+  require(refusedGeneric&&java.util.Arrays.equals(brokenGeneric,Files.readAllBytes(genericFile)),"generic corruption/reward forgery fails closed before append");
   System.out.println("CONSOLE_SHARED_MEMORY_PASS");
  }
 }

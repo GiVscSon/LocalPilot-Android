@@ -17,6 +17,8 @@ on:
       - 'tools/harness_student_device_acceptance.py'
       - 'tools/run_harness_runtime_acceptance.py'
       - 'tools/run_g2_direct_gguf_acceptance.py'
+      - 'tests/test_g2_visible_saf.py'
+      - 'tools/run_real_nes_vision_acceptance.py'
       - 'tests/test_harness_runtime_acceptance.py'
       - 'tests/NesModelHost*.java'
       - 'tools/harness_student_candidate_evaluation.py'
@@ -93,6 +95,7 @@ jobs:
           java tests/HarnessCoordinatorVerify.java
           java tests/NesModelHostVerify.java
           python3 -m unittest discover -s tests -p 'test_harness_runtime_acceptance.py' -v
+          python3 -m unittest discover -s tests -p 'test_g2_visible_saf.py' -v
           java tests/ConsoleAgentContractVerify.java
           java tests/ConsoleExperienceMemoryVerify.java
           java tests/HomebrewGoalRewardVerify.java
@@ -446,3 +449,43 @@ jobs:
           retention-days: 14
           if-no-files-found: warn
           path: sustained-nes-evidence/
+
+  real-game-vision:
+    needs: unified-emulator-build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/download-artifact@v4
+        with:
+          name: LocalPilot-One-APK-X86-TEST-ONLY-${{ github.sha }}
+          path: app/build/outputs/apk/debug/
+      - name: Prepare exact real VOID LANCER and existing pinned vision model/projector
+        run: python3 tools/run_real_nes_vision_acceptance.py prepare
+      - name: Require isolated KVM
+        run: |
+          test -c /dev/kvm
+          sudo chmod 666 /dev/kvm
+      - name: Play current real game through visible SAF, model, controller and STOP
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: default
+          profile: pixel_2
+          disable-animations: true
+          emulator-boot-timeout: 600
+          emulator-options: -no-window -gpu software -no-snapshot -noaudio -no-boot-anim -camera-back none
+          script: python3 tools/run_real_nes_vision_acceptance.py verify --apk app/build/outputs/apk/debug/app-debug.apk
+      - name: Preserve real-game evidence on success or failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: LocalPilot-Real-ROM-Vision-${{ github.sha }}
+          retention-days: 14
+          if-no-files-found: warn
+          path: real-nes-evidence/

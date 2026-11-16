@@ -154,6 +154,8 @@ public final class HarnessModelRuntime {
     finish(call,NesModelHost.Status.STALE,null,0);return;
    }
    call.model=model;phase(call,"VERIFYING");
+   boolean generic=call.observation.profile()==NesModelHost.TaskProfile.VISION_EXPLORATION;
+   if(generic&&!model.vision()){finish(call,NesModelHost.Status.UNAVAILABLE,null,0);return;}
    File weights=store.modelFile(model);
    byte[] png=call.observation.png();byte[] pixels=null;
    File projector=null;
@@ -173,12 +175,15 @@ public final class HarnessModelRuntime {
      }
     }finally{bitmap.recycle();}
    }
-   String history=ConsoleExperienceMemory.context(application.getFilesDir().toPath(),model.id,model.modelSha);
+   String history=generic?ConsoleExperienceMemory.genericContext(application.getFilesDir().toPath(),call.observation.romSha256(),model.id,model.modelSha):
+    ConsoleExperienceMemory.context(application.getFilesDir().toPath(),model.id,model.modelSha);
    var t=call.observation.ticket();
    String observation=(projector==null?"TEXT ONLY: no image understanding. ":"Verified NES RGB attached. ")+
-    "Builtin NES rightward task. frame="+t.frame+" hash="+Integer.toUnsignedString(t.hash)+
+    (generic?"Play the visible NES game. Infer its controls and objective from the image. Choose NONE if uncertain. No RAM, score, reward or victory is verified. ROM="+call.observation.romSha256()+". ":
+      "Builtin NES rightward task. ")+"frame="+t.frame+" hash="+Integer.toUnsignedString(t.hash)+
     (call.observation.ramX()<0?" RAM UNKNOWN. ":" verified RAM x="+call.observation.ramX()+" y="+call.observation.ramY()+". ")+
-    "Choose one allowed BUTTON for rightward progress without crossing a RAM edge. Input ACK is not a reward. "+history;
+    (generic?"Choose one allowed BUTTON for visible game progress. ":"Choose one allowed BUTTON for rightward progress without crossing a RAM edge. ")+
+    "Input ACK is not a reward. "+history;
    final File mmproj=projector;final byte[] rgb=pixels;
    main.post(()->{
     try{
