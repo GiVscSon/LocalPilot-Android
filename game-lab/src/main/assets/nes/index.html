@@ -67,7 +67,8 @@ function sendFrame(rgb){
  ctx.putImageData(image,0,0);frames++;
  // Latest fingerprint belongs to the rendered frame, even while frozen.
  let hash=2166136261>>>0;
- for(let i=0;i<256*240;i+=241)hash=Math.imul(hash^rgb[i],16777619)>>>0;
+ // Hash every rendered pixel: sparse sampling can miss a moving 8x8 sprite.
+ for(let i=0;i<256*240;i++)hash=Math.imul(hash^rgb[i],16777619)>>>0;
  validFrame=hash;
  // In STEP_MODE, only publish AFTER the action release ACK so Android can
  // verify a coherent transition, never an intermediate frame.
@@ -213,7 +214,7 @@ window.retroExitStepMode=function(){
 window.retroSaveState=function(){
  if(!nes||!activeRomSession||!paused||!stepMode||agentTrial||!gamepadLatch||
     gamepadLatch.down.size!==0||frames<15||!validFrame)return null;
- return {schema:"localpilot-jsnes-save-v1",frame:frames,hash:validFrame|0,machine:nes.toJSON()};
+ return {schema:"localpilot-jsnes-save-v1",frame:frames,hash:validFrame|0,hashAlgorithm:"FNV1A_RGB32_FULL_V1",machine:nes.toJSON()};
 };
 // Keep large CPU/PPU graphs inside JS. Android receives small, bounded JSON chunks.
 window.retroPrepareSave=function(token){
@@ -266,7 +267,8 @@ window.retroRestoreState=function(saved,session,newSession){
  if(!nes||session!==activeRomSession||typeof newSession!=="string"||newSession===session||
     !/^[1-9][0-9]{0,18}$/.test(newSession)||!saved||saved.schema!=="localpilot-jsnes-save-v1"||
     !Number.isInteger(saved.frame)||saved.frame<15||saved.frame>2147483646||
-    !Number.isInteger(saved.hash)||saved.hash===0||!saved.machine||
+    !Number.isInteger(saved.hash)||saved.hash===0||
+    (saved.hashAlgorithm!==undefined&&saved.hashAlgorithm!=="FNV1A_RGB32_FULL_V1")||!saved.machine||
     !saved.machine.cpu||!saved.machine.ppu)return false;
  try{
   window.retroPause();stepMode=true;
@@ -276,9 +278,16 @@ window.retroRestoreState=function(saved,session,newSession){
    nes.buttonUp(player,jsnes.Controller[name]);
   gamepadLatch=new FrameHeldButtons(nes,4);agentTrial=null;usedStepNonce="";
   frames=saved.frame-1;sendFrame(nes.ppu.buffer);
-  if((validFrame|0)!==saved.hash)throw new Error("Saved frame hash mismatch");
+  // Legacy archives retain their original checksum, then migrate to the full frame.
+  let savedFrameHash=validFrame|0;
+  if(saved.hashAlgorithm===undefined){
+   let legacy=2166136261>>>0;
+   for(let i=0;i<256*240;i+=241)legacy=Math.imul(legacy^nes.ppu.buffer[i],16777619)>>>0;
+   savedFrameHash=legacy|0;
+  }
+  if(savedFrameHash!==saved.hash)throw new Error("Saved frame hash mismatch");
   activeRomSession=newSession;
-  return {frame:frames,hash:validFrame|0,session:activeRomSession};
+  return {frame:frames,hash:validFrame|0,savedHash:savedFrameHash,session:activeRomSession};
  }catch(error){stop();status("STOP: сохранение NES не прошло проверку");return false;}
 };
 let usedStepNonce="";
