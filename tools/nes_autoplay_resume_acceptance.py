@@ -109,13 +109,19 @@ if __name__=='__main__':
     try:main(a.apk,a.output)
     except Exception as error:
         report=dict(result='FAIL',error=str(error)[:1000],releaseReady=False)
-        if ui.is_emulator():
-            ui.write_failure_diagnostics(a.output,error)
-            try:
-                report['lastCheckpoint']=checkpoint()
-                import xml.etree.ElementTree as ET
-                report['emulatorUiText']=[n.get('text','')[:400] for n in ET.fromstring(ui.dump_ui()).iter('node') if n.get('text')][:35]
-            except Exception as diagnostic:report['checkpointDiagnostic']=str(diagnostic)[:300]
+        try:
+            if ui.is_emulator():
+                ui.write_failure_diagnostics(a.output,error)
+                try:
+                    report['lastCheckpoint']=checkpoint()
+                    import xml.etree.ElementTree as ET
+                    report['emulatorUiText']=[n.get('text','')[:400] for n in ET.fromstring(ui.dump_ui()).iter('node') if n.get('text')][:35]
+                except Exception as diagnostic:
+                    report['checkpointDiagnostic']=str(diagnostic)[:300]
+        except Exception as disconnected:
+            report['emulatorDiagnosticUnavailable']=type(disconnected).__name__
+            # Preserve the PRIMARY failure even if ADB drops after it.
+
         a.output.parent.mkdir(parents=True,exist_ok=True)
         a.output.write_text(json.dumps(report,indent=2)+'\n')
         raise
