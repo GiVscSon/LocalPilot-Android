@@ -15,6 +15,6 @@ Base: PR182 7ff1b4c35ce1b10cf4330db4cd7f70652dac6e63. Main observed: 32838fde8c2
 | External games | PilotService, ActionGate, InputPermit | Existing separate control path; universal integration unproven |
 | Video → learning | No integrated video adapter | Absent; defer until stable core |
 
-First incremental UI change: controller status and validated replay summary appear inside the existing NES Activity. Read-only storage work runs off the UI thread; no new controller/runtime or policy activation. Import remains a separate screen and is a subsequent step. All-button acceptance, device acceptance, universal environment adapters and automatic candidate promotion are not completed by this patch.
+First incremental UI change: controller status and validated replay summary appear inside the existing NES Activity. Read-only storage work runs off the UI thread; no new controller/runtime or policy activation. The subsequent [model-library increment](LOCALPILOT-183-MODEL-LIBRARY-HANDOFF.md) adds SAF import and existing catalog/binding management to the same NES Activity. All-button acceptance, device acceptance, universal environment adapters and automatic candidate promotion remain incomplete.
 
 Evidence from the base is not acceptance of a new commit. Keep BUILD/UI/INFERENCE/TRANSITION/TRAINING/DEVICE labels separate. Release/signing/main merge remain on hold.

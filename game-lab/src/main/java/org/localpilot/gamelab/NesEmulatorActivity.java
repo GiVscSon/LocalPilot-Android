@@ -60,6 +60,9 @@ import java.security.SecureRandom;
  */
 public final class NesEmulatorActivity extends Activity {
  private static final int CHOOSE_ROM=101;
+ private static final int CHOOSE_MODEL=102,CHOOSE_PROJECTOR=103;
+ private String pendingModelSha="";
+ private NesModelHost.ModelIdentity pendingProjector;
  private final ExecutorService romDownloads=Executors.newSingleThreadExecutor();
  private boolean closed;
  private static final int MAX_ROM=3*1024*1024;
@@ -152,6 +155,11 @@ public final class NesEmulatorActivity extends Activity {
  private final AtomicInteger touches=new AtomicInteger();
  @Override public void onCreate(Bundle bundle){
   super.onCreate(bundle);
+  if(bundle!=null){
+   pendingModelSha=bundle.getString("modelImportSha","");
+   String id=bundle.getString("projectorModelId"),sha=bundle.getString("projectorModelSha");
+   if(id!=null&&sha!=null)try{pendingProjector=new NesModelHost.ModelIdentity(id,sha);}catch(IllegalArgumentException ignored){}
+  }
   dendy=getIntent().getBooleanExtra("dendy",false);
   if(getPackageName().startsWith("org.localpilot.android")){
    String mode=getIntent().getStringExtra(HarnessDemoWorkflow.EXTRA_MODE);
@@ -352,6 +360,11 @@ public final class NesEmulatorActivity extends Activity {
   LinearLayout selectionRow=new LinearLayout(this);
   compactModels=new android.widget.Spinner(this);compactModels.setContentDescription("Модель агента NES");
   selectionRow.addView(compactModels,new LinearLayout.LayoutParams(0,-2,1));
+  Button library=new Button(this);library.setText("Модели");library.setContentDescription("Управление моделями NES");
+  boolean libraryAvailable=getApplication() instanceof NesModelHost host&&host.nesLibraryAvailable();
+  library.setEnabled(libraryAvailable);
+  if(!libraryAvailable)library.setContentDescription("Библиотека моделей недоступна в этой сборке");
+  library.setOnClickListener(v->showModelLibrary(library));selectionRow.addView(library);
   Button more=new Button(this);more.setText("Ещё");more.setContentDescription("Открыть дополнительные настройки");
   more.setOnClickListener(v->{boolean expanded=actionScroll.getVisibility()!=View.VISIBLE;
    actionScroll.setVisibility(expanded?View.VISIBLE:View.GONE);
@@ -1724,8 +1737,91 @@ public final class NesEmulatorActivity extends Activity {
   }catch(RuntimeException invalid){showState("STOP: каталог моделей недоступен");}
  }
  private boolean compactWorkflowBusy(){
-  return progressBusy||studentRemaining>0||aiRunning||experiment.running()||harness.hasPending()||harness.actionInFlight()||
+  return getApplication() instanceof NesModelHost host&&host.nesLibraryBusy()||progressBusy||studentRemaining>0||aiRunning||experiment.running()||harness.hasPending()||harness.actionInFlight()||
     autoStartArmed||autoLaunchArmed||autoGgufRemaining>0||autoplayBatchesRemaining>0||studentTraining!=null&&!studentTraining.isDone();
+ }
+ private NesModelHost.ModelIdentity selectedLibraryModel(){
+  int index=compactModels.getSelectedItemPosition()-1;
+  return index>=0&&index<compactChoices.size()?compactChoices.get(index).identity():null;
+ }
+ private void showModelLibrary(View anchor){
+  if(!(getApplication() instanceof NesModelHost host)||!host.nesLibraryAvailable())return;
+  refreshCompactModels();
+  var selected=selectedLibraryModel();boolean idle=!compactWorkflowBusy();
+  boolean removable=selected!=null&&host.nesModelRemovable(selected);
+  var bound=host.nesBoundModel();
+  android.widget.PopupMenu menu=new android.widget.PopupMenu(this,anchor);
+  menu.getMenu().add("Статус выбранной модели").setOnMenuItemClickListener(item->{
+   new AlertDialog.Builder(this).setTitle("Модели NES")
+    .setMessage((selected==null?"Student · CPU. Состояние обучения — в панели опыта.":
+      "Установлена: "+selected.id()+"\nSHA-256 "+selected.sha256()+"\n"+
+      (selected.equals(bound)?"BOUND: назначена NES":"Не привязана к NES")+
+      "\nИнференс и пригодность к игре проверяются отдельно.")+"\n"+
+      (host.nesLibraryBusy()?"Операция с файлами выполняется":"Операции с файлами свободны"))
+    .setPositiveButton("Закрыть",null).show();return true;
+  });
+  menu.getMenu().add(idle?"Импорт GGUF…":"Импорт GGUF · сначала STOP / заверши операцию").setEnabled(idle)
+   .setOnMenuItemClickListener(item->{chooseModelFile(false,null);return true;});
+  menu.getMenu().add(removable?"Импорт mmproj…":"mmproj · выбери импортированный GGUF").setEnabled(idle&&removable)
+   .setOnMenuItemClickListener(item->{chooseModelFile(true,selected);return true;});
+  menu.getMenu().add("Скачать из проверенного каталога…").setEnabled(idle)
+   .setOnMenuItemClickListener(item->{
+    var choices=host.nesDownloads();String[] labels=new String[choices.size()];
+    for(int i=0;i<labels.length;i++)labels[i]=choices.get(i).label();
+    new AlertDialog.Builder(this).setTitle("Загрузка по сети · размер включает mmproj")
+     .setItems(labels,(dialog,index)->manageModelLibrary(new NesModelHost.LibraryRequest(
+       NesModelHost.LibraryOperation.DOWNLOAD_PRESET,null,null,null,choices.get(index).id())))
+     .setNegativeButton("Отмена",null).show();return true;
+   });
+  menu.getMenu().add("Проверить SHA-256 файлов").setEnabled(idle&&selected!=null)
+   .setOnMenuItemClickListener(item->{manageModelLibrary(new NesModelHost.LibraryRequest(NesModelHost.LibraryOperation.VERIFY,selected,null,null,null));return true;});
+  menu.getMenu().add("Привязать выбранный GGUF к NES").setEnabled(idle&&selected!=null)
+   .setOnMenuItemClickListener(item->{
+    if(!compactWorkflowBusy()&&host.selectNesModel(selected))showState("BOUND · модель назначена NES; агент не запущен, инференс ещё не проверен");
+    else showState("STOP: модель недоступна или сеанс занят");return true;
+   });
+  menu.getMenu().add("Отвязать GGUF от NES").setEnabled(idle&&bound!=null)
+   .setOnMenuItemClickListener(item->{manageModelLibrary(new NesModelHost.LibraryRequest(NesModelHost.LibraryOperation.UNBIND,null,null,null,null));return true;});
+  menu.getMenu().add(selected!=null&&selected.equals(bound)?"Удаление · сначала отвяжи GGUF":
+      removable?"Удалить импортированный GGUF…":"Удаление · выбери импортированный GGUF")
+   .setEnabled(idle&&removable&&!selected.equals(bound)).setOnMenuItemClickListener(item->{
+    new AlertDialog.Builder(this).setTitle("Удалить выбранный GGUF?").setMessage("Удалится файл из библиотеки приложения. Исходный документ останется в файлах.")
+     .setPositiveButton("Удалить",(dialog,which)->manageModelLibrary(new NesModelHost.LibraryRequest(NesModelHost.LibraryOperation.DELETE,selected,null,null,null)))
+     .setNegativeButton("Отмена",null).show();return true;
+   });
+  menu.show();
+ }
+ private void chooseModelFile(boolean projector,NesModelHost.ModelIdentity target){
+  if(compactWorkflowBusy()){showState("Сначала останови сеанс или заверши операцию");return;}
+  android.widget.EditText checksum=new android.widget.EditText(this);
+  checksum.setHint("Ожидаемый SHA-256 (необязательно)");checksum.setSingleLine(true);
+  AlertDialog dialog=new AlertDialog.Builder(this).setTitle(projector?"Импорт mmproj":"Импорт GGUF")
+   .setMessage("Без ожидаемого SHA-256 будет вычислен хеш файла; источник не считается доверенным. Инференс не запускается.")
+   .setView(checksum).setPositiveButton("Выбрать файл",null).setNegativeButton("Отмена",null).create();
+  dialog.setOnShowListener(ignored->dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v->{
+   String sha=checksum.getText().toString().trim().toLowerCase(java.util.Locale.ROOT);
+   if(!sha.isEmpty()&&!sha.matches("[0-9a-f]{64}")){checksum.setError("Нужно 64 шестнадцатеричных символа");return;}
+   pendingModelSha=sha;pendingProjector=projector?target:null;
+   try{startActivityForResult(new Intent(Intent.ACTION_OPEN_DOCUMENT).setType("*/*")
+      .addCategory(Intent.CATEGORY_OPENABLE),projector?CHOOSE_PROJECTOR:CHOOSE_MODEL);dialog.dismiss();}
+   catch(android.content.ActivityNotFoundException missing){showState("Системный выбор файлов недоступен");}
+  }));dialog.show();
+ }
+ private void manageModelLibrary(NesModelHost.LibraryRequest request){
+  if(closed||compactWorkflowBusy()){showState("Сначала останови сеанс или заверши операцию");return;}
+  if(!(getApplication() instanceof NesModelHost host)||!host.nesLibraryAvailable())return;
+  showState("Операция с моделями выполняется. STOP доступен; новый агент ждёт завершения операции.");
+  java.lang.ref.WeakReference<NesEmulatorActivity> owner=new java.lang.ref.WeakReference<>(this);
+  host.manageNesLibrary(request,reply->{
+   var activity=owner.get();if(activity==null||activity.closed)return;
+   activity.refreshCompactModels();
+   if(reply.success()&&reply.model()!=null){
+    for(int i=0;i<activity.compactChoices.size();i++)if(activity.compactChoices.get(i).identity().equals(reply.model()))activity.compactModels.setSelection(i+1);
+   }
+   activity.showState(reply.message());
+   if(activity.resumed)new AlertDialog.Builder(activity).setTitle(reply.success()?"Модели":"Операция отклонена")
+    .setMessage(reply.message()).setPositiveButton("Закрыть",null).show();
+  });
  }
  private void requestCompactWorkflow(String mode,NesModelHost.ModelIdentity model){
   if(compactWorkflowBusy()){
@@ -1758,6 +1854,13 @@ public final class NesEmulatorActivity extends Activity {
  }
  @Override protected void onActivityResult(int req,int result,Intent data){
   super.onActivityResult(req,result,data);
+  if(req==CHOOSE_MODEL||req==CHOOSE_PROJECTOR){
+   var target=pendingProjector;String sha=pendingModelSha;pendingProjector=null;pendingModelSha="";
+   if(result!=RESULT_OK||data==null||data.getData()==null){showState("Импорт модели отменён");return;}
+   if(req==CHOOSE_PROJECTOR&&target==null){showState("STOP: утрачена целевая модель mmproj; выбери её снова");return;}
+   manageModelLibrary(new NesModelHost.LibraryRequest(req==CHOOSE_MODEL?NesModelHost.LibraryOperation.IMPORT_MODEL:
+    NesModelHost.LibraryOperation.IMPORT_PROJECTOR,target,data.getData().toString(),sha,null));return;
+  }
   if(req!=CHOOSE_ROM||result!=RESULT_OK||data==null||data.getData()==null)return;
   Uri uri=data.getData();
   String name=filename(uri);
@@ -1780,6 +1883,10 @@ public final class NesEmulatorActivity extends Activity {
    showState("ROM не запущен: "+exception.getClass().getSimpleName());
    Toast.makeText(this,"Неподдерживаемый или слишком большой файл игры",Toast.LENGTH_LONG).show();
   }
+ }
+ @Override protected void onSaveInstanceState(Bundle saved){
+  super.onSaveInstanceState(saved);saved.putString("modelImportSha",pendingModelSha);
+  if(pendingProjector!=null){saved.putString("projectorModelId",pendingProjector.id());saved.putString("projectorModelSha",pendingProjector.sha256());}
  }
  @Override protected void onPause(){
   resumed=false;autoplayBatchesRemaining=0;progressBusy=false;++progressGeneration;snapshotGate.cancel();exportTrial=null;

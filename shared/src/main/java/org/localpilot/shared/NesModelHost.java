@@ -46,6 +46,19 @@ public interface NesModelHost {
  default java.util.List<ModelChoice> nesModels(){return java.util.List.of();}
  default boolean selectNesModel(ModelIdentity identity){return false;}
 
+ /** File/catalog operations have no input authority and never start inference. */
+ enum LibraryOperation { IMPORT_MODEL, IMPORT_PROJECTOR, DOWNLOAD_PRESET, VERIFY, DELETE, UNBIND }
+ record LibraryRequest(LibraryOperation operation,ModelIdentity target,String uri,String sha256,String presetId){}
+ record LibraryReply(boolean success,ModelIdentity model,String message){}
+ record DownloadChoice(String id,String label){}
+ default boolean nesLibraryAvailable(){return false;}
+ default boolean nesLibraryBusy(){return false;}
+ default boolean nesModelRemovable(ModelIdentity model){return false;}
+ default java.util.List<DownloadChoice> nesDownloads(){return java.util.List.of();}
+ default void manageNesLibrary(LibraryRequest request,Consumer<LibraryReply> completed){
+  completed.accept(new LibraryReply(false,null,"Библиотека моделей недоступна в этой сборке"));
+ }
+
  static boolean current(HarnessCoordinator coordinator,Observation observation,long now){
   if(coordinator==null||observation==null)return false;
   HarnessCoordinator.Ticket t=observation.ticket();
