@@ -26,18 +26,51 @@ class EvidencePending(RuntimeError):
 
 
 def private_file(path, limit=100000):
-    result = subprocess.run(['adb', 'shell', '-T', 'run-as', ui.PACKAGE, 'cat', path],
-                            capture_output=True, timeout=15)
-    if result.returncode:
-        diagnostic=(result.stdout+result.stderr)[:600].decode('utf-8',errors='replace')
-        if 'cat:' in diagnostic and path in diagnostic and 'No such file or directory' in diagnostic:
-            raise EvidencePending('Generated homebrew evidence not written yet: '+path)
-        raise RuntimeError('Cannot read generated homebrew evidence: '+diagnostic[:300])
-    # shell v2 carries remote exit status; exec-out alone can report transport
-    # success while returning cat/run-as errors as if they were file bytes.
-    if not 0 < len(result.stdout) <= limit:
-        raise RuntimeError('Generated homebrew evidence exceeds its bound')
-    return result.stdout
+    # Android AVD can temporarily drop shell v2 during a large run-as read.
+    # A nonzero exit is NEVER evidence, even when stdout begins with NSV1.
+    # Bound the retry to 3 read-only probes; do not retry gameplay/actions.
+    for attempt in range(3):
+        try:
+            result = subprocess.run(
+                ['adb', 'shell', '-T', 'run-as', ui.PACKAGE, 'cat', path],
+                capture_output=True, timeout=15)
+        except subprocess.TimeoutExpired:
+            if attempt < 2:
+                time.sleep(1)
+                continue
+            raise EvidencePending('ADB_READ_TIMEOUT: device evidence not verified')
+        if result.returncode == 0:
+            # Do not accept an empty, truncated or oversized binary as saved proof.
+            if not 0 < len(result.stdout) <= limit:
+                raise RuntimeError('Generated homebrew evidence size outside bound')
+            return result.stdout
+        # Some ADB versions send remote cat/run-as errors to stdout with no
+        # stderr. Inspect only small printable text, never dump a binary ROM.
+        stderr = result.stderr.decode('utf-8', errors='replace')[-500:]
+        printable = (len(result.stdout) <= 500 and
+                     all(ch in b'\\t\\r\\n' or 32 <= ch <= 126
+                         for ch in result.stdout))
+        stdout_error = (result.stdout.decode('ascii', errors='replace')
+                        if not stderr and printable else '')
+        diagnostic = stderr or stdout_error
+        if ('No such file or directory' in diagnostic and
+            ('cat:' in diagnostic or path in diagnostic)):
+            raise EvidencePending('Generated homebrew evidence not written yet: ' + path)
+        interrupted = (any(marker in diagnostic.lower() for marker in (
+            'device offline', 'device not found', 'no devices/emulators',
+            'device disconnected', 'transport', 'closed', 'device unauthorized'))
+            or result.stdout.startswith(b'NSV1'))  # partial binary + failed ADB
+        if interrupted:
+            if attempt < 2:
+                time.sleep(1)
+                continue
+            raise EvidencePending('ADB_READ_TRANSPORT_PENDING: no verified bytes; '
+                                  'stdout_bytes=' + str(len(result.stdout)))
+        # Show stderr and size only; raw save blobs may contain private ROM/state.
+        raise RuntimeError('Unverified run-as evidence: adb_exit=' +
+                           str(result.returncode) + ' stderr=' + diagnostic[:250] +
+                           ' stdout_bytes=' + str(len(result.stdout)))
+    raise EvidencePending('ADB_READ_NOT_VERIFIED')
 
 
 def verified_manifest(manifest, active, candidate):
