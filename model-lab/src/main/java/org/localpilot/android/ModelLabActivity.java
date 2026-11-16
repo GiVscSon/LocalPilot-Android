@@ -128,7 +128,8 @@ public final class ModelLabActivity extends Activity {
      "ModelLab вычисляет BUTTON на CPU/Vulkan → тот же NES-controller исполняет шаг → "+
      "после ACK + свежего кадра и RAM фиксируется опыт. Текстовая модель не видит кадр "+
      "без подходящего mmproj. GGUF не обучается автоматически.");
-   button(col,"▶ NES · 4 действия назначенной GGUF (контроль каждого шага)",()->{
+   button(col,"▶ NES · 4 действия выбранной GGUF (контроль каждого шага)",()->{
+    if(!assignSelectedNesModel())return;
     Intent game=new Intent().setClassName(getPackageName(),"org.localpilot.gamelab.NesEmulatorActivity")
       .putExtra(HarnessDemoWorkflow.EXTRA_MODE,HarnessDemoWorkflow.GGUF_PLAY_4)
       .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP|Intent.FLAG_ACTIVITY_SINGLE_TOP);
@@ -193,6 +194,7 @@ public final class ModelLabActivity extends Activity {
   modelPicker=new Spinner(this);
   col.addView(modelPicker);
   modelStatus=line(col,"Одна активная модель. Остальные не загружены в RAM.");
+  if(inUnifiedApk())button(col,"Назначить выбранную GGUF для NES",this::assignSelectedNesModel);
   title(col,"Проверенный каталог · модели загружаются отдельно");
   line(col,"APK не содержит тяжёлых весов. Выбери модель: ссылка указывает на "+
     "закреплённую ревизию Hugging Face, размер и SHA-256 проверяются до установки. "+
@@ -240,25 +242,26 @@ public final class ModelLabActivity extends Activity {
    }else presetStatus.setText("Сейчас нет активной загрузки");
   });
   title(col,"Ускорение нейросети · CPU / Vulkan GPU");
-  line(col,"На POCO X7 Pro установлен Mali-G720. Vulkan экспериментален: "+
+  line(col,BuildConfig.VULKAN_COMPILED?"На POCO X7 Pro установлен Mali-G720. Vulkan экспериментален: "+
     "производительность и устойчивость нужно измерить. По умолчанию всегда CPU. "+
     "При тесте GPU держи ModelLab на экране: некоторые драйверы Mali "+
-    "могут зависать при переходе приложения в фон.");
+    "могут зависать при переходе приложения в фон.":
+    "Локальная генерация и управление NES в этой сборке выполняются на CPU.");
   computePicker=new Spinner(this);
   computePicker.setAdapter(new ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,
-    new String[]{"CPU · надёжный режим","Vulkan GPU · 8 слоёв (эксперимент)",
-      "Vulkan GPU · 16 слоёв (эксперимент)","Auto · GPU только после успешного сравнения"}));
+    BuildConfig.VULKAN_COMPILED?new String[]{"CPU · надёжный режим","Vulkan GPU · 8 слоёв (эксперимент)",
+      "Vulkan GPU · 16 слоёв (эксперимент)","Auto · GPU только после успешного сравнения"}:new String[]{"CPU · надёжный режим"}));
   col.addView(computePicker);
   computePicker.setSelection(0); // Explicit opt-in after every app start.
   computeStatus=line(col,BuildConfig.VULKAN_COMPILED?
     "В этом APK собран Vulkan. GPU не используется, пока не выбран пользователем.":
-    "Эта сборка только CPU. Нужен отдельный ModelLab Vulkan APK для теста GPU.");
+    "В этом APK доступен только CPU. GPU-режимы отключены.");
   button(col,"Проверить наличие Vulkan GPU",()->{
    if(engine.busy()){computeStatus.setText("Движок занят");return;}
    engine.probeGpu((answer,elapsed)->{
     if(!closed)computeStatus.setText(answer+" · "+elapsed+" мс");
    });
-  });
+  }).setEnabled(BuildConfig.VULKAN_COMPILED);
   button(col,"Сравнить CPU и GPU на одинаковом английском запросе",()->{
    ModelLabStore.Entry choice=selected();
    if(choice==null){computeStatus.setText("Сначала выбери GGUF");return;}
@@ -303,7 +306,7 @@ public final class ModelLabActivity extends Activity {
     });
     return "Модель проверена";
    },false);
-  });
+  }).setEnabled(BuildConfig.VULKAN_COMPILED);
   button(col,"Обновить список",this::refresh);
   button(col,"Удалить выбранную импортированную модель",()->{
    ModelLabStore.Entry e=selected();
@@ -426,6 +429,19 @@ public final class ModelLabActivity extends Activity {
   receiveNesIntent(getIntent());
  }
 
+ /** Bind the visible selection before opening NES; inference still validates files and tickets. */
+ private boolean assignSelectedNesModel(){
+  ModelLabStore.Entry entry=selected();
+  if(entry==null){status.setText("Сначала скачай или импортируй GGUF и выбери её в списке моделей");return false;}
+  if(engine.busy()){status.setText("Сначала заверши текущий запрос или нажми STOP");return false;}
+  try{
+   HarnessModelBinding.assign(this,entry);
+   getPreferences(MODE_PRIVATE).edit().putString("selected",entry.id).apply();
+   modelStatus.setText("Для NES назначена: "+entry.label+" · SHA "+entry.modelSha.substring(0,16)+
+     ". При запуске проверяются веса, ответ модели и свежесть кадра.");
+   return true;
+  }catch(RuntimeException invalid){status.setText("STOP: назначение модели не сохранено");return false;}
+ }
  /** One native GGUF runtime shared by manual/automatic NES proposals, no second agent. */
  private ModelLabStore.Entry boundForAutomaticNes(){
   if(!inUnifiedApk()||store==null)return null;
@@ -582,7 +598,8 @@ public final class ModelLabActivity extends Activity {
     " · GGUF inference: "+inference.inferenceCalls()+
     " / ответов "+inference.validReplies()+" / отказов "+inference.rejectedReplies()+
     "; последний "+inference.lastLatencyMs()+" мс, GPU-слоёв "+inference.lastGpuLayers()+
-    " · PPO replay: "+replay.batches()+" серий / "+replay.steps()+" настоящих переходов"+shared;
+    " · PPO replay: "+replay.batches()+" серий / "+replay.steps()+" настоящих переходов · сумма подтверждённых RAM-наград "+replay.rewardSum()+
+    ". PPO учится движению вправо; журнал визуальных изменений сам по себе награды не содержит."+shared;
   }catch(java.io.IOException damaged){return "STOP: общий журнал повреждён";}
  }
  private void cancelConsoleAgent(){
@@ -738,8 +755,8 @@ public final class ModelLabActivity extends Activity {
   ModelLabStore.Entry bound=inUnifiedApk()?
     HarnessModelBinding.resolve(this,store.list()):null;
   String selectedId=preferredModelId!=null?preferredModelId:
-    bound!=null?bound.id:selected()==null?getPreferences(MODE_PRIVATE)
-    .getString("selected","builtin:qwen35"):selected().id;
+    selected()!=null?selected().id:bound!=null?bound.id:getPreferences(MODE_PRIVATE)
+    .getString("selected","builtin:qwen35");
   preferredModelId=null;
   List<ModelLabStore.Entry> current=store.list();
   displayed.clear();displayed.addAll(current);
@@ -794,10 +811,11 @@ public final class ModelLabActivity extends Activity {
   text.setText(value);text.setTextSize(15);
   text.setPadding(0,10,0,14);parent.addView(text);return text;
  }
- private void button(LinearLayout parent,String name,Runnable click){
+ private Button button(LinearLayout parent,String name,Runnable click){
   Button b=new Button(this);b.setText(name);b.setOnClickListener(v->click.run());
   parent.addView(b,new LinearLayout.LayoutParams(
     ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT));
+  return b;
  }
  private String displayName(Uri uri){
   try(Cursor cursor=getContentResolver().query(uri,

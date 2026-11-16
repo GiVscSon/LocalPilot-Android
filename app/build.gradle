@@ -83,8 +83,8 @@ android {
   applicationId 'org.localpilot.android'
   minSdk 30
   targetSdk 35
-  versionCode 57
-  versionName '0.8.5'
+  versionCode 58
+  versionName '0.8.6'
   testInstrumentationRunner captureAcceptance ? 'org.localpilot.android.CaptureAcceptanceInstrumentation' : (harnessRuntimeAcceptance ? 'org.localpilot.android.HarnessRuntimeAcceptanceInstrumentation' : 'org.localpilot.android.PilotUiInstrumentation')
   buildConfigField 'boolean', 'EMBEDDED_GGUF', bundledGguf.toString()
   buildConfigField 'boolean', 'UNIFIED_MODELLAB', unifiedModelLab.toString()

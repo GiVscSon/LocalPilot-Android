@@ -307,6 +307,12 @@ public final class HarnessDashboardActivity extends Activity {
        ") → ("+goal.afterX()+","+goal.afterY()+") · модель "+goal.modelId());
    }
   }catch(IOException invalid){row(summary,"STOP: записи награды не прошли проверку.");return;}
+  try{
+   var replay=VerifiedPpoReplayStore.summary(new java.io.File(getFilesDir(),"localpilot_vault").toPath());
+   row(summary,"PPO: "+replay.batches()+" проверенных серий / "+replay.steps()+
+     " переходов · сумма RAM-наград "+replay.rewardSum()+
+     ". Это отдельный журнал; ниже показаны только визуальные переходы.");
+  }catch(IOException invalid){row(summary,"STOP: PPO replay не прошёл проверку.");}
   if(all.isEmpty()){row(summary,"Пока нет визуальных переходов. Новых оценок игры не предполагаем.");return;}
   int start=Math.max(0,all.size()-15);
   for(int i=all.size()-1;i>=start;i--){
@@ -316,7 +322,7 @@ public final class HarnessDashboardActivity extends Activity {
    row(entry,"Кадры "+e.beforeFrame()+" → "+e.afterFrame()+
      " · CRC "+Integer.toUnsignedString(e.beforeHash())+" → "+
      Integer.toUnsignedString(e.afterHash()));
-   row(entry,"Награда: НЕИЗВЕСТНА · веса не менялись");
+   row(entry,"Визуальная запись: награда не определяется по пикселям. RAM-награды и PPO-кандидат — в разделе «Обучение».");
   }
  }
  private void learning(){

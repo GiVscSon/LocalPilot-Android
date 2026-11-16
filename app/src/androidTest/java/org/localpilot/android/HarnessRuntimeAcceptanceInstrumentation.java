@@ -94,6 +94,13 @@ public final class HarnessRuntimeAcceptanceInstrumentation extends Instrumentati
    result.putString("evidence_json",evidence.toString());finish(pass?Activity.RESULT_OK:Activity.RESULT_CANCELED,result);
   }
  }
+ private static android.widget.Button findButton(android.view.View view,String text){
+  if(view instanceof android.widget.Button b&&text.contentEquals(b.getText()))return b;
+  if(view instanceof android.view.ViewGroup group)for(int i=0;i<group.getChildCount();i++){
+   android.widget.Button found=findButton(group.getChildAt(i),text);if(found!=null)return found;
+  }
+  return null;
+ }
  private static void require(boolean value,String message){if(!value)throw new AssertionError(message);}
  private void prepareModel(){
   Bundle result=new Bundle();JSONObject evidence=new JSONObject();boolean pass=false;
@@ -122,9 +129,28 @@ public final class HarnessRuntimeAcceptanceInstrumentation extends Instrumentati
     }finally{java.nio.file.Files.deleteIfExists(fixture.toPath());}
    }else imported=runtime.store().downloadPreset(preset,null);
    require(imported.modelSha.equals(preset.sha256)&&imported.modelBytes==preset.bytes,"Public fixture model identity mismatch");
-   runtime.store().modelFile(imported);HarnessModelBinding.assign(app,imported);
+   runtime.store().modelFile(imported);
+   HarnessModelBinding.clear(app);
+   Activity screen=startActivitySync(new Intent(getTargetContext(),ModelLabActivity.class)
+     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+   try{
+    runOnMainSync(()->{
+     try{
+      Field picker=ModelLabActivity.class.getDeclaredField("computePicker");picker.setAccessible(true);
+      android.widget.Spinner modes=(android.widget.Spinner)picker.get(screen);
+      require(BuildConfig.VULKAN_COMPILED||modes.getCount()==1,"CPU build exposes unusable GPU modes");
+      android.widget.Button assign=findButton(screen.getWindow().getDecorView(),"Назначить выбранную GGUF для NES");
+      require(assign!=null&&assign.performClick(),"Visible GGUF assignment control unavailable");
+     }catch(ReflectiveOperationException failure){throw new AssertionError(failure);}
+    });
+    ModelLabStore.Entry bound=HarnessModelBinding.resolve(app,runtime.store().list());
+    require(bound!=null&&bound.id.equals(imported.id)&&bound.modelSha.equals(imported.modelSha),
+      "ModelLab visible selection was not assigned to the shared NES runtime");
+   }finally{runOnMainSync(screen::finish);}
    evidence.put("result","MODEL_IMPORT_PASS_NOT_INFERENCE").put("modelSha256",imported.modelSha)
     .put("modelId",imported.id).put("modelBytes",imported.modelBytes).put("nativeInferencePerformed",false)
+    .put("selectionAssignedThroughVisibleModelLabButton",true)
+    .put("cpuBuildRejectsUnavailableGpuModes",true)
     .put("source","PUBLIC_PINNED_GGUF_CI_FIXTURE")
     .put("transport",localFixture?"HOST_VERIFIED_PRIVATE_FIXTURE":"ANDROID_HTTPS")
     .put("physicalDevice",false).put("releaseReady",false);
