@@ -2,6 +2,13 @@
 
 **Status:** coordination ledger, not a release certificate. **Updated:** 2026-11-15. **Canonical implementation:** current GitHub `main`, then separately reviewed changes rebased onto its latest SHA. This file must be updated after every accepted integration; a conversation, screenshot, or draft PR never overrides verified repository state.
 
+**2026-11-16 update:** one integration lane is Draft [PR #175](https://github.com/GiVscSon/LocalPilot-Android/pull/175),
+combining current #170 runtime, #174 bounded APK audit and #168 sustained256
+evidence over the existing implementation. [Source-bound audit and continuation](LOCALPILOT-HARNESS-INTEGRATION-20261116.md)
+records verified initial CI and compatible20-pair/median G5 adaptation. The latest
+GitHub main/head and final CI must still be checked live; neither this entry nor
+old six-pair `NO_PROVEN_IMPROVEMENT` is proof of promotion or a release.
+
 ## 1. One project, one product
 
 One offline-first Android ARM64 APK (`org.localpilot.android` for final release) containing the actual GameLab/NES, ModelLab, local models, agents and training, coordinated by **the existing** `HarnessCoordinator`. Optional downloads are user-initiated. A test-only application ID and debug signer are not a production release. Preserve STOP, one ActionGate/InputPermit owner, epoch/TTL, legalMask, fail-closed behavior and visual verification; Android ACK is not proof of gameplay. No duplicate JNI, second emulator, duplicate trainer, or decorative-only screens.

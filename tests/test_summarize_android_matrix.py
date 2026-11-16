@@ -30,8 +30,8 @@ def populate(root):
                                     'evaluation': 'NOT_RUN', 'policyBeforeSha256': POLICY_BEFORE,
                                     'policyAfterSha256': POLICY_AFTER, 'apkSha256': APK},
                 matrix.REPORTS[2]: {'sourceSha': SHA, 'api': api, 'releaseReady': False,
-                                    'result': 'NO_PROVEN_IMPROVEMENT', 'scenarioCount': 6,
-                                    'pairedScenarios': [{'scenario': 'smoke'+str(i)} for i in range(6)],
+                                    'result': 'NO_PROVEN_IMPROVEMENT', 'scenarioCount': 20,
+                                    'pairedScenarios': [{'scenario': 'holdout'+str(i)} for i in range(20)],
                                     'physicalAndroidVerified': False,
                                     'promotion': 'BLOCKED_UNTIL_DEVICE_HOLDOUT_AND_ROLLBACK',
                                     'androidWeightsAndManifestUnchanged': True,
@@ -96,6 +96,15 @@ class MatrixEvidenceTest(unittest.TestCase):
         file = first / matrix.REPORTS[2]
         row = json.loads(file.read_text())
         row['pairedScenarios'] = row['pairedScenarios'][:3]
+        file.write_text(json.dumps(row))
+        self.assertEqual('FAIL', matrix.inspect(self.root, SHA)['result'])
+
+    def test_nineteen_complete_pairs_cannot_pass_twenty_pair_gate(self):
+        first = next(iter(self.root.iterdir()))
+        file = first / matrix.REPORTS[2]
+        row = json.loads(file.read_text())
+        row['scenarioCount'] = 19
+        row['pairedScenarios'] = row['pairedScenarios'][:19]
         file.write_text(json.dumps(row))
         self.assertEqual('FAIL', matrix.inspect(self.root, SHA)['result'])
 

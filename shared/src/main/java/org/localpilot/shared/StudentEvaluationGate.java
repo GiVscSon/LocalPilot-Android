@@ -20,7 +20,7 @@ import java.util.Set;
  */
 public final class StudentEvaluationGate {
  private StudentEvaluationGate() {}
- public static final int MIN_SCENARIOS=5, MIN_STEPS_PER_ARM=4;
+ public static final int MIN_SCENARIOS=20, MIN_STEPS_PER_ARM=4;
  public static final String TASK="builtin-homebrew-right-progress-v1";
  /** A concrete EnvironmentAdapter must verify game-specific evidence before
   * returning a numeric reward. Shared Harness has no dependency on GameLab. */
@@ -50,6 +50,7 @@ public final class StudentEvaluationGate {
  ) {}
  public record Report(boolean accepted,Reason reason,int scenarios,
                       float activeMeanReturn,float candidateMeanReturn,
+                      float activeMedianReturn,float candidateMedianReturn,
                       int candidateWins,String activeSha256,
                       String candidateSha256,List<Scenario> paired) {
   public Report {
@@ -64,7 +65,7 @@ public final class StudentEvaluationGate {
  private static Report reject(Reason reason,int scenarios,float a,float b,
                               int wins,String active,String candidate,
                               List<Scenario> pairs){
-  return new Report(false,reason,scenarios,a,b,wins,active,candidate,pairs);
+  return new Report(false,reason,scenarios,a,b,0,0,wins,active,candidate,pairs);
  }
  /** Only SHA-verified, separately reset, reward-bearing real emulator traces
   * may establish a holdout verdict. The given training X-values were observed
@@ -164,12 +165,21 @@ public final class StudentEvaluationGate {
      results[0],results[1],left.size(),right.size()));
   }
   float base=activeTotal/scenarios.size(),proposed=candidateTotal/scenarios.size();
-  // Preset pilot gate: positive task progress and >=60% matched scenarios
-  // improve, candidate mean > active by 0.1 reward. This is not statistical
-  // evidence of general performance outside the pinned homebrew task.
+  // Twenty disjoint paired resets; a few large returns cannot substitute for
+  // median progress. Preserve the mean and >=60% pair-win requirements too.
+  // This is evidence only for the pinned homebrew, not generalization or release.
+  float[] oldReturns=new float[scenarios.size()],newReturns=new float[scenarios.size()];
+  for(int i=0;i<scenarios.size();i++){
+   oldReturns[i]=scenarios.get(i).activeReturn();newReturns[i]=scenarios.get(i).candidateReturn();
+  }
+  java.util.Arrays.sort(oldReturns);java.util.Arrays.sort(newReturns);
+  int middle=scenarios.size()/2;
+  float oldMedian=(oldReturns[(scenarios.size()-1)/2]+oldReturns[middle])/2;
+  float newMedian=(newReturns[(scenarios.size()-1)/2]+newReturns[middle])/2;
   boolean improved=proposed>=base+0.10f&&proposed>0&&
+      newMedian>oldMedian+Math.max(0.05f,Math.abs(oldMedian)*0.05f)&&
       wins*5>=scenarios.size()*3;
   return new Report(improved,improved?Reason.ACCEPTED:Reason.NO_PROVEN_IMPROVEMENT,
-                    scenarios.size(),base,proposed,wins,activeSha,candidateSha,scenarios);
+                    scenarios.size(),base,proposed,oldMedian,newMedian,wins,activeSha,candidateSha,scenarios);
  }
 }

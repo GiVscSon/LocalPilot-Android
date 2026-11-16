@@ -46,8 +46,9 @@ const scenarios=[
 ];
 // Preset fallback recipes, never chosen by reward or whether the candidate wins.
 // Actual on-device exploration can overlap a fixed reset. Only replay leakage
-// and duplicate initial X can exclude a recipe; select the first six valid pairs.
-for(const full of [1,2,3])for(const warm of [4,6,10,12])for(const dir of ["LEFT","RIGHT"])
+// and duplicate initial X can exclude a recipe; select the first 20 valid pairs.
+// Every recipe executes the real core; no reset is selected by its return.
+for(const full of [0,1,2,3])for(const warm of [4,5,6,7,8,9,10,11,12])for(const dir of ["LEFT","RIGHT"])
  scenarios.push({id:dir.toLowerCase()+"-"+full+"-"+warm,dir,full,warm});
 function runScenario(scenario,arm,weights){
  const events=[];
@@ -133,7 +134,7 @@ function runScenario(scenario,arm,weights){
  }
  return {initial,rows,final:env.window.retroHomebrewState()};
 }
-const lines=[],selection={protocol:"first-six-preset-pairs-excluding-training-X-v1",selected:[],excluded:[]};
+const lines=[],selection={protocol:"first-20-preset-pairs-excluding-training-X-v2",requiredPairs:20,selected:[],excluded:[]};
 const seenX=new Set();let pairs=0,resets=0;
 for(const scenario of scenarios){
  const baseline=runScenario(scenario,"ACTIVE",activeWeights);
@@ -153,9 +154,9 @@ for(const scenario of scenarios){
  }
  seenX.add(baseline.initial.x);selection.selected.push({id:scenario.id,initialX:baseline.initial.x});
  lines.push(...baseline.rows,...proposed.rows);pairs++;
- if(pairs===6)break;
+ if(pairs===20)break;
 }
-assert.ok(pairs>=5,"insufficient independently reset holdout scenarios");
+assert.ok(pairs>=20,"insufficient independently reset holdout scenarios");
 fs.mkdirSync(path.dirname(output),{recursive:true});
 fs.writeFileSync(output,lines.join("\n")+"\n");
 fs.writeFileSync(output+".selection.json",JSON.stringify({...selection,independentResets:resets},null,2)+"\n");

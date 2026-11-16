@@ -19,6 +19,8 @@ public final class StudentEvaluationGateTest {
   return policy;
  }
  private static final String ROM="a".repeat(64);
+ private static final int[] STARTS={24,32,40,48,56,64,72,80,88,96,
+   160,168,176,184,192,200,208,216,224,232};
  private static Float fixtureReward(StudentEvaluationGate.Step step){
   if(step.frameAfter()-step.frameBefore()!=16||
      step.xBefore()<0||step.xBefore()>255||
@@ -32,7 +34,7 @@ public final class StudentEvaluationGateTest {
 
  private static List<StudentEvaluationGate.Step> rows(StudentPolicyNet active,
    StudentPolicyNet candidate) {
-  return rows(active,candidate,new int[]{40,64,96,160,200});
+  return rows(active,candidate,STARTS);
  }
  private static List<StudentEvaluationGate.Step> rows(StudentPolicyNet active,
    StudentPolicyNet candidate,int[] starts) {
@@ -67,15 +69,30 @@ public final class StudentEvaluationGateTest {
  public static void main(String[] args){
   StudentPolicyNet left=forced(0),right=forced(1);
   var normal=rows(left,right);
+  var insufficient=rows(left,right,java.util.Arrays.copyOf(STARTS,19));
+  check(StudentEvaluationGate.evaluate(left,right,ROM,Set.of(128),insufficient,
+    StudentEvaluationGateTest::fixtureReward).reason()==StudentEvaluationGate.Reason.INSUFFICIENT_SCENARIOS,
+    "19 winning independent pairs must not satisfy the required 20-pair gate");
+  int[] edgeStarts=STARTS.clone();edgeStarts[0]=0;
   check(StudentEvaluationGate.evaluate(left,right,ROM,Set.of(128),
-    rows(left,right,new int[]{0,64,96,160,200}),StudentEvaluationGateTest::fixtureReward).reason()
+    rows(left,right,edgeStarts),StudentEvaluationGateTest::fixtureReward).reason()
     ==StudentEvaluationGate.Reason.ACTION_MISMATCH,"unmasked edge action rejected before rewarding wrap");
   var report=StudentEvaluationGate.evaluate(left,right,ROM,Set.of(128),normal,StudentEvaluationGateTest::fixtureReward);
   check(report.accepted()&&report.reason()==StudentEvaluationGate.Reason.ACCEPTED,
     "independent matched fixture with task progress passes");
-  check(report.scenarios()==5&&report.candidateWins()==5,"paired scenarios count");
+  check(report.scenarios()==20&&report.candidateWins()==20,"paired scenarios count");
   check(report.candidateMeanReturn()>report.activeMeanReturn(),"actual arithmetic improvement");
-  check(report.paired().size()==5,"individual scenario evidence preserved");
+  check(report.activeMedianReturn()==-0.25f&&report.candidateMedianReturn()==0.25f,
+    "even-sized paired evaluation reports measured medians");
+  var outlier=StudentEvaluationGate.evaluate(left,right,ROM,Set.of(128),normal,step->{
+   if(step.arm()==StudentEvaluationGate.Arm.ACTIVE)return 0f;
+   int scenario=Integer.parseInt(step.scenarioId().substring("independent-".length()));
+   return scenario<8?-0.0025f:scenario==19?1f:0.0025f;
+  });
+  check(outlier.candidateMeanReturn()>0.1f&&outlier.candidateWins()==12
+    &&!outlier.accepted()&&outlier.reason()==StudentEvaluationGate.Reason.NO_PROVEN_IMPROVEMENT,
+    "one large outlier cannot replace material median improvement");
+  check(report.paired().size()==20,"individual scenario evidence preserved");
   check(left.sha256().equals(report.activeSha256()),"baseline SHA tied to report");
   check(right.sha256().equals(report.candidateSha256()),"candidate SHA tied to report");
   var first=normal.get(0);
@@ -134,7 +151,7 @@ public final class StudentEvaluationGateTest {
    report.paired().clear();
    throw new AssertionError("Report pair list mutable");
   }catch(UnsupportedOperationException expected){checks++;}
-  check(StudentEvaluationGate.MIN_SCENARIOS==5,"minimum evidence independent resets");
+  check(StudentEvaluationGate.MIN_SCENARIOS==20,"minimum evidence independent resets");
   System.out.println("STUDENT_EVALUATION_GATE_FIXTURE_PASS checks="+checks+
     " source=SYNTHETIC_CONTRACT_ONLY realNesHoldout=false");
  }

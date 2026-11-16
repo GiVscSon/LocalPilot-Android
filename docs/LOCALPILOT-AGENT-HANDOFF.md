@@ -1,5 +1,12 @@
 # LocalPilot · handoff for fresh ChatGPT / Codex / Gemini agents
 
+**2026-11-16 integration continuation:** [PR #175 evidence and next gate](LOCALPILOT-HARNESS-INTEGRATION-20261116.md).
+Initial head23288d8 / actual tested merge1cb915e passed17 workflows, including
+NES256, real GGUF and six UI profiles. Current main32838fde is incorporated
+without dropping Android QA tooling. The existing evaluation gate is being
+strengthened to20 disjoint pairs and material median improvement; read the
+new head's CI in PR #175/#159 before accepting it. No main merge or release.
+
 **Live index:** [Control Tower #159](https://github.com/GiVscSon/LocalPilot-Android/issues/159), including ONE continuously updated `github-actions[bot]` CI status comment. **Implementation authority:** [main](https://github.com/GiVscSon/LocalPilot-Android/tree/main), not the latest chat or draft PR. **Architecture:** [single source of truth](LOCALPILOT-SINGLE-SOURCE-OF-TRUTH.md), [staged acceptance](LOCALPILOT-CONTROL-TOWER-STAGES.md), [RFC](LOCALPILOT-HARNESS-RFC-v1.md).
 
 ## First five minutes of a fresh session
