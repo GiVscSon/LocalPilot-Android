@@ -36,6 +36,13 @@ def decode(raw):
         raise RuntimeError('Saved ROM/core identity mismatch')
     if state['schema']!='localpilot-jsnes-save-v1' or state['frame']!=frame or state['hash']!=pixel or frame<15 or pixel==0 or actions<0:
         raise RuntimeError('Saved runtime frame identity mismatch')
+    pixels=state.get('machine',{}).get('ppu',{}).get('buffer')
+    if not isinstance(pixels,list) or len(pixels)!=256*240 or any(type(v) is not int or not 0<=v<=0xffffff for v in pixels):
+        raise RuntimeError('Saved PPU framebuffer invalid')
+    fingerprint=2166136261
+    for value in pixels[::241]:fingerprint=((fingerprint^value)*16777619)&0xffffffff
+    if fingerprint>=0x80000000:fingerprint-=0x100000000
+    if fingerprint!=pixel:raise RuntimeError('Saved PPU framebuffer fingerprint mismatch')
     return dict(frame=frame,hash=pixel,actions=actions,policy=policy,romSha256=rom_hash.hex(),saveSha256=hashlib.sha256(raw).hexdigest())
 
 

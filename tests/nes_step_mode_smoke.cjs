@@ -6,18 +6,21 @@ if(!core||!rom)throw Error("Usage: CORE_JS ROM_NES");
 const jsnes=require(path.resolve(core));
 const {FrameHeldButtons}=require("../game-lab/src/main/assets/nes/latched-buttons.js");
 const html=fs.readFileSync("game-lab/src/main/assets/nes/index.html","utf8");
-let timer=0,lease=null,serial=0,revokeAt=null,pixels=null;
+let timer=0,lease=null,serial=0,revokeAt=null,pixels=null,paints=0;
 const timers=new Map(),events=[];
 const context={jsnes,FrameHeldButtons,Uint8ClampedArray,Float32Array,
  atob(s){return Buffer.from(s,"base64").toString("latin1");},
  setInterval(fn){timers.set(++timer,fn);return timer;},clearInterval(id){timers.delete(id);},
  addEventListener(){},document:{addEventListener(){},getElementById(id){return id==="screen"?{
   getContext(){return {createImageData(){return {data:new Uint8ClampedArray(256*240*4)};},
-   putImageData(image){pixels=Uint8Array.from(image.data);if(revokeAt===metrics().frames+1){lease=null;revokeAt=null;}}
+   putImageData(image){pixels=Uint8Array.from(image.data);paints++;}
   };}
  }:{textContent:""};}},
  GameLabBridge:{
-  allowStep(session,nonce,frames){return lease!==null&&session===lease.session&&nonce===lease.nonce&&frames===lease.frames;},
+  allowStep(session,nonce,frames){
+   if(revokeAt!==null&&metrics().frames>=revokeAt){lease=null;revokeAt=null;}
+   return lease!==null&&session===lease.session&&nonce===lease.nonce&&frames===lease.frames;
+  },
   onStatus(){},onStepReady(...a){events.push(["ready",...a]);},
   onFrame(...a){events.push(["frame",...a]);},onAgentAction(...a){events.push(["realtime",...a]);},
   onStepAction(...a){events.push(["ack",...a]);},onHomebrewTask(...a){events.push(["goal",...a]);},
@@ -32,6 +35,7 @@ function tick(n){for(let i=0;i<n;i++)for(const fn of [...timers.values()])fn();}
 function grant(frames){lease={session,frames,nonce:String(++serial).padStart(22,"n")};return {...lease};}
 function step(button,frames){return context.retroAiStep(button,frames,grant(frames).nonce);}
 assert.equal(context.retroLoadRom(encoded,false,true,session),true);tick(45);
+assert.equal(paints,45,"realtime still paints each genuine frame");
 assert.equal(context.retroEnterStepMode(),true);
 const initial=metrics().frames,initialPixels=crypto.createHash("sha256").update(pixels).digest("hex");
 tick(3);assert.equal(metrics().frames,initial,"STEP_MODE freezes timer");
@@ -40,7 +44,14 @@ assert.equal(step("START",16),false,"legal mask excludes Start");
 assert.equal(step("RIGHT",15),false,"arbitrary duration rejected");
 for(const frames of [16,4,8]){
  const before=metrics().frames;
+ const beforePaints=paints;
  assert.equal(step("RIGHT",frames),true);
+ assert.equal(paints-beforePaints,1,"one final framebuffer upload per bounded step");
+ const ppu=vm.runInContext("nes.ppu.buffer",page);
+ for(let i=0;i<ppu.length;i++){
+  assert.equal(pixels[i*4],(ppu[i]>>>16)&255);assert.equal(pixels[i*4+1],(ppu[i]>>>8)&255);
+  assert.equal(pixels[i*4+2],ppu[i]&255);assert.equal(pixels[i*4+3],255);
+ }
  assert.equal(metrics().frames-before,frames,"exact real core frame budget");
  assert.equal(held(),0,"release precedes evidence");
  const task=events.filter(e=>e[0]==="goal").at(-1);
