@@ -323,9 +323,30 @@ public final class NesEmulatorActivity extends Activity {
    Button modelTools=new Button(this);modelTools.setText("Импорт и проверка моделей");
    modelTools.setOnClickListener(v->startActivity(new Intent().setClassName(getPackageName(),"org.localpilot.android.ModelLabActivity")));
    actionPanel.addView(modelTools);
-   Button journal=new Button(this);journal.setText("Журнал и диагностика");
-   journal.setOnClickListener(v->startActivity(new Intent().setClassName(getPackageName(),"org.localpilot.android.HarnessDashboardActivity")));
-   actionPanel.addView(journal);
+   Button journal=new Button(this);journal.setText("Состояние и опыт");
+   TextView evidence=new TextView(this);evidence.setTextColor(HubContract.TEXT);
+   evidence.setVisibility(View.GONE);
+   journal.setOnClickListener(v->{
+    if(evidence.getVisibility()==View.VISIBLE){evidence.setVisibility(View.GONE);return;}
+    evidence.setVisibility(View.VISIBLE);
+    var snapshot=harness.snapshot();
+    String controller="Кадр "+frames+" · "+snapshot.mode()+" · владелец "+snapshot.owner()+
+      "\nОжидание модели: "+snapshot.waiting()+" · выполняется действие: "+snapshot.actionInFlight()+
+      "\nПоследний STOP: "+snapshot.lastStopReason();
+    evidence.setText(controller+"\nПроверяю сохранённый опыт…");
+    progressIo.execute(()->{
+     String history;
+     try{
+      var replay=VerifiedPpoReplayStore.summary(progressVault());
+      history="\nPPO: "+replay.steps()+" пригодных переходов · "+replay.batches()+" серий"+
+       "\nИсточник награды: проверенная RAM учебного ROM · сумма "+replay.rewardSum()+
+       "\nНезависимая оценка и активация кандидата в приложении пока недоступны.";
+     }catch(IOException|RuntimeException invalid){history="\nSTOP: журнал опыта не прошёл проверку";}
+     String result=controller+history;
+     runOnUiThread(()->{if(!closed)evidence.setText(result);});
+    });
+   });
+   actionPanel.addView(journal);actionPanel.addView(evidence);
   }
   LinearLayout compact=new LinearLayout(this);compact.setOrientation(LinearLayout.VERTICAL);
   LinearLayout selectionRow=new LinearLayout(this);
