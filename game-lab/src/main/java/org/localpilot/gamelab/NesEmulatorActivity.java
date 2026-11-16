@@ -67,6 +67,7 @@ public final class NesEmulatorActivity extends Activity {
  private static final String[] GAMEPAD={"UP","LEFT","DOWN","RIGHT","SELECT","START","B","A"};
  private WebView web;
  private TextView state;
+ private TextView learningResult;
  private Button demoButton,aButton,bButton,shareTrial,cpuAgentButton,cpuBatchButton,stopCpuButton,aiObserveButton,studentStepButton,studentBatchButton;
  private CheckBox exploratoryStopSwitch;
  private final NesExperimentPolicy experiment=new NesExperimentPolicy();
@@ -161,6 +162,9 @@ public final class NesEmulatorActivity extends Activity {
   showState("Загрузи свой .nes или скачай проверенный homebrew. Эмуляция работает офлайн, сеть нужна только для загрузки файла.");
   state.setMaxLines(3);state.setEllipsize(android.text.TextUtils.TruncateAt.END);
   root.addView(state,new LinearLayout.LayoutParams(-1,(int)(64*getResources().getDisplayMetrics().density)));
+  learningResult=new TextView(this);learningResult.setTextColor(HubContract.TEXT);
+  learningResult.setText("Учебный ROM: квадрат — управляемый объект. PPO учится движению вправо по RAM; импортированные игры требуют своих адаптеров награды.");
+  root.addView(learningResult);
   // Fixed-height scrolling controls preserve the real NES viewport on API
   // 30/35/36, while leaving the STOP button and physical controller visible.
   android.widget.ScrollView actionScroll=new android.widget.ScrollView(this);
@@ -1248,7 +1252,7 @@ public final class NesEmulatorActivity extends Activity {
          harness.stopRevision()!=revision)return;
       studentRollout.clear();
       studentTraining=null;
-      showState("NES: 16 проверенных шагов сохранены · replay SHA "+
+      learningResult.setText("NES: 16 проверенных шагов сохранены · replay SHA "+
         receipt.sha256().substring(0,12)+" · ROM-RAM reward "+receipt.totalReward()+
         ". "+trainingNote+
         " · ОЦЕНКА НЕ ПРОЙДЕНА · активные веса НЕ ЗАМЕНЕНЫ");
