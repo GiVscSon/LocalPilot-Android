@@ -15,6 +15,7 @@ from pathlib import Path
 from zipfile import BadZipFile, ZipFile
 
 SOURCE_ENTRY = "assets/localpilot-source.json"
+MAX_SOURCE_BYTES = 64 * 1024  # bounded JSON metadata even when ZIP compressed
 REQUIRED_NES = (
     "assets/nes/index.html",
     "assets/nes/jsnes.min.js",
@@ -84,8 +85,14 @@ def inspect_apk(
                     raise AuditError("REQUIRED_ENTRY_EMPTY:" + name)
             if SOURCE_ENTRY not in by_name:
                 raise AuditError("BUILD_SOURCE_PROVENANCE_MISSING")
+            if by_name[SOURCE_ENTRY].file_size > MAX_SOURCE_BYTES:
+                raise AuditError("BUILD_SOURCE_PROVENANCE_TOO_LARGE")
             try:
-                source = json.loads(apk.read(SOURCE_ENTRY))
+                with apk.open(SOURCE_ENTRY) as stream:
+                    source_bytes = stream.read(MAX_SOURCE_BYTES + 1)
+                if len(source_bytes) > MAX_SOURCE_BYTES:
+                    raise AuditError("BUILD_SOURCE_PROVENANCE_TOO_LARGE")
+                source = json.loads(source_bytes)
             except (ValueError, UnicodeDecodeError):
                 raise AuditError("BUILD_SOURCE_PROVENANCE_INVALID") from None
             if not isinstance(source, dict) or source.get("schema") != "localpilot-source-v1":
@@ -122,7 +129,11 @@ def inspect_apk(
             for name in names:
                 if not name.startswith("lib/") or not name.endswith(".so"):
                     continue
-                if by_name[name].file_size < 4 or apk.read(name)[:4] != b"\x7fELF":
+                if by_name[name].file_size < 4:
+                    raise AuditError("INVALID_NATIVE_LIBRARY:" + name)
+                with apk.open(name) as stream:
+                    magic = stream.read(4)
+                if magic != b"\x7fELF":
                     raise AuditError("INVALID_NATIVE_LIBRARY:" + name)
                 native_libs.append(name)
             # A ZIP index can prove packaging, not the absence of runtime
