@@ -92,6 +92,27 @@ class ApkAuditTest(unittest.TestCase):
         with self.assertRaisesRegex(AuditError, "BUILD_SOURCE_SCHEMA_INVALID"):
             inspect_apk(self.make_apk(e))
 
+    def test_reject_oversized_provenance(self):
+        e = dict(BASE)
+        e["assets/localpilot-source.json"] = (
+            json.dumps({"schema": "localpilot-source-v1", "sourceSha": SHA,
+                        "padding": "x" * (64 * 1024)}).encode("utf-8")
+        )
+        with self.assertRaisesRegex(AuditError, "BUILD_SOURCE_PROVENANCE_TOO_LARGE"):
+            inspect_apk(self.make_apk(e))
+
+    def test_large_native_library_uses_header_only(self):
+        # Header-only ZIP check is not ELF/JNI validation.
+        e = dict(BASE, **{
+            "lib/arm64-v8a/liblocalpilot_embedded.so":
+                b"\x7fELF" + b"x" * (2 * 1024 * 1024)
+        })
+        result = inspect_apk(self.make_apk(e))
+        self.assertEqual(
+            ["lib/arm64-v8a/liblocalpilot_embedded.so"],
+            result["nativeLibraries"],
+        )
+
     def test_reject_duplicate_member(self):
         with self.assertRaisesRegex(AuditError, "DUPLICATE_ZIP_MEMBER"):
             inspect_apk(self.make_apk(duplicates=["classes.dex"]))
