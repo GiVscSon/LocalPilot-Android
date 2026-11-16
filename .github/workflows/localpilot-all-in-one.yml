@@ -137,6 +137,7 @@ jobs:
             --expected-source-sha "$SOURCE_SHA" \
             --report build/all-in-one/APK-PACKAGING.json
           python3 tools/verify_g0_chain.py --apk "$APK" \
+            --apksigner "$ANDROID_HOME/build-tools/35.0.0/apksigner" \
             --source-sha "$SOURCE_SHA" \
             --packaging build/all-in-one/APK-PACKAGING.json \
             --signed-manifest build/all-in-one/TEST-ONLY-MANIFEST.json \
@@ -149,6 +150,28 @@ jobs:
           cp "$APK" dist/all-in-one/LocalPilot-All-in-One-TEST-ONLY.apk
           cp build/all-in-one/TEST-ONLY-MANIFEST.json dist/all-in-one/
           (cd dist/all-in-one && sha256sum LocalPilot-All-in-One-TEST-ONLY.apk TEST-ONLY-MANIFEST.json APK-PACKAGING.json G0-CANDIDATE-EVIDENCE.json ELF16K.json > SHA256SUMS.txt)
+      - name: Reject a false signer receipt for the actual signed APK
+        run: |
+          python3 - <<'PYCODE'
+          import json, os, pathlib, subprocess, tempfile
+          root = pathlib.Path("build/all-in-one")
+          claimed = json.loads((root / "TEST-ONLY-MANIFEST.json").read_text())
+          claimed["debugSignerSha256"] = "0" * 64 if claimed["debugSignerSha256"] != "0" * 64 else "f" * 64
+          with tempfile.TemporaryDirectory(prefix="g0-wrong-signer-") as temporary:
+              folder = pathlib.Path(temporary)
+              receipt = folder / "wrong-signer.json"
+              receipt.write_text(json.dumps(claimed))
+              output = folder / "must-not-pass.json"
+              command = ["python3", "tools/verify_g0_chain.py", "--apk", "app/build/outputs/apk/debug/app-debug.apk",
+                         "--apksigner", os.environ["ANDROID_HOME"] + "/build-tools/35.0.0/apksigner",
+                         "--source-sha", subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip(),
+                         "--packaging", str(root / "APK-PACKAGING.json"), "--signed-manifest", str(receipt),
+                         "--elf", str(root / "ELF16K.json"), "--output", str(output)]
+              result = subprocess.run(command, capture_output=True, text=True, timeout=90)
+              assert result.returncode == 1 and "G0_APK_SIGNER_DOES_NOT_MATCH_SDK" in result.stderr, result.stdout + result.stderr
+              assert not output.exists(), "A false certificate receipt created a PASS report"
+          print("G0_ACTUAL_SIGNED_APK_FALSE_SIGNER_REJECTED")
+          PYCODE
       - name: Upload candidate only, NEVER publish as stable
         uses: actions/upload-artifact@v4
         with:
