@@ -1,0 +1,480 @@
+{
+  "headRefOid": "d09d21e438498b2754ce634d553d9da9a05ddda9",
+  "mergeStateStatus": "UNSTABLE",
+  "potentialMergeCommit": {
+    "oid": "1413aadc7760459d9e1fc5311b51f5e7cfc6a927"
+  },
+  "state": "OPEN",
+  "statusCheckRollup": [
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-15T11:39:00Z",
+      "conclusion": "CANCELLED",
+      "detailsUrl": "https://github.com/GiVscSon/LocalPilot-Android/actions/runs/43709936069/job/132799091147",
+      "name": "device (30, default)",
+      "startedAt": "2026-11-15T11:38:58Z",
+      "status": "COMPLETED",
+      "workflowName": "Android device acceptance"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-15T11:39:01Z",
+      "conclusion": "CANCELLED",
+      "detailsUrl": "https://github.com/GiVscSon/LocalPilot-Android/actions/runs/43709936075/job/132799091166",
+      "name": "build",
+      "startedAt": "2026-11-15T11:38:58Z",
+      "status": "COMPLETED",
+      "workflowName": "Build Android debug APK"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-15T11:39:00Z",
+      "conclusion": "CANCELLED",
+      "detailsUrl": "https://github.com/GiVscSon/LocalPilot-Android/actions/runs/43709936063/job/132799090905",
+      "name": "nes",
+      "startedAt": "2026-11-15T11:38:58Z",
+      "status": "COMPLETED",
+      "workflowName": "GameLab NES CPU/PPU runtime"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-15T11:45:47Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/GiVscSon/LocalPilot-Android/actions/runs/43709939245/job/132799110738",
+      "name": "device (30, default)",
+      "startedAt": "2026-11-15T11:39:16Z",
+      "status": "COMPLETED",
+      "workflowName": "Android device acceptance"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-15T11:42:45Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/GiVscSon/LocalPilot-Android/actions/runs/43709939246/job/132799103342",
+      "name": "build",
+      "startedAt": "2026-11-15T11:39:13Z",
+      "status": "COMPLETED",
+      "workflowName": "Build Android debug APK"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-15T11:39:58Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/GiVscSon/LocalPilot-Android/actions/runs/43709939219/job/132799102860",
+      "name": "nes",
+      "startedAt": "2026-11-15T11:39:09Z",
+      "status": "COMPLETED",
+      "workflowName": "GameLab NES CPU/PPU runtime"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-15T11:39:06Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/GiVscSon/LocalPilot-Android/actions/runs/43709939254/job/132799100708",
+      "name": "synthetic-package-regressions",
+      "startedAt": "2026-11-15T11:39:03Z",
+      "status": "COMPLETED",
+      "workflowName": "Harness Phase 0 APK integrity gates"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-15T11:39:11Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/GiVscSon/LocalPilot-Android/actions/runs/43709939259/job/132799100770",
+      "name": "route-and-invariants",
+      "startedAt": "2026-11-15T11:39:03Z",
+      "status": "COMPLETED",
+      "workflowName": "Harness Phase 1 window screenshot safety"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-15T11:39:09Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/GiVscSon/LocalPilot-Android/actions/runs/43709939161/job/132799100381",
+      "name": "replay-contract-jvm",
+      "startedAt": "2026-11-15T11:39:03Z",
+      "status": "COMPLETED",
+      "workflowName": "Harness on-policy replay eligibility (contract only)"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-15T11:41:36Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/GiVscSon/LocalPilot-Android/actions/runs/43709939154/job/132799100719",
+      "name": "all-in-one",
+      "startedAt": "2026-11-15T11:39:03Z",
+      "status": "COMPLETED",
+      "workflowName": "LocalPilot All-in-One \u00b7 GameLab + ModelLab (test-only)"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-15T11:41:36Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/GiVscSon/LocalPilot-Android/actions/runs/43709939279/job/132799100914",
+      "name": "verify-build",
+      "startedAt": "2026-11-15T11:39:04Z",
+      "status": "COMPLETED",
+      "workflowName": "LocalPilot One APK scripted games and training (candidate)"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-15T11:39:10Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/GiVscSon/LocalPilot-Android/actions/runs/43709939156/job/132799100676",
+      "name": "release-lab-contracts",
+      "startedAt": "2026-11-15T11:39:04Z",
+      "status": "COMPLETED",
+      "workflowName": "LocalPilot ReleaseLab \u00b7 isolated Android APK acceptance"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-15T11:39:11Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/GiVscSon/LocalPilot-Android/actions/runs/43709939252/job/132799100555",
+      "name": "source-provenance",
+      "startedAt": "2026-11-15T11:39:03Z",
+      "status": "COMPLETED",
+      "workflowName": "LocalPilot \u00b7 Verified Git Source Snapshot"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-15T11:40:58Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/GiVscSon/LocalPilot-Android/actions/runs/43709939157/job/132799100602",
+      "name": "standalone-light",
+      "startedAt": "2026-11-15T11:39:03Z",
+      "status": "COMPLETED",
+      "workflowName": "ModelLab Android \u00b7 separate app and optional local GGUF"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-15T11:44:15Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/GiVscSon/LocalPilot-Android/actions/runs/43709939261/job/132799100870",
+      "name": "android-vulkan",
+      "startedAt": "2026-11-15T11:39:04Z",
+      "status": "COMPLETED",
+      "workflowName": "ModelLab Vulkan \u00b7 ARM64 experimental GPU backend"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-15T11:43:22Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/GiVscSon/LocalPilot-Android/actions/runs/43709939187/job/132799100764",
+      "name": "bundled-catalog",
+      "startedAt": "2026-11-15T11:39:03Z",
+      "status": "COMPLETED",
+      "workflowName": "Offline Android Catalog \u00b7 Qwen + LFM + Vision"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-15T11:43:06Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/GiVscSon/LocalPilot-Android/actions/runs/43709939253/job/132799100898",
+      "name": "embedded",
+      "startedAt": "2026-11-15T11:39:04Z",
+      "status": "COMPLETED",
+      "workflowName": "Self-contained Android APK \u00b7 embedded GGUF"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-15T11:46:16Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/GiVscSon/LocalPilot-Android/actions/runs/43709939293/job/132799101381",
+      "name": "integrated-acceptance",
+      "startedAt": "2026-11-15T11:39:05Z",
+      "status": "COMPLETED",
+      "workflowName": "Whole System \u00b7 NES GameLab ModelLab CPU integration"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-15T11:39:01Z",
+      "conclusion": "CANCELLED",
+      "detailsUrl": "https://github.com/GiVscSon/LocalPilot-Android/actions/runs/43709936069/job/132799091118",
+      "name": "device (35, default)",
+      "startedAt": "2026-11-15T11:38:58Z",
+      "status": "COMPLETED",
+      "workflowName": "Android device acceptance"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-15T11:42:53Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/GiVscSon/LocalPilot-Android/actions/runs/43709939245/job/132799110709",
+      "name": "device (35, default)",
+      "startedAt": "2026-11-15T11:39:14Z",
+      "status": "COMPLETED",
+      "workflowName": "Android device acceptance"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-15T11:39:03Z",
+      "conclusion": "CANCELLED",
+      "detailsUrl": "https://github.com/GiVscSon/LocalPilot-Android/actions/runs/43709936069/job/132799090939",
+      "name": "device (36, google_apis)",
+      "startedAt": "2026-11-15T11:39:00Z",
+      "status": "COMPLETED",
+      "workflowName": "Android device acceptance"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-15T11:44:07Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/GiVscSon/LocalPilot-Android/actions/runs/43709939245/job/132799110516",
+      "name": "device (36, google_apis)",
+      "startedAt": "2026-11-15T11:39:09Z",
+      "status": "COMPLETED",
+      "workflowName": "Android device acceptance"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-15T11:39:00Z",
+      "conclusion": "SKIPPED",
+      "detailsUrl": "https://github.com/GiVscSon/LocalPilot-Android/actions/runs/43709939157/job/132799101951",
+      "name": "standalone-preloaded",
+      "startedAt": "2026-11-15T11:39:01Z",
+      "status": "COMPLETED",
+      "workflowName": "ModelLab Android \u00b7 separate app and optional local GGUF"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-15T11:41:59Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/GiVscSon/LocalPilot-Android/actions/runs/43709939254/job/132799124443",
+      "name": "actual-unified-apk",
+      "startedAt": "2026-11-15T11:39:13Z",
+      "status": "COMPLETED",
+      "workflowName": "Harness Phase 0 APK integrity gates"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-15T11:40:45Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/GiVscSon/LocalPilot-Android/actions/runs/43709939259/job/132799142519",
+      "name": "android-compile",
+      "startedAt": "2026-11-15T11:40:01Z",
+      "status": "COMPLETED",
+      "workflowName": "Harness Phase 1 window screenshot safety"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-15T11:44:04Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/GiVscSon/LocalPilot-Android/actions/runs/43709939154/job/132799724759",
+      "name": "unified-emulator-build",
+      "startedAt": "2026-11-15T11:41:39Z",
+      "status": "COMPLETED",
+      "workflowName": "LocalPilot All-in-One \u00b7 GameLab + ModelLab (test-only)"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-15T11:41:53Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/GiVscSon/LocalPilot-Android/actions/runs/43709939156/job/132799138676",
+      "name": "build-emulator-derivative",
+      "startedAt": "2026-11-15T11:39:34Z",
+      "status": "COMPLETED",
+      "workflowName": "LocalPilot ReleaseLab \u00b7 isolated Android APK acceptance"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-15T11:44:39Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/GiVscSon/LocalPilot-Android/actions/runs/43709939293/job/132799101121",
+      "name": "Student independent data seed 571",
+      "startedAt": "2026-11-15T11:39:04Z",
+      "status": "COMPLETED",
+      "workflowName": "Whole System \u00b7 NES GameLab ModelLab CPU integration"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-15T11:44:49Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/GiVscSon/LocalPilot-Android/actions/runs/43709939293/job/132799101368",
+      "name": "Student independent data seed 9091",
+      "startedAt": "2026-11-15T11:39:12Z",
+      "status": "COMPLETED",
+      "workflowName": "Whole System \u00b7 NES GameLab ModelLab CPU integration"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-15T11:43:36Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/GiVscSon/LocalPilot-Android/actions/runs/43709939293/job/132799101348",
+      "name": "Student independent data seed 12097",
+      "startedAt": "2026-11-15T11:39:12Z",
+      "status": "COMPLETED",
+      "workflowName": "Whole System \u00b7 NES GameLab ModelLab CPU integration"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-15T11:45:00Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/GiVscSon/LocalPilot-Android/actions/runs/43709939293/job/132799101296",
+      "name": "Student independent data seed 65537",
+      "startedAt": "2026-11-15T11:39:04Z",
+      "status": "COMPLETED",
+      "workflowName": "Whole System \u00b7 NES GameLab ModelLab CPU integration"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-15T11:43:30Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/GiVscSon/LocalPilot-Android/actions/runs/43709939259/job/132799142496",
+      "name": "actual-android-capture (30, default)",
+      "startedAt": "2026-11-15T11:41:00Z",
+      "status": "COMPLETED",
+      "workflowName": "Harness Phase 1 window screenshot safety"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-15T11:46:38Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/GiVscSon/LocalPilot-Android/actions/runs/43709939154/job/132800313606",
+      "name": "unified-ui-emulator (30, default, pixel_2)",
+      "startedAt": "2026-11-15T11:44:07Z",
+      "status": "COMPLETED",
+      "workflowName": "LocalPilot All-in-One \u00b7 GameLab + ModelLab (test-only)"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-15T11:43:59Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/GiVscSon/LocalPilot-Android/actions/runs/43709939156/job/132799789592",
+      "name": "isolated-release-lab (30, default, pixel_2)",
+      "startedAt": "2026-11-15T11:42:26Z",
+      "status": "COMPLETED",
+      "workflowName": "LocalPilot ReleaseLab \u00b7 isolated Android APK acceptance"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-15T11:42:22Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/GiVscSon/LocalPilot-Android/actions/runs/43709939259/job/132799142529",
+      "name": "actual-android-capture (34, default)",
+      "startedAt": "2026-11-15T11:40:00Z",
+      "status": "COMPLETED",
+      "workflowName": "Harness Phase 1 window screenshot safety"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-15T11:46:36Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/GiVscSon/LocalPilot-Android/actions/runs/43709939154/job/132800313592",
+      "name": "unified-ui-emulator (35, default, pixel_2)",
+      "startedAt": "2026-11-15T11:44:07Z",
+      "status": "COMPLETED",
+      "workflowName": "LocalPilot All-in-One \u00b7 GameLab + ModelLab (test-only)"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-15T11:43:28Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/GiVscSon/LocalPilot-Android/actions/runs/43709939156/job/132799789495",
+      "name": "isolated-release-lab (35, default, pixel_2)",
+      "startedAt": "2026-11-15T11:41:56Z",
+      "status": "COMPLETED",
+      "workflowName": "LocalPilot ReleaseLab \u00b7 isolated Android APK acceptance"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-15T11:42:23Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/GiVscSon/LocalPilot-Android/actions/runs/43709939259/job/132799142513",
+      "name": "actual-android-capture (35, default)",
+      "startedAt": "2026-11-15T11:39:50Z",
+      "status": "COMPLETED",
+      "workflowName": "Harness Phase 1 window screenshot safety"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-15T11:47:54Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/GiVscSon/LocalPilot-Android/actions/runs/43709939154/job/132800313585",
+      "name": "unified-ui-emulator (36, google_apis, pixel_2)",
+      "startedAt": "2026-11-15T11:44:07Z",
+      "status": "COMPLETED",
+      "workflowName": "LocalPilot All-in-One \u00b7 GameLab + ModelLab (test-only)"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-15T11:44:23Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/GiVscSon/LocalPilot-Android/actions/runs/43709939156/job/132799789503",
+      "name": "isolated-release-lab (36, google_apis, pixel_2)",
+      "startedAt": "2026-11-15T11:42:02Z",
+      "status": "COMPLETED",
+      "workflowName": "LocalPilot ReleaseLab \u00b7 isolated Android APK acceptance"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-15T11:43:48Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/GiVscSon/LocalPilot-Android/actions/runs/43709939259/job/132799142520",
+      "name": "actual-android-capture (36, google_apis)",
+      "startedAt": "2026-11-15T11:40:48Z",
+      "status": "COMPLETED",
+      "workflowName": "Harness Phase 1 window screenshot safety"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-15T11:46:51Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/GiVscSon/LocalPilot-Android/actions/runs/43709939154/job/132800313578",
+      "name": "unified-ui-emulator (30, default, pixel_c)",
+      "startedAt": "2026-11-15T11:44:07Z",
+      "status": "COMPLETED",
+      "workflowName": "LocalPilot All-in-One \u00b7 GameLab + ModelLab (test-only)"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-15T11:44:24Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/GiVscSon/LocalPilot-Android/actions/runs/43709939156/job/132799789551",
+      "name": "isolated-release-lab (30, default, pixel_c)",
+      "startedAt": "2026-11-15T11:42:48Z",
+      "status": "COMPLETED",
+      "workflowName": "LocalPilot ReleaseLab \u00b7 isolated Android APK acceptance"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-15T11:46:35Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/GiVscSon/LocalPilot-Android/actions/runs/43709939154/job/132800313576",
+      "name": "unified-ui-emulator (35, default, pixel_c)",
+      "startedAt": "2026-11-15T11:44:07Z",
+      "status": "COMPLETED",
+      "workflowName": "LocalPilot All-in-One \u00b7 GameLab + ModelLab (test-only)"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-15T11:43:42Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/GiVscSon/LocalPilot-Android/actions/runs/43709939156/job/132799789486",
+      "name": "isolated-release-lab (35, default, pixel_c)",
+      "startedAt": "2026-11-15T11:41:56Z",
+      "status": "COMPLETED",
+      "workflowName": "LocalPilot ReleaseLab \u00b7 isolated Android APK acceptance"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-15T11:47:44Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/GiVscSon/LocalPilot-Android/actions/runs/43709939154/job/132800313655",
+      "name": "unified-ui-emulator (36, google_apis, pixel_c)",
+      "startedAt": "2026-11-15T11:44:07Z",
+      "status": "COMPLETED",
+      "workflowName": "LocalPilot All-in-One \u00b7 GameLab + ModelLab (test-only)"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-11-15T11:44:51Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/GiVscSon/LocalPilot-Android/actions/runs/43709939156/job/132799789529",
+      "name": "isolated-release-lab (36, google_apis, pixel_c)",
+      "startedAt": "2026-11-15T11:42:24Z",
+      "status": "COMPLETED",
+      "workflowName": "LocalPilot ReleaseLab \u00b7 isolated Android APK acceptance"
+    }
+  ]
+}

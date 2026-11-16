@@ -1,0 +1,14 @@
+{
+  "schema": "localpilot-unified-signed-candidate-v1",
+  "sourceCommit": "1413aadc7760459d9e1fc5311b51f5e7cfc6a927",
+  "package": "org.localpilot.android",
+  "versionCode": 55,
+  "versionName": "0.8.3",
+  "signerSha256": "b960ab2feccf7f6c47602779695d13297755f97f654444d9e0f0737d3a1408c2",
+  "apkSha256": "6dd518b64f0d78fc3601174ba0ee0436fae48f15e8219552f5ed7b67e481d84b",
+  "apkBytes": 11787981,
+  "releaseReady": false,
+  "physicalAndroidTest": "NOT_VERIFIED",
+  "upgradeDataPreservation": "NOT_VERIFIED",
+  "models": "ON_DEMAND_NOT_BUNDLED"
+}

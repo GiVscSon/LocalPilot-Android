@@ -1,0 +1,194 @@
+[
+  {
+    "schema": "localpilot-android-autoplay-save-resume-v1",
+    "result": "PASS",
+    "sourceSha": "1413aadc7760459d9e1fc5311b51f5e7cfc6a927",
+    "api": 30,
+    "processRestarted": true,
+    "saved": {
+      "frame": 530,
+      "hash": 1154021349,
+      "actions": 32,
+      "policy": "472e25ff6f857021e6cc1f48d62debdf39bb98bbeddfb9aed8c8fb09b0bea6bb",
+      "romSha256": "7bfc5e462c6acddc0fcb7f5ac6cef4d87888a54d5bf788a31aab25320e446372",
+      "saveSha256": "dc20f5870e4d7feef89dc11d25e8198451814a940b9f21816e5fed5823576385"
+    },
+    "resumed": {
+      "frame": 786,
+      "hash": 1154021349,
+      "actions": 48,
+      "policy": "472e25ff6f857021e6cc1f48d62debdf39bb98bbeddfb9aed8c8fb09b0bea6bb",
+      "romSha256": "7bfc5e462c6acddc0fcb7f5ac6cef4d87888a54d5bf788a31aab25320e446372",
+      "saveSha256": "09a21522940101a4867130df64f1fb4ed6283342f81a27f4da41e84a1b374af8"
+    },
+    "apkSha256": "50168778393fdc39867ca9162192edfaf8b397582bb34d2c5110b8fd5ebfc02d",
+    "stopBlocksFurtherCompletedActions": true,
+    "candidatePreserved": true,
+    "activePolicyPreserved": true,
+    "singlePackage": true,
+    "physicalDevice": false,
+    "releaseReady": false,
+    "deviceProfile": "pixel_2",
+    "artifactId": 14159803362
+  },
+  {
+    "schema": "localpilot-android-autoplay-save-resume-v1",
+    "result": "PASS",
+    "sourceSha": "1413aadc7760459d9e1fc5311b51f5e7cfc6a927",
+    "api": 30,
+    "processRestarted": true,
+    "saved": {
+      "frame": 533,
+      "hash": -189113541,
+      "actions": 32,
+      "policy": "28879e4991b1b095c0ef8f22c398039bc270f0bef7b624fbf59b4d2714209e10",
+      "romSha256": "7bfc5e462c6acddc0fcb7f5ac6cef4d87888a54d5bf788a31aab25320e446372",
+      "saveSha256": "3556737781b4c95a859a6ff4a5f8280275ae90f0c6c25599a7aed0d8a79b2ca6"
+    },
+    "resumed": {
+      "frame": 789,
+      "hash": 1154021349,
+      "actions": 48,
+      "policy": "28879e4991b1b095c0ef8f22c398039bc270f0bef7b624fbf59b4d2714209e10",
+      "romSha256": "7bfc5e462c6acddc0fcb7f5ac6cef4d87888a54d5bf788a31aab25320e446372",
+      "saveSha256": "99865958ca03808f494039ffc27c0e0f3fcc3ee44d3de88db9b7c9621f01c163"
+    },
+    "apkSha256": "50168778393fdc39867ca9162192edfaf8b397582bb34d2c5110b8fd5ebfc02d",
+    "stopBlocksFurtherCompletedActions": true,
+    "candidatePreserved": true,
+    "activePolicyPreserved": true,
+    "singlePackage": true,
+    "physicalDevice": false,
+    "releaseReady": false,
+    "deviceProfile": "pixel_c",
+    "artifactId": 14159249844
+  },
+  {
+    "schema": "localpilot-android-autoplay-save-resume-v1",
+    "result": "PASS",
+    "sourceSha": "1413aadc7760459d9e1fc5311b51f5e7cfc6a927",
+    "api": 35,
+    "processRestarted": true,
+    "saved": {
+      "frame": 785,
+      "hash": 2026606966,
+      "actions": 48,
+      "policy": "d399b9a79da3c03064b53521f7773fe3a7bdf3a183ad3ebc80c3dafc87808ac0",
+      "romSha256": "7bfc5e462c6acddc0fcb7f5ac6cef4d87888a54d5bf788a31aab25320e446372",
+      "saveSha256": "cf185c5707b6cdde81e3464b861dcd964e123f77c2b43c7f2a91b31a8a8c747f"
+    },
+    "resumed": {
+      "frame": 1041,
+      "hash": 1154021349,
+      "actions": 64,
+      "policy": "d399b9a79da3c03064b53521f7773fe3a7bdf3a183ad3ebc80c3dafc87808ac0",
+      "romSha256": "7bfc5e462c6acddc0fcb7f5ac6cef4d87888a54d5bf788a31aab25320e446372",
+      "saveSha256": "8bcd6c0be1293452bfb3472c40a4fc748e2053fd928836a4e7b771099870261b"
+    },
+    "apkSha256": "50168778393fdc39867ca9162192edfaf8b397582bb34d2c5110b8fd5ebfc02d",
+    "stopBlocksFurtherCompletedActions": true,
+    "candidatePreserved": true,
+    "activePolicyPreserved": true,
+    "singlePackage": true,
+    "physicalDevice": false,
+    "releaseReady": false,
+    "deviceProfile": "pixel_2",
+    "artifactId": 14160416977
+  },
+  {
+    "schema": "localpilot-android-autoplay-save-resume-v1",
+    "result": "PASS",
+    "sourceSha": "1413aadc7760459d9e1fc5311b51f5e7cfc6a927",
+    "api": 35,
+    "processRestarted": true,
+    "saved": {
+      "frame": 786,
+      "hash": -189113541,
+      "actions": 48,
+      "policy": "9387b5b1a543e9adc2a6ced127d24c4ea5dc0d29ac69bb5aeb47d62c916bb1b5",
+      "romSha256": "7bfc5e462c6acddc0fcb7f5ac6cef4d87888a54d5bf788a31aab25320e446372",
+      "saveSha256": "bddfc1b196bb6d9cb4c75cff6ba136be5ad82e5fe9d53b658c36f7bf37b6f34b"
+    },
+    "resumed": {
+      "frame": 1042,
+      "hash": -189113541,
+      "actions": 64,
+      "policy": "9387b5b1a543e9adc2a6ced127d24c4ea5dc0d29ac69bb5aeb47d62c916bb1b5",
+      "romSha256": "7bfc5e462c6acddc0fcb7f5ac6cef4d87888a54d5bf788a31aab25320e446372",
+      "saveSha256": "f3577dafbbf1ade195bd35397287044fd804abe8e667e8c2ecfc46074ddc7012"
+    },
+    "apkSha256": "50168778393fdc39867ca9162192edfaf8b397582bb34d2c5110b8fd5ebfc02d",
+    "stopBlocksFurtherCompletedActions": true,
+    "candidatePreserved": true,
+    "activePolicyPreserved": true,
+    "singlePackage": true,
+    "physicalDevice": false,
+    "releaseReady": false,
+    "deviceProfile": "pixel_c",
+    "artifactId": 14160272513
+  },
+  {
+    "schema": "localpilot-android-autoplay-save-resume-v1",
+    "result": "PASS",
+    "sourceSha": "1413aadc7760459d9e1fc5311b51f5e7cfc6a927",
+    "api": 36,
+    "processRestarted": true,
+    "saved": {
+      "frame": 530,
+      "hash": -189113541,
+      "actions": 32,
+      "policy": "0e503d88dfcfc9f23db50b979ec18bcfb7ca62596223923ce921e1d309e691ac",
+      "romSha256": "7bfc5e462c6acddc0fcb7f5ac6cef4d87888a54d5bf788a31aab25320e446372",
+      "saveSha256": "6b1abfff99ca9e578884b3067759dbc242b1e972028a9c5380c3c1b3bfdfe8ee"
+    },
+    "resumed": {
+      "frame": 786,
+      "hash": -189113541,
+      "actions": 48,
+      "policy": "0e503d88dfcfc9f23db50b979ec18bcfb7ca62596223923ce921e1d309e691ac",
+      "romSha256": "7bfc5e462c6acddc0fcb7f5ac6cef4d87888a54d5bf788a31aab25320e446372",
+      "saveSha256": "6bb8ac5cae2f3216d673a1c5ab1ec8cfdc642803abd4963f99c7203b9af34da3"
+    },
+    "apkSha256": "50168778393fdc39867ca9162192edfaf8b397582bb34d2c5110b8fd5ebfc02d",
+    "stopBlocksFurtherCompletedActions": true,
+    "candidatePreserved": true,
+    "activePolicyPreserved": true,
+    "singlePackage": true,
+    "physicalDevice": false,
+    "releaseReady": false,
+    "deviceProfile": "pixel_2",
+    "artifactId": 14159958889
+  },
+  {
+    "schema": "localpilot-android-autoplay-save-resume-v1",
+    "result": "PASS",
+    "sourceSha": "1413aadc7760459d9e1fc5311b51f5e7cfc6a927",
+    "api": 36,
+    "processRestarted": true,
+    "saved": {
+      "frame": 530,
+      "hash": 1154021349,
+      "actions": 32,
+      "policy": "58b55da6927b2960d3b1aa49952f54171464b2e01116eb1d26739ded96f6e678",
+      "romSha256": "7bfc5e462c6acddc0fcb7f5ac6cef4d87888a54d5bf788a31aab25320e446372",
+      "saveSha256": "5df010c6c55663c9354772155fbf3b04d380a5b516e0e56ef12931d39d8ca820"
+    },
+    "resumed": {
+      "frame": 786,
+      "hash": 262773560,
+      "actions": 48,
+      "policy": "58b55da6927b2960d3b1aa49952f54171464b2e01116eb1d26739ded96f6e678",
+      "romSha256": "7bfc5e462c6acddc0fcb7f5ac6cef4d87888a54d5bf788a31aab25320e446372",
+      "saveSha256": "e6f3f6b8a1a990c1bf894b12b69bdc918b59baaead06b4e885724804853fd28f"
+    },
+    "apkSha256": "50168778393fdc39867ca9162192edfaf8b397582bb34d2c5110b8fd5ebfc02d",
+    "stopBlocksFurtherCompletedActions": true,
+    "candidatePreserved": true,
+    "activePolicyPreserved": true,
+    "singlePackage": true,
+    "physicalDevice": false,
+    "releaseReady": false,
+    "deviceProfile": "pixel_c",
+    "artifactId": 14160591128
+  }
+]
