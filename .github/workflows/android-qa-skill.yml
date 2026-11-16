@@ -1,0 +1,45 @@
+name: LocalPilot Android QA skill tests
+on:
+  pull_request:
+    paths:
+      - '.agents/skills/android-qa-emulator-pro/**'
+      - '.github/workflows/android-qa-skill.yml'
+      - 'AGENTS.md'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  android-qa-skill:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Validate skill metadata, ADB/KVM probes and negative cases
+        run: |
+          set -euo pipefail
+          test -s .agents/skills/android-qa-emulator-pro/SKILL.md
+          grep -q '^name: android-qa-emulator-pro$' .agents/skills/android-qa-emulator-pro/SKILL.md
+          python3 -m unittest discover -s .agents/skills/android-qa-emulator-pro/tests -p 'test_*.py' -v
+          bash -n .agents/skills/android-qa-emulator-pro/scripts/android_avd_smoke.sh
+      - name: Capture truthful host-only probe without claiming Android runtime
+        run: |
+          set -euo pipefail
+          python3 .agents/skills/android-qa-emulator-pro/scripts/android_qa_probe.py doctor \
+            --output build/android-qa-skill-host.json
+          python3 - <<'PY'
+          import json
+          r=json.load(open('build/android-qa-skill-host.json'))
+          assert r['schema']=='android-qa-host-device-probe-v1'
+          assert r['androidBoot']=='NOT_TESTED' and r['releaseReady'] is False
+          print('HOST_PROBE_PASS: android_runtime=NOT_TESTED')
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: LocalPilot-Android-QA-Skill-${{ github.sha }}
+          path: build/android-qa-skill-host.json
+          if-no-files-found: warn
+          retention-days: 14
