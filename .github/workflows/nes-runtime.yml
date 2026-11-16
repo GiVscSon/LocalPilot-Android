@@ -1,5 +1,6 @@
 name: GameLab NES CPU/PPU runtime
 on:
+  workflow_dispatch:
   push:
     paths:
       - 'game-lab/**'

@@ -9,6 +9,7 @@ import android.content.Intent;
 import android.content.res.Configuration;
 import android.graphics.Bitmap;
 import android.graphics.Insets;
+import android.graphics.Point;
 import android.graphics.Rect;
 import android.os.Bundle;
 import android.os.SystemClock;
@@ -176,6 +177,7 @@ public final class PilotUiInstrumentation extends Instrumentation {
                 // or UI automation query that may stall a sick main thread.
                 if (service != null) evidence.put("capture_timing",service.captureTimingReport());
                 if (service != null) evidence.put("chosen_window_debug",String.valueOf(field("chosenWindowDebug")));
+                if (service != null) evidence.put("chosen_window_selection",String.valueOf(field("chosenWindowSelectionDebug")));
                 evidence.put("failed_at_ms", SystemClock.uptimeMillis()-started);
                 evidence.put("windows", windowSummary());
                 evidence.put("stack", stack.toString());
@@ -1144,6 +1146,27 @@ public final class PilotUiInstrumentation extends Instrumentation {
         await(()->onMain(()->gate().armed()&&pkg.equals(field("target"))
             &&field("overlayDialog")==null),8_000,
             "Window selection did not commit before the next control");
+        if("org.localpilot.gamelab".equals(pkg)){
+            addCheck("external_window_binding_geometry",onMain(()->{
+                Rect bound=new Rect((Rect)field("armedBounds"));
+                Rect selected=new Rect((Rect)field("visualWindowBounds"));
+                int window=(Integer)field("visualWindow");
+                Point display=new Point();
+                ((WindowManager)service.getSystemService(Context.WINDOW_SERVICE)).getDefaultDisplay().getRealSize(display);
+                require(!bound.isEmpty()&&bound.equals(selected)
+                    &&new Rect(0,0,display.x,display.y).contains(bound),
+                    "Committed window is not the exact visible selection: selected="+selected+" bound="+bound+" display="+display);
+                require(pkg.equals(field("visualOwner"))&&gate().matches(pkg,window,bound.width(),bound.height()),
+                    "Committed gate does not match selected package/window/geometry");
+                return new JSONObject().put("source","GameLab synthetic only").put("market_acceptance",false)
+                    .put("observation_only",true).put("window_id",window).put("epoch",gate().epoch())
+                    .put("selected_bounds",new JSONArray(new int[]{selected.left,selected.top,selected.right,selected.bottom}))
+                    .put("bound_bounds",new JSONArray(new int[]{bound.left,bound.top,bound.right,bound.bottom}))
+                    .put("display_width",display.x).put("display_height",display.y)
+                    .put("selection_snapshot",String.valueOf(field("chosenWindowSelectionDebug")))
+                    .put("focus_snapshot",String.valueOf(field("chosenWindowDebug")));
+            }));
+        }
     }
     private void awaitBrowserMechanic()throws Exception{await(()->onMain(()->booleanField("browserProfileConfirmed")&&field("overlayDialog")==null),3_000,"Browser mechanic selection did not finish before the next action");}
 
