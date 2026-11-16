@@ -24,12 +24,25 @@ public final class PilotApplication extends android.app.Application implements H
  }
  @Override public boolean selectNesModel(org.localpilot.shared.NesModelHost.ModelIdentity identity){
   if(!BuildConfig.UNIFIED_MODELLAB||identity==null)return false;
-  var state=org.localpilot.shared.HarnessCoordinator.nes().snapshot();
-  if(state.waiting()||state.actionInFlight()||harnessModels().engine().busy())return false;
-  for(var entry:harnessModels().store().list())if(entry.id.equals(identity.id())&&entry.modelSha.equals(identity.sha256())){
-   HarnessModelBinding.assign(this,entry);return true;
-  }
-  return false;
+  return harnessModels().select(identity);
+ }
+ @Override public boolean nesLibraryAvailable(){return BuildConfig.UNIFIED_MODELLAB;}
+ @Override public boolean nesLibraryBusy(){return models!=null&&models.libraryBusy();}
+ @Override public boolean nesModelRemovable(org.localpilot.shared.NesModelHost.ModelIdentity identity){
+  if(!BuildConfig.UNIFIED_MODELLAB||identity==null)return false;
+  var entry=harnessModels().store().find(identity.id());
+  return entry!=null&&!entry.bundled&&entry.modelSha.equals(identity.sha256());
+ }
+ @Override public java.util.List<org.localpilot.shared.NesModelHost.DownloadChoice> nesDownloads(){
+  if(!BuildConfig.UNIFIED_MODELLAB)return java.util.List.of();
+  var choices=new java.util.ArrayList<org.localpilot.shared.NesModelHost.DownloadChoice>();
+  for(var preset:ModelLabPresetCatalog.ALL)choices.add(new org.localpilot.shared.NesModelHost.DownloadChoice(preset.id,preset.description()));
+  return java.util.List.copyOf(choices);
+ }
+ @Override public void manageNesLibrary(org.localpilot.shared.NesModelHost.LibraryRequest request,
+   java.util.function.Consumer<org.localpilot.shared.NesModelHost.LibraryReply> completed){
+  if(!BuildConfig.UNIFIED_MODELLAB){org.localpilot.shared.NesModelHost.super.manageNesLibrary(request,completed);return;}
+  harnessModels().manageLibrary(request,completed);
  }
  @Override public void onCreate(){super.onCreate();CrashDiagnostics.install(this);}
 }

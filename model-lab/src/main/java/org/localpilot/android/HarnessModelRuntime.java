@@ -30,6 +30,7 @@ public final class HarnessModelRuntime {
   Thread t=new Thread(r,"Harness-Model-Validation");t.setDaemon(true);return t;
  });
  private Call active;
+ private boolean libraryBusy;
  private NesModelHost.State state=new NesModelHost.State("IDLE","","","",0,0);
  private static final class Call {
   final NesModelHost.Observation observation;final Consumer<NesModelHost.Reply> callback;
@@ -45,6 +46,76 @@ public final class HarnessModelRuntime {
   return owner.harnessModels();
  }
  public ModelLabStore store(){return store;}
+ public synchronized boolean libraryBusy(){return libraryBusy;}
+ public synchronized boolean select(NesModelHost.ModelIdentity identity){
+  var snapshot=HarnessCoordinator.nes().snapshot();
+  if(identity==null||libraryBusy||active!=null||!snapshot.owner().equals("NONE")||snapshot.waiting()||snapshot.actionInFlight()||engine!=null&&engine.busy())return false;
+  var entry=store.find(identity.id());
+  if(entry==null||!entry.modelSha.equals(identity.sha256()))return false;
+  HarnessModelBinding.assign(application,entry);return true;
+ }
+ public synchronized void manageLibrary(NesModelHost.LibraryRequest request,Consumer<NesModelHost.LibraryReply> completed){
+  var snapshot=HarnessCoordinator.nes().snapshot();
+  if(libraryBusy||active!=null||!snapshot.owner().equals("NONE")||snapshot.waiting()||snapshot.actionInFlight()||engine!=null&&engine.busy()){
+   main.post(()->completed.accept(new NesModelHost.LibraryReply(false,null,"Сначала останови текущий сеанс или дождись завершения операции")));return;
+  }
+  libraryBusy=true;
+  files.execute(()->{
+   NesModelHost.LibraryReply reply;
+   try{
+    if(request==null||request.operation()==null)throw new IllegalArgumentException("Не выбрана операция");
+    ModelLabStore.Entry target=null;
+    if(request.target()!=null){
+     target=store.find(request.target().id());
+     if(target==null||!target.modelSha.equals(request.target().sha256()))throw new IllegalStateException("Модель изменилась или удалена");
+    }
+    ModelLabStore.Entry result=null;String message;
+    switch(request.operation()){
+     case IMPORT_MODEL,IMPORT_PROJECTOR -> {
+      boolean projector=request.operation()==NesModelHost.LibraryOperation.IMPORT_PROJECTOR;
+      if(projector&&(target==null||target.bundled))throw new IllegalArgumentException("Для mmproj выбери импортированный GGUF");
+      var uri=android.net.Uri.parse(request.uri());String label="Imported GGUF";
+      if(!"content".equals(uri.getScheme()))throw new SecurityException("Только Android Content Picker");
+      try(var cursor=application.getContentResolver().query(uri,new String[]{android.provider.OpenableColumns.DISPLAY_NAME},null,null,null)){
+       if(cursor!=null&&cursor.moveToFirst())label=cursor.getString(0);
+      }catch(RuntimeException ignored){}
+      result=store.importFile(uri,projector?target.label:label,request.sha256(),projector?target.id:null);
+      boolean pinned=request.sha256()!=null&&!request.sha256().isBlank();
+      message=(pinned?"HASH_VERIFIED":"SHA_COMPUTED · источник не проверен")+" · SHA-256 "+(projector?result.projectorSha:result.modelSha)+" · инференс ещё не проверен";
+     }
+     case DOWNLOAD_PRESET -> {
+      ModelLabPresetCatalog.Preset preset=null;
+      for(var candidate:ModelLabPresetCatalog.ALL)if(candidate.id.equals(request.presetId()))preset=candidate;
+      if(preset==null)throw new IllegalArgumentException("Модель отсутствует в закреплённом каталоге");
+      result=store.downloadPreset(preset,null);
+      message="HASH_VERIFIED · модель и mmproj (если нужен) установлены · инференс ещё не проверен";
+     }
+     case VERIFY -> {
+      if(target==null)throw new IllegalArgumentException("Выбери GGUF");
+      store.modelFile(target);if(target.vision())store.projectorFile(target);result=target;
+      message="HASH_VERIFIED · SHA-256 "+target.modelSha+" · это проверка файлов, инференс ещё не проверен";
+     }
+     case DELETE -> {
+      if(target==null||target.bundled)throw new IllegalArgumentException("Встроенную модель нельзя удалить");
+      var bound=boundIdentity();
+      if(bound!=null&&bound.equals(request.target()))throw new IllegalStateException("Сначала отвяжи модель от NES");
+      store.remove(target);message="Импортированная модель удалена";
+     }
+     case UNBIND -> {HarnessModelBinding.clear(application);message="Привязка GGUF снята; ввод не запущен";}
+     default -> throw new IllegalArgumentException("Операция недоступна");
+    }
+    reply=new NesModelHost.LibraryReply(true,result==null?null:new NesModelHost.ModelIdentity(result.id,result.modelSha),message);
+   }catch(Exception failure){
+    String reason=failure instanceof SecurityException?"не прошла проверка SHA-256, размера или источника":
+      failure instanceof IOException?"не удалось прочитать или сохранить файл":
+      failure instanceof IllegalArgumentException?"неверный файл GGUF, контрольная сумма или целевая модель":
+      "модель недоступна, привязана к NES или недостаточно места";
+    reply=new NesModelHost.LibraryReply(false,null,"Операция отклонена: "+reason);
+   }
+   final var outcome=reply;
+   main.post(()->{synchronized(this){libraryBusy=false;}completed.accept(outcome);});
+  });
+ }
  public NesModelHost.ModelIdentity boundIdentity(){
   try{
    ModelLabStore.Entry selected=HarnessModelBinding.resolve(application,store.list());
@@ -70,7 +141,7 @@ public final class HarnessModelRuntime {
  }
  public synchronized void infer(NesModelHost.Observation observation,Consumer<NesModelHost.Reply> callback){
   if(observation==null||callback==null)throw new IllegalArgumentException("Observation and callback required");
-  if(active!=null){main.post(()->callback.accept(new NesModelHost.Reply(observation,NesModelHost.Status.BUSY,null,null,null,0)));return;}
+  if(active!=null||libraryBusy){main.post(()->callback.accept(new NesModelHost.Reply(observation,NesModelHost.Status.BUSY,null,null,null,0)));return;}
   Call call=new Call(observation,callback);active=call;phase(call,"VERIFYING");
   files.execute(()->prepare(call));
  }

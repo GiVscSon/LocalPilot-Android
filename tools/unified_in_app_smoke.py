@@ -297,6 +297,31 @@ def companion_absent(package: str) -> bool:
                for line in listing.splitlines())
 
 
+def verify_nes_model_library(process: str) -> dict:
+    """Use visible controls and the real SAF picker; never inject an import URI."""
+    tap_text("Управление моделями NES", swipes=0)
+    tap_text("Статус выбранной модели", swipes=0)
+    tap_text("Закрыть", swipes=0)
+    tap_text("Управление моделями NES", swipes=0)
+    tap_text("Импорт GGUF", swipes=0)
+    tap_text("Выбрать файл", swipes=0)
+    picker = dump_ui()
+    packages = {n.get("package", "") for n in ET.fromstring(picker).iter("node")}
+    if not any("documentsui" in package for package in packages):
+        raise RuntimeError("System SAF document picker did not open")
+    adb("shell", "input", "keyevent", "KEYCODE_BACK")
+    wait_activity(NES)
+    xml = dump_ui()
+    for label in ("STOP", "Управление моделями NES", "Импорт модели отменён"):
+        if target_bounds(xml, label) is None:
+            raise RuntimeError("SAF cancel did not return intact NES workspace: " + label)
+    tap_text("STOP", swipes=0)
+    if one_process() != process:
+        raise RuntimeError("Model library replaced NES process")
+    return {"name": "nes_model_library_and_saf_cancel", "status": "PASS",
+            "actualModelImport": "NOT_TESTED", "modelInference": "NOT_TESTED"}
+
+
 def verify(apk: Path, output: Path) -> dict:
     if not is_emulator():
         raise RuntimeError("EMULATOR_ONLY: will not install/test on a physical phone")
@@ -365,6 +390,7 @@ def verify(apk: Path, output: Path) -> dict:
         raise RuntimeError("Expanded details hid STOP or cannot be collapsed")
     tap_text("Скрыть дополнительные настройки",swipes=0)
     checks.append({"name":"compact_workspace_controls_and_disclosure","status":"PASS"})
+    checks.append(verify_nes_model_library(process))
 
     adb("shell", "input", "keyevent", "KEYCODE_BACK")
     wait_activity(GAMELAB)

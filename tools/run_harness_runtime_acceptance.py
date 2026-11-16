@@ -17,7 +17,7 @@ def command(*args, timeout=40):
 def validate(e):
     if e.get('schema')!='localpilot-application-runtime-contract-v1' or e.get('result')!='ANDROID_CONTRACT_PASS':
         raise RuntimeError('Runtime contract failed: '+str(e.get('error','UNKNOWN')))
-    for name in ('sameEngineAcrossActivityRecreation','sameCatalogAcrossScreens','missingModelFailsClosed','duplicateRequestRejected','stopRevokesPendingReply','syntheticObservationMetadata'):
+    for name in ('sameEngineAcrossActivityRecreation','sameCatalogAcrossScreens','missingModelFailsClosed','duplicateRequestRejected','stopRevokesPendingReply','syntheticObservationMetadata','modelLibraryLifecycle','modelLibraryBusyFailsClosed'):
         if e.get(name) is not True:raise RuntimeError('Missing contract proof: '+name)
     for name in ('inputAuthorityConsumed','nativeInferencePerformed','physicalDevice','releaseReady'):
         if e.get(name) is not False:raise RuntimeError('False inference/device claim: '+name)

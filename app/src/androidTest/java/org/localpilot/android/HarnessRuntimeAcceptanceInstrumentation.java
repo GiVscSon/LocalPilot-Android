@@ -79,10 +79,12 @@ public final class HarnessRuntimeAcceptanceInstrumentation extends Instrumentati
    require(first.get().status()==NesModelHost.Status.CANCELLED&&duplicate.get().status()==NesModelHost.Status.BUSY,
      "Duplicate inference replaced owner or STOP admitted a response");
    require(!h.hasPending()&&!h.actionInFlight(),"STOP restored input authority");
+   verifyLibraryContracts((NesModelHost)app,shared,h);
    evidence.put("schema","localpilot-application-runtime-contract-v1").put("result","ANDROID_CONTRACT_PASS")
     .put("sameEngineAcrossActivityRecreation",true).put("sameCatalogAcrossScreens",true)
     .put("missingModelFailsClosed",true).put("inputAuthorityConsumed",false)
     .put("duplicateRequestRejected",true).put("stopRevokesPendingReply",true)
+    .put("modelLibraryLifecycle",true).put("modelLibraryBusyFailsClosed",true)
     .put("syntheticObservationMetadata",true).put("nativeInferencePerformed",false)
     .put("physicalDevice",false).put("releaseReady",false);
    pass=true;
@@ -92,6 +94,61 @@ public final class HarnessRuntimeAcceptanceInstrumentation extends Instrumentati
    app.unregisterActivityLifecycleCallbacks(lifecycle);HarnessCoordinator.nes().stop("INSTRUMENTATION_DONE");
    Activity a=latest;if(a!=null)runOnMainSync(a::finish);
    result.putString("evidence_json",evidence.toString());finish(pass?Activity.RESULT_OK:Activity.RESULT_CANCELED,result);
+  }
+ }
+ private NesModelHost.LibraryReply library(NesModelHost host,NesModelHost.LibraryRequest request)throws Exception{
+  CountDownLatch done=new CountDownLatch(1);AtomicReference<NesModelHost.LibraryReply> reply=new AtomicReference<>();
+  runOnMainSync(()->host.manageNesLibrary(request,r->{reply.set(r);done.countDown();}));
+  require(done.await(15,TimeUnit.SECONDS),"Library operation did not complete");return reply.get();
+ }
+ /** Header-only bytes exercise storage, never native loading, model fitness or gameplay. */
+ private void verifyLibraryContracts(NesModelHost host,HarnessModelRuntime runtime,HarnessCoordinator h)throws Exception{
+  require(host.nesLibraryAvailable(),"NES library port unavailable");
+  var uri=android.net.Uri.parse("content://org.localpilot.test.slow-model/model.gguf");
+  var resolver=getTargetContext().getContentResolver();
+  resolver.call(uri,"reset",null,null);
+  CountDownLatch done=new CountDownLatch(1);AtomicReference<NesModelHost.LibraryReply> rejected=new AtomicReference<>();
+  try{
+   runOnMainSync(()->host.manageNesLibrary(new NesModelHost.LibraryRequest(NesModelHost.LibraryOperation.IMPORT_MODEL,
+     null,uri.toString(),"0".repeat(64),null),r->{rejected.set(r);done.countDown();}));
+   long until=SystemClock.elapsedRealtime()+5000;
+   while(!resolver.call(uri,"status",null,null).getBoolean("started")&&SystemClock.elapsedRealtime()<until)SystemClock.sleep(25);
+   require(host.nesLibraryBusy()&&done.getCount()==1,"Import fixture did not block on provider");
+   h.reset("7010",HarnessCoordinator.Mode.STEP_MODE);
+   var ticket=h.begin("7010",15,123,SystemClock.elapsedRealtime());
+   var identity=new NesModelHost.ModelIdentity("fixture:missing","b".repeat(64));
+   CountDownLatch response=new CountDownLatch(1);AtomicReference<NesModelHost.Reply> busy=new AtomicReference<>();
+   runOnMainSync(()->{
+    require(!host.selectNesModel(identity),"Selection bypassed active file operation");
+    host.inferNes(new NesModelHost.Observation(ticket,"a".repeat(64),identity,128,112,null),r->{busy.set(r);response.countDown();});
+   });
+   require(response.await(3,TimeUnit.SECONDS)&&busy.get().status()==NesModelHost.Status.BUSY,"Inference entered during import");
+   h.stop("LIBRARY_FIXTURE_STOP");
+   require(!h.hasPending()&&!h.actionInFlight(),"File operation blocked STOP");
+  }finally{resolver.call(uri,"release",null,null);}
+  require(done.await(10,TimeUnit.SECONDS)&&!rejected.get().success(),"Wrong SHA was accepted");
+  require(runtime.store().list().isEmpty()&&!host.nesLibraryBusy(),"Rejected import changed catalog or stayed busy");
+  byte[] bytes=new byte[128];bytes[0]='G';bytes[1]='G';bytes[2]='U';bytes[3]='F';
+  StringBuilder digest=new StringBuilder();
+  for(byte value:java.security.MessageDigest.getInstance("SHA-256").digest(bytes))digest.append(String.format(java.util.Locale.ROOT,"%02x",value&255));
+  String sha=digest.toString();
+  var imported=library(host,new NesModelHost.LibraryRequest(NesModelHost.LibraryOperation.IMPORT_MODEL,null,uri.toString(),sha,null));
+  require(imported.success()&&imported.model()!=null&&sha.equals(imported.model().sha256()),"File import did not preserve SHA identity");
+  var model=imported.model();
+  try{
+   require(library(host,new NesModelHost.LibraryRequest(NesModelHost.LibraryOperation.IMPORT_PROJECTOR,model,uri.toString(),sha,null)).success(),"Projector attach failed");
+   require(runtime.store().find(model.id()).vision(),"Attached projector absent from shared store");
+   require(library(host,new NesModelHost.LibraryRequest(NesModelHost.LibraryOperation.VERIFY,model,null,null,null)).success(),"Stored fixture SHA verification failed");
+   runOnMainSync(()->require(host.selectNesModel(model),"Binding stored fixture failed"));
+   require(model.equals(host.nesBoundModel()),"NES did not share library binding");
+   require(!library(host,new NesModelHost.LibraryRequest(NesModelHost.LibraryOperation.DELETE,model,null,null,null)).success(),"Bound model deleted");
+   require(library(host,new NesModelHost.LibraryRequest(NesModelHost.LibraryOperation.UNBIND,null,null,null,null)).success(),"Unbind failed");
+   require(host.nesBoundModel()==null,"Unbind did not revoke assignment");
+   require(library(host,new NesModelHost.LibraryRequest(NesModelHost.LibraryOperation.DELETE,model,null,null,null)).success(),"Unbound model not deleted");
+   require(runtime.store().list().isEmpty(),"Deleted fixture remains in shared catalog");
+  }finally{
+   HarnessModelBinding.clear(getTargetContext());
+   var leftover=runtime.store().find(model.id());if(leftover!=null)runtime.store().remove(leftover);
   }
  }
  private static android.widget.Button findButton(android.view.View view,String text){
