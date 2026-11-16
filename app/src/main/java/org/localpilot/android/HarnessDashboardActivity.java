@@ -322,7 +322,7 @@ public final class HarnessDashboardActivity extends Activity {
    row(entry,"Кадры "+e.beforeFrame()+" → "+e.afterFrame()+
      " · CRC "+Integer.toUnsignedString(e.beforeHash())+" → "+
      Integer.toUnsignedString(e.afterHash()));
-   row(entry,"Визуальная запись: награда не определяется по пикселям. RAM-награды и PPO-кандидат — в разделе «Обучение».");
+   row(entry,"Награда: НЕИЗВЕСТНА для визуальной записи; по пикселям она не определяется. RAM-награды и PPO-кандидат — в разделе «Обучение».");
   }
  }
  private void learning(){
