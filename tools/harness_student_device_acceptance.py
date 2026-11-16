@@ -123,6 +123,7 @@ def verify_journal(raw, manifest):
 
 
 def tap_scroll_control(label):
+    ui.expand_compact_details()
     # Swipe inside the bounded controls panel, never across the NES viewport.
     for _ in range(12):
         xml=ui.dump_ui()

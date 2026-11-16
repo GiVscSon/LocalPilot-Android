@@ -179,6 +179,19 @@ def scroll_up() -> None:
         str(x), str(int(height * .26)), "280")
 
 
+def expand_compact_details(xml_text=None) -> bool:
+    """Open the visible disclosure in our app; never bypass or hide UI changes in tests."""
+    xml_text = dump_ui() if xml_text is None else xml_text
+    point = target_bounds(xml_text, "Открыть дополнительные настройки")
+    if point is None:
+        return False
+    current = resumed_activity()
+    if not any(PACKAGE + "/" + activity in current for activity in (MAIN, NES)):
+        raise RuntimeError("Compact disclosure is not in the expected LocalPilot activity")
+    adb("shell", "input", "tap", str(point[0]), str(point[1]))
+    return True
+
+
 def tap_text(label: str, swipes: int = 6) -> None:
     global LAST_HARNESS_UI
     for index in range(swipes + 1):
@@ -193,6 +206,8 @@ def tap_text(label: str, swipes: int = 6) -> None:
             adb("shell", "input", "tap", str(bounds[0]), str(bounds[1]))
             return
         if index < swipes:
+            if expand_compact_details(xml):
+                continue
             scroll_up()
             time.sleep(.35)
     raise RuntimeError("Required in-app button not visible: " + label)
@@ -326,6 +341,30 @@ def verify(apk: Path, output: Path) -> dict:
     if one_process() != process:
         raise RuntimeError("NES launched in a different process")
     checks.append({"name": "in_app_nes_navigation", "status": "PASS"})
+
+    compact_xml = dump_ui()
+    for label in ("Модель агента NES", "Запустить выбранного агента NES", "Учить Student", "STOP"):
+        if target_bounds(compact_xml, label) is None:
+            raise RuntimeError("Compact workspace control missing: " + label)
+    if target_bounds(compact_xml, "Запустить тестовую NES-игру") is not None:
+        raise RuntimeError("Advanced controls must initially be collapsed")
+    root = ET.fromstring(compact_xml)
+    viewport = next((BOUNDS.fullmatch(n.get("bounds", "")) for n in root.iter("node")
+                     if n.get("class") == "android.webkit.WebView"), None)
+    if viewport is None or int(viewport[4])-int(viewport[2]) < screen_size()[1]*.35:
+        raise RuntimeError("Compact NES viewport is too small")
+    image = subprocess.run(["adb", "exec-out", "screencap", "-p"], capture_output=True, check=True, timeout=20).stdout
+    if not image.startswith(b"\x89PNG\r\n\x1a\n") or len(image)>4*1024*1024:
+        raise RuntimeError("Compact workspace screenshot invalid")
+    output.parent.mkdir(parents=True,exist_ok=True)
+    (output.parent/"compact-workspace.png").write_bytes(image)
+    if not expand_compact_details(compact_xml):
+        raise RuntimeError("Advanced disclosure unavailable")
+    expanded = dump_ui()
+    if target_bounds(expanded, "STOP") is None or target_bounds(expanded,"Скрыть дополнительные настройки") is None:
+        raise RuntimeError("Expanded details hid STOP or cannot be collapsed")
+    tap_text("Скрыть дополнительные настройки",swipes=0)
+    checks.append({"name":"compact_workspace_controls_and_disclosure","status":"PASS"})
 
     adb("shell", "input", "keyevent", "KEYCODE_BACK")
     wait_activity(GAMELAB)

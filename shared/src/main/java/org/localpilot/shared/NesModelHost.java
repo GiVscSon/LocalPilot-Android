@@ -39,6 +39,13 @@ public interface NesModelHost {
  boolean cancelNesInference(String ticketNonce);
  State nesModelState();
  ModelIdentity nesBoundModel();
+ /** Catalog metadata only: selection grants no input permission or model fitness. */
+ record ModelChoice(ModelIdentity identity,String label){
+  public ModelChoice{if(identity==null||label==null||label.isBlank())throw new IllegalArgumentException("Invalid catalog choice");}
+ }
+ default java.util.List<ModelChoice> nesModels(){return java.util.List.of();}
+ default boolean selectNesModel(ModelIdentity identity){return false;}
+
  static boolean current(HarnessCoordinator coordinator,Observation observation,long now){
   if(coordinator==null||observation==null)return false;
   HarnessCoordinator.Ticket t=observation.ticket();
