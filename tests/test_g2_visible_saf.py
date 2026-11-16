@@ -4,8 +4,17 @@ import unittest
 
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'tools'))
 from run_g2_direct_gguf_acceptance import exact_target
+from run_real_nes_vision_acceptance import confirms_control,parse_game_state
 
 class VisibleSafTargets(unittest.TestCase):
+    def test_background_or_wrong_direction_is_not_game_control(self):
+        before=parse_game_state('1,100,180,3,3,1,0,0,0,0')
+        after=parse_game_state('1,116,180,3,3,1,0,0,1,1')
+        self.assertTrue(confirms_control('RIGHT',before,after))
+        self.assertTrue(confirms_control('A',before,after))
+        self.assertFalse(confirms_control('A',before,before))
+        self.assertFalse(confirms_control('LEFT',before,after))
+        with self.assertRaises(ValueError):parse_game_state('1,100,180,3,3,1,999999999,0,0,0')
     def test_refuses_wrong_package_before_typing_checksum(self):
         xml='<hierarchy><node class="android.widget.EditText" package="other.app" bounds="[0,0][80,40]"/></hierarchy>'
         with self.assertRaises(RuntimeError):exact_target(xml,'',package='org.localpilot.android.dev.unified',editable=True)

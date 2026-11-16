@@ -45,15 +45,31 @@ def verified_generic_rows(raw, model_sha):
     for line in raw.decode().splitlines():
         body,checksum=line.rsplit('|',1)
         if hashlib.sha256(body.encode()).hexdigest()!=checksum:raise ValueError('Generic journal checksum')
-        parts=body.split('|',7)
-        if len(parts)!=8 or parts[0]!='NES_USER_ROM_V1' or parts[1]!=ROM_SHA or parts[4]!=model_sha or parts[5:7]!=['RETRO_EMULATED','NULL']:
+        parts=body.split('|',9)
+        if len(parts)!=10 or parts[0]!='NES_USER_ROM_V2' or parts[1]!=ROM_SHA or parts[4]!=model_sha or parts[5:7]!=['RETRO_EMULATED','NULL']:
             raise ValueError('Wrong ROM/model/provenance or fabricated reward')
-        trial,inner=parts[7].rsplit('|',1)
+        before=parse_game_state(parts[7]);after=parse_game_state(parts[8])
+        trial,inner=parts[9].rsplit('|',1)
         if hashlib.sha256(trial.encode()).hexdigest()!=inner:raise ValueError('Trial checksum')
         p=trial.split('|')
         if len(p)!=9 or p[2]!='USER_ROM' or int(p[5])-int(p[4])!=16:raise ValueError('Wrong real-game step')
-        result.append(dict(button=p[3],beforeFrame=int(p[4]),afterFrame=int(p[5]),beforeHash=p[6],afterHash=p[7],status=p[8]))
+        result.append(dict(button=p[3],beforeFrame=int(p[4]),afterFrame=int(p[5]),beforeHash=p[6],afterHash=p[7],status=p[8],
+                           gameBefore=before,gameAfter=after,semanticControl=confirms_control(p[3],before,after)))
     return result
+
+def parse_game_state(text):
+    values=[int(x) for x in text.split(',')]
+    keys=('state','x','y','lives','bombs','stage','score','kills','shots','bullets')
+    maxima=(3,255,255,9,9,3,999999,255,255,8)
+    if len(values)!=10 or any(x<0 or x>limit for x,limit in zip(values,maxima)):raise ValueError('Missing or impossible actual game state')
+    return dict(zip(keys,values))
+
+def confirms_control(button,before,after):
+    if before['state']!=1 or after['state']!=1:return False
+    return {'LEFT':after['x']<before['x'],'RIGHT':after['x']>before['x'],
+            'UP':after['y']<before['y'],'DOWN':after['y']>before['y'],
+            'A':after['shots']!=before['shots'] or after['bullets']>before['bullets'],
+            'B':after['bombs']<before['bombs']}.get(button,False)
 
 def correlate_inference(raw, rows, model_sha):
     calls=[]
@@ -104,13 +120,15 @@ def verify(apk,directory,output):
         if 'STOP:' in text:raise RuntimeError('Real game agent stopped before four transitions: '+text[:800])
         time.sleep(.5)
     else:raise RuntimeError('Real game did not confirm four vision actions')
+    if not any(row['semanticControl'] for row in rows):
+        raise RuntimeError('Frames changed but ship movement, firing or bomb use was not confirmed')
     ui.tap_text('STOP',swipes=0)
     before=private_file('files/console-ai-user-rom-v1.log',262144);time.sleep(1)
     if before!=private_file('files/console-ai-user-rom-v1.log',262144):raise RuntimeError('Action completed after real-game STOP')
     report=dict(result='REAL_ROM_VISION_INPUT_FRAME_PASS',sourceSha=source,
                 apkSha256=hashlib.sha256(apk.read_bytes()).hexdigest(),romSha256=ROM_SHA,
                 modelSha256=models.PINNED_FILES[MODEL][1],projectorSha256=models.PINNED_FILES[PROJECTOR][1],
-                transitions=rows,inferenceCallsForModel=calls,exactModelActionAndFrameMatch=True,
+                transitions=rows,inferenceCallsForModel=calls,exactModelActionAndFrameMatch=True,semanticGameControlVerified=True,
                 modelTransport='VISIBLE_SAF',romTransport='VISIBLE_SAF',
                 currentRomPreserved=True,educationalScene=False,reward=None,
                 gameVictory='NOT_VERIFIED',physicalDevice=False,releaseReady=False)

@@ -19,6 +19,7 @@ on:
       - 'tools/run_g2_direct_gguf_acceptance.py'
       - 'tests/test_g2_visible_saf.py'
       - 'tools/run_real_nes_vision_acceptance.py'
+      - 'tests/nes_real_game_profile_smoke.cjs'
       - 'tests/test_harness_runtime_acceptance.py'
       - 'tests/NesModelHost*.java'
       - 'tools/harness_student_candidate_evaluation.py'
@@ -466,6 +467,15 @@ jobs:
           path: app/build/outputs/apk/debug/
       - name: Prepare exact real VOID LANCER and existing pinned vision model/projector
         run: python3 tools/run_real_nes_vision_acceptance.py prepare
+      - name: Verify actual real-game ship, fire and bomb memory semantics in the packaged core
+        run: |
+          python3 - <<'PY'
+          import pathlib,zipfile
+          target=pathlib.Path('build/real-nes-core/jsnes.min.cjs');target.parent.mkdir(parents=True,exist_ok=True)
+          with zipfile.ZipFile('app/build/outputs/apk/debug/app-debug.apk') as apk:
+              target.write_bytes(apk.read('assets/nes/jsnes.min.js'))
+          PY
+          node tests/nes_real_game_profile_smoke.cjs build/real-nes-core/jsnes.min.cjs build/real-nes-vision/VOID-LANCER-v1.0.0.nes
       - name: Require isolated KVM
         run: |
           test -c /dev/kvm

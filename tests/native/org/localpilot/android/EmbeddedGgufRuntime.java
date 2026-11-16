@@ -9,7 +9,7 @@ public final class EmbeddedGgufRuntime {
  private static native String nativeInfer(
    String filename,String system,String question,int maxTokens,float temperature);
  private static native String nativeAnalyzeImage(
-   String model,String projector,String question,byte[] rgb,int width,int height);
+   String model,String projector,String question,byte[] rgb,int width,int height,boolean controllerMode);
  private static native void nativeRelease();
 
  public static void main(String[] args) {
@@ -46,7 +46,7 @@ public final class EmbeddedGgufRuntime {
      rgb[at+2]=(byte)40;
     }
     String vision=nativeAnalyzeImage(args[3],args[4],
-      "Describe the two colored areas that you can see. Avoid guessing game objects.",rgb,w,h);
+      "Describe the two colored areas that you can see. Avoid guessing game objects.",rgb,w,h,false);
     System.out.println("NATIVE_VISION_RAW="+quote(vision));
     String lower=vision==null?"":vision.toLowerCase(java.util.Locale.ROOT);
     if(!lower.contains("red")||!lower.contains("green"))

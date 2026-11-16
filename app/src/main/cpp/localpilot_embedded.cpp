@@ -15,6 +15,9 @@ std::mutex lock;
 std::atomic<bool> cancelled(false);
 llama_model * model=nullptr;
 llama_context * ctx=nullptr;
+mtmd_context * visionContext=nullptr;
+std::string visionPath;
+int visionMaxTokens=0;
 std::string path;
 int gpuLayersRequested=0;
 int gpuLayersLoaded=0;
@@ -51,6 +54,8 @@ struct Utf {
 };
 
 void unload(){
+ if(visionContext){mtmd_free(visionContext);visionContext=nullptr;}
+ visionPath.clear();visionMaxTokens=0;
  if(ctx){llama_free(ctx);ctx=nullptr;}
  if(model){llama_model_free(model);model=nullptr;}
  path.clear();gpuLayersLoaded=0;
@@ -110,7 +115,7 @@ bool run_batch(llama_batch_ext *batch,const llama_token *tokens,int count,int of
  return llama_process(ctx,LLAMA_PROCESS_TYPE_DECODE,batch)==0;
 }
 
-std::string generate_from_logits(int pos,int limit,float temp){
+std::string generate_from_logits(int pos,int limit,float temp,bool nesController=false){
  if(!ctx||pos<1||limit<1||limit>192)return "";
  const auto *vocab=llama_model_get_vocab(model);
  auto *batch=llama_batch_ext_init(ctx);
@@ -119,6 +124,11 @@ std::string generate_from_logits(int pos,int limit,float temp){
  auto *sampler=llama_sampler_chain_init(llama_sampler_chain_default_params());
  if(!sampler)ok=false;
  if(ok){
+  if(nesController){
+   auto *grammar=llama_sampler_init_grammar(vocab,
+    "root ::= \"BUTTON=\" (\"A\" | \"B\" | \"UP\" | \"DOWN\" | \"LEFT\" | \"RIGHT\" | \"NONE\")","root");
+   if(grammar)llama_sampler_chain_add(sampler,grammar);else ok=false;
+  }
   llama_sampler_chain_add(sampler,llama_sampler_init_penalties(
    llama_vocab_n_tokens(vocab),64,1.18f,0.0f,0.0f));
   if(temp<=0.0f)llama_sampler_chain_add(sampler,llama_sampler_init_greedy());
@@ -229,7 +239,7 @@ Java_org_localpilot_android_EmbeddedGgufRuntime_nativeInfer(
 extern "C" JNIEXPORT jstring JNICALL
 Java_org_localpilot_android_EmbeddedGgufRuntime_nativeAnalyzeImage(
  JNIEnv *e,jclass,jstring filename,jstring mmproj,jstring prompt,
- jbyteArray pixelData,jint width,jint height){
+ jbyteArray pixelData,jint width,jint height,jboolean controllerMode){
  Utf f(e,filename),m(e,mmproj),p(e,prompt);
  if(!pixelData||width<1||height<1||width>640||height>640||
     e->GetArrayLength(pixelData)!=width*height*3)
@@ -241,19 +251,28 @@ Java_org_localpilot_android_EmbeddedGgufRuntime_nativeAnalyzeImage(
  std::lock_guard<std::mutex> guard(lock);
  std::string reply;
  if(!cancelled.load()&&init(f.str())&&!cancelled.load()){
+  const bool controller=controllerMode==JNI_TRUE;
   auto params=mtmd_context_params_default();
   params.use_gpu=gpuLayersLoaded>0;
   params.n_threads=4;
   params.warmup=false;
-  params.image_max_tokens=512;
-  mtmd_context *vision=mtmd_init_from_file(m.str().c_str(),model,params);
+  params.image_max_tokens=controller?128:512;
+  if(!visionContext||visionPath!=m.str()||visionMaxTokens!=params.image_max_tokens){
+   if(visionContext)mtmd_free(visionContext);
+   visionContext=mtmd_init_from_file(m.str().c_str(),model,params);
+   visionPath=m.str();visionMaxTokens=params.image_max_tokens;
+  }
+  mtmd_context *vision=visionContext;
   if(vision){
    if(mtmd_support_vision(vision)){
     mtmd_bitmap *bitmap=mtmd_bitmap_init(width,height,pixels.data());
     mtmd_input_chunks *chunks=mtmd_input_chunks_init();
     if(bitmap&&chunks){
      std::string user="Analyze the attached game screenshot. <__media__>\n"+p.str();
-     std::string formatted=chat(
+     std::string formatted=chat(controller?
+       "Control the current NES game using the screenshot and verified game state. "
+       "Return exactly one BUTTON=A, BUTTON=B, BUTTON=UP, BUTTON=DOWN, BUTTON=LEFT, BUTTON=RIGHT or BUTTON=NONE. "
+       "Do not explain. Choose NONE when uncertain. Never issue Android commands.":
        "You are a game vision diagnostician. Describe only visible objects "
        "and uncertainty. Never issue a gesture, coordinates or action commands.",user);
      mtmd_input_text input{formatted.data(),formatted.size(),true,true};
@@ -263,14 +282,13 @@ Java_org_localpilot_android_EmbeddedGgufRuntime_nativeAnalyzeImage(
       llama_memory_clear(llama_get_memory(ctx),true);
       llama_pos after=0;
       if(mtmd_helper_eval_chunks(vision,ctx,chunks,0,0,512,true,&after)==0
-          &&after>0&&after+128<4096&&!cancelled.load())
-       reply=generate_from_logits(after,128,0.1f);
+          &&after>0&&after+(controller?16:128)<4096&&!cancelled.load())
+       reply=generate_from_logits(after,controller?16:128,controller?0.0f:0.1f,controller);
      }
     }
     if(chunks)mtmd_input_chunks_free(chunks);
     if(bitmap)mtmd_bitmap_free(bitmap);
    }
-   mtmd_free(vision);
   }
  }
  for(unsigned char c:reply)if((c&0xF8)==0xF0){reply.clear();break;}

@@ -8,6 +8,15 @@ public final class NesModelHostTest {
   boolean failed=false;try{operation.run();}catch(IllegalArgumentException expected){failed=true;}check(failed,message);
  }
  public static void main(String[] args){
+  var realBefore=new VoidLancerGameState(1,100,180,3,3,1,0,0,0,0);
+  var realAfter=new VoidLancerGameState(1,116,180,3,3,1,0,0,1,1);
+  check(realAfter.confirms("RIGHT",realBefore),"actual ship movement proves directional control");
+  check(realAfter.confirms("A",realBefore),"actual shot counter/bullets prove firing");
+  check(!realBefore.confirms("A",realBefore),"changing background alone cannot prove firing");
+  check(!realAfter.confirms("LEFT",realBefore),"wrong movement direction cannot pass");
+  check(!realAfter.display().contains("ПОБЕДА"),"ordinary gameplay never becomes an invented win");
+  check(VoidLancerGameState.parse(realAfter.wire()).equals(realAfter),"real-game evidence encoding roundtrips");
+  refuses(()->VoidLancerGameState.parse("3,100,180,3,3,1,999999999,0,0,0"),"impossible game score rejected");
   for(int budget:HarnessDemoWorkflow.GGUF_BUDGETS){
    check(HarnessDemoWorkflow.ggufSteps(HarnessDemoWorkflow.ggufMode(budget))==budget,"exact bounded GGUF budget");
    check(HarnessDemoWorkflow.supported(HarnessDemoWorkflow.ggufMode(budget)),"explicit GGUF budget is supported");

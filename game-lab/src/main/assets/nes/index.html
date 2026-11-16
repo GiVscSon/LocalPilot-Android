@@ -299,6 +299,17 @@ window.retroRestoreState=function(saved,session,newSession){
  }catch(error){stop();status("STOP: сохранение NES не прошло проверку");return false;}
 };
 let usedStepNonce="";
+function readActualGameState(){
+ if(!nes||!nes.cpu||!nes.cpu.mem||!window.GameLabBridge||
+    typeof window.GameLabBridge.realGameProfile!=="function"||
+    window.GameLabBridge.realGameProfile(activeRomSession)!=="VOID_LANCER_V1")return null;
+ const m=nes.cpu.mem;let score=0,bullets=0;
+ for(let i=0;i<6;i++){if(!Number.isInteger(m[0x30+i])||m[0x30+i]<0||m[0x30+i]>9)return null;score=score*10+m[0x30+i];}
+ for(let i=0;i<8;i++)if(m[0x348+i]!==255)bullets++;
+ const values=[m[0],m[6],m[7],m[0x0a],m[0x0b],m[0x0d],score,m[0x13],m[0x26],bullets];
+ if(values.some(x=>!Number.isInteger(x)||x<0)||m[0]>3)return null;
+ return values.join(",");
+}
 window.retroAiStep=function(name,holdFrames,nonce){
  if(!nes||!stepMode||!paused||(!homebrewRom&&!visionProfileCurrent())||!gamepadLatch||agentTrial||
     !["A","B","UP","DOWN","LEFT","RIGHT"].includes(name)||
@@ -312,6 +323,7 @@ window.retroAiStep=function(name,holdFrames,nonce){
  const mapped=keyMap[name];
  if(!mapped||!Object.prototype.hasOwnProperty.call(jsnes.Controller,mapped))return false;
  const code=jsnes.Controller[mapped],started=frames;
+ const realBefore=readActualGameState();
  // This exact bundled homebrew uses CPU RAM $01/$02 for sprite X/Y.
  // Unlike pixel differences, these are emulator-executed task coordinates.
  if(homebrewRom&&(!nes.cpu||!nes.cpu.mem||nes.cpu.mem.length<3))return false;
@@ -335,6 +347,9 @@ window.retroAiStep=function(name,holdFrames,nonce){
       afterX<0||afterX>255||afterY<0||afterY>255))
    throw Error("Unverified homebrew state");
   if(window.GameLabBridge){
+   const realAfter=readActualGameState();
+   if(realBefore!==null&&realAfter!==null&&typeof window.GameLabBridge.onRealGameTransition==="function")
+    window.GameLabBridge.onRealGameTransition(realBefore,realAfter,started,frames,activeRomSession,nonce);
    // Exact pre/post emulated RAM is separately verified in Android. No
    // generic reward for imported ROMs; no win inferred from the PPU frame.
    if(homebrewRom&&typeof window.GameLabBridge.onHomebrewTask==="function")
@@ -385,6 +400,9 @@ window.retroSnapshot=function(token){
       x<0||x>255||y<0||y>255)return false;
    window.GameLabBridge.onHomebrewObservation(x,y,token,activeRomSession);
   }
+  const realState=readActualGameState();
+  if(realState!==null&&typeof window.GameLabBridge.onRealGameObservation==="function")
+   window.GameLabBridge.onRealGameObservation(realState,token,activeRomSession);
   window.GameLabBridge.onSnapshot(image.substring(prefix.length),token);
   return true;
  }catch(error){return false;}

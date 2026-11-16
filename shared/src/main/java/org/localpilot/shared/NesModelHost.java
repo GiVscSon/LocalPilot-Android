@@ -14,7 +14,10 @@ public interface NesModelHost {
   }
  }
  enum TaskProfile { HOMEBREW_RAM, VISION_EXPLORATION }
- record Observation(HarnessCoordinator.Ticket ticket,String romSha256,ModelIdentity binding,int ramX,int ramY,byte[] png,TaskProfile profile) {
+ record Observation(HarnessCoordinator.Ticket ticket,String romSha256,ModelIdentity binding,int ramX,int ramY,byte[] png,TaskProfile profile,VoidLancerGameState game) {
+  public Observation(HarnessCoordinator.Ticket ticket,String romSha256,ModelIdentity binding,int ramX,int ramY,byte[] png,TaskProfile profile){
+   this(ticket,romSha256,binding,ramX,ramY,png,profile,null);
+  }
   public Observation(HarnessCoordinator.Ticket ticket,String romSha256,ModelIdentity binding,int ramX,int ramY,byte[] png){
    this(ticket,romSha256,binding,ramX,ramY,png,TaskProfile.HOMEBREW_RAM);
   }
@@ -24,6 +27,8 @@ public interface NesModelHost {
     throw new IllegalArgumentException("Invalid typed NES observation");
    if(profile==TaskProfile.VISION_EXPLORATION&&(ramX!=-1||ramY!=-1||png==null))
     throw new IllegalArgumentException("Generic NES requires pixels and UNKNOWN RAM");
+   if(game!=null&&(profile!=TaskProfile.VISION_EXPLORATION||!VoidLancerGameState.ROM_SHA.equals(romSha256)))
+    throw new IllegalArgumentException("Game memory profile differs from ROM identity");
    if(png!=null){NesFrameTransfer.verify(png);png=png.clone();}
   }
   @Override public byte[] png(){return png==null?null:png.clone();}

@@ -102,6 +102,11 @@ public final class ConsoleExperienceMemoryTest {
   NesTrial user=NesTrial.create("USER_ROM","RIGHT",20,36,44,55);
   ConsoleExperienceMemory.appendGeneric(generic,new ConsoleExperienceMemory.GenericEpisode(sha,"1234","import:alpha",other,user));
   require(ConsoleExperienceMemory.readGeneric(generic).size()==1,"user-ROM evidence persisted");
+  var shipBefore=new VoidLancerGameState(1,100,180,3,3,1,0,0,0,0);
+  var shipAfter=new VoidLancerGameState(1,116,180,3,3,1,0,0,1,1);
+  ConsoleExperienceMemory.appendGeneric(generic,new ConsoleExperienceMemory.GenericEpisode(VoidLancerGameState.ROM_SHA,"1235","import:alpha",other,user,shipBefore,shipAfter));
+  require(ConsoleExperienceMemory.readGeneric(generic).get(1).after().confirms("RIGHT",shipBefore),"actual RAM controls survive journal verification");
+  expectFailure(()->new ConsoleExperienceMemory.GenericEpisode(sha,"1235","import:alpha",other,user,shipBefore,shipAfter));
   require(ConsoleExperienceMemory.read(generic).isEmpty()&&ConsoleExperienceMemory.readGoals(generic).isEmpty()&&
     ConsoleExperienceMemory.readHomebrewGoals(generic).isEmpty(),"unknown generic reward cannot enter any trusted homebrew stream");
   require(ConsoleExperienceMemory.genericContext(generic,sha,"import:alpha",other).contains("RIGHT:PIXELS_DIFFER"),"same exact ROM/model receives its observations");

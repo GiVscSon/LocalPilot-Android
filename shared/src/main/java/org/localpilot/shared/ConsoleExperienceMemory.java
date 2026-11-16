@@ -27,22 +27,29 @@ public final class ConsoleExperienceMemory {
  private static final int MAX_LINE=350;
  private static final String GENERIC="console-ai-user-rom-v1.log",GENERIC_OLD="console-ai-user-rom-v1.previous.log";
  /** User-ROM evidence never enters the homebrew reward/PPO journals. */
- public record GenericEpisode(String romSha,String epoch,String modelId,String modelSha,NesTrial trial) {
+ public record GenericEpisode(String romSha,String epoch,String modelId,String modelSha,NesTrial trial,
+                              VoidLancerGameState before,VoidLancerGameState after) {
+  public GenericEpisode(String romSha,String epoch,String modelId,String modelSha,NesTrial trial){this(romSha,epoch,modelId,modelSha,trial,null,null);}
   public GenericEpisode {
    if(!sha(romSha)||epoch==null||!epoch.matches("[1-9][0-9]{0,18}")||!id(modelId)||!sha(modelSha)||
        trial==null||!"USER_ROM".equals(trial.scenario)||!ConsoleAgentContract.playable(trial.button))
     throw new IllegalArgumentException("Invalid user-ROM evidence identity");
    NesTrial.parse(trial.serialize());
+   if((before==null)!=(after==null)||(before!=null&&!VoidLancerGameState.ROM_SHA.equals(romSha)))
+    throw new IllegalArgumentException("Wrong real-game memory provenance");
   }
  }
  private static GenericEpisode decodeGeneric(String line){
   if(line==null||line.length()>800)throw new IllegalArgumentException("Generic row size");
   int end=line.lastIndexOf('|');
   if(end<0||!digest(line.substring(0,end)).equals(line.substring(end+1)))throw new IllegalArgumentException("Generic checksum");
-  String[] p=line.substring(0,end).split("\\|",8);
-  if(p.length!=8||!"NES_USER_ROM_V1".equals(p[0])||!"RETRO_EMULATED".equals(p[5])||!"NULL".equals(p[6]))
+  String body=line.substring(0,end);boolean v2=body.startsWith("NES_USER_ROM_V2|");
+  String[] p=body.split("\\|",v2?10:8);
+  if(p.length!=(v2?10:8)||!("NES_USER_ROM_V1".equals(p[0])||"NES_USER_ROM_V2".equals(p[0]))||!"RETRO_EMULATED".equals(p[5])||!"NULL".equals(p[6]))
    throw new IllegalArgumentException("Generic provenance/reward");
-  return new GenericEpisode(p[1],p[2],p[3],p[4],NesTrial.parse(p[7]));
+  return v2?new GenericEpisode(p[1],p[2],p[3],p[4],NesTrial.parse(p[9]),
+    "-".equals(p[7])?null:VoidLancerGameState.parse(p[7]),"-".equals(p[8])?null:VoidLancerGameState.parse(p[8])):
+    new GenericEpisode(p[1],p[2],p[3],p[4],NesTrial.parse(p[7]));
  }
  public static synchronized List<GenericEpisode> readGeneric(Path directory)throws IOException{
   List<GenericEpisode> all=new ArrayList<>();
@@ -58,8 +65,9 @@ public final class ConsoleExperienceMemory {
  }
  public static synchronized void appendGeneric(Path directory,GenericEpisode row)throws IOException{
   if(row==null)throw new IllegalArgumentException("Missing generic evidence");
-  String body="NES_USER_ROM_V1|"+row.romSha()+"|"+row.epoch()+"|"+row.modelId()+"|"+row.modelSha()+
-    "|RETRO_EMULATED|NULL|"+row.trial().serialize();
+  String body="NES_USER_ROM_V2|"+row.romSha()+"|"+row.epoch()+"|"+row.modelId()+"|"+row.modelSha()+
+    "|RETRO_EMULATED|NULL|"+(row.before()==null?"-":row.before().wire())+"|"+
+    (row.after()==null?"-":row.after().wire())+"|"+row.trial().serialize();
   String line=body+"|"+digest(body);decodeGeneric(line);
   Files.createDirectories(directory);readGeneric(directory);
   Path journal=directory.resolve(GENERIC);byte[] encoded=(line+"\n").getBytes(StandardCharsets.UTF_8);
@@ -71,7 +79,7 @@ public final class ConsoleExperienceMemory {
   if(!sha(romSha)||!id(modelId)||!sha(modelSha))throw new IllegalArgumentException("Generic context identity");
   List<GenericEpisode> rows=new ArrayList<>();
   for(var row:readGeneric(directory))if(row.romSha().equals(romSha)&&row.modelId().equals(modelId)&&row.modelSha().equals(modelSha))rows.add(row);
-  StringBuilder result=new StringBuilder("Past observations for this exact ROM and model. Reward, score and success UNKNOWN: ");
+  StringBuilder result=new StringBuilder("Past inputs and frame changes for this exact ROM and model; these alone do not prove reward or victory: ");
   for(int i=Math.max(0,rows.size()-MAX_CONTEXT);i<rows.size();i++)result.append(rows.get(i).trial().button).append(':').append(rows.get(i).trial().status).append("; ");
   return result.toString();
  }

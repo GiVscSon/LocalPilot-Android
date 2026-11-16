@@ -56,7 +56,7 @@ public final class EmbeddedGgufRuntime {
 
  private static native String nativeInfer(String model,String system,String question,int maxTokens,float temp);
  private static native String nativeAnalyzeImage(String model,String projector,String question,
-   byte[] rgb,int width,int height);
+   byte[] rgb,int width,int height,boolean controllerMode);
  private static native void nativeInterrupt();
  private static native void nativeResetInterrupt();
  private static native void nativeRelease();
@@ -275,7 +275,7 @@ public final class EmbeddedGgufRuntime {
     return LocalCoreContract.visibleAnswer(nativeAnalyzeImage(
       model.getAbsolutePath(),projector.getAbsolutePath(),
       "Describe only visible image contents, and explicitly mention uncertainty. "+prompt,
-      pixels,width,height));
+      pixels,width,height,false));
   });
  }
  public void image(File model,File projector,String prompt,byte[] rgb,int width,int height,
@@ -305,7 +305,7 @@ public final class EmbeddedGgufRuntime {
    String proposal=projector==null?
      nativeInfer(weights.getAbsolutePath(),instructions,observation,48,0.0f):
      nativeAnalyzeImage(weights.getAbsolutePath(),projector.getAbsolutePath(),
-       instructions+observation,pixels,width,height);
+       instructions+observation,pixels,width,height,true);
    return LocalCoreContract.visibleAnswer(proposal);
   });
  }
@@ -396,7 +396,7 @@ public final class EmbeddedGgufRuntime {
      weights.getAbsolutePath(),projector.getAbsolutePath(),
      "Describe the visible game objects and uncertainties in English. "+
      "Do not invent tiles, coordinates, actions or game outcomes. "+ask,
-     rgb,width,height));
+     rgb,width,height,false));
    if(!LocalCoreContract.acceptEnglish(reply))
     return "Мультимодальная модель не смогла надёжно описать изображение. "+
       "Никаких игровых действий не выполнено.";

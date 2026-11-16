@@ -10,6 +10,7 @@ class HomebrewStudentNetworkVerify{
       "shared/src/main/java/org/localpilot/shared/ConsoleAgentContract.java",
       "shared/src/main/java/org/localpilot/shared/NesTrial.java",
       "shared/src/main/java/org/localpilot/shared/HomebrewGoalReward.java",
+      "shared/src/main/java/org/localpilot/shared/VoidLancerGameState.java",
       "shared/src/main/java/org/localpilot/shared/ConsoleExperienceMemory.java",
       "shared/src/main/java/org/localpilot/shared/HomebrewStudentNetwork.java",
       "tests/HomebrewStudentNetworkTest.java")!=0)

@@ -179,11 +179,14 @@ public final class HarnessModelRuntime {
     ConsoleExperienceMemory.context(application.getFilesDir().toPath(),model.id,model.modelSha);
    var t=call.observation.ticket();
    String observation=(projector==null?"TEXT ONLY: no image understanding. ":"Verified NES RGB attached. ")+
-    (generic?"Play the visible NES game. Infer its controls and objective from the image. Choose NONE if uncertain. No RAM, score, reward or victory is verified. ROM="+call.observation.romSha256()+". ":
+    (generic?(call.observation.game()==null?"Play the visible NES game. Infer its controls and objective from the image. Choose NONE if uncertain. Game RAM, score and victory UNKNOWN. ":
+      "Play the actual VOID LANCER shooter. Move to dodge threats and fire A when safe; B spends a limited bomb. The ROM-specific memory below is verified. ")+"ROM="+call.observation.romSha256()+". ":
       "Builtin NES rightward task. ")+"frame="+t.frame+" hash="+Integer.toUnsignedString(t.hash)+
-    (call.observation.ramX()<0?" RAM UNKNOWN. ":" verified RAM x="+call.observation.ramX()+" y="+call.observation.ramY()+". ")+
+    (generic?" ":call.observation.ramX()<0?" RAM UNKNOWN. ":" verified RAM x="+call.observation.ramX()+" y="+call.observation.ramY()+". ")+
     (generic?"Choose one allowed BUTTON for visible game progress. ":"Choose one allowed BUTTON for rightward progress without crossing a RAM edge. ")+
     "Input ACK is not a reward. "+history;
+   if(call.observation.game()!=null)observation=call.observation.game().prompt()+observation;
+   final String modelObservation=observation.substring(0,Math.min(900,observation.length()));
    final File mmproj=projector;final byte[] rgb=pixels;
    main.post(()->{
     try{
@@ -191,7 +194,7 @@ public final class HarnessModelRuntime {
      EmbeddedGgufRuntime runtime=engine();
      if(runtime.busy()){finish(call,NesModelHost.Status.BUSY,null,0);return;}
      phase(call,"INFERENCING");
-     runtime.proposeNesButton(weights,mmproj,observation,rgb,NesFrameTransfer.WIDTH,NesFrameTransfer.HEIGHT,0,
+     runtime.proposeNesButton(weights,mmproj,modelObservation,rgb,NesFrameTransfer.WIDTH,NesFrameTransfer.HEIGHT,0,
        (answer,elapsed)->completed(call,answer,elapsed));
      call.nativeStarted=true;
     }catch(RuntimeException unavailable){finish(call,NesModelHost.Status.UNAVAILABLE,null,0);}

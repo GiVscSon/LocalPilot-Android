@@ -17,7 +17,7 @@ public final class EmbeddedGgufRuntime {
  public interface Result { void complete(String answer,long elapsedMs); }
  private static native String nativeInfer(String model,String system,String question,int tokens,float temperature);
  private static native String nativeAnalyzeImage(String model,String projector,String question,
-   byte[] rgb,int width,int height);
+   byte[] rgb,int width,int height,boolean controllerMode);
  private static native String nativeGpuDescription();
  private static native boolean nativeConfigureGpuLayers(int layers);
  private static native int nativeLoadedGpuLayers();
@@ -118,7 +118,7 @@ public final class EmbeddedGgufRuntime {
    String answer=nativeAnalyzeImage(model.getAbsolutePath(),
      projector.getAbsolutePath(),
      "Describe only what is visible in the attached image. Mention uncertainty. "+prompt,
-     copy,width,height);
+     copy,width,height,false);
    lastGpuLayers=nativeLoadedGpuLayers();
    if(answer==null||answer.isBlank())return "";
    return answer+

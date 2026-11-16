@@ -39,6 +39,7 @@ import org.localpilot.shared.ConsoleExperienceMemory;
 import org.localpilot.shared.HomebrewGoalReward;
 import org.localpilot.shared.ConsoleAgentContract;
 import org.localpilot.shared.NesModelHost;
+import org.localpilot.shared.VoidLancerGameState;
 import org.localpilot.shared.HarnessCoordinator;
 import org.localpilot.shared.HarnessDemoWorkflow;
 import org.localpilot.shared.NesSaveStore;
@@ -104,6 +105,8 @@ public final class NesEmulatorActivity extends Activity {
   }
  }
  private TaskObservation taskObservation;
+ private record RealGameObservation(String token,String epoch,VoidLancerGameState state){}
+ private RealGameObservation realGameObservation;
  private final HarnessCoordinator harness=HarnessCoordinator.nes();
  private HarnessCoordinator.ActionPermit pendingPermit;
  private boolean aiSnapshot,aiRunning,aiFrozen,studentStepRequested;
@@ -135,6 +138,7 @@ public final class NesEmulatorActivity extends Activity {
   float[] studentState64;
   int studentActionId=-1,studentLegalMask;
   String studentPolicySha;
+  VoidLancerGameState gameBefore,gameAfter;
   TrialPending(String button,int frame,int hash){
    this.button=button;this.frame=frame;this.hash=hash;
   }
@@ -181,7 +185,7 @@ public final class NesEmulatorActivity extends Activity {
   label.setText(dendy?"LocalPilot · Денди (50 Гц)":"LocalPilot · NES");
   label.setTextColor(HubContract.TEXT);label.setTextSize(21);root.addView(label);
   state=new TextView(this);state.setTextColor(HubContract.WARNING);
-  showState("Загрузи свой .nes или скачай проверенный homebrew. Эмуляция работает офлайн, сеть нужна только для загрузки файла.");
+  showState("Открой игровой .nes или VOID LANCER. Агент работает с текущей игрой; сеть нужна только для скачивания файлов.");
   state.setMaxLines(2);state.setEllipsize(android.text.TextUtils.TruncateAt.END);
   root.addView(state,new LinearLayout.LayoutParams(-1,(int)(40*getResources().getDisplayMetrics().density)));
   learningResult=new TextView(this);learningResult.setTextColor(HubContract.TEXT);
@@ -345,6 +349,7 @@ public final class NesEmulatorActivity extends Activity {
    Button modelTools=new Button(this);modelTools.setText("Импорт и проверка моделей");
    modelTools.setOnClickListener(v->startActivity(new Intent().setClassName(getPackageName(),"org.localpilot.android.ModelLabActivity")));
    actionPanel.addView(modelTools);
+   if(!testFixturesAllowed())modelTools.setVisibility(View.GONE);
    Button journal=new Button(this);journal.setText("Состояние и опыт");
    TextView evidence=new TextView(this);evidence.setTextColor(HubContract.TEXT);
    evidence.setVisibility(View.GONE);
@@ -359,10 +364,17 @@ public final class NesEmulatorActivity extends Activity {
     progressIo.execute(()->{
      String history;
      try{
+      if(!testFixturesAllowed()){
+       var rows=ConsoleExperienceMemory.readGeneric(getFilesDir().toPath());
+       String latest="Нет сохранённых результатов настоящей игры";
+       for(var row:rows)if(row.romSha().equals(activeRomSha)&&row.after()!=null)latest=row.after().display();
+       history="\n"+latest+"\nОбучение отключено: reward=NULL. Тестовые показатели в пользовательском режиме не отображаются.";
+      }else{
       var replay=VerifiedPpoReplayStore.summary(progressVault());
       history="\nPPO: "+replay.steps()+" пригодных переходов · "+replay.batches()+" серий"+
        "\nИсточник награды: проверенная RAM учебного ROM · сумма "+replay.rewardSum()+
        "\nНезависимая оценка и активация кандидата в приложении пока недоступны.";
+      }
      }catch(IOException|RuntimeException invalid){history="\nSTOP: журнал опыта не прошёл проверку";}
      String result=controller+history;
      runOnUiThread(()->{if(!closed)evidence.setText(result);});
@@ -451,6 +463,24 @@ public final class NesEmulatorActivity extends Activity {
    }
   });
   web.addJavascriptInterface(new Object(){
+   @JavascriptInterface public String realGameProfile(String session){
+    return genericVisionEpisode&&frameEpoch.current(session)&&VoidLancerGameState.ROM_SHA.equals(activeRomSha)?VoidLancerGameState.PROFILE:"";
+   }
+   @JavascriptInterface public void onRealGameObservation(String data,String token,String session){
+    runOnUiThread(()->{
+     if(!genericVisionEpisode||!VoidLancerGameState.ROM_SHA.equals(activeRomSha)||!frameEpoch.current(session)||!snapshotGate.current(token))return;
+     try{realGameObservation=new RealGameObservation(token,session,VoidLancerGameState.parse(data));}
+     catch(IllegalArgumentException invalid){stopCpuExperiment("STOP: не подтверждено состояние настоящей игры");}
+    });
+   }
+   @JavascriptInterface public void onRealGameTransition(String before,String after,int start,int finish,String session,String nonce){
+    runOnUiThread(()->{
+     if(!genericVisionEpisode||!VoidLancerGameState.ROM_SHA.equals(activeRomSha)||!frameEpoch.current(session)||
+        pendingTrial==null||pendingPermit==null||!pendingPermit.nonce.equals(nonce)||pendingTrial.frame!=start||finish-start!=16)return;
+     try{pendingTrial.gameBefore=VoidLancerGameState.parse(before);pendingTrial.gameAfter=VoidLancerGameState.parse(after);}
+     catch(IllegalArgumentException invalid){stopCpuExperiment("STOP: игровые данные после действия не прошли проверку");}
+    });
+   }
    @JavascriptInterface public boolean allowVisionProfile(String session){
     return genericVisionEpisode&&frameEpoch.current(session)&&getApplication() instanceof NesModelHost host&&
       host.nesVisionModel(host.nesBoundModel());
@@ -1144,13 +1174,18 @@ public final class NesEmulatorActivity extends Activity {
      aiRunning=false;
      GoalSample goal=pendingGoal;
      pendingGoal=null;
-     boolean saved=recordAiEpisode(readyTrial);
+     boolean saved=recordAiEpisode(readyTrial,current);
      if(genericVisionEpisode){
       if(!saved||!"PIXELS_DIFFER".equals(readyTrial.status)){
        stopCpuExperiment("STOP: пользовательский ROM не подтвердил свежий визуальный переход");return;
       }
       --autoGgufRemaining;++ggufCompleted;
-      showState("Зрительный агент: "+ggufCompleted+" шагов · reward/победа UNKNOWN · текущий ROM сохранён");
+      if(current.gameAfter!=null){
+       showState(current.gameAfter.display());
+       if(current.gameAfter.state()==2||current.gameAfter.state()==3){
+        autoGgufRemaining=0;genericVisionEpisode=false;return;
+       }
+      }else showState("Агент управляет текущей игрой · счёт и результат пока не распознаны");
       if(autoGgufRemaining>0){
        String epoch=frameEpoch.token();web.postDelayed(()->{
         if(genericVisionEpisode&&resumed&&!closed&&frameEpoch.current(epoch)&&!harness.hasPending())requestFrozenAiObservation();
@@ -1450,6 +1485,8 @@ public final class NesEmulatorActivity extends Activity {
  private void completeAiObservation(String token,byte[] png){
   if(!snapshotGate.finish(token))return;
   TaskObservation task=taskObservation;
+  RealGameObservation real=realGameObservation;
+  realGameObservation=null;
   taskObservation=null;
   aiSnapshot=false;
   if(aiObserveButton!=null)aiObserveButton.setEnabled(aiEligible());
@@ -1468,8 +1505,12 @@ public final class NesEmulatorActivity extends Activity {
    if(task!=null&&task.token.equals(token)&&task.epoch.equals(frameEpoch.token())){x=task.x;y=task.y;}
    final NesModelHost.Observation observation;
    try{observation=new NesModelHost.Observation(ticket,homebrewRom?pinnedHomebrewRomSha:activeRomSha,host.nesBoundModel(),
-     homebrewRom?x:-1,homebrewRom?y:-1,png,homebrewRom?NesModelHost.TaskProfile.HOMEBREW_RAM:NesModelHost.TaskProfile.VISION_EXPLORATION);}
+     homebrewRom?x:-1,homebrewRom?y:-1,png,homebrewRom?NesModelHost.TaskProfile.HOMEBREW_RAM:NesModelHost.TaskProfile.VISION_EXPLORATION,
+     real!=null&&real.token().equals(token)&&real.epoch().equals(frameEpoch.token())?real.state():null);}
    catch(IllegalArgumentException invalid){stopCpuExperiment("STOP: контракт наблюдения модели недопустим");return;}
+   if(VoidLancerGameState.ROM_SHA.equals(activeRomSha)&&observation.game()==null){
+    stopCpuExperiment("STOP: не получено состояние настоящей VOID LANCER");return;
+   }
    directModelInference=true;
    directModelBinding=observation.binding();
    if(aiObserveButton!=null)aiObserveButton.setEnabled(false);
@@ -1510,11 +1551,11 @@ public final class NesEmulatorActivity extends Activity {
    harness.stopForEpoch(frameEpoch.token(),"STOP");aiTicketNonce=null;showState("STOP: ModelLab не открылся");
   }
  }
- private boolean recordAiEpisode(NesTrial episode){
+ private boolean recordAiEpisode(NesTrial episode,TrialPending current){
   try{
    if(!homebrewRom){
     ConsoleExperienceMemory.appendGeneric(getFilesDir().toPath(),new ConsoleExperienceMemory.GenericEpisode(
-      activeRomSha,frameEpoch.token(),aiModelId,aiModelSha,episode));return true;
+      activeRomSha,frameEpoch.token(),aiModelId,aiModelSha,episode,current.gameBefore,current.gameAfter));return true;
    }
    // The SAME bounded, verified source is consumed by ModelLab and the main
    // console status. Old JSONL is retained read-only as legacy diagnostics.
@@ -1810,7 +1851,7 @@ public final class NesEmulatorActivity extends Activity {
   });
   menu.getMenu().add("Статус выбранной модели").setOnMenuItemClickListener(item->{
    new AlertDialog.Builder(this).setTitle("Модели NES")
-    .setMessage((selected==null?"Student · CPU. Состояние обучения — в панели опыта.":
+    .setMessage((selected==null?(testFixturesAllowed()?"Внутренняя проверка Student · CPU":"Зрительная модель для настоящей игры ещё не выбрана"):
       "Установлена: "+selected.id()+"\nSHA-256 "+selected.sha256()+"\n"+
       (selected.equals(bound)?"BOUND: назначена NES":"Не привязана к NES")+
       "\nИнференс и пригодность к игре проверяются отдельно.")+"\n"+
