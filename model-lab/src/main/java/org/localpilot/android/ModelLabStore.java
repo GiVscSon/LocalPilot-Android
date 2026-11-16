@@ -36,6 +36,8 @@ public final class ModelLabStore {
  // The mutable entries list is confined to synchronized store methods.
  private final ModelLabRegistrySnapshot<Entry> published=new ModelLabRegistrySnapshot<>();
  private final Map<String,Boolean> verified=new HashMap<>();
+ // Serialize transfers/removal without holding the registry monitor during network/SAF reads.
+ private final Object transfers=new Object();
 
  public static final class Entry {
   public final String id,label,modelName,modelSha,projectorName,projectorSha;
@@ -75,7 +77,7 @@ public final class ModelLabStore {
  public List<Entry> list(){return published.read();}
  private void publishSnapshot(){published.publish(entries);}
  public interface Progress { void onBytes(String phase,long done,long total); }
- private int importedCount(){int n=0;for(Entry e:entries)if(!e.bundled)n++;return n;}
+ private synchronized int importedCount(){int n=0;for(Entry e:entries)if(!e.bundled)n++;return n;}
  public synchronized Entry find(String id){
   for(Entry e:entries)if(e.id.equals(id))return e;
   return null;
@@ -264,12 +266,13 @@ public final class ModelLabStore {
      throw new SecurityException("Внутренний файл с тем же SHA повреждён");
     temp.delete();
    }else if(!temp.renameTo(dest))throw new IllegalStateException("Не удалось сохранить GGUF");
-   verified.put(finalName,true);
+   synchronized(this){verified.put(finalName,true);}
    return new ImportedFile(finalName,sha,copied);
   }finally{temp.delete();}
  }
- public synchronized Entry importFile(Uri uri,String label,String expectedSha,
+ public Entry importFile(Uri uri,String label,String expectedSha,
                                        String attachProjectorTo)throws Exception{
+  synchronized(transfers){
   if(uri==null||!"content".equals(uri.getScheme()))
    throw new SecurityException("Только Android Content Picker");
   if(attachProjectorTo==null&&importedCount()>=MAX_IMPORTS)
@@ -277,9 +280,12 @@ public final class ModelLabStore {
   requireProjectorTarget(attachProjectorTo);
   InputStream stream=app.getContentResolver().openInputStream(uri);
   return register(copy(stream,expectedSha),label,attachProjectorTo);
+
+  }
  }
- public synchronized Entry download(String link,String label,String expectedSha,
+ public Entry download(String link,String label,String expectedSha,
                                     String attachProjectorTo)throws Exception{
+  synchronized(transfers){
   if(attachProjectorTo==null&&importedCount()>=MAX_IMPORTS)
    throw new IllegalStateException("Слишком много импортированных GGUF");
   requireProjectorTarget(attachProjectorTo);
@@ -289,10 +295,13 @@ public final class ModelLabStore {
     throw new IllegalArgumentException("Удалённый GGUF больше лимита 3,5 ГБ");
    return register(copy(connection.getInputStream(),expectedSha),label,attachProjectorTo);
   }finally{connection.disconnect();}
+
+  }
  }
  /** Download only a preset from the reviewed catalogue, including its optional vision projector.
   * HTTP size, actual bytes, SHA-256 and GGUF header are all checked before registration. */
- public synchronized Entry downloadPreset(ModelLabPresetCatalog.Preset preset,Progress progress)throws Exception{
+ public Entry downloadPreset(ModelLabPresetCatalog.Preset preset,Progress progress)throws Exception{
+  synchronized(transfers){
   boolean trusted=false;
   for(ModelLabPresetCatalog.Preset item:ModelLabPresetCatalog.ALL)
    if(item==preset){trusted=true;break;}
@@ -322,6 +331,8 @@ public final class ModelLabStore {
    }else projectorFile(chosen);
   }
   return chosen;
+
+  }
  }
  private Entry downloadChecked(String link,String label,String digest,long bytes,
                                String projectorFor,Progress progress)throws Exception{
@@ -335,13 +346,13 @@ public final class ModelLabStore {
   }finally{connection.disconnect();}
  }
  /** Reject a stale/missing projector target BEFORE any large download/import. */
- private void requireProjectorTarget(String id){
+ private synchronized void requireProjectorTarget(String id){
   if(id==null)return;
   Entry entry=find(id);
   if(entry==null||entry.bundled)
    throw new IllegalArgumentException("Выбери существующую импортированную модель для mmproj");
  }
- private Entry register(ImportedFile file,String label,String projectorFor)throws Exception{
+ private synchronized Entry register(ImportedFile file,String label,String projectorFor)throws Exception{
   if(projectorFor!=null){
    Entry found=find(projectorFor);
    if(found==null||found.bundled)throw new IllegalArgumentException(
@@ -431,7 +442,8 @@ public final class ModelLabStore {
   verified.remove(filename);
   new File(directory,filename).delete();
  }
- public synchronized void remove(Entry model)throws Exception{
+ public void remove(Entry model)throws Exception{
+  synchronized(transfers){synchronized(this){
   Entry current=find(model.id);
   if(current==null||current.bundled)throw new IllegalArgumentException("Встроенную модель нельзя удалить");
   entries.remove(current);
@@ -439,5 +451,7 @@ public final class ModelLabStore {
   // Imported files are addressed by SHA. The same mmproj can be shared.
   deleteUnusedBlob(current.modelName);
   deleteUnusedBlob(current.projectorName);
+
+  }}
  }
 }

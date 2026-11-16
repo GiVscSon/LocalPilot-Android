@@ -181,8 +181,10 @@ public final class ModelLabActivity extends Activity {
     return "Только текстовая стратегия, без доступа к игровым кнопкам";
    },false);
   });
-  button(col,"ИИ-агент · выбрать и выполнить один ход в тестовой NES",
+  button(col,"GGUF · выполнить один ход выбранной моделью в тестовой NES",
     ()->proposeNesAction(false));
+  if(inUnifiedApk())button(col,"Student · выполнить один ход назначенной CPU-моделью",
+    ()->proposeNesAction(false,true));
   button(col,"STOP · отменить локальную генерацию",()->{
    boolean running=engine.requestCancel();
    if(ConsoleAgentContract.tokenValid(consoleAgentTicket))cancelConsoleAgent();
@@ -448,7 +450,8 @@ public final class ModelLabActivity extends Activity {
   try{return HarnessModelBinding.resolve(this,store.list());}
   catch(RuntimeException invalid){return null;}
  }
- private void proposeNesAction(boolean automatic){
+ private void proposeNesAction(boolean automatic){proposeNesAction(automatic,false);}
+ private void proposeNesAction(boolean automatic,boolean studentRequested){
    final String nonce=consoleAgentTicket;
    final long revision=revisions.nes();
    final ModelLabStore.Entry selection=automatic?boundForAutomaticNes():selected();
@@ -460,7 +463,10 @@ public final class ModelLabActivity extends Activity {
     nesStatus.setText("Сначала открой встроенную homebrew NES и нажми «ИИ-агент · получить кадр»");return;
    }
    HarnessModelBinding.Assignment bound=HarnessModelBinding.read(this);
-   if(!automatic&&bound!=null&&bound.id().startsWith("student:")){
+   if(studentRequested&&(bound==null||!bound.id().startsWith("student:"))){
+    nesStatus.setText("STOP: сначала назначь проверенную CPU Student в Harness");return;
+   }
+   if(studentRequested&&bound!=null&&bound.id().startsWith("student:")){
     if(consoleAgentTaskX<0||consoleAgentTaskY<0){
      nesStatus.setText("STOP: student не получил 6502 RAM из замороженной NES");
      cancelConsoleAgent();return;
@@ -650,7 +656,7 @@ public final class ModelLabActivity extends Activity {
     consoleAgentTaskX=-1;consoleAgentTaskY=-1;
    }
    nesStatus.setText("NES наблюдение #"+frame+" получено. Выбери GGUF и нажми "+
-     "«ИИ-агент · выбрать и выполнить один ход». STOP и TTL действуют.");
+     "«GGUF · выполнить один ход» или используй отдельно назначенную Student. STOP и TTL действуют.");
    imageStatus.setText("Только свежий PNG-кадр из встроенной NES. "+
      "Text GGUF не видит картинку; для зрения нужен mmproj. "+
      (consoleAgentTaskX>=0?"Задача CPU: ("+consoleAgentTaskX+","+

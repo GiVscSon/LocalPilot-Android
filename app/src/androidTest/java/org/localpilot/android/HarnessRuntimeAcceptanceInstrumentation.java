@@ -102,6 +102,33 @@ public final class HarnessRuntimeAcceptanceInstrumentation extends Instrumentati
   return null;
  }
  private static void require(boolean value,String message){if(!value)throw new AssertionError(message);}
+ private void verifySlowTransfer(ModelLabStore store,ModelLabStore.Entry existing)throws Exception{
+  android.net.Uri uri=android.net.Uri.parse("content://org.localpilot.test.slow-model/model.gguf");
+  var resolver=getTargetContext().getContentResolver();
+  resolver.call(uri,"reset",null,null);
+  var workers=java.util.concurrent.Executors.newFixedThreadPool(2);
+  int before=store.list().size();
+  var transfer=workers.submit(()->{
+   try{store.importFile(uri,"Rejected slow fixture","0".repeat(64),null);return false;}
+   catch(SecurityException rejected){return true;}
+  });
+  try{
+   long deadline=SystemClock.elapsedRealtime()+5000;
+   while(!resolver.call(uri,"status",null,null).getBoolean("started")){
+    require(SystemClock.elapsedRealtime()<deadline,"Slow SAF producer never started");
+    SystemClock.sleep(20);
+   }
+   var read=workers.submit(()->store.modelFile(existing));
+   require(read.get(2,TimeUnit.SECONDS).isFile(),"Existing model inaccessible during transfer");
+   require(!transfer.isDone(),"Slow transfer did not remain blocked during model access");
+  }finally{
+   resolver.call(uri,"release",null,null);
+   try{
+    require(transfer.get(5,TimeUnit.SECONDS),"Invalid slow GGUF was registered");
+    require(store.list().size()==before&&store.find(existing.id)!=null,"Slow rejected import changed registry");
+   }finally{workers.shutdownNow();}
+  }
+ }
  private void prepareModel(){
   Bundle result=new Bundle();JSONObject evidence=new JSONObject();boolean pass=false;
   try{
@@ -130,6 +157,7 @@ public final class HarnessRuntimeAcceptanceInstrumentation extends Instrumentati
    }else imported=runtime.store().downloadPreset(preset,null);
    require(imported.modelSha.equals(preset.sha256)&&imported.modelBytes==preset.bytes,"Public fixture model identity mismatch");
    runtime.store().modelFile(imported);
+   verifySlowTransfer(runtime.store(),imported);
    HarnessModelBinding.clear(app);
    Activity screen=startActivitySync(new Intent(getTargetContext(),ModelLabActivity.class)
      .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
@@ -149,6 +177,8 @@ public final class HarnessRuntimeAcceptanceInstrumentation extends Instrumentati
    }finally{runOnMainSync(screen::finish);}
    evidence.put("result","MODEL_IMPORT_PASS_NOT_INFERENCE").put("modelSha256",imported.modelSha)
     .put("modelId",imported.id).put("modelBytes",imported.modelBytes).put("nativeInferencePerformed",false)
+    .put("existingModelReadableDuringBlockedSafImport",true)
+    .put("invalidSlowImportRejectedWithoutRegistryChange",true)
     .put("selectionAssignedThroughVisibleModelLabButton",true)
     .put("cpuBuildRejectsUnavailableGpuModes",true)
     .put("source","PUBLIC_PINNED_GGUF_CI_FIXTURE")

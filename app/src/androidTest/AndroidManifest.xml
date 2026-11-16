@@ -1,5 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
  <application>
+  <provider android:name="org.localpilot.android.SlowModelImportProvider" android:authorities="org.localpilot.test.slow-model" android:exported="true"/>
   <activity android:name="org.localpilot.android.CaptureAcceptanceFixtureActivity" android:exported="true" android:label="LocalPilot isolated capture acceptance"/>
   <activity android:name="org.localpilot.android.BubbleFixtureActivity" android:exported="true" android:label="LocalPilot bubble fixture"/>
   <activity android:name="org.localpilot.android.CaptureFixtureActivity" android:exported="true" android:label="LocalPilot capture fixture">
