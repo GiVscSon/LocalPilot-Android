@@ -75,11 +75,13 @@ def verify_metadata(apk,aapt):
             raise ValueError(f"Missing unified screen {activity}")
     return m
 
-def verify(apk,aapt,apksigner,pinned_cert,source_sha,previous=None):
+def verify(apk,aapt,apksigner,pinned_cert,source_sha,previous=None,previous_apk=None):
     if not re.fullmatch(r"[0-9a-fA-F]{40}",source_sha):
         raise ValueError("Full pinned 40-digit git source SHA required")
     if not re.fullmatch(r"[0-9a-fA-F]{64}",pinned_cert):
         raise ValueError("One permanent 64-hex release certificate required")
+    if (previous is None)!=(previous_apk is None):
+        raise ValueError("Previous manifest and actual previous APK must be supplied together")
     cert=pinned_cert.lower()
     verify_payload(apk,source_sha)
     m=verify_metadata(apk,aapt)
@@ -90,14 +92,31 @@ def verify(apk,aapt,apksigner,pinned_cert,source_sha,previous=None):
     if not re.search(r"^Verified using v[23] scheme .*: true$",signed,re.M):
         raise ValueError("No valid v2/v3 signature")
     version=int(m.group(2))
+    upgrade={"status":"NOT_EVALUATED"}
     if previous is not None:
-        if previous.get("schema")!="localpilot-unified-signed-candidate-v1" or previous.get("package")!=PACKAGE:
+        if not isinstance(previous,dict) or previous.get("schema")!="localpilot-unified-signed-candidate-v1" or previous.get("package")!=PACKAGE:
             raise ValueError("Old signed manifest schema or package mismatch")
         if previous.get("signerSha256")!=cert:
             raise ValueError("Release certificate changed since prior version")
-        old_version=previous.get("versionCode")
-        if not isinstance(old_version,int) or version<=old_version:
+        previous_source=previous.get("sourceCommit")
+        if not isinstance(previous_source,str) or not re.fullmatch(r"[0-9a-fA-F]{40}",previous_source):
+            raise ValueError("Previous manifest requires a full source commit")
+        # Reuse the same payload/SDK checks; JSON alone cannot establish the
+        # predecessor's certificate, version, source or byte identity.
+        actual_previous=verify(Path(previous_apk),aapt,apksigner,cert,previous_source)
+        for field in ("sourceCommit","package","versionCode","versionName",
+                      "signerSha256","apkSha256","apkBytes"):
+            if type(previous.get(field)) is not type(actual_previous[field]) or previous.get(field)!=actual_previous[field]:
+                raise ValueError(f"Prior manifest {field} differs from actual previous APK")
+        old_version=actual_previous["versionCode"]
+        if version<=old_version:
             raise ValueError("Release upgrade versionCode is not incremented")
+        upgrade={"status":"APK_PAIR_IDENTITY_VERSION_PASS",
+                 "previousSourceCommit":actual_previous["sourceCommit"],
+                 "previousApkSha256":actual_previous["apkSha256"],
+                 "previousVersionCode":old_version,"currentVersionCode":version,
+                 "previousSignerSha256":actual_previous["signerSha256"],
+                 "deviceInstall":"NOT_TESTED"}
     h=hashlib.sha256()
     with apk.open("rb") as f:
         for block in iter(lambda:f.read(1024*1024),b""):
@@ -111,6 +130,7 @@ def verify(apk,aapt,apksigner,pinned_cert,source_sha,previous=None):
       "releaseReady":False,
       "physicalAndroidTest":"NOT_VERIFIED",
       "upgradeDataPreservation":"NOT_VERIFIED",
+      "upgradeCompatibility":upgrade,
       "models":"ON_DEMAND_NOT_BUNDLED",
     }
 
@@ -122,10 +142,16 @@ def main():
     p.add_argument("--cert",required=True)
     p.add_argument("--source-sha",required=True)
     p.add_argument("--previous",type=Path)
+    p.add_argument("--previous-apk",type=Path,
+                   help="Actual prior signed unified APK; required together with --previous")
     p.add_argument("--output",type=Path,required=True)
     a=p.parse_args()
+    if (a.previous is None)!=(a.previous_apk is None):
+        raise ValueError("Previous manifest and actual previous APK must be supplied together")
     prior=json.loads(a.previous.read_text(encoding="utf-8")) if a.previous else None
-    result=verify(a.apk,a.aapt,a.apksigner,a.cert,a.source_sha,prior)
+    if a.previous is not None and not isinstance(prior,dict):
+        raise ValueError("Previous manifest must be a JSON object")
+    result=verify(a.apk,a.aapt,a.apksigner,a.cert,a.source_sha,prior,a.previous_apk)
     a.output.parent.mkdir(parents=True,exist_ok=True)
     a.output.write_text(json.dumps(result,ensure_ascii=False,indent=2)+"\n",encoding="utf-8")
     print("SIGNED_UNIFIED_CANDIDATE_PASS; releaseReady=false; real device not tested")
