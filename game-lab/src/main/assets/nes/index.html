@@ -164,14 +164,12 @@ window.retroAgentTrial=function(name,holdFrames){
 // The old CPU-baseline retroAgentTrial remains A-only for parity tests.
 window.retroAiTrial=function(name,holdFrames){
  if(!nes||paused||!gamepadLatch||!homebrewRom||agentTrial||
-    !(homebrewRom?["A","B","UP","DOWN","LEFT","RIGHT"].includes(name):ordinaryButton)||
+    !["A","B","UP","DOWN","LEFT","RIGHT"].includes(name)||
     !Number.isInteger(holdFrames)||holdFrames!==16)return false;
  const mapped=keyMap[name];
  if(!mapped||!Object.prototype.hasOwnProperty.call(jsnes.Controller,mapped))return false;
  const code=jsnes.Controller[mapped];
- for(let i=0;i<names.length;i++)if(!gamepadLatch.change(names[i],codes[i],true,frames)){
-  gamepadLatch.clear();return false;
- }
+ if(typeof code!=="number"||!gamepadLatch.change(name,code,true,frames))return false;
  agentTrial={name,code,started:frames,holdFrames};
  return true;
 };
@@ -326,13 +324,13 @@ function readActualGameState(){
   nearest(8,0x360,0x368,i=>m[0x368+i]!==255)).join(",");
 }
 window.retroAiStep=function(name,holdFrames,nonce){
- const names=typeof name==="string"?name.split("+"):[];
+ const names=name==="WAIT"?[]:typeof name==="string"?name.split("+"):[];
  let previous=-1;
  const canonical=names.length>=1&&names.length<=4&&names.every(key=>{
   const rank={UP:0,DOWN:0,LEFT:1,RIGHT:1,A:2,B:3}[key];
   if(!Number.isInteger(rank)||rank<=previous)return false;previous=rank;return true;
  });
- const ordinaryButton=canonical||name==="START"||name==="SELECT";
+ const ordinaryButton=canonical||name==="START"||name==="SELECT"||name==="WAIT";
  if(!nes||!stepMode||!paused||(!homebrewRom&&!visionProfileCurrent())||!gamepadLatch||agentTrial||
     !(homebrewRom?["A","B","UP","DOWN","LEFT","RIGHT"].includes(name):ordinaryButton)||
     !Number.isInteger(holdFrames)||![4,8,16].includes(holdFrames)||
@@ -342,6 +340,8 @@ window.retroAiStep=function(name,holdFrames,nonce){
     (homebrewRom&&typeof window.GameLabBridge.onHomebrewTask!=="function")||
     !window.GameLabBridge.allowStep(activeRomSession,nonce,holdFrames))return false;
  usedStepNonce=nonce;
+ // WAIT samples an actually released controller for the complete frame budget.
+ if(name==="WAIT")gamepadLatch.clear();
  const codes=names.map(key=>jsnes.Controller[keyMap[key]]);
  if(codes.some(code=>typeof code!=="number"))return false;
  const started=frames;

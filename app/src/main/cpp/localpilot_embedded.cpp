@@ -317,7 +317,7 @@ Java_org_localpilot_android_EmbeddedGgufRuntime_nativeAnalyzeImage(
      std::string user="Analyze the attached game screenshot. <__media__>\n"+p.str();
      const std::string controlInstructions=controller==2?
        "Control NES from the screenshot. Return BUTTON=<command>: one button or a chord ordered vertical(UP/DOWN), horizontal(LEFT/RIGHT), A, B. "
-       "START/SELECT stand alone. NONE stops. No explanations or Android commands.":
+       "START/SELECT stand alone. WAIT advances16 frames with all buttons released. NONE stops. No explanations or Android commands.":
        "Control NES from the screenshot. Return exactly BUTTON=A, BUTTON=B, BUTTON=UP, BUTTON=DOWN, BUTTON=LEFT, BUTTON=RIGHT or BUTTON=NONE. No explanations or Android commands.";
      std::string formatted=chat(controller?controlInstructions:
        "You are a game vision diagnostician. Describe only visible objects "

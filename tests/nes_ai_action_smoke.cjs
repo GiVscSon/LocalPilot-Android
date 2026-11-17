@@ -35,7 +35,7 @@ for(const button of ["A","B","UP","DOWN","LEFT","RIGHT"]){
  assert.equal(run.env.agentTrial.holdFrames,16);
  assert.equal(run.move(button,16),false,"no parallel AI button holds");
 }
-for(const bad of ["START","SELECT","X","A;DROP",""]){
+for(const bad of ["START","SELECT","WAIT","RIGHT+A","X","A;DROP",""]){
  const run=world();assert.equal(run.move(bad,16),false);
  assert.equal(run.pressed.length,0);
 }

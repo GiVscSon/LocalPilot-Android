@@ -26,11 +26,12 @@ public final class NesModelHostTest {
   check("START".equals(ConsoleAgentContract.parseGameButton("BUTTON=START")),"game parser accepts canonical NES START");
   check("SELECT".equals(ConsoleAgentContract.parseGameButton("BUTTON=SELECT")),"game parser accepts NES SELECT");
   check(ConsoleAgentContract.parseGameButton("BUTTON=START; tap Android")==null,"menu proposal cannot inject an Android command");
-  for(String action:new String[]{"RIGHT+A","UP+LEFT+A+B","A+B"})
+  for(String action:new String[]{"RIGHT+A","UP+LEFT+A+B","A+B","WAIT"})
    check(ConsoleAgentContract.gamePlayable(action)&&action.equals(ConsoleAgentContract.parseGameButton("BUTTON="+action)),"canonical game chord accepted");
-  for(String action:new String[]{"UP+DOWN","LEFT+RIGHT+A","A+RIGHT","START+A","A+A","UP+LEFT+A+B+A"})
+  for(String action:new String[]{"UP+DOWN","LEFT+RIGHT+A","A+RIGHT","START+A","WAIT+A","A+A","UP+LEFT+A+B+A"})
    check(!ConsoleAgentContract.gamePlayable(action)&&ConsoleAgentContract.parseGameButton("BUTTON="+action)==null,"opposing/duplicate/reordered/oversized chord rejected");
   check(ConsoleAgentContract.parseButton("BUTTON=RIGHT+A")==null,"legacy profile cannot gain chord input");
+  check(ConsoleAgentContract.parseButton("BUTTON=WAIT")==null&&!ConsoleAgentContract.manualPlayable("WAIT"),"WAIT cannot expand legacy or realtime manual scope");
   var title=new VoidLancerGameState(0,120,40,0,3,1,500,7,0,0);
   check(title.prompt().contains("TITLE MENU")&&!title.prompt().contains("lives=0"),"inactive menu counters are not presented as a lost active game");
   check(!title.display().contains("500")&&!title.display().contains("ПОБЕДА"),"menu does not publish stale game counters or victory");

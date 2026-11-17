@@ -23,6 +23,8 @@ on:
       - 'tests/native_controller_format_test.cpp'
       - 'tools/run_real_nes_vision_acceptance.py'
       - 'tests/nes_real_game_profile_smoke.cjs'
+      - 'tests/nes_ai_action_smoke.cjs'
+      - 'tests/nes_controller_framehold.cjs'
       - 'tests/test_harness_runtime_acceptance.py'
       - 'tests/NesModelHost*.java'
       - 'tools/harness_student_candidate_evaluation.py'
@@ -103,6 +105,8 @@ jobs:
           python3 -m unittest discover -s tests -p 'test_native_inference_optimization.py' -v
           c++ -std=c++17 -Wall -Wextra -Werror tests/native_controller_format_test.cpp -o /tmp/localpilot-native-controller-format-test
           /tmp/localpilot-native-controller-format-test
+          node tests/nes_controller_framehold.cjs
+          node tests/nes_ai_action_smoke.cjs
           node tests/nes_visual_bridge_smoke.cjs
           java tests/ConsoleAgentContractVerify.java
           java tests/ConsoleExperienceMemoryVerify.java

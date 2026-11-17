@@ -124,6 +124,10 @@ public final class ConsoleExperienceMemoryTest {
   require(ConsoleExperienceMemory.genericContext(generic,sha,"import:alpha",other).contains("RIGHT:PIXELS_DIFFER"),"same exact ROM/model receives its observations");
   require(!ConsoleExperienceMemory.genericContext(generic,other,"import:alpha",other).contains("RIGHT"),"another ROM cannot receive that history");
   expectFailure(()->new ConsoleExperienceMemory.GenericEpisode(sha,"1234","import:alpha",other,changed));
+  var waitTrial=NesTrial.create("USER_ROM","WAIT",84,100,88,88);
+  ConsoleExperienceMemory.appendGeneric(generic,new ConsoleExperienceMemory.GenericEpisode(VoidLancerGameState.ROM_SHA,"1236","import:alpha",other,waitTrial,shipAfter,shipAfter));
+  var waitRecord=ConsoleExperienceMemory.readGeneric(generic).get(4);
+  require(waitRecord.trial().button.equals("WAIT")&&waitRecord.trial().status.equals("NO_VISUAL_CHANGE")&&!waitRecord.after().confirms("WAIT",waitRecord.before()),"neutral frames retain unchanged pixels without fabricated control progress");
   Path genericFile=generic.resolve("console-ai-user-rom-v1.log");
   String originalGeneric=Files.readString(genericFile);Files.writeString(genericFile,originalGeneric.replace("|NULL|","|1|"));
   byte[] brokenGeneric=Files.readAllBytes(genericFile);boolean refusedGeneric=false;

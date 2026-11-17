@@ -43,6 +43,11 @@ function assertActualGeometry(){
  assert.deepEqual(actual.slice(12),expected(8,0x360,0x368,i=>memory[0x368+i]!==255));
 }
 assertActualGeometry();
+const waiting=step("WAIT");
+assert.equal(waiting.finish-waiting.start,16,"WAIT advances exact actual frames");
+assert.equal(waiting.after[1],waiting.before[1]);assert.equal(waiting.after[2],waiting.before[2]);
+assert.equal(waiting.after[8],waiting.before[8],"neutral frames do not invent a shot");
+assert.equal(vm.runInContext("gamepadLatch.down.size",page),0);
 const move=step("RIGHT");assert.ok(move.after[1]>move.before[1],"actual ship moves right under controller input");
 const shot=step("A");assert.notEqual(shot.after[8],shot.before[8],"actual game fire routine increments its shot meter");
 const chord=step("RIGHT+A");
@@ -71,7 +76,7 @@ step("A");assertActualGeometry();
 // Inactive object arrays can retain old coordinates. They must never become targets.
 vm.runInContext("for(let i=0;i<6;i++){nes.cpu.mem[0x300+i]=0;nes.cpu.mem[0x308+i]=200;} for(let i=0;i<8;i++){nes.cpu.mem[0x368+i]=255;nes.cpu.mem[0x360+i]=100;}",page);
 assert.deepEqual(context.readActualGameState().split(',').map(Number).slice(10),[-1,-1,-1,-1]);
-for(const bad of ["UP+DOWN","LEFT+RIGHT+A","A+RIGHT","START+A","A+A","UP+LEFT+A+B+A"]){
+for(const bad of ["UP+DOWN","LEFT+RIGHT+A","A+RIGHT","START+A","WAIT+A","A+A","UP+LEFT+A+B+A"]){
  lease={session:selectedSession,nonce:String(++serial).padStart(22,"r")};
  assert.equal(context.retroAiStep(bad,16,lease.nonce),false,"unsafe/noncanonical chord rejected: "+bad);
 }
@@ -81,4 +86,27 @@ assert.equal(context.retroAiStep("LEFT+A",16,lease.nonce),false,"STOP revokes th
 assert.equal(events.length,completed,"partial chord never becomes a completed transition");
 assert.equal(vm.runInContext("gamepadLatch.down.size",page),0,"STOP releases all chord components");
 assert.equal(vm.runInContext("(nes.controllers[1].state[jsnes.Controller.BUTTON_A]&1)|(nes.controllers[1].state[jsnes.Controller.BUTTON_LEFT]&1)",page),0,"actual core buttons released after STOP");
+// A released controller must be sampled by the CPU to restore a menu edge.
+checksBeforeRevoke=Infinity;selectedSession="779";
+assert.equal(context.retroLoadRom(raw.toString('base64'),false,false,selectedSession),true);tick(120);
+assert.equal(context.retroEnterVisionStepMode(),true);step("START");
+for(let i=0;i<200&&context.readActualGameState().split(',')[0]==="1";i++)step("UP");
+assert.equal(context.readActualGameState().split(',')[0],"2","actual game reaches a loss without RAM substitution");
+assert.equal(step("START").after[0],0,"START returns actual loss screen to title");
+assert.equal(step("START").after[0],0,"same held START has no new CPU-sampled edge");
+const neutral=step("WAIT");assert.equal(neutral.finish-neutral.start,16);assert.equal(neutral.after[0],0);
+assert.equal(vm.runInContext("Object.values(jsnes.Controller).filter(x=>typeof x==='number').reduce((a,code)=>a|(nes.controllers[1].state[code]&1),0)",page),0,"WAIT leaves every actual core button released");
+assert.equal(step("START").after[0],1,"WAIT enables a genuine next START edge");
+const beforeWaitStop=events.length;
+lease={session:selectedSession,nonce:String(++serial).padStart(22,"r")};checksBeforeRevoke=2;
+assert.equal(context.retroAiStep("WAIT",16,lease.nonce),false,"STOP also interrupts neutral emulated frames");
+assert.equal(events.length,beforeWaitStop,"revoked partial WAIT never becomes completed evidence");
+// Actual core scoring validates that the unchanged16-decision gate is feasible.
+// Fixed input here is an explicit core test, never a model reply or NN evidence.
+checksBeforeRevoke=Infinity;selectedSession="780";
+assert.equal(context.retroLoadRom(raw.toString('base64'),false,false,selectedSession),true);tick(120);
+assert.equal(context.retroEnterVisionStepMode(),true);step("START");
+for(let i=0;i<15;i++)step("A");
+const scored=context.readActualGameState().split(',').map(Number);
+assert.equal(scored[0],1);assert.ok(scored[6]>0&&scored[7]>0,"actual fire yields actual score and kills within16 decisions");
 console.log("REAL_VOID_LANCER_RAM_PROFILE_CORE_PASS shipMovement=true firing=true bombUse=true nativeModel=false androidBridge=modeled educationalScene=false");

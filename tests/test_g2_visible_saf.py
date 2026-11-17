@@ -26,11 +26,12 @@ class VisibleSafTargets(unittest.TestCase):
         self.assertTrue(confirms_control('A',before,after))
         self.assertFalse(confirms_control('A',before,before))
         self.assertFalse(confirms_control('LEFT',before,after))
+        self.assertFalse(confirms_control('WAIT',before,after))
         with self.assertRaises(ValueError):parse_game_state('1,100,180,3,3,1,999999999,0,0,0')
     def test_chord_evidence_is_bounded_and_canonical(self):
-        for action in ('RIGHT+A','UP+LEFT+A+B','A+B'):
+        for action in ('RIGHT+A','UP+LEFT+A+B','A+B','WAIT'):
             self.assertTrue(valid_game_button(action))
-        for action in ('UP+DOWN','LEFT+RIGHT+A','A+RIGHT','START+A','A+A','UP+LEFT+A+B+A'):
+        for action in ('UP+DOWN','LEFT+RIGHT+A','A+RIGHT','START+A','WAIT+A','A+A','UP+LEFT+A+B+A'):
             self.assertFalse(valid_game_button(action))
         before=parse_game_state('1,100,180,3,3,1,0,0,0,0')
         after=parse_game_state('1,116,180,3,3,1,0,0,1,1')

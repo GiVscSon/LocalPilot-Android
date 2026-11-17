@@ -33,8 +33,9 @@ int main(){
  const std::string basic=localpilot::controller_grammar(1),full=localpilot::controller_grammar(2);
  assert(basic.find("START")==std::string::npos&&basic.find("RIGHT+A")==std::string::npos);
  assert(full.find("\"RIGHT+A\"")!=std::string::npos&&full.find("\"UP+LEFT+A+B\"")!=std::string::npos);
+ assert(full.find("\"WAIT\"")!=std::string::npos&&basic.find("WAIT")==std::string::npos);
  assert(full.find("BUTTON=")==std::string::npos&&basic.find("BUTTON=")!=std::string::npos);
  assert(full.find("UP+DOWN")==std::string::npos&&full.find("START+A")==std::string::npos);
- assert(std::count(full.begin(),full.end(),'|')==37); // 37 actual chords/buttons + NONE
- std::cout<<"NATIVE_CONTROLLER_CHAT_FORMAT_PASS cases=19 neuralInference=false\n";
+ assert(std::count(full.begin(),full.end(),'|')==38); // 37 buttons/chords + released WAIT + NONE
+ std::cout<<"NATIVE_CONTROLLER_CHAT_FORMAT_PASS cases=20 neuralInference=false\n";
 }

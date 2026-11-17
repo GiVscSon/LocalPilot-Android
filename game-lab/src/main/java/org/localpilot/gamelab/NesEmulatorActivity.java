@@ -1191,9 +1191,8 @@ public final class NesEmulatorActivity extends Activity {
      if(genericVisionEpisode){
       pendingTrial=null; // The verified permit is complete; the next observation must see an idle controller.
       if(!saved){stopCpuExperiment("STOP: переход настоящей игры не записан в журнал");return;}
-      if(!"PIXELS_DIFFER".equals(readyTrial.status)){
-       stopCpuExperiment("STOP: свежий кадр настоящей игры не изменился");return;
-      }
+      // Exact permitted frame advancement was verified above. Static pixels
+      // (e.g. WAIT/menu/boundary) remain NO_VISUAL_CHANGE, never game progress.
       --autoGgufRemaining;++ggufCompleted;
       if(current.gameAfter!=null){
        showState(current.gameAfter.display());
@@ -1617,7 +1616,7 @@ public final class NesEmulatorActivity extends Activity {
   boolean durationValid=student?ConsoleAgentContract.studentFramesValid(proposedFrames):
     proposedFrames==ConsoleAgentContract.HOLD_FRAMES;
   boolean admissible=durationValid&&button!=null&&
-    ((genericVisionEpisode?ConsoleAgentContract.manualPlayable(button):ConsoleAgentContract.playable(button))||"NONE".equals(button))&&
+    ((genericVisionEpisode?ConsoleAgentContract.gamePlayable(button):ConsoleAgentContract.playable(button))||"NONE".equals(button))&&
     modelId!=null&&modelId.matches("[A-Za-z0-9:_.-]{1,96}")&&
     modelSha!=null&&modelSha.matches("[a-f0-9]{64}")&&
     harness.consume(nonce,frameEpoch.token(),frames,hash,SystemClock.elapsedRealtime())&&

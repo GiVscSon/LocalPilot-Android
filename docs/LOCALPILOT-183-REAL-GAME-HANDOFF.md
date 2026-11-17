@@ -2,7 +2,9 @@
 
 Updated 2026-11-17 (Europe/Moscow). User: work autonomously toward a universal agent; real games and real control only; NES first; no educational scenes or fabricated measurements. Do not ask routine permission. Do not call an intermediate PR completion of #183. Release, main merge and signing changes remain paused.
 
-## Exact source and current acceptance
+Latest source/evidence is recorded in the final dated sections below. The optimized baseline in this first block is historical; do not use it as current HEAD.
+
+## Historical optimized baseline
 
 - Main observed: `32838fde8c2432dd060f3cf2923d4dd1910c9553`.
 - Base PR #185: `23d82aa1563ab6416b368e5b1d378ca7ab6bb56d` (model-library work, all15 CI passed).
@@ -97,3 +99,18 @@ HEAD0496ea9dfe8e0238864adb402e090e003620a473 / tested merge56489027ec3edb854cef2
 Next source pre-fills only the fixed protocol key BUTTON= in controller mode2 and constrains generation to the actual action suffix. Every chosen action, including NONE, still comes from model weights; no fixed A/START or fallback is supplied. The original strict full reply is reconstructed only after successful EOS; cancellation, invalid/unfinished decode still fail closed. Legacy controller mode1 and diagnostics mode0 retain their existing framing. Thinking-format diagnostics remain separate from prefix diagnostics. C++19 contract checks cover both framing modes and the unchanged38 choices.
 
 The real-game CI job now independently compares existing catalog-pinned Qwen3.5-0.8B and LFM2.5-350M with the same exact built APK and real VOID LANCER ROM through visible SAF. Each report/attempt identifies profile, repository, revision and actual SHA, and has a unique artifact name. Both retain model START, exact model/action/frame correlation, actual active-phase score/kill or win, and STOP gates; failures remain failures. Python12 SAF/game-evidence checks include exact reviewed model identities and refusal of unknown profiles. New source has no Android gameplay result yet. Continue actual CI; do not claim universal play, accepted vision, weight learning, physical-device success or completion of #183. Release/main merge/signing remain paused.
+
+
+## 2026-11-17 19:05 UTC · actual two-model failure, admission and released-frame fix
+
+HEADae9c57310a7e1965e02b4c3beb923f3be8e4c465 / tested merge480d2c0423427e8e6fd4e07b489805505ad4fe05, All-in-One44152416666: real LFM job134287877815 FAILED after actual1992ms LEFT at title96→112; state stayed0, no visual change, old Activity stopped. Qwen job134287877882 FAILED:16 actual START decisions, first entered PLAYING, all later ineffective; score/kills/shots0, lives3→2, inference3874–7089ms. Both actual native logs confirm controller_prefix_prefilled=1. Framing change did not establish policy improvement. Do not manufacture success or force A to fix these policy failures.
+
+Whole-system44152416771/job134284031903 also FAILED at legacy retroAiTrial with ReferenceError names undefined. An earlier chord edit had accidentally changed this independent six-button callback too. Restore that callback exactly to the #185 six-button implementation; test its old six controls and rejection of WAIT/chords, and run the cheap existing test before expensive All-in-One APK builds. Preserve original failed run.
+
+Source audit found a second missed outer contract: Activity.acceptAiProposal still used manualPlayable, so it would reject an otherwise valid RIGHT+A proposal before the coordinator. Fix it to use the same canonical gamePlayable parser for generic episodes; legacy remains six-only and HarnessCoordinator still requires the consumed full-game ticket and unique permit. New source integration regression explicitly checks this Activity boundary, alongside actual shared parser/permit tests. This bug was not the cause of either observed ae9 failure, since neither model selected a chord.
+
+Add WAIT only to full-game model commands: exact16 actual emulated frames, every button released, original120s TTL/nonces/epoch/STOP/one-use permit. NONE still stops; manual realtime/legacy/Student/homebrew commands do not gain WAIT. Actual real ROM tests demonstrate naturally reached GAME OVER→START→title; repeated START alone fails to create a new CPU-sampled edge, WAIT then START genuinely starts again. WAIT advances exactly16 frames and interrupted partial WAIT never becomes completed evidence. No invented no-op input or fake frame ACK is supplied.
+
+The generic loop now accepts an exact permitted fresh16-frame transition even when pixels remain identical, preserving NO_VISUAL_CHANGE honestly. A static menu, boundary or neutral wait is not evidence of a stale frame or game progress. Semantic score/kill/win acceptance is unchanged, including model START and STOP. Legacy homebrew reward/visual gates remain intact. HOST_UNIT verifies same-hash exact-frame completion and journal round trips, without claiming reward/control success for WAIT.
+
+Local checks for this new source:74 typed-host,99 coordinator,15 bridge,9 inference-journal metadata checks, shared journal integrity; C++20 grammar/framing checks;32 Harness Python,12 SAF/game-evidence,9 workflow checks, cancellation10+6. Actual pinned JSNES/VOID core checks movement/fire/bomb/chords, release/restore/revocation/WAIT/new START edge; fresh real core START+15A test produces score400/kills4 within the existing16-decision budget (fixed-input test only, never NN evidence). Existing frozen-step/visual/legacy single-input regressions pass. Android results for the new source remain pending. Continue exact-head CI and genuine model/policy work; #183, vision, universal play, learning improvement and physical-device acceptance remain unfinished. No release/main/signing changes.

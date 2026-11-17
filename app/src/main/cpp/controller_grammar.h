@@ -17,6 +17,6 @@ inline std::string controller_grammar(int mode){
     }
     if(!action.empty())add(action);
    }
- add("START");add("SELECT");add("NONE");return rules+")";
+ add("START");add("SELECT");add("WAIT");add("NONE");return rules+")";
 }
 }

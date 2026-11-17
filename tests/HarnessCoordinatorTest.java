@@ -195,6 +195,18 @@ public final class HarnessCoordinatorTest {
   check(chord!=null&&!c.hasPending()&&c.actionInFlight(),"one unique permit covers the complete chord");
   c.stop("CHORD_STOP");
   check(!c.authorizesStep("1500",chord.nonce,16,16004),"STOP revokes every component through one permit");
+  c.reset("1600",HarnessCoordinator.Mode.STEP_MODE);
+  var waitTicket=c.beginGame("1600",30,123,17000);
+  check(c.consume(waitTicket.nonce,"1600",30,123,17001),"WAIT consumes a real full-game observation");
+  var waiting=c.start(HarnessCoordinator.Actor.GGUF,"1600","WAIT",30,123,16,17002);
+  check(waiting!=null&&c.authorizesStep("1600",waiting.nonce,16,17003),"WAIT needs the same unique frame permit");
+  check(c.complete(waiting,"1600",46,123,true,true,17004),"exact16 released frames may have unchanged pixels; no reward implied");
+  c.reset("1601",HarnessCoordinator.Mode.STEP_MODE);
+  var stoppedWait=c.beginGame("1601",30,123,18000);
+  check(c.consume(stoppedWait.nonce,"1601",30,123,18001),"second WAIT requires a new observation");
+  var waitPermit=c.start(HarnessCoordinator.Actor.GGUF,"1601","WAIT",30,123,16,18002);
+  c.stop("WAIT_STOP");
+  check(!c.authorizesStep("1601",waitPermit.nonce,16,18003),"STOP revokes neutral frames too");
   System.out.println("HARNESS_COORDINATOR_PASS checks="+checks);
  }
 }

@@ -301,7 +301,7 @@ public final class EmbeddedGgufRuntime {
   final String instructions=gameControls?
    "You control the current NES game for16 frames. Reply exactly BUTTON=<command>. "+
    "Use one button or a chord ordered vertical(UP/DOWN), horizontal(LEFT/RIGHT), A, B. Example: BUTTON=RIGHT+A. "+
-   "START and SELECT stand alone. NONE stops. No explanations or Android commands; never invent success.":
+   "START and SELECT stand alone. WAIT advances16 frames with all buttons released. NONE stops. No explanations or Android commands; never invent success.":
    "You are a one-step controller for the current NES game. Reply with EXACTLY one of "+
    "BUTTON=A, BUTTON=B, BUTTON=UP, BUTTON=DOWN, BUTTON=LEFT, BUTTON=RIGHT, BUTTON=NONE. "+
    "Do not explain or issue Android commands. Do not claim success or reward. ";

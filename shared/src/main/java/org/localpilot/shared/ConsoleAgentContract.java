@@ -32,7 +32,7 @@ public final class ConsoleAgentContract {
  }
  /** Canonical NES chord: vertical, horizontal, A, B; menu keys stand alone. */
  public static boolean gamePlayable(String button){
-  if(manualPlayable(button))return true;
+  if(manualPlayable(button)||"WAIT".equals(button))return true;
   if(button==null||button.length()>20)return false;
   String[] keys=button.split("\\+",-1);
   if(keys.length<2||keys.length>4)return false;

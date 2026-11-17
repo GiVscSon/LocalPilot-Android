@@ -79,7 +79,7 @@ def parse_game_state(text):
     return result
 
 def valid_game_button(button):
-    if button in ('A','B','UP','DOWN','LEFT','RIGHT','START','SELECT'):return True
+    if button in ('A','B','UP','DOWN','LEFT','RIGHT','START','SELECT','WAIT'):return True
     keys=button.split('+')
     if not 2<=len(keys)<=4:return False
     ranks={'UP':0,'DOWN':0,'LEFT':1,'RIGHT':1,'A':2,'B':3}
