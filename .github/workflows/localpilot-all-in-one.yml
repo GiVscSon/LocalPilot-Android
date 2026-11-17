@@ -451,10 +451,10 @@ jobs:
           if-no-files-found: warn
           path: sustained-nes-evidence/
 
-  real-game-vision:
+  real-game-agent:
     needs: unified-emulator-build
     runs-on: ubuntu-24.04
-    timeout-minutes: 25
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -465,7 +465,7 @@ jobs:
         with:
           name: LocalPilot-One-APK-X86-TEST-ONLY-${{ github.sha }}
           path: app/build/outputs/apk/debug/
-      - name: Prepare exact real VOID LANCER and existing pinned vision model/projector
+      - name: Prepare exact real VOID LANCER and existing pinned game model
         run: python3 tools/run_real_nes_vision_acceptance.py prepare
       - name: Verify actual real-game ship, fire and bomb memory semantics in the packaged core
         run: |
@@ -495,7 +495,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: LocalPilot-Real-ROM-Vision-${{ github.sha }}
+          name: LocalPilot-Real-NES-Game-${{ github.sha }}
           retention-days: 14
           if-no-files-found: warn
           path: real-nes-evidence/

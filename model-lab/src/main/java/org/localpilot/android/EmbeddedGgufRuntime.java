@@ -15,7 +15,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  */
 public final class EmbeddedGgufRuntime {
  public interface Result { void complete(String answer,long elapsedMs); }
- private static native String nativeInfer(String model,String system,String question,int tokens,float temperature);
+ private static native String nativeInfer(String model,String system,String question,int tokens,float temperature,boolean controllerMode);
  private static native String nativeAnalyzeImage(String model,String projector,String question,
    byte[] rgb,int width,int height,boolean controllerMode);
  private static native String nativeGpuDescription();
@@ -91,7 +91,7 @@ public final class EmbeddedGgufRuntime {
    String answer=nativeInfer(model.getAbsolutePath(),
     "You are an offline on-device model being evaluated. Answer briefly and in English. "+
     "If the question is uncertain, say so; do not provide executable commands.",
-    prompt,160,0.2f);
+    prompt,160,0.2f,false);
    lastGpuLayers=nativeLoadedGpuLayers();
    if(answer==null||answer.isBlank())return "";
    return answer+

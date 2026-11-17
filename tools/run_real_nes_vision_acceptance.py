@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Real VOID LANCER ROM + pinned vision GGUF/mmproj, through visible NES UI.
+"""Real VOID LANCER + pinned GGUF, using verified ROM state and visible NES UI.
 
 No educational scene, synthetic model answer, substituted policy, or guessed
 reward. Model-to-input/frame evidence is distinct from game score or victory.
@@ -13,23 +13,24 @@ import xml.etree.ElementTree as ET
 import zipfile
 import urllib.request
 import bundle_optional_models as models
+import bundle_embedded_gguf as pocket
 import unified_in_app_smoke as ui
-from run_g2_direct_gguf_acceptance import import_picker_file, picker_select_fixture, wait_library_result
+from run_g2_direct_gguf_acceptance import import_picker_file, picker_select_fixture, wait_library_result, click_exact
 from run_harness_runtime_acceptance import command, PACKAGE
 from harness_student_device_acceptance import private_file, EvidencePending
 
-REPO='LiquidAI/LFM2.5-VL-450M-GGUF'
-MODEL='LFM2.5-VL-450M-Q4_0.gguf'
-PROJECTOR='mmproj-LFM2.5-VL-450m-Q8_0.gguf'
+REPO=pocket.REPO
+MODEL=pocket.NAME
+FILES={MODEL:(pocket.EXPECTED_BYTES,pocket.EXPECTED_SHA256)}
 ROM='VOID-LANCER-v1.0.0.nes'
 ROM_SHA='5eb801aca68131a3d17fa82d8901d46f6098b878d1e00cd1c47d00c001c2405a'
 ROM_URL='https://github.com/Riyoway/void-lancer-nes/releases/download/v1.0.0/'+ROM
 
 def prepare(directory):
     directory.mkdir(parents=True,exist_ok=True)
-    revision=models.PINNED_REVISIONS[REPO]
-    for name in (MODEL,PROJECTOR):
-        size,digest=models.PINNED_FILES[name];path=directory/name
+    revision=pocket.REVISION
+    for name in (MODEL,):
+        size,digest=FILES[name];path=directory/name
         if path.is_file() and path.stat().st_size==size and hashlib.sha256(path.read_bytes()).hexdigest()==digest:continue
         with models.get(models.BASE+'/'+REPO+'/resolve/'+revision+'/'+name) as source,path.open('wb') as out:
             actual,amount=models.sha_stream(source,out,limit=size)
@@ -87,8 +88,8 @@ def correlate_inference(raw, rows, model_sha):
 def verify(apk,directory,output):
     if not ui.is_emulator():raise RuntimeError('Isolated Android emulator required')
     output.parent.mkdir(parents=True,exist_ok=True)
-    for name in (MODEL,PROJECTOR):
-        size,digest=models.PINNED_FILES[name]
+    for name in (MODEL,):
+        size,digest=FILES[name]
         path=directory/name
         if path.stat().st_size!=size or hashlib.sha256(path.read_bytes()).hexdigest()!=digest:raise RuntimeError('Local model identity mismatch')
     if hashlib.sha256((directory/ROM).read_bytes()).hexdigest()!=ROM_SHA:raise RuntimeError('Local real ROM identity mismatch')
@@ -96,43 +97,54 @@ def verify(apk,directory,output):
     command('adb','install',str(apk),timeout=120)
     ui.adb('shell','am','start','-W','-n',PACKAGE+'/'+ui.MAIN);ui.wait_activity(ui.MAIN)
     ui.tap_text('Рабочее окно · игра и агент');ui.wait_activity(ui.NES)
-    import_picker_file(directory/MODEL,models.PINNED_FILES[MODEL][1],'LOCALPILOT_CI_ONLY_VISION.gguf',output)
-    import_picker_file(directory/PROJECTOR,models.PINNED_FILES[PROJECTOR][1],'LOCALPILOT_CI_ONLY_MMPROJ.gguf',output,True)
+    public_ui='\n'.join(n.get('text','') for n in ET.fromstring(ui.dump_ui()).iter('node'))
+    if 'Учить Student' in public_ui or 'Внутренняя приёмка' in public_ui or 'Учебный ROM' in public_ui:
+        raise RuntimeError('User workspace exposes educational controls or measurements')
+    if ui.target_bounds(ui.dump_ui(),'Ручное') is None:raise RuntimeError('Manual control handover is missing')
+    import_picker_file(directory/MODEL,FILES[MODEL][1],'LOCALPILOT_CI_ONLY_GAME_MODEL.gguf',output)
     ui.tap_text('Управление моделями NES',swipes=0);ui.tap_text('Привязать выбранный GGUF к NES',swipes=0)
+    ui.tap_text('Управление моделями NES',swipes=0);ui.tap_text('Бюджет GGUF:',swipes=0)
+    click_exact('16 действий',package=PACKAGE)
     command('adb','push',str(directory/ROM),'/sdcard/Download/LOCALPILOT_CI_ONLY_VOIDLANCER.nes',timeout=60)
     ui.tap_text('Игра',swipes=0);ui.tap_text('Открыть .nes',swipes=0)
     picker_select_fixture('LOCALPILOT_CI_ONLY_VOIDLANCER.nes');ui.wait_activity(ui.NES)
     ui.tap_text('START',swipes=0)
     ui.tap_text('Запустить выбранного агента NES',swipes=0)
-    deadline=time.monotonic()+4*120+45;rows=[]
+    deadline=time.monotonic()+16*120+45;rows=[]
     while time.monotonic()<deadline:
         if PACKAGE+'/'+ui.NES not in ui.resumed_activity():raise RuntimeError('Vision agent left actual game screen')
         try:
             raw=private_file('files/console-ai-user-rom-v1.log',262144)
-            rows=verified_generic_rows(raw,models.PINNED_FILES[MODEL][1])
+            rows=verified_generic_rows(raw,FILES[MODEL][1])
             (output.parent/'real-game-transitions.log').write_bytes(raw)
             inference=private_file('files/harness-model-execution-v1.log',262144)
-            calls=correlate_inference(inference,rows,models.PINNED_FILES[MODEL][1])
+            calls=correlate_inference(inference,rows,FILES[MODEL][1])
             (output.parent/'real-game-inference.log').write_bytes(inference)
-            if len(rows)>=4:break
+            progress=bool(rows) and any(r['gameAfter']['score']>rows[0]['gameBefore']['score'] or
+                                       r['gameAfter']['kills']>rows[0]['gameBefore']['kills'] or
+                                       r['gameAfter']['state']==3 for r in rows)
+            if len(rows)>=4 and progress:break
         except EvidencePending:pass
         text='\n'.join(n.get('text','') for n in ET.fromstring(ui.dump_ui()).iter('node'))
-        if 'STOP:' in text:raise RuntimeError('Real game agent stopped before four transitions: '+text[:800])
+        if 'STOP:' in text:raise RuntimeError('Real game agent stopped before verified game progress: '+text[:800])
+        if len(rows)>=16:raise RuntimeError('No real score/kill progress within the selected game episode')
         time.sleep(.5)
-    else:raise RuntimeError('Real game did not confirm four vision actions')
+    else:raise RuntimeError('Real game did not confirm model-driven score/kill progress')
     if not any(row['semanticControl'] for row in rows):
         raise RuntimeError('Frames changed but ship movement, firing or bomb use was not confirmed')
     ui.tap_text('STOP',swipes=0)
     before=private_file('files/console-ai-user-rom-v1.log',262144);time.sleep(1)
     if before!=private_file('files/console-ai-user-rom-v1.log',262144):raise RuntimeError('Action completed after real-game STOP')
-    report=dict(result='REAL_ROM_VISION_INPUT_FRAME_PASS',sourceSha=source,
+    report=dict(result='REAL_ROM_GGUF_GAME_PROGRESS_PASS',sourceSha=source,
                 apkSha256=hashlib.sha256(apk.read_bytes()).hexdigest(),romSha256=ROM_SHA,
-                modelSha256=models.PINNED_FILES[MODEL][1],projectorSha256=models.PINNED_FILES[PROJECTOR][1],
+                modelSha256=FILES[MODEL][1],modelKind='TEXT_GGUF_WITH_VERIFIED_GAME_RAM',
                 transitions=rows,inferenceCallsForModel=calls,exactModelActionAndFrameMatch=True,semanticGameControlVerified=True,
-                modelTransport='VISIBLE_SAF',romTransport='VISIBLE_SAF',
+                realScoreBefore=rows[0]['gameBefore']['score'],realScoreAfter=rows[-1]['gameAfter']['score'],
+                gameProgressVerified=True,
+                modelTransport='VISIBLE_SAF',romTransport='VISIBLE_SAF',decisionInput='VERIFIED_ROM_RAM',visionInferencePerformed=False,
                 currentRomPreserved=True,educationalScene=False,reward=None,
-                gameVictory='NOT_VERIFIED',physicalDevice=False,releaseReady=False)
-    output.write_text(json.dumps(report,indent=2)+'\n');print('REAL_ROM_VISION_INPUT_FRAME_PASS '+json.dumps(report))
+                gameVictory=rows[-1]['gameAfter']['state']==3,physicalDevice=False,releaseReady=False)
+    output.write_text(json.dumps(report,indent=2)+'\n');print('REAL_ROM_GGUF_GAME_PROGRESS_PASS '+json.dumps(report))
 
 if __name__=='__main__':
     p=argparse.ArgumentParser(description=__doc__);p.add_argument('mode',choices=['prepare','verify'])

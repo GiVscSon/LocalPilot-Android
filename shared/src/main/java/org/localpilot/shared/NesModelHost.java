@@ -13,7 +13,7 @@ public interface NesModelHost {
     throw new IllegalArgumentException("Invalid model binding");
   }
  }
- enum TaskProfile { HOMEBREW_RAM, VISION_EXPLORATION }
+ enum TaskProfile { HOMEBREW_RAM, VISION_EXPLORATION, GAME_RAM }
  record Observation(HarnessCoordinator.Ticket ticket,String romSha256,ModelIdentity binding,int ramX,int ramY,byte[] png,TaskProfile profile,VoidLancerGameState game) {
   public Observation(HarnessCoordinator.Ticket ticket,String romSha256,ModelIdentity binding,int ramX,int ramY,byte[] png,TaskProfile profile){
    this(ticket,romSha256,binding,ramX,ramY,png,profile,null);
@@ -25,9 +25,9 @@ public interface NesModelHost {
    if(ticket==null||binding==null||profile==null||romSha256==null||!romSha256.matches("[0-9a-f]{64}")||
       !((ramX==-1&&ramY==-1)||(ramX>=0&&ramX<=255&&ramY>=0&&ramY<=255)))
     throw new IllegalArgumentException("Invalid typed NES observation");
-   if(profile==TaskProfile.VISION_EXPLORATION&&(ramX!=-1||ramY!=-1||png==null))
+   if(profile!=TaskProfile.HOMEBREW_RAM&&(ramX!=-1||ramY!=-1||png==null))
     throw new IllegalArgumentException("Generic NES requires pixels and UNKNOWN RAM");
-   if(game!=null&&(profile!=TaskProfile.VISION_EXPLORATION||!VoidLancerGameState.ROM_SHA.equals(romSha256)))
+   if((profile==TaskProfile.GAME_RAM)!=(game!=null)||game!=null&&!VoidLancerGameState.ROM_SHA.equals(romSha256))
     throw new IllegalArgumentException("Game memory profile differs from ROM identity");
    if(png!=null){NesFrameTransfer.verify(png);png=png.clone();}
   }
@@ -57,6 +57,8 @@ public interface NesModelHost {
  default java.util.List<ModelChoice> nesModels(){return java.util.List.of();}
  default boolean selectNesModel(ModelIdentity identity){return false;}
  default boolean nesVisionModel(ModelIdentity identity){return false;}
+ default boolean supportsNesGame(ModelIdentity identity,String romSha){return nesVisionModel(identity);}
+ String EXTRA_REAL_GAMES_ONLY="org.localpilot.shared.REAL_GAMES_ONLY";
  /** Internal x86 acceptance only; never enabled in the user ARM64 APK. */
  default boolean nesTestFixturesAllowed(){return false;}
 

@@ -159,7 +159,7 @@ std::string generate_from_logits(int pos,int limit,float temp,bool nesController
  return output;
 }
 
-std::string infer(const std::string &sys,const std::string &usr,int limit,float temp){
+std::string infer(const std::string &sys,const std::string &usr,int limit,float temp,bool controller=false){
  if(!ctx||limit<1||limit>192)return "";
  std::string formatted=chat(sys,usr);
  if(formatted.empty())return "";
@@ -181,7 +181,7 @@ std::string infer(const std::string &sys,const std::string &usr,int limit,float 
  }
  if(!ok||cancelled.load()){llama_batch_ext_free(batch);return "";}
  llama_batch_ext_free(batch);
- return generate_from_logits(n,limit,temp);
+ return generate_from_logits(n,controller?std::min(16,limit):limit,temp,controller);
 
 }
 }
@@ -223,11 +223,11 @@ Java_org_localpilot_android_EmbeddedGgufRuntime_nativeResetInterrupt(JNIEnv *,jc
 }
 extern "C" JNIEXPORT jstring JNICALL
 Java_org_localpilot_android_EmbeddedGgufRuntime_nativeInfer(
- JNIEnv *e,jclass,jstring filename,jstring system,jstring question,jint maxTokens,jfloat temperature){
+ JNIEnv *e,jclass,jstring filename,jstring system,jstring question,jint maxTokens,jfloat temperature,jboolean controllerMode){
  Utf f(e,filename),s(e,system),q(e,question);
  std::lock_guard<std::mutex> guard(lock);
  std::string result;
- if(!cancelled.load()&&init(f.str()))result=infer(s.str(),q.str(),maxTokens,temperature);
+ if(!cancelled.load()&&init(f.str()))result=infer(s.str(),q.str(),maxTokens,temperature,controllerMode==JNI_TRUE);
  // JNI NewStringUTF expects Modified UTF-8, not 4-byte emoji sequences.
  // Reject unsupported supplementary characters rather than risking a VM abort.
  for(unsigned char byte:result){

@@ -49,6 +49,9 @@ let stepSerial=0;
 env.gamepadLatch=new FrameHeldButtons(machine,4);
 for(let i=0;i<45;i++)machine.frame();
 assert.ok(env.frames>=15,"actual 6502 emulator started");
+const gameReader=html.match(/function readActualGameState\(\)\{[\s\S]*?\n\}/);
+assert.ok(gameReader,"the core's read-only game adapter is present");
+vm.runInNewContext(gameReader[0],env,{timeout:2500});
 for(const name of ["retroHomebrewRamX","retroHomebrewState","retroAiStep"])
  vm.runInNewContext(snippet(name),env,{timeout:2500});
 const buttons=["LEFT","RIGHT","UP","DOWN","A","B"],rows=[];

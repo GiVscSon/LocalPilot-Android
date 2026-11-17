@@ -154,12 +154,13 @@ public final class HarnessModelRuntime {
     finish(call,NesModelHost.Status.STALE,null,0);return;
    }
    call.model=model;phase(call,"VERIFYING");
-   boolean generic=call.observation.profile()==NesModelHost.TaskProfile.VISION_EXPLORATION;
-   if(generic&&!model.vision()){finish(call,NesModelHost.Status.UNAVAILABLE,null,0);return;}
+   boolean generic=call.observation.profile()!=NesModelHost.TaskProfile.HOMEBREW_RAM;
+   boolean gameRam=call.observation.profile()==NesModelHost.TaskProfile.GAME_RAM;
+   if(generic&&!gameRam&&!model.vision()){finish(call,NesModelHost.Status.UNAVAILABLE,null,0);return;}
    File weights=store.modelFile(model);
    byte[] png=call.observation.png();byte[] pixels=null;
    File projector=null;
-   if(model.vision()){
+   if(model.vision()&&!gameRam){
     if(png==null)throw new IOException("Vision model requires verified NES PNG");
     NesFrameTransfer.verify(png);projector=store.projectorFile(model);
     Bitmap bitmap=BitmapFactory.decodeByteArray(png,0,png.length);
@@ -178,7 +179,7 @@ public final class HarnessModelRuntime {
    String history=generic?ConsoleExperienceMemory.genericContext(application.getFilesDir().toPath(),call.observation.romSha256(),model.id,model.modelSha):
     ConsoleExperienceMemory.context(application.getFilesDir().toPath(),model.id,model.modelSha);
    var t=call.observation.ticket();
-   String observation=(projector==null?"TEXT ONLY: no image understanding. ":"Verified NES RGB attached. ")+
+   String observation=(gameRam?"VERIFIED ROM GAME STATE: this request uses RAM text, not image inference. ":projector==null?"TEXT ONLY: no image understanding. ":"Verified NES RGB attached. ")+
     (generic?(call.observation.game()==null?"Play the visible NES game. Infer its controls and objective from the image. Choose NONE if uncertain. Game RAM, score and victory UNKNOWN. ":
       "Play the actual VOID LANCER shooter. Move to dodge threats and fire A when safe; B spends a limited bomb. The ROM-specific memory below is verified. ")+"ROM="+call.observation.romSha256()+". ":
       "Builtin NES rightward task. ")+"frame="+t.frame+" hash="+Integer.toUnsignedString(t.hash)+
@@ -193,7 +194,7 @@ public final class HarnessModelRuntime {
      if(!current(call)||!sameBinding(call)){finish(call,NesModelHost.Status.STALE,null,0);return;}
      EmbeddedGgufRuntime runtime=engine();
      if(runtime.busy()){finish(call,NesModelHost.Status.BUSY,null,0);return;}
-     phase(call,"INFERENCING");
+     phase(call,gameRam?"GAME_RAM_INFERENCE":"INFERENCING");
      runtime.proposeNesButton(weights,mmproj,modelObservation,rgb,NesFrameTransfer.WIDTH,NesFrameTransfer.HEIGHT,0,
        (answer,elapsed)->completed(call,answer,elapsed));
      call.nativeStarted=true;

@@ -80,7 +80,9 @@ def wait_library_result(expected, output, name):
 def import_through_visible_saf(gguf, output):
     """Public CI-only file goes through actual picker and production import UI."""
     ui.adb('shell','am','start','-W','-n',PACKAGE+'/'+ui.MAIN);ui.wait_activity(ui.MAIN)
-    ui.tap_text('Рабочее окно · игра и агент');ui.wait_activity(ui.NES)
+    # Internal core acceptance is explicitly separate from the user's real-game workspace.
+    ui.tap_text('Открыть консольную лабораторию · NES / Денди');ui.wait_activity(ui.GAMELAB)
+    ui.tap_text('Играть в NES / Денди');ui.wait_activity(ui.NES)
     import_picker_file(gguf,EXPECTED_SHA256,FIXTURE_NAME,output)
     ui.tap_text('Управление моделями NES',swipes=0)
     ui.tap_text('Проверить SHA-256 файлов',swipes=0)

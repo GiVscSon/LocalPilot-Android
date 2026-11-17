@@ -7,7 +7,7 @@ package org.localpilot.android;
  */
 public final class EmbeddedGgufRuntime {
  private static native String nativeInfer(
-   String filename,String system,String question,int maxTokens,float temperature);
+   String filename,String system,String question,int maxTokens,float temperature,boolean controllerMode);
  private static native String nativeAnalyzeImage(
    String model,String projector,String question,byte[] rgb,int width,int height,boolean controllerMode);
  private static native void nativeRelease();
@@ -18,10 +18,10 @@ public final class EmbeddedGgufRuntime {
   System.loadLibrary("localpilot_embedded");
   String system="Answer in English only. Follow the exact output format. No explanations.";
   try {
-   String blue=nativeInfer(args[0],system,"Reply with exactly one word: BLUE",16,0f);
-   String sum=nativeInfer(args[0],system,"What is 12 + 15? Reply with the number only.",16,0f);
+   String blue=nativeInfer(args[0],system,"Reply with exactly one word: BLUE",16,0f,false);
+   String sum=nativeInfer(args[0],system,"What is 12 + 15? Reply with the number only.",16,0f,false);
    String cat=nativeInfer(args[0],system,
-      "Write one short English sentence about a cat.",64,0f);
+      "Write one short English sentence about a cat.",64,0f,false);
    System.out.println("NATIVE_MODEL_QUALITY blue="+quote(blue)+" sum="+quote(sum)+
       " cat="+quote(cat));
    if(!"BLUE".equals(blue.trim())||!LocalCoreContract.acceptArithmetic(sum)||
@@ -31,11 +31,11 @@ public final class EmbeddedGgufRuntime {
    System.out.println("NATIVE_MODEL_ENGLISH_SMOKE_PASS");
    if(args.length==5){
     String qwen=nativeInfer(args[1],"Respond in short English sentences.",
-      "Explain one reason to preserve empty cells in 2048.",96,0f);
+      "Explain one reason to preserve empty cells in 2048.",96,0f,false);
     System.out.println("NATIVE_QWEN_RAW="+quote(qwen));
     if(qwen==null||qwen.isBlank())throw new AssertionError("Qwen cannot produce local strategy text");
     String liquid=nativeInfer(args[2],"Answer in English.",
-      "What is a useful principle for avoiding game hazards?",96,0f);
+      "What is a useful principle for avoiding game hazards?",96,0f,false);
     System.out.println("NATIVE_LFM_RAW="+quote(liquid));
     if(liquid==null||liquid.isBlank())throw new AssertionError("LFM failed text generation");
     int w=224,h=224;byte[] rgb=new byte[w*h*3];

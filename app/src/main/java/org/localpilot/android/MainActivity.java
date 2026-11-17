@@ -20,7 +20,8 @@ public class MainActivity extends Activity {
   if(BuildConfig.UNIFIED_MODELLAB){
    LinearLayout allSections=new LinearLayout(this);allSections.setOrientation(LinearLayout.VERTICAL);
    allSections.setVisibility(android.view.View.GONE);
-   button(box,"Рабочее окно · игра и агент",()->startActivity(new Intent(this,org.localpilot.gamelab.NesEmulatorActivity.class)));
+   button(box,"Рабочее окно · игра и агент",()->startActivity(new Intent(this,org.localpilot.gamelab.NesEmulatorActivity.class)
+     .putExtra(org.localpilot.shared.NesModelHost.EXTRA_REAL_GAMES_ONLY,true)));
    Button more=new Button(this);more.setText("Ещё");more.setContentDescription("Открыть дополнительные настройки");
    more.setOnClickListener(v->{boolean open=allSections.getVisibility()!=android.view.View.VISIBLE;
     allSections.setVisibility(open?android.view.View.VISIBLE:android.view.View.GONE);
@@ -37,8 +38,11 @@ public class MainActivity extends Activity {
    if(BuildConfig.HARNESS_TEST_FIXTURES)button(box,"🎮 Harness Console · модели, NES, эпизоды, STOP, GPU",
      ()->startActivity(new Intent(this,HarnessDashboardActivity.class)));
   if(BuildConfig.UNIFIED_MODELLAB) {
-   button(box,"🧠 ModelLab · GGUF, загрузка моделей и анализ фото",
+   if(BuildConfig.HARNESS_TEST_FIXTURES)button(box,"🧠 ModelLab · GGUF, загрузка моделей и анализ фото",
      ()->startActivity(new Intent(this,ModelLabActivity.class)));
+   else button(box,"Модели и игровое окно",()->startActivity(new Intent(this,org.localpilot.gamelab.NesEmulatorActivity.class)
+     .putExtra(org.localpilot.shared.NesModelHost.EXTRA_REAL_GAMES_ONLY,true)
+     .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP|Intent.FLAG_ACTIVITY_SINGLE_TOP)));
   }else {
   button(box,"Локальное ИИ-ядро · MNN-Pocket (English)",()->startActivity(new Intent(this,LocalCoreActivity.class)));
   }
@@ -49,7 +53,7 @@ public class MainActivity extends Activity {
   TextView autoHelp=new TextView(this);autoHelp.setText("Для сетки фишек: Игра → Мэтч Ворлд · обмен соседей или Фишки · удалить группу → выберите 6×6, 7×7 либо другой размер → обведите клетки → Старт. Настройки и типы фишек сохраняются. Поддерживаются различимые цветные фишки без специальных эффектов; цели уровня и усилители пока не распознаются. Для аркад другого оформления: Ещё → Настроить распознавание. Для разных игр одного браузера: Игра → Имя игры. STOP всегда останавливает ввод.");box.addView(autoHelp);
   section(box,"03 · Консольная лаборатория");
   TextView labCaption=new TextView(this);
-  labCaption.setText("NES/Денди работает локально. Зрительная GGUF с mmproj получает кадры текущей игры и предлагает управление через единый контроллер. Для Android-игр используется служба LocalPilot и выбранная область экрана. Поддержка каждой игры проверяется отдельно.");
+  labCaption.setText("NES/Денди работает локально. GGUF получает кадры или проверенное состояние текущей игры и предлагает управление через единый контроллер. Поддержка каждой игры проверяется отдельно.");
   labCaption.setTextColor(HubContract.SECONDARY);box.addView(labCaption);
   button(box,"Открыть консольную лабораторию · NES / Денди",this::openGameLab);
   consoleExperience=new TextView(this);

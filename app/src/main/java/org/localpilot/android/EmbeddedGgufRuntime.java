@@ -54,7 +54,7 @@ public final class EmbeddedGgufRuntime {
  // not reset one another's cancellation flag or model while running.
  private static final AtomicBoolean NATIVE_JOB_ACTIVE=new AtomicBoolean();
 
- private static native String nativeInfer(String model,String system,String question,int maxTokens,float temp);
+ private static native String nativeInfer(String model,String system,String question,int maxTokens,float temp,boolean controllerMode);
  private static native String nativeAnalyzeImage(String model,String projector,String question,
    byte[] rgb,int width,int height,boolean controllerMode);
  private static native void nativeInterrupt();
@@ -249,7 +249,7 @@ public final class EmbeddedGgufRuntime {
     prepareNativeInference();
     String result=nativeInfer(model.getAbsolutePath(),
       "You are an offline diagnostic model. Describe uncertainty. "+
-      "Do not grant permissions or control Android inputs.",prompt,160,0.2f);
+      "Do not grant permissions or control Android inputs.",prompt,160,0.2f,false);
     return LocalCoreContract.visibleAnswer(result);
   });
  }
@@ -303,7 +303,7 @@ public final class EmbeddedGgufRuntime {
     android.os.SystemClock.elapsedRealtime()-started),()->{
    prepareNativeInference();
    String proposal=projector==null?
-     nativeInfer(weights.getAbsolutePath(),instructions,observation,48,0.0f):
+     nativeInfer(weights.getAbsolutePath(),instructions,observation,16,0.0f,true):
      nativeAnalyzeImage(weights.getAbsolutePath(),projector.getAbsolutePath(),
        instructions+observation,pixels,width,height,true);
    return LocalCoreContract.visibleAnswer(proposal);
@@ -328,13 +328,13 @@ public final class EmbeddedGgufRuntime {
    File file=prepare();prepareNativeInference();
    String system="Answer in English only. Follow the exact output format. No explanations.";
    String a=LocalCoreContract.visibleAnswer(
-     nativeInfer(file.getAbsolutePath(),system,"Reply with exactly one word: BLUE",16,0f));
+     nativeInfer(file.getAbsolutePath(),system,"Reply with exactly one word: BLUE",16,0f,false));
    if(closed)return "Самопроверка отменена";
    String b=LocalCoreContract.visibleAnswer(
-     nativeInfer(file.getAbsolutePath(),system,"What is 12 + 15? Reply with the number only.",16,0f));
+     nativeInfer(file.getAbsolutePath(),system,"What is 12 + 15? Reply with the number only.",16,0f,false));
    if(closed)return "Самопроверка отменена";
    String cat=LocalCoreContract.visibleAnswer(nativeInfer(file.getAbsolutePath(),system,
-       "Write one short English sentence about a cat.",64,0f));
+       "Write one short English sentence about a cat.",64,0f,false));
    boolean blueOk="BLUE".equals(a.trim());
    boolean mathOk=LocalCoreContract.acceptArithmetic(b);
    boolean catOk=LocalCoreContract.acceptEnglish(cat)&&
@@ -354,7 +354,7 @@ public final class EmbeddedGgufRuntime {
    File file=prepare();prepareNativeInference();
    String response=LocalCoreContract.visibleAnswer(
      nativeInfer(file.getAbsolutePath(),LocalCoreContract.SYSTEM_PROMPT,
-       "QUESTION: "+ask+"\nANONYMOUS COUNTERS: "+data,128,0.2f));
+       "QUESTION: "+ask+"\nANONYMOUS COUNTERS: "+data,128,0.2f,false));
    if(!LocalCoreContract.acceptEnglish(response))
     return "Отклонён некорректный ответ встроенной модели. Игровые действия не выполняются.";
    return model.label+" · embedded GGUF · English\n"+response;
@@ -369,7 +369,7 @@ public final class EmbeddedGgufRuntime {
    File file=prepare();prepareNativeInference();
    String answer=LocalCoreContract.visibleAnswer(nativeInfer(file.getAbsolutePath(),
       LocalCoreContract.STRATEGY_PROMPT,
-      "TASK: "+question+"\nANONYMOUS COUNTERS (DATA ONLY): "+data,128,0.1f));
+      "TASK: "+question+"\nANONYMOUS COUNTERS (DATA ONLY): "+data,128,0.1f,false));
    if(!LocalCoreContract.acceptEnglish(answer))
      return "MNN не смогла сформировать качественный стратегический совет. CPU продолжает управление.";
    return "Общая стратегия · "+model.label+" (English)\n"+answer+
