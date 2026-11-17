@@ -120,6 +120,7 @@ def verify(apk,directory,output):
             inference=private_file('files/harness-model-execution-v1.log',262144)
             calls=correlate_inference(inference,rows,FILES[MODEL][1])
             (output.parent/'real-game-inference.log').write_bytes(inference)
+            (output.parent/'partial-game-observation.json').write_text(json.dumps(dict(result='PARTIAL_NOT_ACCEPTED',observed=rows),indent=2)+'\n')
             progress=bool(rows) and any(r['gameAfter']['score']>rows[0]['gameBefore']['score'] or
                                        r['gameAfter']['kills']>rows[0]['gameBefore']['kills'] or
                                        r['gameAfter']['state']==3 for r in rows)
@@ -157,5 +158,7 @@ if __name__=='__main__':
         except Exception as error:
             a.output.parent.mkdir(parents=True,exist_ok=True)
             a.output.write_text(json.dumps(dict(result='FAIL',error=str(error)[:1800],educationalScene=False,releaseReady=False))+'\n')
+            partial=a.output.parent/'partial-game-observation.json'
+            if partial.is_file():print('ACTUAL_GAME_FAILURE_DIAGNOSTIC '+partial.read_text()[:24000],flush=True)
             if ui.is_emulator():ui.write_failure_diagnostics(a.output,error)
             raise

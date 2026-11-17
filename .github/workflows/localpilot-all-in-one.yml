@@ -97,6 +97,7 @@ jobs:
           java tests/NesModelHostVerify.java
           python3 -m unittest discover -s tests -p 'test_harness_runtime_acceptance.py' -v
           python3 -m unittest discover -s tests -p 'test_g2_visible_saf.py' -v
+          node tests/nes_visual_bridge_smoke.cjs
           java tests/ConsoleAgentContractVerify.java
           java tests/ConsoleExperienceMemoryVerify.java
           java tests/HomebrewGoalRewardVerify.java

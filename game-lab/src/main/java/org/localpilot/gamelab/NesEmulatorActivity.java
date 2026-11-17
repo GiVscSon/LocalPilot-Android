@@ -385,6 +385,10 @@ public final class NesEmulatorActivity extends Activity {
   LinearLayout compact=new LinearLayout(this);compact.setOrientation(LinearLayout.VERTICAL);
   LinearLayout selectionRow=new LinearLayout(this);
   compactModels=new android.widget.Spinner(this);compactModels.setContentDescription("Модель агента NES");
+  compactModels.setOnTouchListener((view,event)->{
+   if(!compactWorkflowBusy())return false;
+   showState("Агент занят текущей игрой; STOP доступен для остановки");return true;
+  });
   selectionRow.addView(compactModels,new LinearLayout.LayoutParams(0,-2,1));
   Button library=new Button(this);library.setText("Модели");library.setContentDescription("Управление моделями NES");
   boolean libraryAvailable=getApplication() instanceof NesModelHost host&&host.nesLibraryAvailable();
@@ -399,6 +403,7 @@ public final class NesEmulatorActivity extends Activity {
   LinearLayout actions=new LinearLayout(this);
   Button gameMenu=new Button(this);gameMenu.setText("Игра");
   gameMenu.setOnClickListener(v->{android.widget.PopupMenu menu=new android.widget.PopupMenu(this,gameMenu);
+   if(compactWorkflowBusy()){showState("Агент занят текущей игрой; сначала останови его кнопкой STOP");return;}
    menu.getMenu().add("VOID LANCER").setOnMenuItemClickListener(item->{if(download.isEnabled())download.performClick();return true;});
    menu.getMenu().add("Продолжить сохранение").setOnMenuItemClickListener(item->{viewSave.performClick();return true;});
    menu.getMenu().add("Открыть .nes").setOnMenuItemClickListener(item->{open.performClick();return true;});
@@ -1179,6 +1184,7 @@ public final class NesEmulatorActivity extends Activity {
      pendingGoal=null;
      boolean saved=recordAiEpisode(readyTrial,current);
      if(genericVisionEpisode){
+      pendingTrial=null; // The verified permit is complete; the next observation must see an idle controller.
       if(!saved||!"PIXELS_DIFFER".equals(readyTrial.status)){
        stopCpuExperiment("STOP: пользовательский ROM не подтвердил свежий визуальный переход");return;
       }
@@ -1839,6 +1845,7 @@ public final class NesEmulatorActivity extends Activity {
  }
  private void showModelLibrary(View anchor){
   if(!(getApplication() instanceof NesModelHost host)||!host.nesLibraryAvailable())return;
+  if(compactWorkflowBusy()){showState("Агент занят текущей игрой; STOP остаётся доступен");return;}
   refreshCompactModels();
   var selected=selectedLibraryModel();boolean idle=!compactWorkflowBusy();
   boolean removable=selected!=null&&host.nesModelRemovable(selected);
