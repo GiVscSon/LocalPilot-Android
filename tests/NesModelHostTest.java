@@ -37,6 +37,14 @@ public final class NesModelHostTest {
   check(!title.display().contains("500")&&!title.display().contains("ПОБЕДА"),"menu does not publish stale game counters or victory");
   check(realBefore.prompt().contains("PLAYING (state=1)")&&realBefore.prompt().contains("FIRE=A"),"actual playing phase and fire control are unambiguous");
   check(!realBefore.prompt().contains("START begins"),"menu-start instruction is absent from active-game observation");
+  String past="RIGHT+A:NO_VISUAL_CHANGE; ".repeat(100);
+  String actualPrompt=realBefore.modelPrompt(past);
+  check(actualPrompt.length()<=900&&actualPrompt.contains("PLAYING (state=1)")&&actualPrompt.contains("FIRE=A"),"bounded history cannot truncate current phase or actual controls");
+  check(actualPrompt.indexOf("CURRENT STATE")>actualPrompt.indexOf("RIGHT+A:NO_VISUAL_CHANGE"),"historical actions precede the current measured observation");
+  check(title.modelPrompt(past).contains("TITLE MENU")&&!title.modelPrompt(past).contains("lives=0"),"current title phase survives a long history without inactive gameplay claims");
+  var largest=new VoidLancerGameState(1,255,255,9,9,3,999999,255,255,8,255,255,255,255);
+  check(largest.modelPrompt(past).length()<=900&&largest.modelPrompt(past).contains("score=999999")&&largest.modelPrompt(past).contains("(255,255)"),"maximum valid actual counters/coordinates remain present within the input cap");
+  check(realBefore.modelPrompt(null).contains("PLAYING (state=1)"),"first observation needs no invented history");
   for(int budget:HarnessDemoWorkflow.GGUF_BUDGETS){
    check(HarnessDemoWorkflow.ggufSteps(HarnessDemoWorkflow.ggufMode(budget))==budget,"exact bounded GGUF budget");
    check(HarnessDemoWorkflow.supported(HarnessDemoWorkflow.ggufMode(budget)),"explicit GGUF budget is supported");

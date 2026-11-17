@@ -51,6 +51,16 @@ public record VoidLancerGameState(int state,int x,int y,int lives,int bombs,int 
    ", nearest enemy="+(enemyX<0?"none/unknown":"("+enemyX+","+enemyY+")")+
    ", nearest hostile bullet="+(threatX<0?"none/unknown":"("+threatX+","+threatY+")")+
    ". FIRE=A (shoot upward, unlimited ammunition). BOMB=B (limited inventory). MOVE=UP/DOWN/LEFT/RIGHT; coordinates increase right/down. START and SELECT have no effect during PLAYING in this ROM. Goal: destroy enemies for score, dodge hostile bullets, preserve lives. ";}
+ /** Keep current measured facts intact and after bounded historical context. */
+ public String modelPrompt(String history){
+  String current="CURRENT STATE (verified ROM RAM, no image inference):\n"+prompt()+
+    "\nChoose one allowed command for this CURRENT STATE. Button and WAIT steps span16 real frames.";
+  if(current.length()>900)throw new IllegalStateException("Current game observation exceeds bounded prompt");
+  String heading="PAST VERIFIED OUTCOMES:\n";
+  int room=Math.min(300,Math.max(0,900-current.length()-heading.length()-1));
+  if(history==null||history.isEmpty()||room==0)return current;
+  return heading+history.substring(0,Math.min(room,history.length()))+"\n"+current;
+ }
  public String display(){
   if(state==0)return "VOID LANCER · МЕНЮ · игровой эпизод не запущен";
   return "VOID LANCER · "+(state==3?"ПОБЕДА":state==2?"ИГРА ОКОНЧЕНА":state==0?"МЕНЮ":"ИГРА")+
