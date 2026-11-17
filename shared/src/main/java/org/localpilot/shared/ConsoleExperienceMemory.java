@@ -79,8 +79,18 @@ public final class ConsoleExperienceMemory {
   if(!sha(romSha)||!id(modelId)||!sha(modelSha))throw new IllegalArgumentException("Generic context identity");
   List<GenericEpisode> rows=new ArrayList<>();
   for(var row:readGeneric(directory))if(row.romSha().equals(romSha)&&row.modelId().equals(modelId)&&row.modelSha().equals(modelSha))rows.add(row);
-  StringBuilder result=new StringBuilder("Past inputs and frame changes for this exact ROM and model; these alone do not prove reward or victory: ");
-  for(int i=Math.max(0,rows.size()-MAX_CONTEXT);i<rows.size();i++)result.append(rows.get(i).trial().button).append(':').append(rows.get(i).trial().status).append("; ");
+  StringBuilder result=new StringBuilder("Past verified inputs for this ROM/model (pixel changes alone prove no reward): ");
+  for(int i=Math.max(0,rows.size()-4);i<rows.size();i++){
+   GenericEpisode row=rows.get(i);
+   result.append(row.trial().button).append(':').append(row.trial().status);
+   if(row.before()!=null&&row.after()!=null){
+    VoidLancerGameState a=row.before(),b=row.after();
+    result.append(" dx=").append(b.x()-a.x()).append(" dy=").append(b.y()-a.y())
+      .append(" scoreDelta=").append(b.score()-a.score()).append(" killsDelta=").append(b.kills()-a.kills())
+      .append(" livesDelta=").append(b.lives()-a.lives());
+   }
+   result.append("; ");
+  }
   return result.toString();
  }
 

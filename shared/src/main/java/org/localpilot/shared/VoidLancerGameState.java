@@ -3,19 +3,27 @@ package org.localpilot.shared;
 /** Real ROM-specific RAM map from Riyoway/void-lancer-nes v1.0.0 src/main.asm (MIT).
  * Only valid for this exact ROM; never applied to arbitrary NES games. */
 public record VoidLancerGameState(int state,int x,int y,int lives,int bombs,int stage,
-                                  int score,int kills,int shots,int bullets) {
+                                  int score,int kills,int shots,int bullets,
+                                  int enemyX,int enemyY,int threatX,int threatY) {
+ public VoidLancerGameState(int state,int x,int y,int lives,int bombs,int stage,int score,int kills,int shots,int bullets){
+  this(state,x,y,lives,bombs,stage,score,kills,shots,bullets,-1,-1,-1,-1);
+ }
  public static final String ROM_SHA="5eb801aca68131a3d17fa82d8901d46f6098b878d1e00cd1c47d00c001c2405a";
  public static final String PROFILE="VOID_LANCER_V1";
  public VoidLancerGameState {
   if(state<0||state>3||x<0||x>255||y<0||y>255||lives<0||lives>9||bombs<0||bombs>9||
-     stage<0||stage>3||score<0||score>999999||kills<0||kills>255||shots<0||shots>255||bullets<0||bullets>8)
+     stage<0||stage>3||score<0||score>999999||kills<0||kills>255||shots<0||shots>255||bullets<0||bullets>8||!position(enemyX,enemyY)||!position(threatX,threatY))
    throw new IllegalArgumentException("Invalid VOID LANCER memory state");
  }
- public String wire(){return state+","+x+","+y+","+lives+","+bombs+","+stage+","+score+","+kills+","+shots+","+bullets;}
+ private static boolean position(int x,int y){return x==-1&&y==-1||x>=0&&x<=255&&y>=0&&y<=255;}
+ public String wire(){return state+","+x+","+y+","+lives+","+bombs+","+stage+","+score+","+kills+","+shots+","+bullets+","+enemyX+","+enemyY+","+threatX+","+threatY;}
  public static VoidLancerGameState parse(String text){
-  if(text==null||text.length()>90||!text.matches("[0-9]+(,[0-9]+){9}"))throw new IllegalArgumentException("Invalid game RAM encoding");
-  String[] p=text.split(",");int[] a=new int[10];for(int i=0;i<a.length;i++)a[i]=Integer.parseInt(p[i]);
-  return new VoidLancerGameState(a[0],a[1],a[2],a[3],a[4],a[5],a[6],a[7],a[8],a[9]);
+  if(text==null||text.length()>140||!text.matches("-?[0-9]+(,-?[0-9]+){9}(,-?[0-9]+){0,4}"))throw new IllegalArgumentException("Invalid game RAM encoding");
+  String[] p=text.split(",");
+  if(p.length!=10&&p.length!=14)throw new IllegalArgumentException("Incomplete game geometry");
+  int[] a=new int[14];java.util.Arrays.fill(a,10,14,-1);
+  for(int i=0;i<p.length;i++)a[i]=Integer.parseInt(p[i]);
+  return new VoidLancerGameState(a[0],a[1],a[2],a[3],a[4],a[5],a[6],a[7],a[8],a[9],a[10],a[11],a[12],a[13]);
  }
  public boolean confirms(String button,VoidLancerGameState before){
   if(before==null||before.state!=1||state!=1)return false;
@@ -28,7 +36,10 @@ public record VoidLancerGameState(int state,int x,int y,int lives,int bombs,int 
  }
  public String prompt(){return "Verified current VOID LANCER RAM: state="+state+" (0 title,1 playing,2 loss,3 win), ship=("+x+","+y+
    "), lives="+lives+", bombs="+bombs+", stage="+stage+", score="+score+", kills="+kills+
-   ". D-pad moves ship; A fires; B spends a bomb. Destroy enemies, dodge bullets and preserve lives. ";}
+   ", shots="+shots+", active player bullets="+bullets+
+   ", nearest enemy="+(enemyX<0?"none/unknown":"("+enemyX+","+enemyY+")")+
+   ", nearest hostile bullet="+(threatX<0?"none/unknown":"("+threatX+","+threatY+")")+
+   ". Coordinates increase right/down; A shoots upward. D-pad moves ship; A fires; B spends a bomb. Destroy enemies, dodge bullets and preserve lives. ";}
  public String display(){return "VOID LANCER · "+(state==3?"ПОБЕДА":state==2?"ИГРА ОКОНЧЕНА":state==0?"МЕНЮ":"ИГРА")+
    " · счёт "+score+" · жизни "+lives+" · корабль ("+x+","+y+") · этап "+stage;}
 }

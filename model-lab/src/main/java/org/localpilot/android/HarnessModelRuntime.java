@@ -186,7 +186,8 @@ public final class HarnessModelRuntime {
     (generic?" ":call.observation.ramX()<0?" RAM UNKNOWN. ":" verified RAM x="+call.observation.ramX()+" y="+call.observation.ramY()+". ")+
     (generic?"Choose one allowed BUTTON for visible game progress. ":"Choose one allowed BUTTON for rightward progress without crossing a RAM edge. ")+
     "Input ACK is not a reward. "+history;
-   if(call.observation.game()!=null)observation=call.observation.game().prompt()+observation;
+   if(gameRam)observation=call.observation.game().prompt()+
+     "One button holds 16 real frames. Current RAM text; no image inference. "+history;
    final String modelObservation=observation.substring(0,Math.min(900,observation.length()));
    final File mmproj=projector;final byte[] rgb=pixels;
    main.post(()->{

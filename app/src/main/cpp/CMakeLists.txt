@@ -2,6 +2,14 @@ cmake_minimum_required(VERSION 3.22.1)
 project(localpilot_embedded_llama LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+# Android's debug variant otherwise compiles ggml tensor kernels at -O0.
+# Keep debug symbols/assertions, but optimize the actual inference arithmetic.
+# Do not enable fast-math or host-native instructions for portable Android APKs.
+if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+  add_compile_options("$<$<CONFIG:Debug>:-O2>")
+endif()
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
 
 # CI checks out the pinned llama.cpp revision, never a moving branch.
 set(LLAMA_SRC "${CMAKE_CURRENT_LIST_DIR}/../../../../third_party/llama.cpp")

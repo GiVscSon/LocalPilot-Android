@@ -28,8 +28,26 @@ assert.equal(context.retroButton("START",false),true);tick(30);
 assert.equal(context.retroEnterVisionStepMode(),true);
 const state=context.readActualGameState().split(',').map(Number);
 assert.equal(state[0],1,"real game has entered gameplay, not the title screen");
+function assertActualGeometry(){
+ const actual=context.readActualGameState().split(',').map(Number);
+ const memory=vm.runInContext("Array.from(nes.cpu.mem)",page);
+ function expected(count,xb,yb,active){
+  const slots=Array.from({length:count},(_,i)=>i).filter(active);
+  slots.sort((a,b)=>((memory[xb+a]-memory[6])**2+(memory[yb+a]-memory[7])**2)-
+    ((memory[xb+b]-memory[6])**2+(memory[yb+b]-memory[7])**2));
+  return slots.length?[memory[xb+slots[0]],memory[yb+slots[0]]]:[-1,-1];
+ }
+ assert.equal(actual.length,14);
+ assert.deepEqual(actual.slice(10,12),expected(6,0x308,0x310,i=>memory[0x300+i]!==0));
+ assert.deepEqual(actual.slice(12),expected(8,0x360,0x368,i=>memory[0x368+i]!==255));
+}
+assertActualGeometry();
 const move=step("RIGHT");assert.ok(move.after[1]>move.before[1],"actual ship moves right under controller input");
 const shot=step("A");assert.notEqual(shot.after[8],shot.before[8],"actual game fire routine increments its shot meter");
 const bomb=step("B");assert.ok(bomb.after[4]<bomb.before[4],"actual game consumes a bomb");
 assert.equal(bomb.finish-bomb.start,16);
+for(let i=0;i<20;i++){step("A");assertActualGeometry();}
+// Inactive object arrays can retain old coordinates. They must never become targets.
+vm.runInContext("for(let i=0;i<6;i++){nes.cpu.mem[0x300+i]=0;nes.cpu.mem[0x308+i]=200;} for(let i=0;i<8;i++){nes.cpu.mem[0x368+i]=255;nes.cpu.mem[0x360+i]=100;}",page);
+assert.deepEqual(context.readActualGameState().split(',').map(Number).slice(10),[-1,-1,-1,-1]);
 console.log("REAL_VOID_LANCER_RAM_PROFILE_CORE_PASS shipMovement=true firing=true bombUse=true nativeModel=false androidBridge=modeled educationalScene=false");

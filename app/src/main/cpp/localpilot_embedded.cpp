@@ -9,8 +9,31 @@
 #include <mutex>
 #include <string>
 #include <vector>
+#include <chrono>
+#include <cstdio>
+#include <unistd.h>
+#ifdef __ANDROID__
+#include <android/log.h>
+#endif
 
 namespace {
+// Timings contain phase names/durations only: never prompts, paths, frames or weights.
+struct NativeStage {
+ const char *name;
+ std::chrono::steady_clock::time_point started=std::chrono::steady_clock::now();
+ explicit NativeStage(const char *phase):name(phase){write("begin",0);}
+ ~NativeStage(){
+  auto ms=std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now()-started).count();
+  write("end",static_cast<long long>(ms));
+ }
+ void write(const char *event,long long ms){
+#ifdef __ANDROID__
+  __android_log_print(ANDROID_LOG_INFO,"LocalPilotNative","phase=%s event=%s elapsed_ms=%lld",name,event,ms);
+#else
+  std::fprintf(stderr,"LocalPilotNative phase=%s event=%s elapsed_ms=%lld\n",name,event,ms);
+#endif
+ }
+};
 std::mutex lock;
 std::atomic<bool> cancelled(false);
 llama_model * model=nullptr;
@@ -19,6 +42,10 @@ mtmd_context * visionContext=nullptr;
 std::string visionPath;
 int visionMaxTokens=0;
 std::string path;
+int workerThreads(){
+ const long online=sysconf(_SC_NPROCESSORS_ONLN);
+ return static_cast<int>(std::max(1L,std::min(4L,online)));
+}
 int gpuLayersRequested=0;
 int gpuLayersLoaded=0;
 bool anyGpu(){
@@ -62,6 +89,7 @@ void unload(){
 }
 
 bool init(const std::string &name){
+ NativeStage timing("model_prepare");
  if(model&&ctx&&name==path&&gpuLayersLoaded==gpuLayersRequested)return true;
  unload();
  if(name.empty())return false;
@@ -79,7 +107,7 @@ bool init(const std::string &name){
  if(!model)return false;
  auto cp=llama_context_default_params();
  cp.n_ctx=4096; cp.n_batch=512; cp.n_ubatch=256;
- cp.n_threads=4; cp.n_threads_batch=4;
+ cp.n_threads=workerThreads(); cp.n_threads_batch=cp.n_threads;
  ctx=llama_init_from_model(model,cp);
  if(!ctx&&mp.n_gpu_layers>0){
   llama_model_free(model);model=nullptr;
@@ -116,6 +144,7 @@ bool run_batch(llama_batch_ext *batch,const llama_token *tokens,int count,int of
 }
 
 std::string generate_from_logits(int pos,int limit,float temp,bool nesController=false){
+ NativeStage timing("token_decode");
  if(!ctx||pos<1||limit<1||limit>192)return "";
  const auto *vocab=llama_model_get_vocab(model);
  auto *batch=llama_batch_ext_init(ctx);
@@ -175,9 +204,12 @@ std::string infer(const std::string &sys,const std::string &usr,int limit,float 
  auto *batch=llama_batch_ext_init(ctx);
  if(!batch)return "";
  bool ok=true;
- for(int i=0;i<n && ok && !cancelled.load();i+=256){
-  int length=std::min(256,n-i);
-  ok=run_batch(batch,tokens.data()+i,length,i,i+length==n);
+ {
+  NativeStage timing("text_prefill");
+  for(int i=0;i<n && ok && !cancelled.load();i+=256){
+   int length=std::min(256,n-i);
+   ok=run_batch(batch,tokens.data()+i,length,i,i+length==n);
+  }
  }
  if(!ok||cancelled.load()){llama_batch_ext_free(batch);return "";}
  llama_batch_ext_free(batch);
@@ -254,11 +286,12 @@ Java_org_localpilot_android_EmbeddedGgufRuntime_nativeAnalyzeImage(
   const bool controller=controllerMode==JNI_TRUE;
   auto params=mtmd_context_params_default();
   params.use_gpu=gpuLayersLoaded>0;
-  params.n_threads=4;
+  params.n_threads=workerThreads();
   params.warmup=false;
   params.image_max_tokens=controller?128:512;
   if(!visionContext||visionPath!=m.str()||visionMaxTokens!=params.image_max_tokens){
    if(visionContext)mtmd_free(visionContext);
+   NativeStage timing("vision_prepare");
    visionContext=mtmd_init_from_file(m.str().c_str(),model,params);
    visionPath=m.str();visionMaxTokens=params.image_max_tokens;
   }
@@ -281,8 +314,12 @@ Java_org_localpilot_android_EmbeddedGgufRuntime_nativeAnalyzeImage(
          mtmd_tokenize(vision,chunks,&input,bitmapArray,1)==0){
       llama_memory_clear(llama_get_memory(ctx),true);
       llama_pos after=0;
-      if(mtmd_helper_eval_chunks(vision,ctx,chunks,0,0,512,true,&after)==0
-          &&after>0&&after+(controller?16:128)<4096&&!cancelled.load())
+      int evaluated;
+      {
+       NativeStage timing("vision_prefill");
+       evaluated=mtmd_helper_eval_chunks(vision,ctx,chunks,0,0,512,true,&after);
+      }
+      if(evaluated==0&&after>0&&after+(controller?16:128)<4096&&!cancelled.load())
        reply=generate_from_logits(after,controller?16:128,controller?0.0f:0.1f,controller);
      }
     }

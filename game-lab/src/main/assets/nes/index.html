@@ -308,7 +308,20 @@ function readActualGameState(){
  for(let i=0;i<8;i++)if(m[0x348+i]!==255)bullets++;
  const values=[m[0],m[6],m[7],m[0x0a],m[0x0b],m[0x0d],score,m[0x13],m[0x26],bullets];
  if(values.some(x=>!Number.isInteger(x)||x<0)||m[0]>3)return null;
- return values.join(",");
+ // Exact tagged ROM map: six enemy slots (boss uses slot 0), eight enemy bullets.
+ // Distance ranks only actual active objects; no inferred targets or scripted input.
+ function nearest(count,xBase,yBase,active){
+  let best=Infinity,point=[-1,-1];
+  for(let i=0;i<count;i++)if(active(i)){
+   const x=m[xBase+i],y=m[yBase+i];
+   if(!Number.isInteger(x)||!Number.isInteger(y)||x<0||x>255||y<0||y>255)continue;
+   const distance=(x-m[6])**2+(y-m[7])**2;
+   if(distance<best){best=distance;point=[x,y];}
+  }
+  return point;
+ }
+ return values.concat(nearest(6,0x308,0x310,i=>m[0x300+i]>0),
+  nearest(8,0x360,0x368,i=>m[0x368+i]!==255)).join(",");
 }
 window.retroAiStep=function(name,holdFrames,nonce){
  if(!nes||!stepMode||!paused||(!homebrewRom&&!visionProfileCurrent())||!gamepadLatch||agentTrial||

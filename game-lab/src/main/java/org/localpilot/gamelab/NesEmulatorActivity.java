@@ -342,7 +342,7 @@ public final class NesEmulatorActivity extends Activity {
   cpuBatchButton.setOnClickListener(v->startCpuExperiment());
   actionPanel.addView(cpuBatchButton);
   if(!testFixturesAllowed()){
-   for(View fixture:new View[]{demo,studentStepButton,studentBatchButton,autoplay,cpuAgentButton,cpuBatchButton,exploratoryStopSwitch,resumeGame})
+   for(View fixture:new View[]{demo,shareTrial,aiObserveButton,studentStepButton,studentBatchButton,autoplay,cpuAgentButton,cpuBatchButton,exploratoryStopSwitch,resumeGame})
     fixture.setVisibility(View.GONE);
   }
   if(getPackageName().startsWith("org.localpilot.android")){

@@ -97,6 +97,7 @@ jobs:
           java tests/NesModelHostVerify.java
           python3 -m unittest discover -s tests -p 'test_harness_runtime_acceptance.py' -v
           python3 -m unittest discover -s tests -p 'test_g2_visible_saf.py' -v
+          python3 -m unittest discover -s tests -p 'test_native_inference_optimization.py' -v
           node tests/nes_visual_bridge_smoke.cjs
           java tests/ConsoleAgentContractVerify.java
           java tests/ConsoleExperienceMemoryVerify.java
@@ -125,6 +126,8 @@ jobs:
           ./gradlew --no-daemon --max-workers=2 --no-parallel \
             -Dorg.gradle.jvmargs='-Xmx4096m -XX:MaxMetaspaceSize=768m -Dfile.encoding=UTF-8' \
             -PunifiedModelLab=true :app:assembleDebug :app:lintDebug
+      - name: Audit actual optimized ARM64 inference compiler commands
+        run: python3 tools/verify_native_inference_optimization.py --root app/.cxx --abi arm64-v8a --output build/all-in-one/NATIVE-COMPILER-OPTIONS.json
       - name: Verify single launcher, bundled NES+JNI, package and debug signer
         run: |
           set -euo pipefail
@@ -150,6 +153,7 @@ jobs:
             --output build/all-in-one/G0-CANDIDATE-EVIDENCE.json
           mkdir -p dist/all-in-one
           cp build/all-in-one/ELF16K.json dist/all-in-one/
+          cp build/all-in-one/NATIVE-COMPILER-OPTIONS.json dist/all-in-one/
           cp build/all-in-one/APK-PACKAGING.json dist/all-in-one/
           cp build/all-in-one/G0-CANDIDATE-EVIDENCE.json dist/all-in-one/
           cp "$APK" dist/all-in-one/LocalPilot-All-in-One-TEST-ONLY.apk
@@ -235,6 +239,8 @@ jobs:
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging \
             app/build/outputs/apk/debug/app-debug.apk \
             | grep "^package: name='org.localpilot.android.dev.unified' "
+      - name: Audit actual optimized x86 inference compiler commands
+        run: python3 tools/verify_native_inference_optimization.py --root app/.cxx --abi x86_64 --output build/x86-native-compiler-options.json
       - name: Audit the actual emulator native ELF and ZIP alignment
         run: python3 tools/verify_android_elf.py app/build/outputs/apk/debug/app-debug.apk --abi x86_64 --report build/x86-elf16k.json
       - name: Preserve one identical x86 APK for every emulator acceptance

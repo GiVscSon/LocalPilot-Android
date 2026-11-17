@@ -62,8 +62,13 @@ def parse_game_state(text):
     values=[int(x) for x in text.split(',')]
     keys=('state','x','y','lives','bombs','stage','score','kills','shots','bullets')
     maxima=(3,255,255,9,9,3,999999,255,255,8)
-    if len(values)!=10 or any(x<0 or x>limit for x,limit in zip(values,maxima)):raise ValueError('Missing or impossible actual game state')
-    return dict(zip(keys,values))
+    if len(values) not in (10,14) or any(x<0 or x>limit for x,limit in zip(values[:10],maxima)):raise ValueError('Missing or impossible actual game state')
+    result=dict(zip(keys,values[:10]))
+    if len(values)==14:
+        for name,(x,y) in zip(('nearestEnemy','nearestHostileBullet'),(values[10:12],values[12:14])):
+            if not ((x,y)==(-1,-1) or 0<=x<=255 and 0<=y<=255):raise ValueError('Invalid real-game object coordinates')
+            result[name]=None if x==-1 else dict(x=x,y=y)
+    return result
 
 def confirms_control(button,before,after):
     if before['state']!=1 or after['state']!=1:return False
@@ -168,5 +173,8 @@ if __name__=='__main__':
                     (a.output.parent/'real-game-inference.log').write_bytes(inference)
                     print('ACTUAL_GAME_INFERENCE_DIAGNOSTIC '+inference.decode()[-12000:],flush=True)
                 except EvidencePending:pass
+                timing=ui.adb('shell','logcat','-d','-s','LocalPilotNative:I','*:S')[-16000:]
+                (a.output.parent/'native-phase-timings.log').write_text(timing)
+                print('ACTUAL_NATIVE_PHASE_TIMINGS '+timing,flush=True)
                 ui.write_failure_diagnostics(a.output,error)
             raise

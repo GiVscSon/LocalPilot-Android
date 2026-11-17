@@ -19,13 +19,15 @@ from verify_g2_trace import correlate
 
 FIXTURE_NAME='LOCALPILOT_CI_ONLY_MNN_Pocket.gguf'
 
-def exact_target(xml, label, package=None, editable=False):
+def exact_target(xml, label, package=None, editable=False, button=False):
     matches=[]
     for node in ET.fromstring(xml).iter('node'):
         if package is not None and node.get('package')!=package:continue
         if node.get('enabled')=='false':continue
         if editable:
             if node.get('class')!='android.widget.EditText':continue
+        elif button:
+            if node.get('class')!='android.widget.Button' or node.get('text','').casefold()!=label.casefold():continue
         elif label not in (node.get('text'),node.get('content-desc')):continue
         box=ui.BOUNDS.fullmatch(node.get('bounds',''))
         if box and int(box[1])<int(box[3]) and int(box[2])<int(box[4]):
@@ -33,8 +35,8 @@ def exact_target(xml, label, package=None, editable=False):
     if len(matches)!=1:raise RuntimeError('Expected one visible '+('input' if editable else label))
     return matches[0]
 
-def click_exact(label, package=None, editable=False):
-    point=exact_target(ui.dump_ui(),label,package,editable)
+def click_exact(label, package=None, editable=False, button=False):
+    point=exact_target(ui.dump_ui(),label,package,editable,button)
     ui.adb('shell','input','tap',str(point[0]),str(point[1]))
 
 def picker_select_fixture(filename=FIXTURE_NAME):
@@ -107,7 +109,7 @@ def remove_through_visible_library(output):
     wait_library_result('Привязка GGUF снята',output,'saf-unbind-result')
     ui.tap_text('Управление моделями NES',swipes=0)
     ui.tap_text('Удалить импортированный GGUF',swipes=0)
-    click_exact('Удалить',package=PACKAGE)
+    click_exact('Удалить',package=PACKAGE,button=True)
     wait_library_result('модель удалена',output,'saf-delete-result')
 
 def main(apk,gguf,output):

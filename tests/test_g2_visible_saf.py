@@ -15,6 +15,15 @@ class VisibleSafTargets(unittest.TestCase):
         self.assertFalse(confirms_control('A',before,before))
         self.assertFalse(confirms_control('LEFT',before,after))
         with self.assertRaises(ValueError):parse_game_state('1,100,180,3,3,1,999999999,0,0,0')
+    def test_game_geometry_requires_complete_active_coordinates(self):
+        state=parse_game_state('1,100,180,3,3,1,0,0,1,1,90,40,104,160')
+        self.assertEqual(state['nearestEnemy'],dict(x=90,y=40))
+        self.assertEqual(state['nearestHostileBullet'],dict(x=104,y=160))
+        absent=parse_game_state('1,100,180,3,3,1,0,0,1,1,-1,-1,-1,-1')
+        self.assertIsNone(absent['nearestEnemy'])
+        for geometry in ('-1,40,104,160','90,40,104','90,40,104,999'):
+            with self.assertRaises(ValueError):parse_game_state('1,100,180,3,3,1,0,0,1,1,'+geometry)
+
     def test_refuses_wrong_package_before_typing_checksum(self):
         xml='<hierarchy><node class="android.widget.EditText" package="other.app" bounds="[0,0][80,40]"/></hierarchy>'
         with self.assertRaises(RuntimeError):exact_target(xml,'',package='org.localpilot.android.dev.unified',editable=True)
@@ -29,6 +38,12 @@ class VisibleSafTargets(unittest.TestCase):
     def test_exact_filename_never_matches_similar_document(self):
         xml='<hierarchy><node text="fixture.gguf.backup" bounds="[0,0][80,40]"/></hierarchy>'
         with self.assertRaises(RuntimeError):exact_target(xml,'fixture.gguf')
+
+    def test_delete_confirmation_matches_android_button_caps_only(self):
+        xml='<hierarchy><node text="Удалить выбранный GGUF?" class="android.widget.TextView" package="own" bounds="[0,0][80,40]"/><node text="УДАЛИТЬ" class="android.widget.Button" package="own" bounds="[10,40][110,80]"/></hierarchy>'
+        self.assertEqual(exact_target(xml,'Удалить',package='own',button=True),(60,60))
+        with self.assertRaises(RuntimeError):exact_target(xml,'Удалить',package='other',button=True)
+        with self.assertRaises(RuntimeError):exact_target(xml,'Удалить выбранный',package='own',button=True)
 
     def test_unique_visible_input(self):
         xml='<hierarchy><node class="android.widget.EditText" package="own" bounds="[10,20][110,60]"/></hierarchy>'
