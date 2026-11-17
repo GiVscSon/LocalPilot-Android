@@ -471,7 +471,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        model: [qwen35, lfm350]
+        model: [qwen35, lfm350, lfm1200]
     needs: unified-emulator-build
     runs-on: ubuntu-24.04
     timeout-minutes: 40

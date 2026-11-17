@@ -16,6 +16,17 @@ class VisibleSafTargets(unittest.TestCase):
         for raw,profile in ((first,'lfm350'),(first+'\n'+first,'qwen35'),('', 'qwen35'),(first.replace('temperature=1.00','temperature=0.00'),'qwen35')):
             with self.subTest(raw=raw,profile=profile),self.assertRaises(ValueError):verified_controller_settings(raw,profile,2)
 
+    def test_larger_candidate_is_exact_pinned_and_not_implicitly_bundled(self):
+        import run_real_nes_vision_acceptance as runner
+        try:
+            runner.select_model('lfm1200')
+            self.assertEqual(runner.REVISION,'8ed288026e23958ad9dfa92d53ed773a8eee7125')
+            self.assertEqual(runner.FILES[runner.MODEL],(695751488,'2ea801949d760cdf1a2cc04a54262c22c3c0c54f0769d57760c9adeb0e59233f'))
+            self.assertNotIn(runner.MODEL,[entry[2] for entry in runner.models.EXTRAS])
+            receipt='controller_sampler=LFM2_TEXT temperature=0.10 top_k=50 top_p=1.00 repeat=1.05 presence=0.00 seed=42'
+            self.assertEqual(runner.verified_controller_settings(receipt,'lfm1200',1)[0]['seed'],42)
+        finally:runner.select_model('qwen35')
+
     def test_model_comparison_preserves_reviewed_identity_and_refuses_unknown_profile(self):
         import run_real_nes_vision_acceptance as runner
         try:

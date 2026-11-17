@@ -19,16 +19,23 @@ from run_g2_direct_gguf_acceptance import import_picker_file, picker_select_fixt
 from run_harness_runtime_acceptance import command, PACKAGE
 from harness_student_device_acceptance import private_file, EvidencePending
 
+def bundled_profile(repository,filename):
+    return repository,filename,models.PINNED_REVISIONS[repository],models.PINNED_FILES[filename]
+
 MODEL_PROFILES={
-    'qwen35':('ggml-org/Qwen3.5-0.8B-GGUF','Qwen3.5-0.8B-Q4_0.gguf'),
-    'lfm350':('LiquidAI/LFM2.5-350M-GGUF','LFM2.5-350M-Q4_0.gguf'),
+    'qwen35':bundled_profile('ggml-org/Qwen3.5-0.8B-GGUF','Qwen3.5-0.8B-Q4_0.gguf'),
+    'lfm350':bundled_profile('LiquidAI/LFM2.5-350M-GGUF','LFM2.5-350M-Q4_0.gguf'),
+    # Reviewed on-demand pin; does not add weights to the bundled APK budget.
+    'lfm1200':('LiquidAI/LFM2.5-1.2B-Instruct-GGUF','LFM2.5-1.2B-Instruct-Q4_0.gguf',
+               '8ed288026e23958ad9dfa92d53ed773a8eee7125',
+               (695751488,'2ea801949d760cdf1a2cc04a54262c22c3c0c54f0769d57760c9adeb0e59233f')),
 }
 
 def select_model(profile):
-    global MODEL_PROFILE,REPO,MODEL,FILES
-    REPO,MODEL=MODEL_PROFILES[profile]
+    global MODEL_PROFILE,REPO,MODEL,REVISION,FILES
+    REPO,MODEL,REVISION,spec=MODEL_PROFILES[profile]
     MODEL_PROFILE=profile
-    FILES={MODEL:models.PINNED_FILES[MODEL]}
+    FILES={MODEL:spec}
 
 select_model('qwen35')
 ROM='VOID-LANCER-v1.0.0.nes'
@@ -37,7 +44,7 @@ ROM_URL='https://github.com/Riyoway/void-lancer-nes/releases/download/v1.0.0/'+R
 
 def prepare(directory):
     directory.mkdir(parents=True,exist_ok=True)
-    revision=models.PINNED_REVISIONS[REPO]
+    revision=REVISION
     for name in (MODEL,):
         size,digest=FILES[name];path=directory/name
         if path.is_file() and path.stat().st_size==size and hashlib.sha256(path.read_bytes()).hexdigest()==digest:continue
@@ -123,6 +130,7 @@ def verified_controller_settings(raw,profile,minimum_calls):
     expected={
         'qwen35':('QWEN35_TEXT',1.0,20,1.0,1.0,2.0),
         'lfm350':('LFM2_TEXT',0.1,50,1.0,1.05,0.0),
+        'lfm1200':('LFM2_TEXT',0.1,50,1.0,1.05,0.0),
     }[profile]
     matches=re.findall(r'controller_sampler=(\w+) temperature=([0-9.]+) top_k=(\d+) top_p=([0-9.]+) repeat=([0-9.]+) presence=([0-9.]+) seed=(\d+)',raw)
     records=[]
@@ -147,7 +155,7 @@ def verify(apk,directory,output,attempt=None):
     api=int(ui.adb('shell','getprop','ro.build.version.sdk'))
     abi=ui.adb('shell','getprop','ro.product.cpu.abi').strip()
     if api!=35 or abi!='x86_64':raise RuntimeError('Actual real-game test device does not match API35 x86_64')
-    attempt.update(modelProfile=MODEL_PROFILE,modelRepository=REPO,modelRevision=models.PINNED_REVISIONS[REPO],sourceSha=source,apkSha256=hashlib.sha256(apk.read_bytes()).hexdigest(),
+    attempt.update(modelProfile=MODEL_PROFILE,modelRepository=REPO,modelRevision=REVISION,sourceSha=source,apkSha256=hashlib.sha256(apk.read_bytes()).hexdigest(),
                    modelSha256=FILES[MODEL][1],romSha256=ROM_SHA,androidApi=api,abi=abi,
                    evidenceType='EMULATOR_ANDROID',physicalDevice=False)
     (output.parent/'attempt-identity.json').write_text(json.dumps(attempt,indent=2)+'\n')
@@ -200,7 +208,7 @@ def verify(apk,directory,output,attempt=None):
     native_settings=ui.adb('shell','logcat','-d','-s','LocalPilotNative:I','*:S')
     native_sampling=verified_controller_settings(native_settings,MODEL_PROFILE,len(rows))
     (output.parent/'native-controller-settings.log').write_text('\n'.join(line for line in native_settings.splitlines() if 'controller_sampler=' in line)+'\n')
-    report=dict(result='REAL_ROM_GGUF_GAME_PROGRESS_PASS',modelProfile=MODEL_PROFILE,modelRepository=REPO,modelRevision=models.PINNED_REVISIONS[REPO],sourceSha=source,
+    report=dict(result='REAL_ROM_GGUF_GAME_PROGRESS_PASS',modelProfile=MODEL_PROFILE,modelRepository=REPO,modelRevision=REVISION,sourceSha=source,
                 apkSha256=hashlib.sha256(apk.read_bytes()).hexdigest(),romSha256=ROM_SHA,
                 modelSha256=FILES[MODEL][1],modelKind='TEXT_GGUF_WITH_VERIFIED_GAME_RAM',
                 transitions=rows,inferenceCallsForModel=calls,nativeSamplingStarted=native_sampling,exactModelActionAndFrameMatch=True,semanticGameControlVerified=True,

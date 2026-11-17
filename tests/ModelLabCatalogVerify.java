@@ -15,7 +15,7 @@ class ModelLabCatalogVerify {
   try(var loader=new URLClassLoader(new URL[]{folder.toUri().toURL()})){
    var klass=loader.loadClass("org.localpilot.android.ModelLabPresetCatalog");
    var rows=(java.util.List<?>)klass.getField("ALL").get(null);
-   if(rows.size()!=4)throw new AssertionError("expected four model choices");
+   if(rows.size()!=5)throw new AssertionError("expected five model choices");
    HashSet<String> ids=new HashSet<>(),urls=new HashSet<>();
    long total=0;
    for(Object entry:rows){
@@ -31,6 +31,9 @@ class ModelLabCatalogVerify {
     if(!source.startsWith("https://huggingface.co/")||source.contains("/main/")||
        !revision.matches("[0-9a-f]{40}")||!sha.matches("[0-9a-f]{64}")||
        size<128||size>900_000_000L)throw new AssertionError("invalid pinned model "+id);
+    if(id.equals("lfm1200")&&(!revision.equals("8ed288026e23958ad9dfa92d53ed773a8eee7125")||
+        size!=695751488L||!sha.equals("2ea801949d760cdf1a2cc04a54262c22c3c0c54f0769d57760c9adeb0e59233f")))
+      throw new AssertionError("on-demand LFM1.2B differs from reviewed official pointer");
     if(vision){
      String projector=(String)t.getMethod("projectorUrl").invoke(entry);
      String projectorSha=(String)t.getField("projectorSha256").get(entry);
@@ -40,7 +43,7 @@ class ModelLabCatalogVerify {
     }else if(projectorBytes!=0)throw new AssertionError("unexpected projector");
     total+=size+projectorBytes;
    }
-   if(total!=1_296_368_960L)throw new AssertionError("weight budget changed");
+   if(total!=1_992_120_448L)throw new AssertionError("weight budget changed");
    System.out.println("MODELLAB_ON_DEMAND_CATALOG_PASS models="+rows.size()+" bytes="+total);
   }
  }
