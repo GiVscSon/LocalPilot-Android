@@ -66,3 +66,27 @@ until the compilation failures are resolved.
 Next: forward-port selected runtime changes onto the current integration line,
 repair real dependencies and execute existing runtime tests; do not copy the full
 old tree or weaken the evaluation gate to make the bundle's tests pass.
+
+## Isolated build validation
+
+The audit now supports `--validate-in-worktree --build-log /absolute/path/outside/repo.log`.
+This opt-in executes the normal Android Java compile task in a detached temporary
+worktree at committed HEAD with decoded payload files. It never executes the
+applicator, changes the source checkout, commits, pushes or edits the issue body.
+This is repository-write isolation, not an operating-system security sandbox;
+the payload/build sources must be trusted before opting in.
+
+Actual re-run on the parent audit commit reproduced **BUILD FAIL**, exit 1,
+in 8 seconds. The report labels source as COMMITTED_HEAD_PLUS_PAYLOAD and device
+as NOT_RUN. CLI exit 3 identifies build failure; conflicts remain exit 2.
+Both regression tests pass, including dirty source preservation and temporary
+worktree cleanup after a deliberately failed build.
+
+A separate dependency-repair experiment copied the omitted learning sources from
+the verified full archive and corrected the ROM method call. Compilation then
+revealed missing RetroInputBridge and incompatible UnifiedNesHarnessChain calls
+to EmbeddedGgufRuntime (`isModelLoaded`, `getLoadedModelSha256`,
+`proposeNesStrategicIntent`, `StrategicAdvice`) and HarnessExperienceLedger.
+Those experimental changes remain outside this PR. This proves the initial
+missing dependencies are not the only integration blocker; no successful Android
+build or functioning new runtime is claimed.
