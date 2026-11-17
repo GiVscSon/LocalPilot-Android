@@ -26,7 +26,9 @@ public record VoidLancerGameState(int state,int x,int y,int lives,int bombs,int 
   return new VoidLancerGameState(a[0],a[1],a[2],a[3],a[4],a[5],a[6],a[7],a[8],a[9],a[10],a[11],a[12],a[13]);
  }
  public boolean confirms(String button,VoidLancerGameState before){
-  if(before==null||before.state!=1||state!=1)return false;
+  if(before==null)return false;
+  if("START".equals(button))return before.state==0&&state==1||(before.state==2||before.state==3)&&state==0;
+  if(before.state!=1||state!=1)return false;
   return switch(button){
    case "LEFT" -> x<before.x;case "RIGHT" -> x>before.x;
    case "UP" -> y<before.y;case "DOWN" -> y>before.y;
@@ -39,7 +41,7 @@ public record VoidLancerGameState(int state,int x,int y,int lives,int bombs,int 
    ", shots="+shots+", active player bullets="+bullets+
    ", nearest enemy="+(enemyX<0?"none/unknown":"("+enemyX+","+enemyY+")")+
    ", nearest hostile bullet="+(threatX<0?"none/unknown":"("+threatX+","+threatY+")")+
-   ". Coordinates increase right/down; A shoots upward. D-pad moves ship; A fires; B spends a bomb. Destroy enemies, dodge bullets and preserve lives. ";}
+   ". Coordinates increase right/down; A shoots upward. D-pad moves ship; A fires; B spends a bomb. START begins from title or returns to title after loss/win. Destroy enemies, dodge bullets and preserve lives. ";}
  public String display(){return "VOID LANCER · "+(state==3?"ПОБЕДА":state==2?"ИГРА ОКОНЧЕНА":state==0?"МЕНЮ":"ИГРА")+
    " · счёт "+score+" · жизни "+lives+" · корабль ("+x+","+y+") · этап "+stage;}
 }

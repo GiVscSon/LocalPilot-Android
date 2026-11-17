@@ -22,6 +22,10 @@ public final class NesModelHostTest {
   check(geometry.prompt().contains("(104,160)"),"actual threat enters model observation");
   check(VoidLancerGameState.parse("1,100,180,3,3,1,0,0,1,1").enemyX()==-1,"legacy observations never invent targets");
   refuses(()->new VoidLancerGameState(1,100,180,3,3,1,0,0,1,1,-1,40,104,160),"partial object coordinates refused");
+  check(ConsoleAgentContract.parseButton("BUTTON=START")==null,"legacy model parser remains six-button only");
+  check("START".equals(ConsoleAgentContract.parseGameButton("BUTTON=START")),"game parser accepts canonical NES START");
+  check("SELECT".equals(ConsoleAgentContract.parseGameButton("BUTTON=SELECT")),"game parser accepts NES SELECT");
+  check(ConsoleAgentContract.parseGameButton("BUTTON=START; tap Android")==null,"menu proposal cannot inject an Android command");
   for(int budget:HarnessDemoWorkflow.GGUF_BUDGETS){
    check(HarnessDemoWorkflow.ggufSteps(HarnessDemoWorkflow.ggufMode(budget))==budget,"exact bounded GGUF budget");
    check(HarnessDemoWorkflow.supported(HarnessDemoWorkflow.ggufMode(budget)),"explicit GGUF budget is supported");
@@ -67,6 +71,16 @@ public final class NesModelHostTest {
   h.stop();h.reset("3",HarnessCoordinator.Mode.REALTIME_MODE);
   var live=h.begin("3",15,123,1300);
   check(!NesModelHost.current(h,new NesModelHost.Observation(live,"a".repeat(64),model,128,112,null),1301),"slow GGUF does not gain real-time input");
+  // Synthetic PNG validates the typed transport only; never game/inference evidence.
+  byte[] unitPng=java.util.Base64.getDecoder().decode("iVBORw0KGgoAAAANSUhEUgAAAIAAAAB4CAIAAAC1nW3oAAAAQ0lEQVR4nO3BMQEAAADCoPVP7W8GoAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgDe0eAABRMsozwAAAABJRU5ErkJggg==");
+  HarnessCoordinator gameGate=new HarnessCoordinator();gameGate.reset("2000",HarnessCoordinator.Mode.STEP_MODE);
+  var full=gameGate.beginGame("2000",30,123,2000);
+  var gameObs=new NesModelHost.Observation(full,VoidLancerGameState.ROM_SHA,model,-1,-1,unitPng,NesModelHost.TaskProfile.GAME_RAM,realBefore);
+  check(new NesModelHost.Reply(gameObs,NesModelHost.Status.PROPOSAL,model.id(),model.sha256(),"START",1).button().equals("START"),"typed full-game reply permits NES menu control");
+  refuses(()->new NesModelHost.Observation(full,"a".repeat(64),model,128,112,null),"full-game capability cannot enter the homebrew profile");
+  gameGate.reset("2001",HarnessCoordinator.Mode.STEP_MODE);
+  var legacyGame=new NesModelHost.Observation(gameGate.begin("2001",30,123,2100),"a".repeat(64),model,-1,-1,unitPng,NesModelHost.TaskProfile.VISION_EXPLORATION);
+  refuses(()->new NesModelHost.Reply(legacyGame,NesModelHost.Status.PROPOSAL,model.id(),model.sha256(),"START",1),"vision pixels alone cannot expand a legacy ticket's button authority");
   System.out.println("NES_MODEL_HOST_CONTRACT_PASS checks="+checks+" nativeInference=false physicalDevice=false");
  }
 }

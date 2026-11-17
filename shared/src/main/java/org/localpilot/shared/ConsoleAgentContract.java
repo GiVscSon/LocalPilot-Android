@@ -30,6 +30,12 @@ public final class ConsoleAgentContract {
   if(!normalized.matches("BUTTON=(A|B|UP|DOWN|LEFT|RIGHT|NONE)"))return null;
   return normalized.substring(7);
  }
+ public static String parseGameButton(String modelText){
+  String basic=parseButton(modelText);if(basic!=null)return basic;
+  if(modelText==null||modelText.length()>80)return null;
+  String normalized=modelText.trim().toUpperCase(Locale.ROOT);
+  return normalized.equals("BUTTON=START")?"START":normalized.equals("BUTTON=SELECT")?"SELECT":null;
+ }
  public static boolean manualPlayable(String button){return playable(button)||"START".equals(button)||"SELECT".equals(button);}
  public static boolean playable(String button){
   return "A".equals(button)||"B".equals(button)||"UP".equals(button)||

@@ -7,9 +7,9 @@ package org.localpilot.android;
  */
 public final class EmbeddedGgufRuntime {
  private static native String nativeInfer(
-   String filename,String system,String question,int maxTokens,float temperature,boolean controllerMode);
+   String filename,String system,String question,int maxTokens,float temperature,int controllerMode);
  private static native String nativeAnalyzeImage(
-   String model,String projector,String question,byte[] rgb,int width,int height,boolean controllerMode);
+   String model,String projector,String question,byte[] rgb,int width,int height,int controllerMode);
  private static native void nativeRelease();
 
  public static void main(String[] args) {
@@ -18,10 +18,10 @@ public final class EmbeddedGgufRuntime {
   System.loadLibrary("localpilot_embedded");
   String system="Answer in English only. Follow the exact output format. No explanations.";
   try {
-   String blue=nativeInfer(args[0],system,"Reply with exactly one word: BLUE",16,0f,false);
-   String sum=nativeInfer(args[0],system,"What is 12 + 15? Reply with the number only.",16,0f,false);
+   String blue=nativeInfer(args[0],system,"Reply with exactly one word: BLUE",16,0f,0);
+   String sum=nativeInfer(args[0],system,"What is 12 + 15? Reply with the number only.",16,0f,0);
    String cat=nativeInfer(args[0],system,
-      "Write one short English sentence about a cat.",64,0f,false);
+      "Write one short English sentence about a cat.",64,0f,0);
    System.out.println("NATIVE_MODEL_QUALITY blue="+quote(blue)+" sum="+quote(sum)+
       " cat="+quote(cat));
    if(!"BLUE".equals(blue.trim())||!LocalCoreContract.acceptArithmetic(sum)||
@@ -31,11 +31,11 @@ public final class EmbeddedGgufRuntime {
    System.out.println("NATIVE_MODEL_ENGLISH_SMOKE_PASS");
    if(args.length==5){
     String qwen=nativeInfer(args[1],"Respond in short English sentences.",
-      "Explain one reason to preserve empty cells in 2048.",96,0f,false);
+      "Explain one reason to preserve empty cells in 2048.",96,0f,0);
     System.out.println("NATIVE_QWEN_RAW="+quote(qwen));
     if(qwen==null||qwen.isBlank())throw new AssertionError("Qwen cannot produce local strategy text");
     String liquid=nativeInfer(args[2],"Answer in English.",
-      "What is a useful principle for avoiding game hazards?",96,0f,false);
+      "What is a useful principle for avoiding game hazards?",96,0f,0);
     System.out.println("NATIVE_LFM_RAW="+quote(liquid));
     if(liquid==null||liquid.isBlank())throw new AssertionError("LFM failed text generation");
     int w=224,h=224;byte[] rgb=new byte[w*h*3];
@@ -46,7 +46,7 @@ public final class EmbeddedGgufRuntime {
      rgb[at+2]=(byte)40;
     }
     String vision=nativeAnalyzeImage(args[3],args[4],
-      "Describe the two colored areas that you can see. Avoid guessing game objects.",rgb,w,h,false);
+      "Describe the two colored areas that you can see. Avoid guessing game objects.",rgb,w,h,0);
     System.out.println("NATIVE_VISION_RAW="+quote(vision));
     String lower=vision==null?"":vision.toLowerCase(java.util.Locale.ROOT);
     if(!lower.contains("red")||!lower.contains("green"))

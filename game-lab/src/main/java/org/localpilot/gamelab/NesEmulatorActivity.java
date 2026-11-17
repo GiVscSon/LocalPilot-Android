@@ -1454,7 +1454,9 @@ public final class NesEmulatorActivity extends Activity {
    showState("ИИ: необходима активная встроенная NES, без другого выполняющегося действия");
    return;
   }
-  if(aiFrozen){requestFrozenAiObservation();return;}
+  // A restored ordinary ROM is frozen but has no active native game profile.
+  // Re-authorize that profile in JS before observing; saves never carry input authority.
+  if(aiFrozen&&!genericVisionEpisode){requestFrozenAiObservation();return;}
   // JSNES confirms it has stopped the realtime timer and returns the
   // authoritative last frame/hash through onStepReady before a ticket exists.
   web.evaluateJavascript(genericVisionEpisode?"window.retroEnterVisionStepMode()":"window.retroEnterStepMode()",result->{
@@ -1469,8 +1471,9 @@ public final class NesEmulatorActivity extends Activity {
    showState("STOP: нет единственного стабильного кадра STEP_MODE");return;
   }
   try{
-   HarnessCoordinator.Ticket ticket=harness.begin(
-     frameEpoch.token(),frames,hash,SystemClock.elapsedRealtime());
+   HarnessCoordinator.Ticket ticket=genericVisionEpisode?
+     harness.beginGame(frameEpoch.token(),frames,hash,SystemClock.elapsedRealtime()):
+     harness.begin(frameEpoch.token(),frames,hash,SystemClock.elapsedRealtime());
    aiObservationTicket=ticket;
    aiIssuedAt=ticket.issuedAt; // Keep the original frame age through inference AND the queued gesture.
    aiTicketNonce=ticket.nonce;
@@ -1608,7 +1611,7 @@ public final class NesEmulatorActivity extends Activity {
   boolean durationValid=student?ConsoleAgentContract.studentFramesValid(proposedFrames):
     proposedFrames==ConsoleAgentContract.HOLD_FRAMES;
   boolean admissible=durationValid&&button!=null&&
-    (ConsoleAgentContract.playable(button)||"NONE".equals(button))&&
+    ((genericVisionEpisode?ConsoleAgentContract.manualPlayable(button):ConsoleAgentContract.playable(button))||"NONE".equals(button))&&
     modelId!=null&&modelId.matches("[A-Za-z0-9:_.-]{1,96}")&&
     modelSha!=null&&modelSha.matches("[a-f0-9]{64}")&&
     harness.consume(nonce,frameEpoch.token(),frames,hash,SystemClock.elapsedRealtime())&&

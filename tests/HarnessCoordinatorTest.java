@@ -172,6 +172,21 @@ public final class HarnessCoordinatorTest {
   check(c.start(HarnessCoordinator.Actor.MANUAL,"1301","A",30,123,0,12003)==null,"ROM reset cannot bypass maintenance");
   check(!c.endMaintenance(null)&&c.endMaintenance(maintenance)&&!c.endMaintenance(maintenance),"only exact lease releases maintenance once");
   check(!c.hasPending()&&!c.consume(t.nonce,"1301",30,123,12004),"maintenance release does not restore old input authority");
+  c.reset("1400",HarnessCoordinator.Mode.STEP_MODE);
+  var basic=c.begin("1400",30,123,13000);
+  check(!basic.gameControls&&c.consume(basic.nonce,"1400",30,123,13001),"legacy observation keeps six-button scope");
+  check(c.start(HarnessCoordinator.Actor.GGUF,"1400","START",30,123,16,13002)==null,"legacy observation cannot gain menu buttons");
+  c.reset("1401",HarnessCoordinator.Mode.STEP_MODE);
+  var game=c.beginGame("1401",30,123,14000);
+  check(game.gameControls&&c.consume(game.nonce,"1401",30,123,14001),"ordinary game ticket explicitly scopes menu controls");
+  check(c.start(HarnessCoordinator.Actor.STUDENT,"1401","START",30,123,16,14002)==null,"Student cannot steal a game menu capability");
+  var menu=c.start(HarnessCoordinator.Actor.GGUF,"1401","START",30,123,16,14003);
+  check(menu!=null&&c.authorizesStep("1401",menu.nonce,16,14004),"same unique permit authorizes actual game START");
+  c.stop("MENU_STOP");
+  check(!c.authorizesStep("1401",menu.nonce,16,14005)&&!c.consume(game.nonce,"1401",30,123,14005),"STOP revokes menu input and original ticket");
+  c.reset("1402",HarnessCoordinator.Mode.REALTIME_MODE);
+  boolean liveRefused=false;try{c.beginGame("1402",30,123,15000);}catch(IllegalStateException expected){liveRefused=true;}
+  check(liveRefused,"ordinary model menu observation requires frozen mode");
   System.out.println("HARNESS_COORDINATOR_PASS checks="+checks);
  }
 }

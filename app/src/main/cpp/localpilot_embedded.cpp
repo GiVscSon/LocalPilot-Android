@@ -143,7 +143,7 @@ bool run_batch(llama_batch_ext *batch,const llama_token *tokens,int count,int of
  return llama_process(ctx,LLAMA_PROCESS_TYPE_DECODE,batch)==0;
 }
 
-std::string generate_from_logits(int pos,int limit,float temp,bool nesController=false){
+std::string generate_from_logits(int pos,int limit,float temp,int nesController=0){
  NativeStage timing("token_decode");
  if(!ctx||pos<1||limit<1||limit>192)return "";
  const auto *vocab=llama_model_get_vocab(model);
@@ -154,8 +154,10 @@ std::string generate_from_logits(int pos,int limit,float temp,bool nesController
  if(!sampler)ok=false;
  if(ok){
   if(nesController){
-   auto *grammar=llama_sampler_init_grammar(vocab,
-    "root ::= \"BUTTON=\" (\"A\" | \"B\" | \"UP\" | \"DOWN\" | \"LEFT\" | \"RIGHT\" | \"NONE\")","root");
+   const char *rules=nesController==2?
+    "root ::= \"BUTTON=\" (\"A\" | \"B\" | \"UP\" | \"DOWN\" | \"LEFT\" | \"RIGHT\" | \"START\" | \"SELECT\" | \"NONE\")":
+    "root ::= \"BUTTON=\" (\"A\" | \"B\" | \"UP\" | \"DOWN\" | \"LEFT\" | \"RIGHT\" | \"NONE\")";
+   auto *grammar=llama_sampler_init_grammar(vocab,rules,"root");
    if(grammar)llama_sampler_chain_add(sampler,grammar);else ok=false;
   }
   llama_sampler_chain_add(sampler,llama_sampler_init_penalties(
@@ -188,7 +190,7 @@ std::string generate_from_logits(int pos,int limit,float temp,bool nesController
  return output;
 }
 
-std::string infer(const std::string &sys,const std::string &usr,int limit,float temp,bool controller=false){
+std::string infer(const std::string &sys,const std::string &usr,int limit,float temp,int controller=0){
  if(!ctx||limit<1||limit>192)return "";
  std::string formatted=chat(sys,usr);
  if(formatted.empty())return "";
@@ -255,11 +257,12 @@ Java_org_localpilot_android_EmbeddedGgufRuntime_nativeResetInterrupt(JNIEnv *,jc
 }
 extern "C" JNIEXPORT jstring JNICALL
 Java_org_localpilot_android_EmbeddedGgufRuntime_nativeInfer(
- JNIEnv *e,jclass,jstring filename,jstring system,jstring question,jint maxTokens,jfloat temperature,jboolean controllerMode){
+ JNIEnv *e,jclass,jstring filename,jstring system,jstring question,jint maxTokens,jfloat temperature,jint controllerMode){
  Utf f(e,filename),s(e,system),q(e,question);
  std::lock_guard<std::mutex> guard(lock);
  std::string result;
- if(!cancelled.load()&&init(f.str()))result=infer(s.str(),q.str(),maxTokens,temperature,controllerMode==JNI_TRUE);
+ if(controllerMode<0||controllerMode>2)return e->NewStringUTF("");
+ if(!cancelled.load()&&init(f.str()))result=infer(s.str(),q.str(),maxTokens,temperature,controllerMode);
  // JNI NewStringUTF expects Modified UTF-8, not 4-byte emoji sequences.
  // Reject unsupported supplementary characters rather than risking a VM abort.
  for(unsigned char byte:result){
@@ -271,9 +274,9 @@ Java_org_localpilot_android_EmbeddedGgufRuntime_nativeInfer(
 extern "C" JNIEXPORT jstring JNICALL
 Java_org_localpilot_android_EmbeddedGgufRuntime_nativeAnalyzeImage(
  JNIEnv *e,jclass,jstring filename,jstring mmproj,jstring prompt,
- jbyteArray pixelData,jint width,jint height,jboolean controllerMode){
+ jbyteArray pixelData,jint width,jint height,jint controllerMode){
  Utf f(e,filename),m(e,mmproj),p(e,prompt);
- if(!pixelData||width<1||height<1||width>640||height>640||
+ if(controllerMode<0||controllerMode>2||!pixelData||width<1||height<1||width>640||height>640||
     e->GetArrayLength(pixelData)!=width*height*3)
   return e->NewStringUTF("");
  std::vector<uint8_t> pixels(static_cast<size_t>(width)*height*3);
@@ -283,7 +286,7 @@ Java_org_localpilot_android_EmbeddedGgufRuntime_nativeAnalyzeImage(
  std::lock_guard<std::mutex> guard(lock);
  std::string reply;
  if(!cancelled.load()&&init(f.str())&&!cancelled.load()){
-  const bool controller=controllerMode==JNI_TRUE;
+  const int controller=controllerMode;
   auto params=mtmd_context_params_default();
   params.use_gpu=gpuLayersLoaded>0;
   params.n_threads=workerThreads();
@@ -304,7 +307,7 @@ Java_org_localpilot_android_EmbeddedGgufRuntime_nativeAnalyzeImage(
      std::string user="Analyze the attached game screenshot. <__media__>\n"+p.str();
      std::string formatted=chat(controller?
        "Control the current NES game using the screenshot and verified game state. "
-       "Return exactly one BUTTON=A, BUTTON=B, BUTTON=UP, BUTTON=DOWN, BUTTON=LEFT, BUTTON=RIGHT or BUTTON=NONE. "
+       "Return exactly one BUTTON=A, BUTTON=B, BUTTON=UP, BUTTON=DOWN, BUTTON=LEFT, BUTTON=RIGHT, BUTTON=START, BUTTON=SELECT or BUTTON=NONE. "
        "Do not explain. Choose NONE when uncertain. Never issue Android commands.":
        "You are a game vision diagnostician. Describe only visible objects "
        "and uncertainty. Never issue a gesture, coordinates or action commands.",user);

@@ -164,7 +164,7 @@ window.retroAgentTrial=function(name,holdFrames){
 // The old CPU-baseline retroAgentTrial remains A-only for parity tests.
 window.retroAiTrial=function(name,holdFrames){
  if(!nes||paused||!gamepadLatch||!homebrewRom||agentTrial||
-    !["A","B","UP","DOWN","LEFT","RIGHT"].includes(name)||
+    !(homebrewRom?["A","B","UP","DOWN","LEFT","RIGHT"]:["A","B","UP","DOWN","LEFT","RIGHT","START","SELECT"]).includes(name)||
     !Number.isInteger(holdFrames)||holdFrames!==16)return false;
  const mapped=keyMap[name];
  if(!mapped||!Object.prototype.hasOwnProperty.call(jsnes.Controller,mapped))return false;
@@ -325,7 +325,7 @@ function readActualGameState(){
 }
 window.retroAiStep=function(name,holdFrames,nonce){
  if(!nes||!stepMode||!paused||(!homebrewRom&&!visionProfileCurrent())||!gamepadLatch||agentTrial||
-    !["A","B","UP","DOWN","LEFT","RIGHT"].includes(name)||
+    !(homebrewRom?["A","B","UP","DOWN","LEFT","RIGHT"]:["A","B","UP","DOWN","LEFT","RIGHT","START","SELECT"]).includes(name)||
     !Number.isInteger(holdFrames)||![4,8,16].includes(holdFrames)||
     typeof nonce!=="string"||!/^[A-Za-z0-9_-]{22}$/.test(nonce)||nonce===usedStepNonce||
     !window.GameLabBridge||typeof window.GameLabBridge.allowStep!=="function"||

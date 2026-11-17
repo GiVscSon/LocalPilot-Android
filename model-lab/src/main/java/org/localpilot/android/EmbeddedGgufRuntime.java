@@ -15,9 +15,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
  */
 public final class EmbeddedGgufRuntime {
  public interface Result { void complete(String answer,long elapsedMs); }
- private static native String nativeInfer(String model,String system,String question,int tokens,float temperature,boolean controllerMode);
+ private static native String nativeInfer(String model,String system,String question,int tokens,float temperature,int controllerMode);
  private static native String nativeAnalyzeImage(String model,String projector,String question,
-   byte[] rgb,int width,int height,boolean controllerMode);
+   byte[] rgb,int width,int height,int controllerMode);
  private static native String nativeGpuDescription();
  private static native boolean nativeConfigureGpuLayers(int layers);
  private static native int nativeLoadedGpuLayers();
@@ -58,6 +58,10 @@ public final class EmbeddedGgufRuntime {
  /** Standalone ModelLab has no console controller; one-APK only. */
  public void proposeNesButton(File weights,File projector,String observation,
     byte[] rgb,int width,int height,int requestedGpuLayers,Result callback){
+  proposeNesButton(weights,projector,observation,rgb,width,height,requestedGpuLayers,false,callback);
+ }
+ public void proposeNesButton(File weights,File projector,String observation,
+    byte[] rgb,int width,int height,int requestedGpuLayers,boolean gameControls,Result callback){
   throw new IllegalStateException("NES agent is available only in the unified LocalPilot APK");
  }
   public void probeGpu(Result callback){
@@ -91,7 +95,7 @@ public final class EmbeddedGgufRuntime {
    String answer=nativeInfer(model.getAbsolutePath(),
     "You are an offline on-device model being evaluated. Answer briefly and in English. "+
     "If the question is uncertain, say so; do not provide executable commands.",
-    prompt,160,0.2f,false);
+    prompt,160,0.2f,0);
    lastGpuLayers=nativeLoadedGpuLayers();
    if(answer==null||answer.isBlank())return "";
    return answer+
@@ -118,7 +122,7 @@ public final class EmbeddedGgufRuntime {
    String answer=nativeAnalyzeImage(model.getAbsolutePath(),
      projector.getAbsolutePath(),
      "Describe only what is visible in the attached image. Mention uncertainty. "+prompt,
-     copy,width,height,false);
+     copy,width,height,0);
    lastGpuLayers=nativeLoadedGpuLayers();
    if(answer==null||answer.isBlank())return "";
    return answer+

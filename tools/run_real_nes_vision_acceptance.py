@@ -13,28 +13,27 @@ import xml.etree.ElementTree as ET
 import zipfile
 import urllib.request
 import bundle_optional_models as models
-import bundle_embedded_gguf as pocket
 import unified_in_app_smoke as ui
 from run_g2_direct_gguf_acceptance import import_picker_file, picker_select_fixture, wait_library_result, click_exact
 from run_harness_runtime_acceptance import command, PACKAGE
 from harness_student_device_acceptance import private_file, EvidencePending
 
-REPO=pocket.REPO
-MODEL=pocket.NAME
-FILES={MODEL:(pocket.EXPECTED_BYTES,pocket.EXPECTED_SHA256)}
+REPO="ggml-org/Qwen3.5-0.8B-GGUF"
+MODEL="Qwen3.5-0.8B-Q4_0.gguf"
+FILES={MODEL:models.PINNED_FILES[MODEL]}
 ROM='VOID-LANCER-v1.0.0.nes'
 ROM_SHA='5eb801aca68131a3d17fa82d8901d46f6098b878d1e00cd1c47d00c001c2405a'
 ROM_URL='https://github.com/Riyoway/void-lancer-nes/releases/download/v1.0.0/'+ROM
 
 def prepare(directory):
     directory.mkdir(parents=True,exist_ok=True)
-    revision=pocket.REVISION
+    revision=models.PINNED_REVISIONS[REPO]
     for name in (MODEL,):
         size,digest=FILES[name];path=directory/name
         if path.is_file() and path.stat().st_size==size and hashlib.sha256(path.read_bytes()).hexdigest()==digest:continue
         with models.get(models.BASE+'/'+REPO+'/resolve/'+revision+'/'+name) as source,path.open('wb') as out:
             actual,amount=models.sha_stream(source,out,limit=size)
-        if (actual,amount)!=(digest,size):raise RuntimeError('Pinned vision model download mismatch')
+        if (actual,amount)!=(digest,size):raise RuntimeError('Pinned game model download mismatch')
     path=directory/ROM
     if not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest()!=ROM_SHA:
         with urllib.request.urlopen(ROM_URL,timeout=60) as source:raw=source.read(40977)
@@ -71,11 +70,17 @@ def parse_game_state(text):
     return result
 
 def confirms_control(button,before,after):
+    if button=='START':return before['state']==0 and after['state']==1 or before['state'] in (2,3) and after['state']==0
     if before['state']!=1 or after['state']!=1:return False
     return {'LEFT':after['x']<before['x'],'RIGHT':after['x']>before['x'],
             'UP':after['y']<before['y'],'DOWN':after['y']>before['y'],
             'A':after['shots']!=before['shots'] or after['bullets']>before['bullets'],
             'B':after['bombs']<before['bombs']}.get(button,False)
+
+def verified_game_progress(row):
+    before,after=row['gameBefore'],row['gameAfter']
+    if before['state']!=1:return False
+    return after['state']==3 or after['state']==1 and (after['score']>before['score'] or after['kills']>before['kills'])
 
 def correlate_inference(raw, rows, model_sha):
     calls=[]
@@ -84,10 +89,14 @@ def correlate_inference(raw, rows, model_sha):
         if hashlib.sha256(body.encode()).hexdigest()!=checksum:raise ValueError('Inference checksum')
         p=body.split('|')
         if len(p)!=8 or p[0]!='NES_MODEL_INFERENCE_V1':raise ValueError('Inference schema')
-        if p[2]==model_sha:calls.append((int(p[3]),p[4],p[6]))
+        elapsed=int(p[5])
+        if elapsed<0:raise ValueError('Invalid measured inference duration')
+        if p[2]==model_sha:calls.append((int(p[3]),p[4],p[6],elapsed))
     for row in rows:
-        if calls.count((row['beforeFrame'],row['beforeHash'],row['button']))!=1:
+        matches=[c for c in calls if c[:3]==(row['beforeFrame'],row['beforeHash'],row['button'])]
+        if len(matches)!=1:
             raise ValueError('Game action lacks an exact model/frame/hash match')
+        row['inferenceElapsedMs']=matches[0][3]
     return len(calls)
 
 def verify(apk,directory,output):
@@ -113,7 +122,6 @@ def verify(apk,directory,output):
     command('adb','push',str(directory/ROM),'/sdcard/Download/LOCALPILOT_CI_ONLY_VOIDLANCER.nes',timeout=60)
     ui.tap_text('Игра',swipes=0);ui.tap_text('Открыть .nes',swipes=0)
     picker_select_fixture('LOCALPILOT_CI_ONLY_VOIDLANCER.nes');ui.wait_activity(ui.NES)
-    ui.tap_text('START',swipes=0)
     ui.tap_text('Запустить выбранного агента NES',swipes=0)
     deadline=time.monotonic()+16*120+45;rows=[]
     while time.monotonic()<deadline:
@@ -126,9 +134,9 @@ def verify(apk,directory,output):
             calls=correlate_inference(inference,rows,FILES[MODEL][1])
             (output.parent/'real-game-inference.log').write_bytes(inference)
             (output.parent/'partial-game-observation.json').write_text(json.dumps(dict(result='PARTIAL_NOT_ACCEPTED',observed=rows),indent=2)+'\n')
-            progress=bool(rows) and any(r['gameAfter']['score']>rows[0]['gameBefore']['score'] or
-                                       r['gameAfter']['kills']>rows[0]['gameBefore']['kills'] or
-                                       r['gameAfter']['state']==3 for r in rows)
+            progress=any(verified_game_progress(r) for r in rows)
+            if rows and rows[-1]['gameAfter']['state']==2:
+                raise RuntimeError('Actual VOID LANCER GAME OVER before accepted gameplay; preserved real observations')
             if len(rows)>=4 and progress:break
         except EvidencePending:pass
         text='\n'.join(n.get('text','') for n in ET.fromstring(ui.dump_ui()).iter('node'))
@@ -136,6 +144,8 @@ def verify(apk,directory,output):
         if len(rows)>=16:raise RuntimeError('No real score/kill progress within the selected game episode')
         time.sleep(.5)
     else:raise RuntimeError('Real game did not confirm model-driven score/kill progress')
+    started_by_model=any(row['button']=='START' and row['gameBefore']['state']==0 and row['gameAfter']['state']==1 for row in rows)
+    if not started_by_model:raise RuntimeError('Real game did not start through a correlated model START')
     if not any(row['semanticControl'] for row in rows):
         raise RuntimeError('Frames changed but ship movement, firing or bomb use was not confirmed')
     ui.tap_text('STOP',swipes=0)
@@ -148,7 +158,7 @@ def verify(apk,directory,output):
                 realScoreBefore=rows[0]['gameBefore']['score'],realScoreAfter=rows[-1]['gameAfter']['score'],
                 gameProgressVerified=True,
                 modelTransport='VISIBLE_SAF',romTransport='VISIBLE_SAF',decisionInput='VERIFIED_ROM_RAM',visionInferencePerformed=False,
-                currentRomPreserved=True,educationalScene=False,reward=None,
+                currentRomPreserved=True,gameStartedByModel=started_by_model,educationalScene=False,reward=None,
                 gameVictory=rows[-1]['gameAfter']['state']==3,physicalDevice=False,releaseReady=False)
     output.write_text(json.dumps(report,indent=2)+'\n');print('REAL_ROM_GGUF_GAME_PROGRESS_PASS '+json.dumps(report))
 

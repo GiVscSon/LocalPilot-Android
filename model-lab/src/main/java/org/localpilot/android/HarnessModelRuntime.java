@@ -196,7 +196,7 @@ public final class HarnessModelRuntime {
      EmbeddedGgufRuntime runtime=engine();
      if(runtime.busy()){finish(call,NesModelHost.Status.BUSY,null,0);return;}
      phase(call,gameRam?"GAME_RAM_INFERENCE":"INFERENCING");
-     runtime.proposeNesButton(weights,mmproj,modelObservation,rgb,NesFrameTransfer.WIDTH,NesFrameTransfer.HEIGHT,0,
+     runtime.proposeNesButton(weights,mmproj,modelObservation,rgb,NesFrameTransfer.WIDTH,NesFrameTransfer.HEIGHT,0,generic&&t.gameControls,
        (answer,elapsed)->completed(call,answer,elapsed));
      call.nativeStarted=true;
     }catch(RuntimeException unavailable){finish(call,NesModelHost.Status.UNAVAILABLE,null,0);}
@@ -216,7 +216,8 @@ public final class HarnessModelRuntime {
  private void recordCompleted(Call call,String answer,long elapsed){
   if(call.cancelled){finish(call,NesModelHost.Status.CANCELLED,null,elapsed);return;}
   if(!current(call)||!sameBinding(call)){finish(call,NesModelHost.Status.STALE,null,elapsed);return;}
-  String button=ConsoleAgentContract.parseButton(answer);
+  String button=call.observation.profile()==NesModelHost.TaskProfile.HOMEBREW_RAM||!call.observation.ticket().gameControls?
+    ConsoleAgentContract.parseButton(answer):ConsoleAgentContract.parseGameButton(answer);
   if(button!=null&&!"NONE".equals(button)&&call.observation.ramX()>=0){
    int id=HomebrewObs64.id(button);
    if(id<0||(HomebrewObs64.taskMask(call.observation.ramX(),call.observation.ramY(),16)&(1<<id))==0)button=null;

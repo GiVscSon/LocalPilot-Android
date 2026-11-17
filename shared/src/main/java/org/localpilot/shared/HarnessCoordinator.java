@@ -22,9 +22,10 @@ public final class HarnessCoordinator {
   public final String nonce,epoch;
   public final int frame,hash;
   public final long issuedAt,stopRevision;
-  private Ticket(String nonce,String epoch,int frame,int hash,long issuedAt,long revision){
+  public final boolean gameControls;
+  private Ticket(String nonce,String epoch,int frame,int hash,long issuedAt,long revision,boolean gameControls){
    this.nonce=nonce;this.epoch=epoch;this.frame=frame;this.hash=hash;
-   this.issuedAt=issuedAt;this.stopRevision=revision;
+   this.issuedAt=issuedAt;this.stopRevision=revision;this.gameControls=gameControls;
   }
  }
  public static final class ActionPermit {
@@ -114,13 +115,21 @@ public final class HarnessCoordinator {
   if(episode!=null)throw new IllegalStateException("Episode owns controller");
   return beginObservation(expectedEpoch,frame,hash,now);
  }
+ /** Full NES menu buttons are scoped to an ordinary-game GGUF observation. */
+ public synchronized Ticket beginGame(String expectedEpoch,int frame,int hash,long now){
+  if(episode!=null||mode!=Mode.STEP_MODE)throw new IllegalStateException("Episode owns controller");
+  return beginObservation(expectedEpoch,frame,hash,now,true);
+ }
  private Ticket beginObservation(String expectedEpoch,int frame,int hash,long now){
+  return beginObservation(expectedEpoch,frame,hash,now,false);
+ }
+ private Ticket beginObservation(String expectedEpoch,int frame,int hash,long now,boolean gameControls){
   if(maintenance!=null||stopPending||!matches(expectedEpoch)||waiting!=null||prepared!=null||active!=null||
      frame<15||hash==0||now<0)
    throw new IllegalStateException("Another NES input owner or unready observation");
   byte[] bytes=new byte[16];random.nextBytes(bytes);
   waiting=new Ticket(Base64.getUrlEncoder().withoutPadding().encodeToString(bytes),
-    epoch,frame,hash,now,stopRevision);
+    epoch,frame,hash,now,stopRevision,gameControls);
   return waiting;
  }
  /** Correlates a timeout/reply with the exact still-pending observation.
@@ -178,7 +187,7 @@ public final class HarnessCoordinator {
  }
  private ActionPermit issue(Actor actor,String expectedEpoch,String button,int frame,int hash,int holdFrames,long now){
   if(maintenance!=null||stopPending||actor==null||!matches(expectedEpoch)||active!=null||waiting!=null||
-      !(actor==Actor.MANUAL?ConsoleAgentContract.manualPlayable(button):ConsoleAgentContract.playable(button))||frame<15||hash==0||now<0)
+      !(actor==Actor.MANUAL||actor==Actor.GGUF&&prepared!=null&&prepared.gameControls?ConsoleAgentContract.manualPlayable(button):ConsoleAgentContract.playable(button))||frame<15||hash==0||now<0)
    return null;
   if(actor==Actor.GGUF||actor==Actor.STUDENT||actor==Actor.PPO_STUDENT){
    Ticket t=prepared;

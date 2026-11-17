@@ -40,7 +40,7 @@ public final class HarnessModelExecutionLog {
  private static boolean proposal(String s){
   return s!=null&&(s.equals("A")||s.equals("B")||s.equals("UP")||
     s.equals("DOWN")||s.equals("LEFT")||s.equals("RIGHT")||s.equals("NONE")||
-    s.equals("REJECTED"));
+    s.equals("START")||s.equals("SELECT")||s.equals("REJECTED"));
  }
  private static String payload(Run r){
   return SCHEMA+"|"+r.modelId()+"|"+r.modelSha()+"|"+r.frame()+"|"+

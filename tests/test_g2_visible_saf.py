@@ -1,10 +1,11 @@
 from pathlib import Path
 import sys
+import hashlib
 import unittest
 
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'tools'))
 from run_g2_direct_gguf_acceptance import exact_target
-from run_real_nes_vision_acceptance import confirms_control,parse_game_state
+from run_real_nes_vision_acceptance import confirms_control,parse_game_state,correlate_inference,verified_game_progress
 
 class VisibleSafTargets(unittest.TestCase):
     def test_background_or_wrong_direction_is_not_game_control(self):
@@ -15,6 +16,24 @@ class VisibleSafTargets(unittest.TestCase):
         self.assertFalse(confirms_control('A',before,before))
         self.assertFalse(confirms_control('LEFT',before,after))
         with self.assertRaises(ValueError):parse_game_state('1,100,180,3,3,1,999999999,0,0,0')
+    def test_progress_requires_actual_playing_phase_delta(self):
+        playing=parse_game_state('1,100,180,3,3,1,10,0,0,0')
+        more=dict(playing,score=20)
+        self.assertTrue(verified_game_progress(dict(gameBefore=playing,gameAfter=more)))
+        self.assertFalse(verified_game_progress(dict(gameBefore=dict(playing,state=0),gameAfter=more)))
+        self.assertFalse(verified_game_progress(dict(gameBefore=playing,gameAfter=dict(more,state=2))))
+        self.assertFalse(verified_game_progress(dict(gameBefore=playing,gameAfter=playing)))
+        self.assertTrue(verified_game_progress(dict(gameBefore=playing,gameAfter=dict(playing,state=3))))
+
+    def test_start_is_proven_by_real_game_phase_not_pixels(self):
+        title=parse_game_state('0,100,180,3,3,1,0,0,0,0')
+        playing=parse_game_state('1,100,180,3,3,1,0,0,0,0')
+        lost=parse_game_state('2,100,180,0,3,1,0,0,0,0')
+        self.assertTrue(confirms_control('START',title,playing))
+        self.assertTrue(confirms_control('START',lost,title))
+        self.assertFalse(confirms_control('START',playing,playing))
+        self.assertFalse(confirms_control('A',title,playing))
+
     def test_game_geometry_requires_complete_active_coordinates(self):
         state=parse_game_state('1,100,180,3,3,1,0,0,1,1,90,40,104,160')
         self.assertEqual(state['nearestEnemy'],dict(x=90,y=40))
@@ -38,6 +57,18 @@ class VisibleSafTargets(unittest.TestCase):
     def test_exact_filename_never_matches_similar_document(self):
         xml='<hierarchy><node text="fixture.gguf.backup" bounds="[0,0][80,40]"/></hierarchy>'
         with self.assertRaises(RuntimeError):exact_target(xml,'fixture.gguf')
+
+    def test_latency_comes_only_from_one_matching_native_record(self):
+        sha='a'*64
+        def record(elapsed=123):
+            body=f'NES_MODEL_INFERENCE_V1|import:test|{sha}|20|44|{elapsed}|RIGHT|0'
+            return (body+'|'+hashlib.sha256(body.encode()).hexdigest()+'\n').encode()
+        rows=[dict(beforeFrame=20,beforeHash='44',button='RIGHT')]
+        self.assertEqual(correlate_inference(record(),rows,sha),1)
+        self.assertEqual(rows[0]['inferenceElapsedMs'],123)
+        with self.assertRaises(ValueError):correlate_inference(record()*2,rows,sha)
+        with self.assertRaises(ValueError):correlate_inference(record(-1),rows,sha)
+        with self.assertRaises(ValueError):correlate_inference(record(),rows,'b'*64)
 
     def test_delete_confirmation_matches_android_button_caps_only(self):
         xml='<hierarchy><node text="Удалить выбранный GGUF?" class="android.widget.TextView" package="own" bounds="[0,0][80,40]"/><node text="УДАЛИТЬ" class="android.widget.Button" package="own" bounds="[10,40][110,80]"/></hierarchy>'
