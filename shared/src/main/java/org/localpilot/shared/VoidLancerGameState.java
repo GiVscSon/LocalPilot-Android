@@ -44,6 +44,7 @@ public record VoidLancerGameState(int state,int x,int y,int lives,int bombs,int 
  /** ROM-specific phase legality, separate from the generic NES action vocabulary.
   * Reject inappropriate model output; never substitute a scripted command. */
  public boolean phaseAllows(String button){
+  if("NONE".equals(button))return true; // explicit model STOP, not a game input
   if(button==null||!ConsoleAgentContract.gamePlayable(button))return false;
   if(state==0||state==2||state==3)return "START".equals(button)||"WAIT".equals(button)||"NONE".equals(button);
   return !"START".equals(button)&&!"SELECT".equals(button);
