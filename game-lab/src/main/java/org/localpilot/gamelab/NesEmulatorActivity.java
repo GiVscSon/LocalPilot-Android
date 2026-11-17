@@ -368,7 +368,7 @@ public final class NesEmulatorActivity extends Activity {
        var rows=ConsoleExperienceMemory.readGeneric(getFilesDir().toPath());
        String latest="Нет сохранённых результатов настоящей игры";
        for(var row:rows)if(row.romSha().equals(activeRomSha)&&row.after()!=null)latest=row.after().display();
-       history="\n"+latest+"\nОбучение отключено: reward=NULL. Тестовые показатели в пользовательском режиме не отображаются.";
+       history="\n"+latest+"\nВеса модели по этим записям не обучаются.";
       }else{
       var replay=VerifiedPpoReplayStore.summary(progressVault());
       history="\nPPO: "+replay.steps()+" пригодных переходов · "+replay.batches()+" серий"+

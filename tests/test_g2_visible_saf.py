@@ -8,6 +8,14 @@ from run_g2_direct_gguf_acceptance import exact_target
 from run_real_nes_vision_acceptance import confirms_control,parse_game_state,correlate_inference,verified_game_progress,valid_game_button
 
 class VisibleSafTargets(unittest.TestCase):
+    def test_native_sampling_receipt_requires_actual_preset_and_fresh_seeds(self):
+        from run_real_nes_vision_acceptance import verified_controller_settings
+        first='controller_sampler=QWEN35_TEXT temperature=1.00 top_k=20 top_p=1.00 repeat=1.00 presence=2.00 seed=42'
+        second=first.replace('seed=42','seed=43')
+        self.assertEqual([r['seed'] for r in verified_controller_settings(first+'\n'+second,'qwen35',2)],[42,43])
+        for raw,profile in ((first,'lfm350'),(first+'\n'+first,'qwen35'),('', 'qwen35'),(first.replace('temperature=1.00','temperature=0.00'),'qwen35')):
+            with self.subTest(raw=raw,profile=profile),self.assertRaises(ValueError):verified_controller_settings(raw,profile,2)
+
     def test_model_comparison_preserves_reviewed_identity_and_refuses_unknown_profile(self):
         import run_real_nes_vision_acceptance as runner
         try:

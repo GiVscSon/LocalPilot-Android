@@ -108,12 +108,11 @@ public class MainActivity extends Activity {
  @Override public void onResume(){super.onResume();if(automatic!=null)automatic.setChecked(getSharedPreferences(PREF,MODE_PRIVATE).getBoolean("auto_control",true));if(status!=null)status.setText(CrashDiagnostics.connectionHint(this));
   if(consoleExperience!=null){
    try{
-    if(BuildConfig.HARNESS_TEST_FIXTURES)consoleExperience.setText(ConsoleExperienceMemory.summary(getFilesDir().toPath()));
-    else{
-     var rows=ConsoleExperienceMemory.readGeneric(getFilesDir().toPath());
-     consoleExperience.setText(rows.isEmpty()?"Нет сохранённых результатов настоящей NES-игры":
-       rows.get(rows.size()-1).after()==null?"Для последней NES-игры счёт и результат не распознаны":rows.get(rows.size()-1).after().display());
-    }
+    // The primary screen always describes actual user games, including the
+    // x86 test derivative. Internal fixture evidence stays in Harness Console.
+    var rows=ConsoleExperienceMemory.readGeneric(getFilesDir().toPath());
+    consoleExperience.setText(rows.isEmpty()?"Нет сохранённых результатов настоящей NES-игры":
+      rows.get(rows.size()-1).after()==null?"Для последней NES-игры счёт и результат не распознаны":rows.get(rows.size()-1).after().display());
    }
    catch(java.io.IOException invalid){
     consoleExperience.setText("STOP: общий журнал NES повреждён; автоматические выводы по опыту запрещены");

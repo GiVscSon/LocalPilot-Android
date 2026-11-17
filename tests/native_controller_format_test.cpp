@@ -1,5 +1,6 @@
 #include "../app/src/main/cpp/controller_chat_format.h"
 #include "../app/src/main/cpp/controller_grammar.h"
+#include "../app/src/main/cpp/controller_sampling.h"
 #include <algorithm>
 #include <cassert>
 #include <iostream>
@@ -37,5 +38,17 @@ int main(){
  assert(full.find("BUTTON=")==std::string::npos&&basic.find("BUTTON=")!=std::string::npos);
  assert(full.find("UP+DOWN")==std::string::npos&&full.find("START+A")==std::string::npos);
  assert(std::count(full.begin(),full.end(),'|')==38); // 37 buttons/chords + released WAIT + NONE
- std::cout<<"NATIVE_CONTROLLER_CHAT_FORMAT_PASS cases=20 neuralInference=false\n";
+ const auto qwen=localpilot::controller_sampling(2,"qwen35",false,0.0f);
+ assert(qwen.temperature==1.0f&&qwen.top_p==1.0f&&qwen.repeat==1.0f&&qwen.presence==2.0f);
+ const auto image=localpilot::controller_sampling(2,"qwen35",true,0.0f);
+ assert(image.temperature==0.7f&&image.top_p==0.8f&&image.presence==1.5f);
+ const auto liquid=localpilot::controller_sampling(2,"lfm2",false,0.0f);
+ assert(liquid.temperature==0.1f&&liquid.top_k==50&&liquid.repeat==1.05f);
+ for(int mode:{0,1}){
+  const auto legacy=localpilot::controller_sampling(mode,"qwen35",false,0.0f);
+  assert(legacy.temperature==0.0f&&legacy.repeat==1.18f&&legacy.presence==0.0f);
+ }
+ const auto unknown=localpilot::controller_sampling(2,"unknown",false,0.0f);
+ assert(unknown.temperature==0.0f&&unknown.repeat==1.18f);
+ std::cout<<"NATIVE_CONTROLLER_CHAT_FORMAT_PASS cases=26 neuralInference=false\n";
 }

@@ -7,6 +7,7 @@ reward. Model-to-input/frame evidence is distinct from game score or victory.
 import argparse
 import hashlib
 import json
+import re
 from pathlib import Path
 import time
 import xml.etree.ElementTree as ET
@@ -118,6 +119,21 @@ def correlate_inference(raw, rows, model_sha):
         row['inferenceElapsedMs']=matches[0][3]
     return len(calls)
 
+def verified_controller_settings(raw,profile,minimum_calls):
+    expected={
+        'qwen35':('QWEN35_TEXT',1.0,20,1.0,1.0,2.0),
+        'lfm350':('LFM2_TEXT',0.1,50,1.0,1.05,0.0),
+    }[profile]
+    matches=re.findall(r'controller_sampler=(\w+) temperature=([0-9.]+) top_k=(\d+) top_p=([0-9.]+) repeat=([0-9.]+) presence=([0-9.]+) seed=(\d+)',raw)
+    records=[]
+    for name,temp,top_k,top_p,repeat,presence,seed in matches:
+        actual=(name,float(temp),int(top_k),float(top_p),float(repeat),float(presence))
+        if actual!=expected:raise ValueError('Actual native sampling differs from selected model preset')
+        records.append(dict(profile=name,temperature=float(temp),topK=int(top_k),topP=float(top_p),repeat=float(repeat),presence=float(presence),seed=int(seed)))
+    if minimum_calls<1 or len(records)<minimum_calls or len({r['seed'] for r in records})!=len(records):
+        raise ValueError('Missing actual native sampling calls or replayed sampling seed')
+    return records
+
 def verify(apk,directory,output,attempt=None):
     if attempt is None:attempt={}
     if not ui.is_emulator():raise RuntimeError('Isolated Android emulator required')
@@ -137,6 +153,9 @@ def verify(apk,directory,output,attempt=None):
     (output.parent/'attempt-identity.json').write_text(json.dumps(attempt,indent=2)+'\n')
     command('adb','install',str(apk),timeout=120)
     ui.adb('shell','am','start','-W','-n',PACKAGE+'/'+ui.MAIN);ui.wait_activity(ui.MAIN)
+    main_ui='\n'.join(n.get('text','') for n in ET.fromstring(ui.dump_ui()).iter('node'))
+    if 'новый рисунок' in main_ui or 'Награда не установлена; веса GGUF не обучались' in main_ui:
+        raise RuntimeError('Primary screen exposes historical fixture measurements')
     ui.tap_text('Рабочее окно · игра и агент');ui.wait_activity(ui.NES)
     public_ui='\n'.join(n.get('text','') for n in ET.fromstring(ui.dump_ui()).iter('node'))
     if 'Учить Student' in public_ui or 'Внутренняя приёмка' in public_ui or 'Учебный ROM' in public_ui:
@@ -178,10 +197,13 @@ def verify(apk,directory,output,attempt=None):
     ui.tap_text('STOP',swipes=0)
     before=private_file('files/console-ai-user-rom-v1.log',262144);time.sleep(1)
     if before!=private_file('files/console-ai-user-rom-v1.log',262144):raise RuntimeError('Action completed after real-game STOP')
+    native_settings=ui.adb('shell','logcat','-d','-s','LocalPilotNative:I','*:S')
+    native_sampling=verified_controller_settings(native_settings,MODEL_PROFILE,len(rows))
+    (output.parent/'native-controller-settings.log').write_text('\n'.join(line for line in native_settings.splitlines() if 'controller_sampler=' in line)+'\n')
     report=dict(result='REAL_ROM_GGUF_GAME_PROGRESS_PASS',modelProfile=MODEL_PROFILE,modelRepository=REPO,modelRevision=models.PINNED_REVISIONS[REPO],sourceSha=source,
                 apkSha256=hashlib.sha256(apk.read_bytes()).hexdigest(),romSha256=ROM_SHA,
                 modelSha256=FILES[MODEL][1],modelKind='TEXT_GGUF_WITH_VERIFIED_GAME_RAM',
-                transitions=rows,inferenceCallsForModel=calls,exactModelActionAndFrameMatch=True,semanticGameControlVerified=True,
+                transitions=rows,inferenceCallsForModel=calls,nativeSamplingStarted=native_sampling,exactModelActionAndFrameMatch=True,semanticGameControlVerified=True,
                 realScoreBefore=rows[0]['gameBefore']['score'],realScoreAfter=rows[-1]['gameAfter']['score'],
                 gameProgressVerified=True,
                 modelTransport='VISIBLE_SAF',romTransport='VISIBLE_SAF',decisionInput='VERIFIED_ROM_RAM',visionInferencePerformed=False,

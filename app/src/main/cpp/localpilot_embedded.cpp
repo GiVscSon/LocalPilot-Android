@@ -5,6 +5,7 @@
 #include "mtmd-helper.h"
 #include "controller_chat_format.h"
 #include "controller_grammar.h"
+#include "controller_sampling.h"
 #include <cstdint>
 #include <algorithm>
 #include <atomic>
@@ -44,6 +45,7 @@ mtmd_context * visionContext=nullptr;
 std::string visionPath;
 int visionMaxTokens=0;
 std::string path;
+uint32_t nextGameSamplingSeed=42; // serialized by the existing inference lock
 int workerThreads(){
  const long online=sysconf(_SC_NPROCESSORS_ONLN);
  return static_cast<int>(std::max(1L,std::min(4L,online)));
@@ -155,10 +157,14 @@ bool run_batch(llama_batch_ext *batch,const llama_token *tokens,int count,int of
 }
 
 
-std::string generate_from_logits(int pos,int limit,float temp,int nesController=0){
+std::string generate_from_logits(int pos,int limit,float temp,int nesController=0,bool imageInput=false){
  NativeStage timing("token_decode");
  if(!ctx||pos<1||limit<1||limit>192)return "";
  const auto *vocab=llama_model_get_vocab(model);
+ char architecture[80]={0};
+ int architectureSize=llama_model_meta_val_str(model,"general.architecture",architecture,sizeof(architecture));
+ const auto sampling=localpilot::controller_sampling(nesController,
+   architectureSize>0&&architectureSize<static_cast<int>(sizeof(architecture))?std::string(architecture):std::string(),imageInput,temp);
  auto *batch=llama_batch_ext_init(ctx);
  if(!batch)return "";
  bool ok=true;
@@ -171,13 +177,22 @@ std::string generate_from_logits(int pos,int limit,float temp,int nesController=
    if(grammar)llama_sampler_chain_add(sampler,grammar);else ok=false;
   }
   llama_sampler_chain_add(sampler,llama_sampler_init_penalties(
-   llama_vocab_n_tokens(vocab),64,1.18f,0.0f,0.0f));
-  if(temp<=0.0f)llama_sampler_chain_add(sampler,llama_sampler_init_greedy());
+   llama_vocab_n_tokens(vocab),64,sampling.repeat,0.0f,sampling.presence));
+  if(sampling.temperature<=0.0f)llama_sampler_chain_add(sampler,llama_sampler_init_greedy());
   else{
-   llama_sampler_chain_add(sampler,llama_sampler_init_top_k(20));
-   llama_sampler_chain_add(sampler,llama_sampler_init_top_p(0.8f,1));
-   llama_sampler_chain_add(sampler,llama_sampler_init_temp(temp));
-   llama_sampler_chain_add(sampler,llama_sampler_init_dist(42));
+   llama_sampler_chain_add(sampler,llama_sampler_init_top_k(sampling.top_k));
+   llama_sampler_chain_add(sampler,llama_sampler_init_top_p(sampling.top_p,1));
+   llama_sampler_chain_add(sampler,llama_sampler_init_temp(sampling.temperature));
+   const uint32_t seed=nesController==2?nextGameSamplingSeed++:42;
+   if(nextGameSamplingSeed==LLAMA_DEFAULT_SEED)nextGameSamplingSeed=0;
+   llama_sampler_chain_add(sampler,llama_sampler_init_dist(seed));
+   if(nesController==2){
+#ifdef __ANDROID__
+    __android_log_print(ANDROID_LOG_INFO,"LocalPilotNative","controller_sampler=%s temperature=%.2f top_k=%d top_p=%.2f repeat=%.2f presence=%.2f seed=%u",sampling.profile,sampling.temperature,sampling.top_k,sampling.top_p,sampling.repeat,sampling.presence,seed);
+#else
+    std::fprintf(stderr,"LocalPilotNative controller_sampler=%s temperature=%.2f top_k=%d top_p=%.2f repeat=%.2f presence=%.2f seed=%u\n",sampling.profile,sampling.temperature,sampling.top_k,sampling.top_p,sampling.repeat,sampling.presence,seed);
+#endif
+   }
   }
  }
  std::string output;
@@ -334,7 +349,7 @@ Java_org_localpilot_android_EmbeddedGgufRuntime_nativeAnalyzeImage(
        evaluated=mtmd_helper_eval_chunks(vision,ctx,chunks,0,0,512,true,&after);
       }
       if(evaluated==0&&after>0&&after+(controller==2?24:controller?16:128)<4096&&!cancelled.load())
-       reply=generate_from_logits(after,controller==2?24:controller?16:128,controller?0.0f:0.1f,controller);
+       reply=generate_from_logits(after,controller==2?24:controller?16:128,controller?0.0f:0.1f,controller,true);
      }
     }
     if(chunks)mtmd_input_chunks_free(chunks);
