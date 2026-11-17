@@ -24,6 +24,7 @@ function tick(n){for(let i=0;i<n;i++)for(const fn of [...timers.values()])fn();}
 function step(button){lease={session:selectedSession,nonce:String(++serial).padStart(22,"r")};assert.equal(context.retroAiStep(button,16,lease.nonce),true);return events.at(-1);}
 assert.equal(context.retroLoadRom(raw.toString('base64'),false,false,"777"),true);tick(120);
 assert.equal(context.retroEnterVisionStepMode(),true);
+assert.deepEqual(context.readActualGameState().split(',').map(Number).slice(10),[-1,-1,-1,-1],"uninitialized title object slots are not invented enemies");
 const started=step("START");
 assert.equal(started.before[0],0);assert.equal(started.after[0],1,"permitted START enters the actual game from its title");
 const state=context.readActualGameState().split(',').map(Number);
@@ -38,7 +39,7 @@ function assertActualGeometry(){
   return slots.length?[memory[xb+slots[0]],memory[yb+slots[0]]]:[-1,-1];
  }
  assert.equal(actual.length,14);
- assert.deepEqual(actual.slice(10,12),expected(6,0x308,0x310,i=>memory[0x300+i]!==0));
+ assert.deepEqual(actual.slice(10,12),expected(6,0x308,0x310,i=>memory[0x300+i]>=1&&memory[0x300+i]<=4));
  assert.deepEqual(actual.slice(12),expected(8,0x360,0x368,i=>memory[0x368+i]!==255));
 }
 assertActualGeometry();

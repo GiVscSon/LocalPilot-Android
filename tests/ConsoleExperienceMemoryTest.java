@@ -108,6 +108,14 @@ public final class ConsoleExperienceMemoryTest {
   require(ConsoleExperienceMemory.readGeneric(generic).get(1).after().confirms("RIGHT",shipBefore),"actual RAM controls survive journal verification");
   String actualContext=ConsoleExperienceMemory.genericContext(generic,VoidLancerGameState.ROM_SHA,"import:alpha",other);
   require(actualContext.contains("dx=16 dy=0 scoreDelta=0 killsDelta=0 livesDelta=0"),"actual outcome deltas reach model history without invented reward");
+  var titleState=new VoidLancerGameState(0,0,0,0,0,0,0,0,0,0);
+  var startTrial=NesTrial.create("USER_ROM","START",52,68,66,77);
+  ConsoleExperienceMemory.appendGeneric(generic,new ConsoleExperienceMemory.GenericEpisode(VoidLancerGameState.ROM_SHA,"1236","import:alpha",other,startTrial,titleState,shipBefore));
+  var startRecord=ConsoleExperienceMemory.readGeneric(generic).get(2);
+  require(startRecord.trial().button.equals("START")&&startRecord.after().confirms("START",startRecord.before()),"real-game START survives the outer evidence journal with its actual phase change");
+  var chordTrial=NesTrial.create("USER_ROM","RIGHT+A",68,84,77,88);
+  ConsoleExperienceMemory.appendGeneric(generic,new ConsoleExperienceMemory.GenericEpisode(VoidLancerGameState.ROM_SHA,"1236","import:alpha",other,chordTrial,shipBefore,shipAfter));
+  require(ConsoleExperienceMemory.readGeneric(generic).get(3).trial().button.equals("RIGHT+A"),"canonical game chord survives both nested integrity layers");
   expectFailure(()->new ConsoleExperienceMemory.GenericEpisode(sha,"1235","import:alpha",other,user,shipBefore,shipAfter));
   require(ConsoleExperienceMemory.read(generic).isEmpty()&&ConsoleExperienceMemory.readGoals(generic).isEmpty()&&
     ConsoleExperienceMemory.readHomebrewGoals(generic).isEmpty(),"unknown generic reward cannot enter any trusted homebrew stream");

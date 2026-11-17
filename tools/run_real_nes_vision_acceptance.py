@@ -109,7 +109,8 @@ def correlate_inference(raw, rows, model_sha):
         row['inferenceElapsedMs']=matches[0][3]
     return len(calls)
 
-def verify(apk,directory,output):
+def verify(apk,directory,output,attempt=None):
+    if attempt is None:attempt={}
     if not ui.is_emulator():raise RuntimeError('Isolated Android emulator required')
     output.parent.mkdir(parents=True,exist_ok=True)
     for name in (MODEL,):
@@ -118,6 +119,13 @@ def verify(apk,directory,output):
         if path.stat().st_size!=size or hashlib.sha256(path.read_bytes()).hexdigest()!=digest:raise RuntimeError('Local model identity mismatch')
     if hashlib.sha256((directory/ROM).read_bytes()).hexdigest()!=ROM_SHA:raise RuntimeError('Local real ROM identity mismatch')
     with zipfile.ZipFile(apk) as z:source=json.loads(z.read('assets/localpilot-source.json'))['sourceSha']
+    api=int(ui.adb('shell','getprop','ro.build.version.sdk'))
+    abi=ui.adb('shell','getprop','ro.product.cpu.abi').strip()
+    if api!=35 or abi!='x86_64':raise RuntimeError('Actual real-game test device does not match API35 x86_64')
+    attempt.update(sourceSha=source,apkSha256=hashlib.sha256(apk.read_bytes()).hexdigest(),
+                   modelSha256=FILES[MODEL][1],romSha256=ROM_SHA,androidApi=api,abi=abi,
+                   evidenceType='EMULATOR_ANDROID',physicalDevice=False)
+    (output.parent/'attempt-identity.json').write_text(json.dumps(attempt,indent=2)+'\n')
     command('adb','install',str(apk),timeout=120)
     ui.adb('shell','am','start','-W','-n',PACKAGE+'/'+ui.MAIN);ui.wait_activity(ui.MAIN)
     ui.tap_text('Рабочее окно · игра и агент');ui.wait_activity(ui.NES)
@@ -179,10 +187,11 @@ if __name__=='__main__':
     a=p.parse_args()
     if a.mode=='prepare':prepare(a.directory)
     else:
-        try:verify(a.apk,a.directory,a.output)
+        attempt={}
+        try:verify(a.apk,a.directory,a.output,attempt)
         except Exception as error:
             a.output.parent.mkdir(parents=True,exist_ok=True)
-            a.output.write_text(json.dumps(dict(result='FAIL',error=str(error)[:1800],educationalScene=False,releaseReady=False))+'\n')
+            a.output.write_text(json.dumps(dict(result='FAIL',error=str(error)[:1800],attemptIdentity=attempt,educationalScene=False if attempt.get('romSha256')==ROM_SHA else None,releaseReady=False))+'\n')
             partial=a.output.parent/'partial-game-observation.json'
             if partial.is_file():print('ACTUAL_GAME_FAILURE_DIAGNOSTIC '+partial.read_text()[:24000],flush=True)
             if ui.is_emulator():

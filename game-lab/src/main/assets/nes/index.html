@@ -322,7 +322,7 @@ function readActualGameState(){
   }
   return point;
  }
- return values.concat(nearest(6,0x308,0x310,i=>m[0x300+i]>0),
+ return values.concat(nearest(6,0x308,0x310,i=>m[0x300+i]>=1&&m[0x300+i]<=4),
   nearest(8,0x360,0x368,i=>m[0x368+i]!==255)).join(",");
 }
 window.retroAiStep=function(name,holdFrames,nonce){

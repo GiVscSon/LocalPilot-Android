@@ -485,7 +485,12 @@ public final class NesEmulatorActivity extends Activity {
     runOnUiThread(()->{
      if(!genericVisionEpisode||!VoidLancerGameState.ROM_SHA.equals(activeRomSha)||!frameEpoch.current(session)||
         pendingTrial==null||pendingPermit==null||!pendingPermit.nonce.equals(nonce)||pendingTrial.frame!=start||finish-start!=16)return;
-     try{pendingTrial.gameBefore=VoidLancerGameState.parse(before);pendingTrial.gameAfter=VoidLancerGameState.parse(after);}
+     try{
+      pendingTrial.gameBefore=VoidLancerGameState.parse(before);pendingTrial.gameAfter=VoidLancerGameState.parse(after);
+      if(getApplication() instanceof NesModelHost host&&host.nesTestFixturesAllowed())
+       android.util.Log.i("LocalPilotObservation","transition_staged=true start="+start+" finish="+finish+
+        " before="+pendingTrial.gameBefore.wire()+" after="+pendingTrial.gameAfter.wire());
+     }
      catch(IllegalArgumentException invalid){stopCpuExperiment("STOP: игровые данные после действия не прошли проверку");}
     });
    }
@@ -1185,8 +1190,9 @@ public final class NesEmulatorActivity extends Activity {
      boolean saved=recordAiEpisode(readyTrial,current);
      if(genericVisionEpisode){
       pendingTrial=null; // The verified permit is complete; the next observation must see an idle controller.
-      if(!saved||!"PIXELS_DIFFER".equals(readyTrial.status)){
-       stopCpuExperiment("STOP: пользовательский ROM не подтвердил свежий визуальный переход");return;
+      if(!saved){stopCpuExperiment("STOP: переход настоящей игры не записан в журнал");return;}
+      if(!"PIXELS_DIFFER".equals(readyTrial.status)){
+       stopCpuExperiment("STOP: свежий кадр настоящей игры не изменился");return;
       }
       --autoGgufRemaining;++ggufCompleted;
       if(current.gameAfter!=null){

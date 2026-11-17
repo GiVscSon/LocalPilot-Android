@@ -32,7 +32,7 @@ public final class ConsoleExperienceMemory {
   public GenericEpisode(String romSha,String epoch,String modelId,String modelSha,NesTrial trial){this(romSha,epoch,modelId,modelSha,trial,null,null);}
   public GenericEpisode {
    if(!sha(romSha)||epoch==null||!epoch.matches("[1-9][0-9]{0,18}")||!id(modelId)||!sha(modelSha)||
-       trial==null||!"USER_ROM".equals(trial.scenario)||!ConsoleAgentContract.playable(trial.button))
+       trial==null||!"USER_ROM".equals(trial.scenario)||!ConsoleAgentContract.gamePlayable(trial.button))
     throw new IllegalArgumentException("Invalid user-ROM evidence identity");
    NesTrial.parse(trial.serialize());
    if((before==null)!=(after==null)||(before!=null&&!VoidLancerGameState.ROM_SHA.equals(romSha)))
