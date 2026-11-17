@@ -44,3 +44,13 @@ is unbounded; coverage here is every model actually offered by this application.
 HOST_UNIT: three matrix/catalogue tests and eleven existing real-game/SAF
 correlation checks PASS. EMULATOR_ANDROID results must be read from the current
 Actions run after completion. PHYSICAL_ANDROID and Vulkan remain unconfirmed.
+
+The follow-up summary job always compares every expected catalogue entry after
+the four game jobs end. It emits `models.json`, `models.csv` and `models.md`,
+including failures. Missing reports remain MISSING; malformed identities, wrong
+source/model hashes, duplicate reports or different APK bytes prevent complete
+acceptance. A failed game does not establish whether native inference ran, so
+unaccepted partial evidence is marked NOT_CONFIRMED, not converted to an
+inference failure or success. Vision and physical-device columns remain NOT_RUN.
+Two host regression tests exercise failure/missing-report behavior; they do not
+run Android or any model.

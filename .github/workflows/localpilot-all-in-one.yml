@@ -24,6 +24,8 @@ on:
       - 'tools/run_real_nes_vision_acceptance.py'
       - 'tools/model_lab_catalog.py'
       - 'tests/test_android_model_matrix.py'
+      - 'tools/summarize_model_matrix.py'
+      - 'tests/test_model_matrix_summary.py'
       - 'tests/nes_real_game_profile_smoke.cjs'
       - 'tests/test_harness_runtime_acceptance.py'
       - 'tests/NesModelHost*.java'
@@ -534,3 +536,26 @@ jobs:
           retention-days: 14
           if-no-files-found: warn
           path: real-nes-evidence/
+
+  model-matrix-summary:
+    needs: [real-game-agent, model-catalog]
+    if: ${{ always() && needs.model-catalog.result == 'success' }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test missing and failed evidence handling
+        run: python3 -m unittest discover -s tests -p test_model_matrix_summary.py -v
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: LocalPilot-Real-NES-Game-*-${{ github.sha }}
+          path: model-matrix-input/
+      - name: Compare every model against one exact source and APK
+        if: always()
+        run: python3 tools/summarize_model_matrix.py --directory model-matrix-input --source '${{ github.sha }}' --output-prefix model-matrix-report/models
+      - name: Preserve JSON, CSV and Markdown comparison including failures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: LocalPilot-Model-Matrix-${{ github.sha }}
+          path: model-matrix-report/
+          if-no-files-found: error
