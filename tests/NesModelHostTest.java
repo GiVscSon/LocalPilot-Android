@@ -34,6 +34,8 @@ public final class NesModelHostTest {
   var title=new VoidLancerGameState(0,120,40,0,3,1,500,7,0,0);
   check(title.prompt().contains("TITLE MENU")&&!title.prompt().contains("lives=0"),"inactive menu counters are not presented as a lost active game");
   check(!title.display().contains("500")&&!title.display().contains("ПОБЕДА"),"menu does not publish stale game counters or victory");
+  check(realBefore.prompt().contains("PLAYING (state=1)")&&realBefore.prompt().contains("FIRE=A"),"actual playing phase and fire control are unambiguous");
+  check(!realBefore.prompt().contains("START begins"),"menu-start instruction is absent from active-game observation");
   for(int budget:HarnessDemoWorkflow.GGUF_BUDGETS){
    check(HarnessDemoWorkflow.ggufSteps(HarnessDemoWorkflow.ggufMode(budget))==budget,"exact bounded GGUF budget");
    check(HarnessDemoWorkflow.supported(HarnessDemoWorkflow.ggufMode(budget)),"explicit GGUF budget is supported");

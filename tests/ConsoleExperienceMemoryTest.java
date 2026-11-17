@@ -113,6 +113,8 @@ public final class ConsoleExperienceMemoryTest {
   ConsoleExperienceMemory.appendGeneric(generic,new ConsoleExperienceMemory.GenericEpisode(VoidLancerGameState.ROM_SHA,"1236","import:alpha",other,startTrial,titleState,shipBefore));
   var startRecord=ConsoleExperienceMemory.readGeneric(generic).get(2);
   require(startRecord.trial().button.equals("START")&&startRecord.after().confirms("START",startRecord.before()),"real-game START survives the outer evidence journal with its actual phase change");
+  String startedContext=ConsoleExperienceMemory.genericContext(generic,VoidLancerGameState.ROM_SHA,"import:alpha",other);
+  require(startedContext.contains("phase=0->1 GAME_STARTED")&&!startedContext.contains("livesDelta=3"),"inactive title counters do not masquerade as life gain or ship movement");
   var chordTrial=NesTrial.create("USER_ROM","RIGHT+A",68,84,77,88);
   ConsoleExperienceMemory.appendGeneric(generic,new ConsoleExperienceMemory.GenericEpisode(VoidLancerGameState.ROM_SHA,"1236","import:alpha",other,chordTrial,shipBefore,shipAfter));
   require(ConsoleExperienceMemory.readGeneric(generic).get(3).trial().button.equals("RIGHT+A"),"canonical game chord survives both nested integrity layers");

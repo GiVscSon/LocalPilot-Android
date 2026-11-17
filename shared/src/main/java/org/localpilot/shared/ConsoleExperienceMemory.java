@@ -85,9 +85,17 @@ public final class ConsoleExperienceMemory {
    result.append(row.trial().button).append(':').append(row.trial().status);
    if(row.before()!=null&&row.after()!=null){
     VoidLancerGameState a=row.before(),b=row.after();
-    result.append(" dx=").append(b.x()-a.x()).append(" dy=").append(b.y()-a.y())
-      .append(" scoreDelta=").append(b.score()-a.score()).append(" killsDelta=").append(b.kills()-a.kills())
-      .append(" livesDelta=").append(b.lives()-a.lives());
+    if(a.state()==1&&b.state()==1){
+     result.append(" dx=").append(b.x()-a.x()).append(" dy=").append(b.y()-a.y())
+       .append(" scoreDelta=").append(b.score()-a.score()).append(" killsDelta=").append(b.kills()-a.kills())
+       .append(" livesDelta=").append(b.lives()-a.lives())
+       .append(" controlChangeVerified=").append(b.confirms(row.trial().button,a));
+    }else{
+     result.append(" phase=").append(a.state()).append("->").append(b.state());
+     if(a.state()==0&&b.state()==1)result.append(" GAME_STARTED");
+     if(b.state()==2)result.append(" GAME_OVER finalScore=").append(b.score());
+     if(b.state()==3)result.append(" VICTORY finalScore=").append(b.score());
+    }
    }
    result.append("; ");
   }

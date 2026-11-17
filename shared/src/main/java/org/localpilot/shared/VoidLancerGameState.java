@@ -45,12 +45,12 @@ public record VoidLancerGameState(int state,int x,int y,int lives,int bombs,int 
   if(state==0)return "Verified VOID LANCER TITLE MENU (state=0). No gameplay episode is active; lives/targets/counters are inactive here. START begins the game. ";
   if(state==2)return "Verified VOID LANCER GAME OVER (state=2), final score="+score+", kills="+kills+". START returns to the title menu. ";
   if(state==3)return "Verified VOID LANCER VICTORY (state=3), final score="+score+", kills="+kills+". START returns to the title menu. ";
-  return "Verified current VOID LANCER RAM: state="+state+" (0 title,1 playing,2 loss,3 win), ship=("+x+","+y+
+  return "Verified VOID LANCER PLAYING (state=1). Active ship=("+x+","+y+
    "), lives="+lives+", bombs="+bombs+", stage="+stage+", score="+score+", kills="+kills+
    ", shots="+shots+", active player bullets="+bullets+
    ", nearest enemy="+(enemyX<0?"none/unknown":"("+enemyX+","+enemyY+")")+
    ", nearest hostile bullet="+(threatX<0?"none/unknown":"("+threatX+","+threatY+")")+
-   ". Coordinates increase right/down; A shoots upward. D-pad moves ship; A fires; B spends a bomb. START begins from title or returns to title after loss/win. Destroy enemies, dodge bullets and preserve lives. ";}
+   ". FIRE=A (shoot upward, unlimited ammunition). BOMB=B (limited inventory). MOVE=UP/DOWN/LEFT/RIGHT; coordinates increase right/down. START and SELECT have no effect during PLAYING in this ROM. Goal: destroy enemies for score, dodge hostile bullets, preserve lives. ";}
  public String display(){
   if(state==0)return "VOID LANCER · МЕНЮ · игровой эпизод не запущен";
   return "VOID LANCER · "+(state==3?"ПОБЕДА":state==2?"ИГРА ОКОНЧЕНА":state==0?"МЕНЮ":"ИГРА")+
