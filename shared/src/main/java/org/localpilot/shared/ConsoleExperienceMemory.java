@@ -79,8 +79,8 @@ public final class ConsoleExperienceMemory {
   if(!sha(romSha)||!id(modelId)||!sha(modelSha))throw new IllegalArgumentException("Generic context identity");
   List<GenericEpisode> rows=new ArrayList<>();
   for(var row:readGeneric(directory))if(row.romSha().equals(romSha)&&row.modelId().equals(modelId)&&row.modelSha().equals(modelSha))rows.add(row);
-  StringBuilder result=new StringBuilder("Past verified inputs for this ROM/model (pixel changes alone prove no reward): ");
-  for(int i=Math.max(0,rows.size()-4);i<rows.size();i++){
+  StringBuilder result=new StringBuilder("Recent verified inputs, newest first; pixels alone prove no reward: ");
+  for(int i=rows.size()-1;i>=Math.max(0,rows.size()-4);i--){
    GenericEpisode row=rows.get(i);
    result.append(row.trial().button).append(':').append(row.trial().status);
    if(row.before()!=null&&row.after()!=null){

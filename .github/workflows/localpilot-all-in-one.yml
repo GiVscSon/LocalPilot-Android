@@ -98,6 +98,8 @@ jobs:
           python3 -m unittest discover -s tests -p 'test_harness_runtime_acceptance.py' -v
           python3 -m unittest discover -s tests -p 'test_g2_visible_saf.py' -v
           python3 -m unittest discover -s tests -p 'test_native_inference_optimization.py' -v
+          c++ -std=c++17 -Wall -Wextra -Werror tests/native_controller_format_test.cpp -o /tmp/localpilot-native-controller-format-test
+          /tmp/localpilot-native-controller-format-test
           node tests/nes_visual_bridge_smoke.cjs
           java tests/ConsoleAgentContractVerify.java
           java tests/ConsoleExperienceMemoryVerify.java

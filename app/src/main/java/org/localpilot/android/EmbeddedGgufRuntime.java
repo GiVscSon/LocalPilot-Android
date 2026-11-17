@@ -298,17 +298,19 @@ public final class EmbeddedGgufRuntime {
       width>640||height>640||(long)width*height*3!=rgb.length))
    throw new IllegalArgumentException("Invalid visual model/projector or NES RGB");
   final byte[] pixels=projector!=null?rgb.clone():null;
-  final String instructions="You are a one-step controller for the current "+
-   "NES game. Reply with EXACTLY one of BUTTON=A, BUTTON=B, "+
-   "BUTTON=UP, BUTTON=DOWN, BUTTON=LEFT, BUTTON=RIGHT, "+
-   (gameControls?"BUTTON=START, BUTTON=SELECT, ":"")+"BUTTON=NONE. "+
+  final String instructions=gameControls?
+   "You control the current NES game for16 frames. Reply exactly BUTTON=<command>. "+
+   "Use one button or a chord ordered vertical(UP/DOWN), horizontal(LEFT/RIGHT), A, B. Example: BUTTON=RIGHT+A. "+
+   "START and SELECT stand alone. NONE stops. No explanations or Android commands; never invent success.":
+   "You are a one-step controller for the current NES game. Reply with EXACTLY one of "+
+   "BUTTON=A, BUTTON=B, BUTTON=UP, BUTTON=DOWN, BUTTON=LEFT, BUTTON=RIGHT, BUTTON=NONE. "+
    "Do not explain or issue Android commands. Do not claim success or reward. ";
   final long started=android.os.SystemClock.elapsedRealtime();
   submit(answer->callback.complete(answer,
     android.os.SystemClock.elapsedRealtime()-started),()->{
    prepareNativeInference();
    String proposal=projector==null?
-     nativeInfer(weights.getAbsolutePath(),instructions,observation,16,0.0f,gameControls?2:1):
+     nativeInfer(weights.getAbsolutePath(),instructions,observation,gameControls?24:16,0.0f,gameControls?2:1):
      nativeAnalyzeImage(weights.getAbsolutePath(),projector.getAbsolutePath(),
        instructions+observation,pixels,width,height,gameControls?2:1);
    return LocalCoreContract.visibleAnswer(proposal);

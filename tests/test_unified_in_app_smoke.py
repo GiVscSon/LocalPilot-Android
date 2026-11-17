@@ -2,6 +2,7 @@
 from pathlib import Path
 import importlib.util
 import unittest
+import tempfile
 from unittest.mock import patch
 
 ROOT=Path(__file__).resolve().parents[1]
@@ -10,6 +11,22 @@ smoke=importlib.util.module_from_spec(spec)
 spec.loader.exec_module(smoke)
 
 class UnifiedUiSmokeContract(unittest.TestCase):
+    def test_ci_failure_capture_never_reads_physical_device_ui(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with patch.object(smoke,"is_emulator",return_value=False),patch.object(smoke,"dump_ui") as read,patch.object(smoke.subprocess,"run") as screenshot:
+                smoke.write_failure_diagnostics(Path(directory)/"report.json",RuntimeError("test"))
+                read.assert_not_called();screenshot.assert_not_called()
+
+    def test_ci_failure_capture_preserves_observed_missing_target_ui(self):
+        xml='<hierarchy><node text="Main actual state" package="own" bounds="[0,0][100,80]"/></hierarchy>'
+        with tempfile.TemporaryDirectory() as directory:
+            with patch.object(smoke,"is_emulator",return_value=True),patch.object(smoke,"dump_ui",return_value=xml),patch.object(smoke,"adb",return_value="observed diagnostic"),patch.object(smoke.subprocess,"run") as screenshot,patch("builtins.print") as output:
+                screenshot.return_value.returncode=1
+                smoke.write_failure_diagnostics(Path(directory)/"report.json",RuntimeError("target absent"))
+                self.assertEqual((Path(directory)/"failure-ui.xml").read_text(),xml)
+                self.assertIn("Main actual state",(Path(directory)/"failure-diagnostics.json").read_text())
+                self.assertTrue(any("ISOLATED_EMULATOR_FAILURE_UI" in str(call) for call in output.call_args_list))
+
     def test_compact_disclosure_opens_only_in_known_localpilot_window(self):
         xml='<hierarchy><node text="Ещё" content-desc="Открыть дополнительные настройки" bounds="[0,0][100,80]" clickable="true"/></hierarchy>'
         with patch.object(smoke,"resumed_activity",return_value=smoke.PACKAGE+"/"+smoke.NES), patch.object(smoke,"adb") as adb:
@@ -203,7 +220,10 @@ class UnifiedUiSmokeContract(unittest.TestCase):
             report=Path(folder)/"evidence.json"
             smoke.LAST_HARNESS_UI='<hierarchy><node text="Harness Console"/></hierarchy>'
             smoke.HARNESS_NAVIGATION.append({"event":"fresh_harness_tap","point":[120,100]})
-            with patch.object(smoke,"adb",return_value="emulator test state"), \
+            with patch.object(smoke,"is_emulator",return_value=True), \
+                 patch.object(smoke,"dump_ui",return_value=smoke.LAST_HARNESS_UI), \
+                 patch("builtins.print"), \
+                 patch.object(smoke,"adb",return_value="emulator test state"), \
                  patch.object(smoke.subprocess,"run",side_effect=OSError("no screenshot")):
                 smoke.write_failure_diagnostics(report,RuntimeError("specific failure"))
             evidence=json.loads((report.parent/"failure-diagnostics.json").read_text())

@@ -5,7 +5,7 @@ import unittest
 
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'tools'))
 from run_g2_direct_gguf_acceptance import exact_target
-from run_real_nes_vision_acceptance import confirms_control,parse_game_state,correlate_inference,verified_game_progress
+from run_real_nes_vision_acceptance import confirms_control,parse_game_state,correlate_inference,verified_game_progress,valid_game_button
 
 class VisibleSafTargets(unittest.TestCase):
     def test_background_or_wrong_direction_is_not_game_control(self):
@@ -16,6 +16,16 @@ class VisibleSafTargets(unittest.TestCase):
         self.assertFalse(confirms_control('A',before,before))
         self.assertFalse(confirms_control('LEFT',before,after))
         with self.assertRaises(ValueError):parse_game_state('1,100,180,3,3,1,999999999,0,0,0')
+    def test_chord_evidence_is_bounded_and_canonical(self):
+        for action in ('RIGHT+A','UP+LEFT+A+B','A+B'):
+            self.assertTrue(valid_game_button(action))
+        for action in ('UP+DOWN','LEFT+RIGHT+A','A+RIGHT','START+A','A+A','UP+LEFT+A+B+A'):
+            self.assertFalse(valid_game_button(action))
+        before=parse_game_state('1,100,180,3,3,1,0,0,0,0')
+        after=parse_game_state('1,116,180,3,3,1,0,0,1,1')
+        self.assertTrue(confirms_control('RIGHT+A',before,after))
+        self.assertFalse(confirms_control('RIGHT+A',before,before))
+
     def test_progress_requires_actual_playing_phase_delta(self):
         playing=parse_game_state('1,100,180,3,3,1,10,0,0,0')
         more=dict(playing,score=20)

@@ -187,7 +187,7 @@ public final class HarnessCoordinator {
  }
  private ActionPermit issue(Actor actor,String expectedEpoch,String button,int frame,int hash,int holdFrames,long now){
   if(maintenance!=null||stopPending||actor==null||!matches(expectedEpoch)||active!=null||waiting!=null||
-      !(actor==Actor.MANUAL||actor==Actor.GGUF&&prepared!=null&&prepared.gameControls?ConsoleAgentContract.manualPlayable(button):ConsoleAgentContract.playable(button))||frame<15||hash==0||now<0)
+      !(actor==Actor.MANUAL?ConsoleAgentContract.manualPlayable(button):actor==Actor.GGUF&&prepared!=null&&prepared.gameControls?ConsoleAgentContract.gamePlayable(button):ConsoleAgentContract.playable(button))||frame<15||hash==0||now<0)
    return null;
   if(actor==Actor.GGUF||actor==Actor.STUDENT||actor==Actor.PPO_STUDENT){
    Ticket t=prepared;

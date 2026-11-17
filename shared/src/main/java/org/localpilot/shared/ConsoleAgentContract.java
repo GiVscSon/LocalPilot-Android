@@ -30,11 +30,26 @@ public final class ConsoleAgentContract {
   if(!normalized.matches("BUTTON=(A|B|UP|DOWN|LEFT|RIGHT|NONE)"))return null;
   return normalized.substring(7);
  }
+ /** Canonical NES chord: vertical, horizontal, A, B; menu keys stand alone. */
+ public static boolean gamePlayable(String button){
+  if(manualPlayable(button))return true;
+  if(button==null||button.length()>20)return false;
+  String[] keys=button.split("\\+",-1);
+  if(keys.length<2||keys.length>4)return false;
+  int previous=-1;
+  for(String key:keys){
+   int rank=switch(key){case "UP","DOWN"->0;case "LEFT","RIGHT"->1;case "A"->2;case "B"->3;default->-1;};
+   if(rank<=previous)return false;previous=rank;
+  }
+  return true;
+ }
  public static String parseGameButton(String modelText){
-  String basic=parseButton(modelText);if(basic!=null)return basic;
   if(modelText==null||modelText.length()>80)return null;
   String normalized=modelText.trim().toUpperCase(Locale.ROOT);
-  return normalized.equals("BUTTON=START")?"START":normalized.equals("BUTTON=SELECT")?"SELECT":null;
+  if(normalized.equals("BUTTON=NONE"))return "NONE";
+  if(!normalized.startsWith("BUTTON="))return null;
+  String action=normalized.substring(7);
+  return gamePlayable(action)?action:null;
  }
  public static boolean manualPlayable(String button){return playable(button)||"START".equals(button)||"SELECT".equals(button);}
  public static boolean playable(String button){

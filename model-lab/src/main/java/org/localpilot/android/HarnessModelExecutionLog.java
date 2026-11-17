@@ -38,9 +38,7 @@ public final class HarnessModelExecutionLog {
   }catch(NoSuchAlgorithmException missing){throw new IllegalStateException(missing);}
  }
  private static boolean proposal(String s){
-  return s!=null&&(s.equals("A")||s.equals("B")||s.equals("UP")||
-    s.equals("DOWN")||s.equals("LEFT")||s.equals("RIGHT")||s.equals("NONE")||
-    s.equals("START")||s.equals("SELECT")||s.equals("REJECTED"));
+  return org.localpilot.shared.ConsoleAgentContract.gamePlayable(s)||"NONE".equals(s)||"REJECTED".equals(s);
  }
  private static String payload(Run r){
   return SCHEMA+"|"+r.modelId()+"|"+r.modelSha()+"|"+r.frame()+"|"+

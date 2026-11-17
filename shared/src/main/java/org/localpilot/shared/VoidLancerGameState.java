@@ -27,6 +27,11 @@ public record VoidLancerGameState(int state,int x,int y,int lives,int bombs,int 
  }
  public boolean confirms(String button,VoidLancerGameState before){
   if(before==null)return false;
+  if(button!=null&&button.contains("+")){
+   if(!ConsoleAgentContract.gamePlayable(button))return false;
+   for(String key:button.split("\\+"))if(confirms(key,before))return true;
+   return false;
+  }
   if("START".equals(button))return before.state==0&&state==1||(before.state==2||before.state==3)&&state==0;
   if(before.state!=1||state!=1)return false;
   return switch(button){
@@ -36,12 +41,18 @@ public record VoidLancerGameState(int state,int x,int y,int lives,int bombs,int 
    case "B" -> bombs<before.bombs;default -> false;
   };
  }
- public String prompt(){return "Verified current VOID LANCER RAM: state="+state+" (0 title,1 playing,2 loss,3 win), ship=("+x+","+y+
+ public String prompt(){
+  if(state==0)return "Verified VOID LANCER TITLE MENU (state=0). No gameplay episode is active; lives/targets/counters are inactive here. START begins the game. ";
+  if(state==2)return "Verified VOID LANCER GAME OVER (state=2), final score="+score+", kills="+kills+". START returns to the title menu. ";
+  if(state==3)return "Verified VOID LANCER VICTORY (state=3), final score="+score+", kills="+kills+". START returns to the title menu. ";
+  return "Verified current VOID LANCER RAM: state="+state+" (0 title,1 playing,2 loss,3 win), ship=("+x+","+y+
    "), lives="+lives+", bombs="+bombs+", stage="+stage+", score="+score+", kills="+kills+
    ", shots="+shots+", active player bullets="+bullets+
    ", nearest enemy="+(enemyX<0?"none/unknown":"("+enemyX+","+enemyY+")")+
    ", nearest hostile bullet="+(threatX<0?"none/unknown":"("+threatX+","+threatY+")")+
    ". Coordinates increase right/down; A shoots upward. D-pad moves ship; A fires; B spends a bomb. START begins from title or returns to title after loss/win. Destroy enemies, dodge bullets and preserve lives. ";}
- public String display(){return "VOID LANCER · "+(state==3?"ПОБЕДА":state==2?"ИГРА ОКОНЧЕНА":state==0?"МЕНЮ":"ИГРА")+
+ public String display(){
+  if(state==0)return "VOID LANCER · МЕНЮ · игровой эпизод не запущен";
+  return "VOID LANCER · "+(state==3?"ПОБЕДА":state==2?"ИГРА ОКОНЧЕНА":state==0?"МЕНЮ":"ИГРА")+
    " · счёт "+score+" · жизни "+lives+" · корабль ("+x+","+y+") · этап "+stage;}
 }

@@ -26,6 +26,14 @@ public final class NesModelHostTest {
   check("START".equals(ConsoleAgentContract.parseGameButton("BUTTON=START")),"game parser accepts canonical NES START");
   check("SELECT".equals(ConsoleAgentContract.parseGameButton("BUTTON=SELECT")),"game parser accepts NES SELECT");
   check(ConsoleAgentContract.parseGameButton("BUTTON=START; tap Android")==null,"menu proposal cannot inject an Android command");
+  for(String action:new String[]{"RIGHT+A","UP+LEFT+A+B","A+B"})
+   check(ConsoleAgentContract.gamePlayable(action)&&action.equals(ConsoleAgentContract.parseGameButton("BUTTON="+action)),"canonical game chord accepted");
+  for(String action:new String[]{"UP+DOWN","LEFT+RIGHT+A","A+RIGHT","START+A","A+A","UP+LEFT+A+B+A"})
+   check(!ConsoleAgentContract.gamePlayable(action)&&ConsoleAgentContract.parseGameButton("BUTTON="+action)==null,"opposing/duplicate/reordered/oversized chord rejected");
+  check(ConsoleAgentContract.parseButton("BUTTON=RIGHT+A")==null,"legacy profile cannot gain chord input");
+  var title=new VoidLancerGameState(0,120,40,0,3,1,500,7,0,0);
+  check(title.prompt().contains("TITLE MENU")&&!title.prompt().contains("lives=0"),"inactive menu counters are not presented as a lost active game");
+  check(!title.display().contains("500")&&!title.display().contains("ПОБЕДА"),"menu does not publish stale game counters or victory");
   for(int budget:HarnessDemoWorkflow.GGUF_BUDGETS){
    check(HarnessDemoWorkflow.ggufSteps(HarnessDemoWorkflow.ggufMode(budget))==budget,"exact bounded GGUF budget");
    check(HarnessDemoWorkflow.supported(HarnessDemoWorkflow.ggufMode(budget)),"explicit GGUF budget is supported");
@@ -77,6 +85,7 @@ public final class NesModelHostTest {
   var full=gameGate.beginGame("2000",30,123,2000);
   var gameObs=new NesModelHost.Observation(full,VoidLancerGameState.ROM_SHA,model,-1,-1,unitPng,NesModelHost.TaskProfile.GAME_RAM,realBefore);
   check(new NesModelHost.Reply(gameObs,NesModelHost.Status.PROPOSAL,model.id(),model.sha256(),"START",1).button().equals("START"),"typed full-game reply permits NES menu control");
+  check(new NesModelHost.Reply(gameObs,NesModelHost.Status.PROPOSAL,model.id(),model.sha256(),"RIGHT+A",1).button().equals("RIGHT+A"),"typed full-game reply keeps the exact bounded chord");
   refuses(()->new NesModelHost.Observation(full,"a".repeat(64),model,128,112,null),"full-game capability cannot enter the homebrew profile");
   gameGate.reset("2001",HarnessCoordinator.Mode.STEP_MODE);
   var legacyGame=new NesModelHost.Observation(gameGate.begin("2001",30,123,2100),"a".repeat(64),model,-1,-1,unitPng,NesModelHost.TaskProfile.VISION_EXPLORATION);

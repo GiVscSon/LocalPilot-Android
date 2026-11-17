@@ -27,6 +27,13 @@ public final class HarnessModelExecutionLogTest {
     "gguf:alpha","bad",46,0x123,0,"A",0));}
   catch(IllegalArgumentException expected){refused=true;}
   check(refused,"reject invalid model SHA");
+  var chord=new HarnessModelExecutionLog.Run("gguf:alpha","a".repeat(64),62,0x1235,211,"RIGHT+A",0);
+  HarnessModelExecutionLog.append(dir,chord);
+  check(HarnessModelExecutionLog.read(dir).get(2).equals(chord),"canonical chord retains exact inference metadata");
+  refused=false;
+  try{HarnessModelExecutionLog.append(dir,new HarnessModelExecutionLog.Run("gguf:alpha","a".repeat(64),78,0x1236,10,"UP+DOWN+A",0));}
+  catch(IllegalArgumentException expected){refused=true;}
+  check(refused&&HarnessModelExecutionLog.read(dir).size()==3,"opposing chord never enters inference evidence");
   Path log=dir.resolve(HarnessModelExecutionLog.FILE);
   byte[] damaged=Files.readAllBytes(log);damaged[damaged.length/3]^=1;
   Files.write(log,damaged);

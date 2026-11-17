@@ -195,6 +195,10 @@ public final class HarnessModelRuntime {
      if(!current(call)||!sameBinding(call)){finish(call,NesModelHost.Status.STALE,null,0);return;}
      EmbeddedGgufRuntime runtime=engine();
      if(runtime.busy()){finish(call,NesModelHost.Status.BUSY,null,0);return;}
+     if(application instanceof NesModelHost host&&host.nesTestFixturesAllowed())
+      android.util.Log.i("LocalPilotObservation","profile="+call.observation.profile()+" frame="+t.frame+
+       " hash="+Integer.toUnsignedString(t.hash)+" gameControls="+t.gameControls+
+       " game="+(call.observation.game()==null?"UNKNOWN":call.observation.game().wire()));
      phase(call,gameRam?"GAME_RAM_INFERENCE":"INFERENCING");
      runtime.proposeNesButton(weights,mmproj,modelObservation,rgb,NesFrameTransfer.WIDTH,NesFrameTransfer.HEIGHT,0,generic&&t.gameControls,
        (answer,elapsed)->completed(call,answer,elapsed));

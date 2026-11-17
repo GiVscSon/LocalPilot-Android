@@ -52,7 +52,7 @@ def verified_generic_rows(raw, model_sha):
         trial,inner=parts[9].rsplit('|',1)
         if hashlib.sha256(trial.encode()).hexdigest()!=inner:raise ValueError('Trial checksum')
         p=trial.split('|')
-        if len(p)!=9 or p[2]!='USER_ROM' or int(p[5])-int(p[4])!=16:raise ValueError('Wrong real-game step')
+        if len(p)!=9 or p[2]!='USER_ROM' or not valid_game_button(p[3]) or int(p[5])-int(p[4])!=16:raise ValueError('Wrong real-game step')
         result.append(dict(button=p[3],beforeFrame=int(p[4]),afterFrame=int(p[5]),beforeHash=p[6],afterHash=p[7],status=p[8],
                            gameBefore=before,gameAfter=after,semanticControl=confirms_control(p[3],before,after)))
     return result
@@ -69,7 +69,17 @@ def parse_game_state(text):
             result[name]=None if x==-1 else dict(x=x,y=y)
     return result
 
+def valid_game_button(button):
+    if button in ('A','B','UP','DOWN','LEFT','RIGHT','START','SELECT'):return True
+    keys=button.split('+')
+    if not 2<=len(keys)<=4:return False
+    ranks={'UP':0,'DOWN':0,'LEFT':1,'RIGHT':1,'A':2,'B':3}
+    order=[ranks.get(key,-1) for key in keys]
+    return all(rank>=0 for rank in order) and all(a<b for a,b in zip(order,order[1:]))
+
 def confirms_control(button,before,after):
+    if not valid_game_button(button):return False
+    if '+' in button:return any(confirms_control(key,before,after) for key in button.split('+'))
     if button=='START':return before['state']==0 and after['state']==1 or before['state'] in (2,3) and after['state']==0
     if before['state']!=1 or after['state']!=1:return False
     return {'LEFT':after['x']<before['x'],'RIGHT':after['x']>before['x'],
@@ -183,7 +193,7 @@ if __name__=='__main__':
                     (a.output.parent/'real-game-inference.log').write_bytes(inference)
                     print('ACTUAL_GAME_INFERENCE_DIAGNOSTIC '+inference.decode()[-12000:],flush=True)
                 except EvidencePending:pass
-                timing=ui.adb('shell','logcat','-d','-s','LocalPilotNative:I','*:S')[-16000:]
+                timing=ui.adb('shell','logcat','-d','-s','LocalPilotNative:I','LocalPilotObservation:I','*:S')[-16000:]
                 (a.output.parent/'native-phase-timings.log').write_text(timing)
                 print('ACTUAL_NATIVE_PHASE_TIMINGS '+timing,flush=True)
                 ui.write_failure_diagnostics(a.output,error)

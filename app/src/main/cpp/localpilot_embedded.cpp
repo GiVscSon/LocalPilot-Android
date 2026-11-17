@@ -3,6 +3,8 @@
 #include "ggml-backend.h"
 #include "mtmd.h"
 #include "mtmd-helper.h"
+#include "controller_chat_format.h"
+#include "controller_grammar.h"
 #include <cstdint>
 #include <algorithm>
 #include <atomic>
@@ -120,7 +122,7 @@ bool init(const std::string &name){
  path=name;return true;
 }
 
-std::string chat(const std::string &sys,const std::string &usr){
+std::string chat(const std::string &sys,const std::string &usr,int controller=0){
  const char *tmpl=llama_model_chat_template(model,nullptr);
  if(!tmpl)return "";
  llama_chat_message msg[2]={{"system",sys.c_str()},{"user",usr.c_str()}};
@@ -129,7 +131,16 @@ std::string chat(const std::string &sys,const std::string &usr){
  std::vector<char> buf(size+1,0);
  int n=llama_chat_apply_template(tmpl,msg,2,true,buf.data(),buf.size());
  if(n<1||n>size)return "";
- return std::string(buf.data(),n);
+ const std::string raw(buf.data(),n);
+ const std::string formatted=localpilot::controller_chat_format(raw,tmpl,controller);
+ if(controller){
+#ifdef __ANDROID__
+  __android_log_print(ANDROID_LOG_INFO,"LocalPilotNative","controller_mode=%d chatml_thinking_closed=%d",controller,formatted!=raw);
+#else
+  std::fprintf(stderr,"LocalPilotNative controller_mode=%d chatml_thinking_closed=%d\n",controller,formatted!=raw);
+#endif
+ }
+ return formatted;
 }
 
 bool run_batch(llama_batch_ext *batch,const llama_token *tokens,int count,int offset,bool logits){
@@ -143,6 +154,7 @@ bool run_batch(llama_batch_ext *batch,const llama_token *tokens,int count,int of
  return llama_process(ctx,LLAMA_PROCESS_TYPE_DECODE,batch)==0;
 }
 
+
 std::string generate_from_logits(int pos,int limit,float temp,int nesController=0){
  NativeStage timing("token_decode");
  if(!ctx||pos<1||limit<1||limit>192)return "";
@@ -150,14 +162,12 @@ std::string generate_from_logits(int pos,int limit,float temp,int nesController=
  auto *batch=llama_batch_ext_init(ctx);
  if(!batch)return "";
  bool ok=true;
+ const std::string rules=nesController?localpilot::controller_grammar(nesController):"";
  auto *sampler=llama_sampler_chain_init(llama_sampler_chain_default_params());
  if(!sampler)ok=false;
  if(ok){
   if(nesController){
-   const char *rules=nesController==2?
-    "root ::= \"BUTTON=\" (\"A\" | \"B\" | \"UP\" | \"DOWN\" | \"LEFT\" | \"RIGHT\" | \"START\" | \"SELECT\" | \"NONE\")":
-    "root ::= \"BUTTON=\" (\"A\" | \"B\" | \"UP\" | \"DOWN\" | \"LEFT\" | \"RIGHT\" | \"NONE\")";
-   auto *grammar=llama_sampler_init_grammar(vocab,rules,"root");
+   auto *grammar=llama_sampler_init_grammar(vocab,rules.c_str(),"root");
    if(grammar)llama_sampler_chain_add(sampler,grammar);else ok=false;
   }
   llama_sampler_chain_add(sampler,llama_sampler_init_penalties(
@@ -192,7 +202,7 @@ std::string generate_from_logits(int pos,int limit,float temp,int nesController=
 
 std::string infer(const std::string &sys,const std::string &usr,int limit,float temp,int controller=0){
  if(!ctx||limit<1||limit>192)return "";
- std::string formatted=chat(sys,usr);
+ std::string formatted=chat(sys,usr,controller);
  if(formatted.empty())return "";
  const auto *vocab=llama_model_get_vocab(model);
  int required=llama_tokenize(vocab,formatted.c_str(),formatted.size(),nullptr,0,true,true);
@@ -215,7 +225,7 @@ std::string infer(const std::string &sys,const std::string &usr,int limit,float 
  }
  if(!ok||cancelled.load()){llama_batch_ext_free(batch);return "";}
  llama_batch_ext_free(batch);
- return generate_from_logits(n,controller?std::min(16,limit):limit,temp,controller);
+ return generate_from_logits(n,controller?std::min(controller==2?24:16,limit):limit,temp,controller);
 
 }
 }
@@ -305,12 +315,13 @@ Java_org_localpilot_android_EmbeddedGgufRuntime_nativeAnalyzeImage(
     mtmd_input_chunks *chunks=mtmd_input_chunks_init();
     if(bitmap&&chunks){
      std::string user="Analyze the attached game screenshot. <__media__>\n"+p.str();
-     std::string formatted=chat(controller?
-       "Control the current NES game using the screenshot and verified game state. "
-       "Return exactly one BUTTON=A, BUTTON=B, BUTTON=UP, BUTTON=DOWN, BUTTON=LEFT, BUTTON=RIGHT, BUTTON=START, BUTTON=SELECT or BUTTON=NONE. "
-       "Do not explain. Choose NONE when uncertain. Never issue Android commands.":
+     const std::string controlInstructions=controller==2?
+       "Control NES from the screenshot. Return BUTTON=<command>: one button or a chord ordered vertical(UP/DOWN), horizontal(LEFT/RIGHT), A, B. "
+       "START/SELECT stand alone. NONE stops. No explanations or Android commands.":
+       "Control NES from the screenshot. Return exactly BUTTON=A, BUTTON=B, BUTTON=UP, BUTTON=DOWN, BUTTON=LEFT, BUTTON=RIGHT or BUTTON=NONE. No explanations or Android commands.";
+     std::string formatted=chat(controller?controlInstructions:
        "You are a game vision diagnostician. Describe only visible objects "
-       "and uncertainty. Never issue a gesture, coordinates or action commands.",user);
+       "and uncertainty. Never issue a gesture, coordinates or action commands.",user,controller);
      mtmd_input_text input{formatted.data(),formatted.size(),true,true};
      const mtmd_bitmap *bitmapArray[]={bitmap};
      if(!formatted.empty()&&
@@ -322,8 +333,8 @@ Java_org_localpilot_android_EmbeddedGgufRuntime_nativeAnalyzeImage(
        NativeStage timing("vision_prefill");
        evaluated=mtmd_helper_eval_chunks(vision,ctx,chunks,0,0,512,true,&after);
       }
-      if(evaluated==0&&after>0&&after+(controller?16:128)<4096&&!cancelled.load())
-       reply=generate_from_logits(after,controller?16:128,controller?0.0f:0.1f,controller);
+      if(evaluated==0&&after>0&&after+(controller==2?24:controller?16:128)<4096&&!cancelled.load())
+       reply=generate_from_logits(after,controller==2?24:controller?16:128,controller?0.0f:0.1f,controller);
      }
     }
     if(chunks)mtmd_input_chunks_free(chunks);

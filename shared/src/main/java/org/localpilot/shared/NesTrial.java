@@ -30,7 +30,7 @@ public final class NesTrial {
  public static NesTrial create(String scenario,String button,int start,int finish,
                                int before,int after){
   if(!("HOMEBREW".equals(scenario)||"USER_ROM".equals(scenario))||
-     !BUTTONS.contains(button)||start<15||
+     !("USER_ROM".equals(scenario)?ConsoleAgentContract.gamePlayable(button):BUTTONS.contains(button))||start<15||
      !((long)finish-start>=15&&(long)finish-start<=600||
        "HOMEBREW".equals(scenario)&&((long)finish-start==4||(long)finish-start==8))||before==0||after==0)
    throw new IllegalArgumentException("Incomplete or impossible NES frame observation");

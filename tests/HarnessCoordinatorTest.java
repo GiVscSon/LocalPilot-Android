@@ -187,6 +187,14 @@ public final class HarnessCoordinatorTest {
   c.reset("1402",HarnessCoordinator.Mode.REALTIME_MODE);
   boolean liveRefused=false;try{c.beginGame("1402",30,123,15000);}catch(IllegalStateException expected){liveRefused=true;}
   check(liveRefused,"ordinary model menu observation requires frozen mode");
+  c.reset("1500",HarnessCoordinator.Mode.STEP_MODE);
+  var chordTicket=c.beginGame("1500",30,123,16000);
+  check(c.consume(chordTicket.nonce,"1500",30,123,16001),"chord consumes one observation only");
+  check(c.start(HarnessCoordinator.Actor.GGUF,"1500","UP+DOWN+A",30,123,16,16002)==null,"opposing axes cannot consume a prepared chord ticket");
+  var chord=c.start(HarnessCoordinator.Actor.GGUF,"1500","RIGHT+A",30,123,16,16003);
+  check(chord!=null&&!c.hasPending()&&c.actionInFlight(),"one unique permit covers the complete chord");
+  c.stop("CHORD_STOP");
+  check(!c.authorizesStep("1500",chord.nonce,16,16004),"STOP revokes every component through one permit");
   System.out.println("HARNESS_COORDINATOR_PASS checks="+checks);
  }
 }
