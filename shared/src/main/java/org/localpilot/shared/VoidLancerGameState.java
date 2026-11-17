@@ -56,10 +56,17 @@ public record VoidLancerGameState(int state,int x,int y,int lives,int bombs,int 
   String current="CURRENT STATE (verified ROM RAM, no image inference):\n"+prompt()+
     "\nChoose one allowed command for this CURRENT STATE. Button and WAIT steps span16 real frames.";
   if(current.length()>900)throw new IllegalStateException("Current game observation exceeds bounded prompt");
+  // Previous PLAYING actions are not instructions for the TITLE or terminal menus.
+  // Keep model selection autonomous: no preselected BUTTON or synthetic feedback.
+  if(state!=1||history==null||history.isEmpty())return current;
   String heading="PAST VERIFIED OUTCOMES:\n";
   int room=Math.min(300,Math.max(0,900-current.length()-heading.length()-1));
-  if(history==null||history.isEmpty()||room==0)return current;
-  return heading+history.substring(0,Math.min(room,history.length()))+"\n"+current;
+  if(room==0)return current;
+  // Do not present a partially cut action/outcome as a complete verified record.
+  String bounded=history.substring(0,Math.min(room,history.length()));
+  int completed=bounded.lastIndexOf(';');
+  if(completed<0)return current;
+  return heading+bounded.substring(0,completed+1)+"\n"+current;
  }
  public String display(){
   if(state==0)return "VOID LANCER · МЕНЮ · игровой эпизод не запущен";
