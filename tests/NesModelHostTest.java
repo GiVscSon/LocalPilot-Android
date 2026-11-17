@@ -42,6 +42,13 @@ public final class NesModelHostTest {
   check(actualPrompt.length()<=900&&actualPrompt.contains("PLAYING (state=1)")&&actualPrompt.contains("FIRE=A"),"bounded history cannot truncate current phase or actual controls");
   check(actualPrompt.indexOf("CURRENT STATE")>actualPrompt.indexOf("RIGHT+A:NO_VISUAL_CHANGE"),"historical actions precede the current measured observation");
   check(title.modelPrompt(past).contains("TITLE MENU")&&!title.modelPrompt(past).contains("lives=0"),"current title phase survives a long history without inactive gameplay claims");
+  check(!title.modelPrompt(past).contains("RIGHT+A")&&!title.modelPrompt(past).contains("PAST VERIFIED OUTCOMES"),"title phase excludes obsolete gameplay actions");
+  var lost=new VoidLancerGameState(2,100,180,0,0,1,400,4,5,0);
+  var won=new VoidLancerGameState(3,100,180,2,0,3,800,9,15,0);
+  check(lost.modelPrompt(past).contains("GAME OVER")&&!lost.modelPrompt(past).contains("RIGHT+A"),"game over excludes obsolete movement examples");
+  check(won.modelPrompt(past).contains("VICTORY")&&!won.modelPrompt(past).contains("RIGHT+A"),"victory excludes obsolete movement examples");
+  String dangling=realBefore.modelPrompt("RIGHT+A:NO_VISUAL_CHANGE; "+"PARTIAL_LONG_RECORD".repeat(100));
+  check(dangling.contains("RIGHT+A:NO_VISUAL_CHANGE;")&&!dangling.contains("PARTIAL_LONG_RECORD"),"partial history record is not presented as verified");
   var largest=new VoidLancerGameState(1,255,255,9,9,3,999999,255,255,8,255,255,255,255);
   check(largest.modelPrompt(past).length()<=900&&largest.modelPrompt(past).contains("score=999999")&&largest.modelPrompt(past).contains("(255,255)"),"maximum valid actual counters/coordinates remain present within the input cap");
   check(realBefore.modelPrompt(null).contains("PLAYING (state=1)"),"first observation needs no invented history");
