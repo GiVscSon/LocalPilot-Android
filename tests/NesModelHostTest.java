@@ -35,6 +35,10 @@ public final class NesModelHostTest {
   var title=new VoidLancerGameState(0,120,40,0,3,1,500,7,0,0);
   check(title.prompt().contains("TITLE MENU")&&!title.prompt().contains("lives=0"),"inactive menu counters are not presented as a lost active game");
   check(!title.display().contains("500")&&!title.display().contains("ПОБЕДА"),"menu does not publish stale game counters or victory");
+  check(title.phaseAllows("START")&&title.phaseAllows("WAIT")&&title.phaseAllows("NONE"),"menu permits explicit start, wait or stop");
+  check(!title.phaseAllows("RIGHT+A")&&!title.phaseAllows("LEFT")&&!title.phaseAllows("A"),"menu rejects inert model gameplay actions");
+  check(realBefore.phaseAllows("RIGHT+A")&&realBefore.phaseAllows("A"),"playing retains legitimate model action chords");
+  check(!realBefore.phaseAllows("START")&&!realBefore.phaseAllows("SELECT"),"playing rejects inert menu commands");
   check(realBefore.prompt().contains("PLAYING (state=1)")&&realBefore.prompt().contains("FIRE=A"),"actual playing phase and fire control are unambiguous");
   check(!realBefore.prompt().contains("START begins"),"menu-start instruction is absent from active-game observation");
   String past="RIGHT+A:NO_VISUAL_CHANGE; ".repeat(100);
@@ -47,6 +51,8 @@ public final class NesModelHostTest {
   var won=new VoidLancerGameState(3,100,180,2,0,3,800,9,15,0);
   check(lost.modelPrompt(past).contains("GAME OVER")&&!lost.modelPrompt(past).contains("RIGHT+A"),"game over excludes obsolete movement examples");
   check(won.modelPrompt(past).contains("VICTORY")&&!won.modelPrompt(past).contains("RIGHT+A"),"victory excludes obsolete movement examples");
+  check(lost.phaseAllows("START")&&!lost.phaseAllows("RIGHT+A"),"game over phase accepts only menu transitions");
+  check(won.phaseAllows("START")&&!won.phaseAllows("A"),"victory phase refuses stale gameplay actions");
   String dangling=realBefore.modelPrompt("RIGHT+A:NO_VISUAL_CHANGE; "+"PARTIAL_LONG_RECORD".repeat(100));
   check(dangling.contains("RIGHT+A:NO_VISUAL_CHANGE;")&&!dangling.contains("PARTIAL_LONG_RECORD"),"partial history record is not presented as verified");
   var largest=new VoidLancerGameState(1,255,255,9,9,3,999999,255,255,8,255,255,255,255);

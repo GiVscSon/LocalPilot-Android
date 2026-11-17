@@ -1542,6 +1542,10 @@ public final class NesEmulatorActivity extends Activity {
        reply.status()!=NesModelHost.Status.PROPOSAL){
      stopCpuExperiment("STOP: ответ общей модели отклонён: "+(reply==null?"UNKNOWN":reply.status()));return;
     }
+    if(observation.game()!=null&&!observation.game().phaseAllows(reply.button())){
+     stopCpuExperiment("STOP: модель выбрала недопустимую для фазы игры команду · phase="+
+       observation.game().state()+" · button="+reply.button());return;
+    }
     acceptAiProposal(ticket.nonce,reply.modelId(),reply.modelSha256(),reply.button(),ConsoleAgentContract.HOLD_FRAMES);
    }));}
    catch(RuntimeException unavailable){stopCpuExperiment("STOP: общий runtime не принял наблюдение");return;}
