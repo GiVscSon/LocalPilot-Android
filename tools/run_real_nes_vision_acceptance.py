@@ -160,5 +160,13 @@ if __name__=='__main__':
             a.output.write_text(json.dumps(dict(result='FAIL',error=str(error)[:1800],educationalScene=False,releaseReady=False))+'\n')
             partial=a.output.parent/'partial-game-observation.json'
             if partial.is_file():print('ACTUAL_GAME_FAILURE_DIAGNOSTIC '+partial.read_text()[:24000],flush=True)
-            if ui.is_emulator():ui.write_failure_diagnostics(a.output,error)
+            if ui.is_emulator():
+                # This isolated run contains only the pinned public CI ROM/model.
+                # Capture the native call even when no game transition completed.
+                try:
+                    inference=private_file('files/harness-model-execution-v1.log',262144)
+                    (a.output.parent/'real-game-inference.log').write_bytes(inference)
+                    print('ACTUAL_GAME_INFERENCE_DIAGNOSTIC '+inference.decode()[-12000:],flush=True)
+                except EvidencePending:pass
+                ui.write_failure_diagnostics(a.output,error)
             raise

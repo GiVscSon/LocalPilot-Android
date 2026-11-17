@@ -1633,10 +1633,12 @@ public final class NesEmulatorActivity extends Activity {
   String button=queuedAiButton;
   if(button==null||!resumed||progressBusy)return;
   queuedAiButton=null;
-  if(!aiFrozen||!aiEligible()||!frameEpoch.current(aiEpoch)||hash!=aiExpectedHash||
-    SystemClock.elapsedRealtime()-aiIssuedAt>ConsoleAgentContract.TTL_MS){
-   harness.stopForEpoch(frameEpoch.token(),"STALE_EMULATOR_FRAME");
-   showState("STOP: новый кадр не совпадает с наблюдением ИИ");
+  long observationAge=SystemClock.elapsedRealtime()-aiIssuedAt;
+  String refusal=!aiFrozen?"NOT_FROZEN":!aiEligible()?"CONTROLLER_BUSY":
+    !frameEpoch.current(aiEpoch)?"EPOCH_CHANGED":hash!=aiExpectedHash?"FRAME_CHANGED":
+    observationAge<0||observationAge>ConsoleAgentContract.TTL_MS?"TTL_EXPIRED":null;
+  if(refusal!=null){
+   stopCpuExperiment("STOP: наблюдение ИИ отклонено · "+refusal+" · возраст "+observationAge+" мс");
    return;
   }
   if(directModelBinding!=null&&(!(getApplication() instanceof NesModelHost host)||
