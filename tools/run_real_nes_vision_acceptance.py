@@ -13,6 +13,7 @@ import xml.etree.ElementTree as ET
 import zipfile
 import urllib.request
 import bundle_optional_models as models
+from model_lab_catalog import presets
 import unified_in_app_smoke as ui
 from run_g2_direct_gguf_acceptance import import_picker_file, picker_select_fixture, wait_library_result, click_exact
 from run_harness_runtime_acceptance import command, PACKAGE
@@ -21,13 +22,21 @@ from harness_student_device_acceptance import private_file, EvidencePending
 REPO="ggml-org/Qwen3.5-0.8B-GGUF"
 MODEL="Qwen3.5-0.8B-Q4_0.gguf"
 FILES={MODEL:models.PINNED_FILES[MODEL]}
+MODEL_ID='qwen35'
+REVISION=models.PINNED_REVISIONS[REPO]
+
+def select_model(identity):
+    global MODEL_ID, REPO, MODEL, FILES, REVISION
+    selected=presets()[identity]
+    MODEL_ID=identity;REPO=selected['repository'];MODEL=selected['filename'];REVISION=selected['revision']
+    FILES={MODEL:(selected['bytes'],selected['sha256'])}
 ROM='VOID-LANCER-v1.0.0.nes'
 ROM_SHA='5eb801aca68131a3d17fa82d8901d46f6098b878d1e00cd1c47d00c001c2405a'
 ROM_URL='https://github.com/Riyoway/void-lancer-nes/releases/download/v1.0.0/'+ROM
 
 def prepare(directory):
     directory.mkdir(parents=True,exist_ok=True)
-    revision=models.PINNED_REVISIONS[REPO]
+    revision=REVISION
     for name in (MODEL,):
         size,digest=FILES[name];path=directory/name
         if path.is_file() and path.stat().st_size==size and hashlib.sha256(path.read_bytes()).hexdigest()==digest:continue
@@ -123,7 +132,7 @@ def verify(apk,directory,output,attempt=None):
     abi=ui.adb('shell','getprop','ro.product.cpu.abi').strip()
     if api!=35 or abi!='x86_64':raise RuntimeError('Actual real-game test device does not match API35 x86_64')
     attempt.update(sourceSha=source,apkSha256=hashlib.sha256(apk.read_bytes()).hexdigest(),
-                   modelSha256=FILES[MODEL][1],romSha256=ROM_SHA,androidApi=api,abi=abi,
+                   modelId=MODEL_ID,modelSha256=FILES[MODEL][1],romSha256=ROM_SHA,androidApi=api,abi=abi,
                    evidenceType='EMULATOR_ANDROID',physicalDevice=False)
     (output.parent/'attempt-identity.json').write_text(json.dumps(attempt,indent=2)+'\n')
     command('adb','install',str(apk),timeout=120)
@@ -171,7 +180,7 @@ def verify(apk,directory,output,attempt=None):
     if before!=private_file('files/console-ai-user-rom-v1.log',262144):raise RuntimeError('Action completed after real-game STOP')
     report=dict(result='REAL_ROM_GGUF_GAME_PROGRESS_PASS',sourceSha=source,
                 apkSha256=hashlib.sha256(apk.read_bytes()).hexdigest(),romSha256=ROM_SHA,
-                modelSha256=FILES[MODEL][1],modelKind='TEXT_GGUF_WITH_VERIFIED_GAME_RAM',
+                modelId=MODEL_ID,modelSha256=FILES[MODEL][1],modelKind='TEXT_GGUF_WITH_VERIFIED_GAME_RAM',
                 transitions=rows,inferenceCallsForModel=calls,exactModelActionAndFrameMatch=True,semanticGameControlVerified=True,
                 realScoreBefore=rows[0]['gameBefore']['score'],realScoreAfter=rows[-1]['gameAfter']['score'],
                 gameProgressVerified=True,
@@ -182,9 +191,11 @@ def verify(apk,directory,output,attempt=None):
 
 if __name__=='__main__':
     p=argparse.ArgumentParser(description=__doc__);p.add_argument('mode',choices=['prepare','verify'])
+    p.add_argument('--model',choices=tuple(presets()),default='qwen35')
     p.add_argument('--directory',type=Path,default=Path('build/real-nes-vision'))
     p.add_argument('--apk',type=Path);p.add_argument('--output',type=Path,default=Path('real-nes-evidence/report.json'))
     a=p.parse_args()
+    select_model(a.model)
     if a.mode=='prepare':prepare(a.directory)
     else:
         attempt={}
