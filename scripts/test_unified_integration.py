@@ -28,7 +28,9 @@ class UnifiedAppContracts(unittest.TestCase):
         self.assertIn("ConsoleExperienceMemory.append(", nes)
         self.assertIn("ConsoleExperienceMemory.context(", model)
         self.assertIn("reward", memory.lower())
-        self.assertIn("ConsoleExperienceMemory.summary(", main)
+        self.assertIn("ConsoleExperienceMemory.readGeneric(", main)
+        self.assertNotIn("ConsoleExperienceMemory.summary(", main)
+        self.assertIn("ConsoleExperienceMemory.summary(", source("app/src/main/java/org/localpilot/android/HarnessDashboardActivity.java"))
         self.assertNotIn("pilot.selectInstalledTarget(getPackageName()", main)
         manifest = source("app/src/main/AndroidManifest.xml")
         for activity in ("TestDeviceActivity", "RetroLibraryActivity",
