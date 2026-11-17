@@ -33,6 +33,7 @@ public final class NesModelHostTest {
   check(ConsoleAgentContract.parseButton("BUTTON=RIGHT+A")==null,"legacy profile cannot gain chord input");
   var title=new VoidLancerGameState(0,120,40,0,3,1,500,7,0,0);
   check(title.prompt().contains("TITLE MENU")&&!title.prompt().contains("lives=0"),"inactive menu counters are not presented as a lost active game");
+  check(realBefore.prompt().contains("PLAYING now")&&!realBefore.prompt().contains("START begins"),"playing observation cannot present menu start as current objective");
   check(!title.display().contains("500")&&!title.display().contains("ПОБЕДА"),"menu does not publish stale game counters or victory");
   for(int budget:HarnessDemoWorkflow.GGUF_BUDGETS){
    check(HarnessDemoWorkflow.ggufSteps(HarnessDemoWorkflow.ggufMode(budget))==budget,"exact bounded GGUF budget");

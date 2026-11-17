@@ -50,7 +50,7 @@ public record VoidLancerGameState(int state,int x,int y,int lives,int bombs,int 
    ", shots="+shots+", active player bullets="+bullets+
    ", nearest enemy="+(enemyX<0?"none/unknown":"("+enemyX+","+enemyY+")")+
    ", nearest hostile bullet="+(threatX<0?"none/unknown":"("+threatX+","+threatY+")")+
-   ". Coordinates increase right/down; A shoots upward. D-pad moves ship; A fires; B spends a bomb. START begins from title or returns to title after loss/win. Destroy enemies, dodge bullets and preserve lives. ";}
+   ". PLAYING now: START/SELECT do not start a new game here. Coordinates increase right/down; A shoots upward. D-pad moves ship; A fires; B spends a bomb. Destroy enemies, dodge bullets and preserve lives. ";}
  public String display(){
   if(state==0)return "VOID LANCER · МЕНЮ · игровой эпизод не запущен";
   return "VOID LANCER · "+(state==3?"ПОБЕДА":state==2?"ИГРА ОКОНЧЕНА":state==0?"МЕНЮ":"ИГРА")+

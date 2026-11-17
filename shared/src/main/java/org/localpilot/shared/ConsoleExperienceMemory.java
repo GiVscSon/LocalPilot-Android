@@ -87,7 +87,10 @@ public final class ConsoleExperienceMemory {
     VoidLancerGameState a=row.before(),b=row.after();
     result.append(" dx=").append(b.x()-a.x()).append(" dy=").append(b.y()-a.y())
       .append(" scoreDelta=").append(b.score()-a.score()).append(" killsDelta=").append(b.kills()-a.kills())
-      .append(" livesDelta=").append(b.lives()-a.lives());
+      .append(" livesDelta=").append(b.lives()-a.lives())
+      .append(" shotsDeltaModulo256=").append((b.shots()-a.shots()+256)%256)
+      .append(" phase=").append(a.state()).append("->").append(b.state())
+      .append(" controlConfirmed=").append(b.confirms(row.trial().button,a));
    }
    result.append("; ");
   }
