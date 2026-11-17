@@ -8,6 +8,17 @@ from run_g2_direct_gguf_acceptance import exact_target
 from run_real_nes_vision_acceptance import confirms_control,parse_game_state,correlate_inference,verified_game_progress,valid_game_button
 
 class VisibleSafTargets(unittest.TestCase):
+    def test_model_comparison_preserves_reviewed_identity_and_refuses_unknown_profile(self):
+        import run_real_nes_vision_acceptance as runner
+        try:
+            runner.select_model('lfm350')
+            self.assertEqual(runner.FILES[runner.MODEL],(219309792,'85e32858daafad55b7bcd6b97a1343ee0661188e8036f9862d14d6b563142f50'))
+            with self.assertRaises(KeyError):runner.select_model('scripted-fallback')
+            self.assertEqual(runner.MODEL_PROFILE,'lfm350')
+            runner.select_model('qwen35')
+            self.assertEqual(runner.FILES[runner.MODEL][1],'57d1997790d1744fba5b40a7317df71ea5e2acee28c47e78f0cce39c0703f8cf')
+        finally:runner.select_model('qwen35')
+
     def test_background_or_wrong_direction_is_not_game_control(self):
         before=parse_game_state('1,100,180,3,3,1,0,0,0,0')
         after=parse_game_state('1,116,180,3,3,1,0,0,1,1')

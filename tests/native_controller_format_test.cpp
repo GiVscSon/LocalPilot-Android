@@ -24,10 +24,17 @@ int main(){
  assert(localpilot::controller_chat_format("unknown generation boundary",model_template,2)=="unknown generation boundary");
  assert(localpilot::controller_chat_format(header,model_template,1)==direct);
  assert(direct.find("BUTTON=")==std::string::npos); // no scripted proposal
+ assert(localpilot::controller_prompt_prefix(direct,2)==direct+"BUTTON=");
+ assert(localpilot::controller_prompt_prefix(header,1)==header);
+ assert(localpilot::controller_reply("RIGHT+A",2)=="BUTTON=RIGHT+A");
+ assert(localpilot::controller_reply("NONE",2)=="BUTTON=NONE");
+ assert(localpilot::controller_reply("",2).empty());
+ assert(localpilot::controller_reply("BUTTON=A",1)=="BUTTON=A");
  const std::string basic=localpilot::controller_grammar(1),full=localpilot::controller_grammar(2);
  assert(basic.find("START")==std::string::npos&&basic.find("RIGHT+A")==std::string::npos);
  assert(full.find("\"RIGHT+A\"")!=std::string::npos&&full.find("\"UP+LEFT+A+B\"")!=std::string::npos);
+ assert(full.find("BUTTON=")==std::string::npos&&basic.find("BUTTON=")!=std::string::npos);
  assert(full.find("UP+DOWN")==std::string::npos&&full.find("START+A")==std::string::npos);
  assert(std::count(full.begin(),full.end(),'|')==37); // 37 actual chords/buttons + NONE
- std::cout<<"NATIVE_CONTROLLER_CHAT_FORMAT_PASS cases=12 neuralInference=false\n";
+ std::cout<<"NATIVE_CONTROLLER_CHAT_FORMAT_PASS cases=19 neuralInference=false\n";
 }

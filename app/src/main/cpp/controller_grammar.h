@@ -4,7 +4,7 @@
 namespace localpilot {
 inline std::string controller_grammar(int mode){
  if(mode!=2)return "root ::= \"BUTTON=\" (\"A\" | \"B\" | \"UP\" | \"DOWN\" | \"LEFT\" | \"RIGHT\" | \"NONE\")";
- std::string rules="root ::= \"BUTTON=\" (";
+ std::string rules="root ::= (";
  bool first=true;
  auto add=[&](const std::string &action){if(!first)rules+=" | ";first=false;rules+="\""+action+"\"";};
  for(const std::string vertical:{"","UP","DOWN"})

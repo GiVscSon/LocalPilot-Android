@@ -464,6 +464,10 @@ jobs:
           path: sustained-nes-evidence/
 
   real-game-agent:
+    strategy:
+      fail-fast: false
+      matrix:
+        model: [qwen35, lfm350]
     needs: unified-emulator-build
     runs-on: ubuntu-24.04
     timeout-minutes: 40
@@ -478,7 +482,7 @@ jobs:
           name: LocalPilot-One-APK-X86-TEST-ONLY-${{ github.sha }}
           path: app/build/outputs/apk/debug/
       - name: Prepare exact real VOID LANCER and existing pinned game model
-        run: python3 tools/run_real_nes_vision_acceptance.py prepare
+        run: python3 tools/run_real_nes_vision_acceptance.py prepare --model-profile ${{ matrix.model }}
       - name: Verify actual real-game ship, fire and bomb memory semantics in the packaged core
         run: |
           python3 - <<'PY'
@@ -502,12 +506,12 @@ jobs:
           disable-animations: true
           emulator-boot-timeout: 600
           emulator-options: -no-window -gpu software -no-snapshot -noaudio -no-boot-anim -camera-back none
-          script: python3 tools/run_real_nes_vision_acceptance.py verify --apk app/build/outputs/apk/debug/app-debug.apk
+          script: python3 tools/run_real_nes_vision_acceptance.py verify --model-profile ${{ matrix.model }} --apk app/build/outputs/apk/debug/app-debug.apk
       - name: Preserve real-game evidence on success or failure
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: LocalPilot-Real-NES-Game-${{ github.sha }}
+          name: LocalPilot-Real-NES-Game-${{ matrix.model }}-${{ github.sha }}
           retention-days: 14
           if-no-files-found: warn
           path: real-nes-evidence/

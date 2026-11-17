@@ -135,12 +135,12 @@ std::string chat(const std::string &sys,const std::string &usr,int controller=0)
  const std::string formatted=localpilot::controller_chat_format(raw,tmpl,controller);
  if(controller){
 #ifdef __ANDROID__
-  __android_log_print(ANDROID_LOG_INFO,"LocalPilotNative","controller_mode=%d chatml_thinking_closed=%d",controller,formatted!=raw);
+  __android_log_print(ANDROID_LOG_INFO,"LocalPilotNative","controller_mode=%d chatml_thinking_closed=%d controller_prefix_prefilled=%d",controller,formatted!=raw,controller==2);
 #else
-  std::fprintf(stderr,"LocalPilotNative controller_mode=%d chatml_thinking_closed=%d\n",controller,formatted!=raw);
+  std::fprintf(stderr,"LocalPilotNative controller_mode=%d chatml_thinking_closed=%d controller_prefix_prefilled=%d\n",controller,formatted!=raw,controller==2);
 #endif
  }
- return formatted;
+ return localpilot::controller_prompt_prefix(formatted,controller);
 }
 
 bool run_batch(llama_batch_ext *batch,const llama_token *tokens,int count,int offset,bool logits){
@@ -197,7 +197,7 @@ std::string generate_from_logits(int pos,int limit,float temp,int nesController=
  llama_batch_ext_free(batch);
  if(!ok||cancelled.load())return "";
  if(!ended)return ""; // No EOS: fail closed instead of accepting a sentinel as text
- return output;
+ return localpilot::controller_reply(output,nesController);
 }
 
 std::string infer(const std::string &sys,const std::string &usr,int limit,float temp,int controller=0){
