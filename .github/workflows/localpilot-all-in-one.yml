@@ -22,6 +22,8 @@ on:
       - 'tests/test_native_inference_optimization.py'
       - 'tests/native_controller_format_test.cpp'
       - 'tools/run_real_nes_vision_acceptance.py'
+      - 'tools/model_lab_catalog.py'
+      - 'tests/test_android_model_matrix.py'
       - 'tests/nes_real_game_profile_smoke.cjs'
       - 'tests/test_harness_runtime_acceptance.py'
       - 'tests/NesModelHost*.java'
