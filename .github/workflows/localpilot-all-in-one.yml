@@ -82,6 +82,14 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
+      - name: Make pinned SDK cache paths runner-owned
+        run: |
+          set -euo pipefail
+          for sdk_part in ndk/27.2.12479018 cmake/3.22.1 platforms/android-35 build-tools/35.0.0; do
+            if [ -e "$ANDROID_HOME/$sdk_part" ]; then
+              sudo chown -R "$(id -u):$(id -g)" "$ANDROID_HOME/$sdk_part"
+            fi
+          done
       - name: Restore pinned native SDK cache
         id: native-sdk-cache
         uses: actions/cache/restore@v4
@@ -264,6 +272,14 @@ jobs:
           test -s dist/original-arm64/LocalPilot-All-in-One-TEST-ONLY.apk
           test -s dist/original-arm64/TEST-ONLY-MANIFEST.json
           grep -q '"releaseReady": false' dist/original-arm64/TEST-ONLY-MANIFEST.json
+      - name: Make pinned SDK cache paths runner-owned
+        run: |
+          set -euo pipefail
+          for sdk_part in ndk/27.2.12479018 cmake/3.22.1 platforms/android-35 build-tools/35.0.0; do
+            if [ -e "$ANDROID_HOME/$sdk_part" ]; then
+              sudo chown -R "$(id -u):$(id -g)" "$ANDROID_HOME/$sdk_part"
+            fi
+          done
       - name: Restore same verified SDK used by ARM64
         id: native-sdk-cache
         uses: actions/cache/restore@v4
