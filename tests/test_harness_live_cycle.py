@@ -27,6 +27,9 @@ class HarnessLiveCycle(unittest.TestCase):
   runtime=read('model-lab/src/main/java/org/localpilot/android/HarnessModelRuntime.java')
   engine=read('app/src/main/java/org/localpilot/android/EmbeddedGgufRuntime.java')
   self.assertIn('call.observation.game().modelPrompt(history)',runtime)
+  self.assertIn('runtime.proposeNesTools(',runtime)
+  self.assertIn('NesAgentTools.parse(answer,toolScope)',runtime)
+  self.assertIn('NesAgentTools.systemPrompt(toolScope)',engine)
   self.assertNotIn('Example: BUTTON=',engine)
  def test_only_real_emulator_data_starts_autonomous_play(self):
   self.assertIn('launchRom(HomebrewNes.cartridge(),true)',self.nes)

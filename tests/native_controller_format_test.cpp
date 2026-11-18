@@ -25,19 +25,26 @@ int main(){
  assert(localpilot::controller_chat_format("unknown generation boundary",model_template,2)=="unknown generation boundary");
  assert(localpilot::controller_chat_format(header,model_template,1)==direct);
  assert(direct.find("BUTTON=")==std::string::npos); // no scripted proposal
- assert(localpilot::controller_prompt_prefix(direct,2)==direct+"BUTTON=");
+ assert(localpilot::controller_prompt_prefix(direct,2)==direct+"{\"tool\":");
+ assert(localpilot::controller_prompt_prefix(direct,3)==direct+"{\"tool\":");
  assert(localpilot::controller_prompt_prefix(header,1)==header);
- assert(localpilot::controller_reply("RIGHT+A",2)=="BUTTON=RIGHT+A");
- assert(localpilot::controller_reply("NONE",2)=="BUTTON=NONE");
- assert(localpilot::controller_reply("",2).empty());
+ assert(localpilot::controller_reply("\"nes_press\",\"button\":\"RIGHT+A\",\"frames\":16}",2)=="{\"tool\":\"nes_press\",\"button\":\"RIGHT+A\",\"frames\":16}");
+ assert(localpilot::controller_reply("\"agent_stop\"}",4)=="{\"tool\":\"agent_stop\"}");
+ assert(localpilot::controller_reply("",3).empty());
  assert(localpilot::controller_reply("BUTTON=A",1)=="BUTTON=A");
  const std::string basic=localpilot::controller_grammar(1),full=localpilot::controller_grammar(2);
+ const std::string menu=localpilot::controller_grammar(3),playing=localpilot::controller_grammar(4);
  assert(basic.find("START")==std::string::npos&&basic.find("RIGHT+A")==std::string::npos);
- assert(full.find("\"RIGHT+A\"")!=std::string::npos&&full.find("\"UP+LEFT+A+B\"")!=std::string::npos);
- assert(full.find("\"WAIT\"")!=std::string::npos&&basic.find("WAIT")==std::string::npos);
+ assert(full.find("RIGHT+A")!=std::string::npos&&full.find("UP+LEFT+A+B")!=std::string::npos);
+ assert(full.find("nes_wait")!=std::string::npos&&full.find("agent_stop")!=std::string::npos);
  assert(full.find("BUTTON=")==std::string::npos&&basic.find("BUTTON=")!=std::string::npos);
  assert(full.find("UP+DOWN")==std::string::npos&&full.find("START+A")==std::string::npos);
- assert(std::count(full.begin(),full.end(),'|')==38); // 37 buttons/chords + released WAIT + NONE
+ assert(std::count(full.begin(),full.end(),'|')==38); // 37 press commands + wait + stop
+ assert(menu.find("nes_start")!=std::string::npos&&menu.find("nes_press")==std::string::npos);
+ assert(std::count(menu.begin(),menu.end(),'|')==2); // start/wait/stop, no fixed choice
+ assert(playing.find("nes_press")!=std::string::npos&&playing.find("START")==std::string::npos&&playing.find("SELECT")==std::string::npos);
+ assert(std::count(playing.begin(),playing.end(),'|')==36);
+ assert(localpilot::controller_prompt_prefix(direct,3).find("nes_start")==std::string::npos);
  const auto qwen=localpilot::controller_sampling(2,"qwen35",false,0.0f);
  assert(qwen.temperature==1.0f&&qwen.top_p==1.0f&&qwen.repeat==1.0f&&qwen.presence==2.0f);
  const auto image=localpilot::controller_sampling(2,"qwen35",true,0.0f);
@@ -50,5 +57,7 @@ int main(){
  }
  const auto unknown=localpilot::controller_sampling(2,"unknown",false,0.0f);
  assert(unknown.temperature==0.0f&&unknown.repeat==1.18f);
- std::cout<<"NATIVE_CONTROLLER_CHAT_FORMAT_PASS cases=26 neuralInference=false\n";
+ const auto menuSampling=localpilot::controller_sampling(3,"lfm2",false,0.0f);
+ assert(menuSampling.temperature==liquid.temperature);
+ std::cout<<"NATIVE_CONTROLLER_TOOL_FORMAT_PASS neuralInference=false\n";
 }

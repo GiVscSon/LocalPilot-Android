@@ -62,7 +62,7 @@ public record VoidLancerGameState(int state,int x,int y,int lives,int bombs,int 
  /** Keep current measured facts intact and after bounded historical context. */
  public String modelPrompt(String history){
   String current="CURRENT STATE (verified ROM RAM, no image inference):\n"+prompt()+
-    "\nChoose one allowed command for this CURRENT STATE. Button and WAIT steps span16 real frames.";
+    "\nChoose one available tool for this CURRENT STATE. Button and WAIT steps span16 real frames.";
   if(current.length()>900)throw new IllegalStateException("Current game observation exceeds bounded prompt");
   // Previous PLAYING actions are not instructions for the TITLE or terminal menus.
   // Keep model selection autonomous: no preselected BUTTON or synthetic feedback.
