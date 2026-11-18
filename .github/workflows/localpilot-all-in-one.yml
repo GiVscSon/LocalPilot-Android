@@ -149,6 +149,7 @@ jobs:
           java tests/NesAgentToolsVerify.java
           java tests/NesDecisionExperimentVerify.java
           python3 -m unittest discover -s tests -p 'test_g4_decision_experiment.py' -v
+          python3 -m unittest discover -s tests -p 'test_pocket_real_game_profile.py' -v
           python3 -m unittest discover -s tests -p 'test_modellab_cancel_verifier.py' -v
           python3 -m unittest discover -s tests -p 'test_harness_runtime_acceptance.py' -v
           python3 -m unittest discover -s tests -p 'test_g2_visible_saf.py' -v
@@ -544,7 +545,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        model: [qwen35, lfm350, lfm1200]
+        model: [pocket, qwen35, lfm350, lfm1200]
     needs: unified-emulator-build
     runs-on: ubuntu-24.04
     timeout-minutes: 40
