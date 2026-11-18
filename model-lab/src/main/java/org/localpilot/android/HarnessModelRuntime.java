@@ -17,6 +17,7 @@ import org.localpilot.shared.HarnessCoordinator;
 import org.localpilot.shared.HomebrewObs64;
 import org.localpilot.shared.NesFrameTransfer;
 import org.localpilot.shared.NesModelHost;
+import org.localpilot.shared.NesAgentTools;
 
 /** Application composition: reuses the existing registry and JNI class.
  * No Activity, emulator, trainer or action executor is retained here.
@@ -154,10 +155,13 @@ public final class HarnessModelRuntime {
     finish(call,NesModelHost.Status.STALE,null,0);return;
    }
    call.model=model;phase(call,"VERIFYING");
+   boolean generic=call.observation.profile()!=NesModelHost.TaskProfile.HOMEBREW_RAM;
+   boolean gameRam=call.observation.profile()==NesModelHost.TaskProfile.GAME_RAM;
+   if(generic&&!gameRam&&!model.vision()){finish(call,NesModelHost.Status.UNAVAILABLE,null,0);return;}
    File weights=store.modelFile(model);
    byte[] png=call.observation.png();byte[] pixels=null;
    File projector=null;
-   if(model.vision()){
+   if(model.vision()&&!gameRam){
     if(png==null)throw new IOException("Vision model requires verified NES PNG");
     NesFrameTransfer.verify(png);projector=store.projectorFile(model);
     Bitmap bitmap=BitmapFactory.decodeByteArray(png,0,png.length);
@@ -173,20 +177,30 @@ public final class HarnessModelRuntime {
      }
     }finally{bitmap.recycle();}
    }
-   String history=ConsoleExperienceMemory.context(application.getFilesDir().toPath(),model.id,model.modelSha);
+   String history=generic?ConsoleExperienceMemory.genericContext(application.getFilesDir().toPath(),call.observation.romSha256(),model.id,model.modelSha):
+    ConsoleExperienceMemory.context(application.getFilesDir().toPath(),model.id,model.modelSha);
    var t=call.observation.ticket();
-   String observation=(projector==null?"TEXT ONLY: no image understanding. ":"Verified NES RGB attached. ")+
-    "Builtin NES rightward task. frame="+t.frame+" hash="+Integer.toUnsignedString(t.hash)+
-    (call.observation.ramX()<0?" RAM UNKNOWN. ":" verified RAM x="+call.observation.ramX()+" y="+call.observation.ramY()+". ")+
-    "Choose one allowed BUTTON for rightward progress without crossing a RAM edge. Input ACK is not a reward. "+history;
+   String observation=(gameRam?"VERIFIED ROM GAME STATE: this request uses RAM text, not image inference. ":projector==null?"TEXT ONLY: no image understanding. ":"Verified NES RGB attached. ")+
+    (generic?(call.observation.game()==null?"Play the visible NES game. Infer its controls and objective from the image. Use agent_stop if uncertain. Game RAM, score and victory UNKNOWN. ":
+      "Play the actual VOID LANCER shooter. Move to dodge threats and fire A when safe; B spends a limited bomb. The ROM-specific memory below is verified. ")+"ROM="+call.observation.romSha256()+". ":
+      "Builtin NES rightward task. ")+"frame="+t.frame+" hash="+Integer.toUnsignedString(t.hash)+
+    (generic?" ":call.observation.ramX()<0?" RAM UNKNOWN. ":" verified RAM x="+call.observation.ramX()+" y="+call.observation.ramY()+". ")+
+    (generic?"Choose one available NES tool for the visible game. ":"Choose one allowed BUTTON for rightward progress without crossing a RAM edge. ")+
+    "Input ACK is not a reward. "+history;
+   if(gameRam)observation=call.observation.game().modelPrompt(history);
+   final String modelObservation=observation.substring(0,Math.min(900,observation.length()));
    final File mmproj=projector;final byte[] rgb=pixels;
    main.post(()->{
     try{
      if(!current(call)||!sameBinding(call)){finish(call,NesModelHost.Status.STALE,null,0);return;}
      EmbeddedGgufRuntime runtime=engine();
      if(runtime.busy()){finish(call,NesModelHost.Status.BUSY,null,0);return;}
-     phase(call,"INFERENCING");
-     runtime.proposeNesButton(weights,mmproj,observation,rgb,NesFrameTransfer.WIDTH,NesFrameTransfer.HEIGHT,0,
+     if(application instanceof NesModelHost host&&host.nesTestFixturesAllowed())
+      android.util.Log.i("LocalPilotObservation","profile="+call.observation.profile()+" frame="+t.frame+
+       " hash="+Integer.toUnsignedString(t.hash)+" gameControls="+t.gameControls+
+       " game="+(call.observation.game()==null?"UNKNOWN":call.observation.game().wire()));
+     phase(call,gameRam?"GAME_RAM_INFERENCE":"INFERENCING");
+     runtime.proposeNesTools(weights,mmproj,modelObservation,rgb,NesFrameTransfer.WIDTH,NesFrameTransfer.HEIGHT,0,NesAgentTools.scope(generic&&t.gameControls,call.observation.game()),
        (answer,elapsed)->completed(call,answer,elapsed));
      call.nativeStarted=true;
     }catch(RuntimeException unavailable){finish(call,NesModelHost.Status.UNAVAILABLE,null,0);}
@@ -206,7 +220,12 @@ public final class HarnessModelRuntime {
  private void recordCompleted(Call call,String answer,long elapsed){
   if(call.cancelled){finish(call,NesModelHost.Status.CANCELLED,null,elapsed);return;}
   if(!current(call)||!sameBinding(call)){finish(call,NesModelHost.Status.STALE,null,elapsed);return;}
-  String button=ConsoleAgentContract.parseButton(answer);
+  int toolScope=NesAgentTools.scope(call.observation.profile()!=NesModelHost.TaskProfile.HOMEBREW_RAM&&call.observation.ticket().gameControls,call.observation.game());
+  NesAgentTools.Call tool=toolScope>=NesAgentTools.GENERIC?NesAgentTools.parse(answer,toolScope):null;
+  String button=toolScope==NesAgentTools.LEGACY?ConsoleAgentContract.parseButton(answer):tool==null?null:tool.button();
+  if(tool!=null&&application instanceof NesModelHost host&&host.nesTestFixturesAllowed())
+   android.util.Log.i("LocalPilotTools","chosen="+tool.name()+" button="+tool.button()+" frames="+tool.frames()+
+     " frame="+call.observation.ticket().frame+" hash="+Integer.toUnsignedString(call.observation.ticket().hash)+" model="+call.model.modelSha);
   if(button!=null&&!"NONE".equals(button)&&call.observation.ramX()>=0){
    int id=HomebrewObs64.id(button);
    if(id<0||(HomebrewObs64.taskMask(call.observation.ramX(),call.observation.ramY(),16)&(1<<id))==0)button=null;

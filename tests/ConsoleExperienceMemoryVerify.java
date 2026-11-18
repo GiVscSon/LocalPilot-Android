@@ -8,6 +8,7 @@ class ConsoleExperienceMemoryVerify {
       ToolProvider.getSystemJavaCompiler().run(null,System.out,System.err,
         "--release","17","-d",out.toString(),
         "shared/src/main/java/org/localpilot/shared/ConsoleAgentContract.java",
+        "shared/src/main/java/org/localpilot/shared/VoidLancerGameState.java",
         "shared/src/main/java/org/localpilot/shared/NesTrial.java",
         "shared/src/main/java/org/localpilot/shared/HomebrewGoalReward.java",
         "shared/src/main/java/org/localpilot/shared/ConsoleExperienceMemory.java",

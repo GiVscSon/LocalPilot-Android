@@ -10,7 +10,7 @@ class NesExperienceArchiveVerify {
   String base="shared/src/main/java/org/localpilot/shared/";
   int result=ToolProvider.getSystemJavaCompiler().run(null,System.out,System.err,
     "--release","17","-d",out.toString(),base+"ConsoleAgentContract.java",base+"NesTrial.java",
-    base+"HomebrewGoalReward.java",base+"ConsoleExperienceMemory.java",base+"VerifiedReplayFilter.java",
+    base+"HomebrewGoalReward.java",base+"VoidLancerGameState.java",base+"ConsoleExperienceMemory.java",base+"VerifiedReplayFilter.java",
     base+"VerifiedPpoReplayStore.java",base+"NesExperienceArchive.java","tests/NesExperienceArchiveTest.java");
   if(result!=0)throw new AssertionError("Archive sources failed compilation");
   try(URLClassLoader loader=new URLClassLoader(new URL[]{out.toUri().toURL()})){

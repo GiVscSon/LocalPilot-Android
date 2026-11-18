@@ -27,6 +27,18 @@ public final class PilotApplication extends android.app.Application implements H
   return harnessModels().select(identity);
  }
  @Override public boolean nesLibraryAvailable(){return BuildConfig.UNIFIED_MODELLAB;}
+ @Override public boolean nesTestFixturesAllowed(){return BuildConfig.HARNESS_TEST_FIXTURES;}
+ @Override public boolean nesVisionModel(org.localpilot.shared.NesModelHost.ModelIdentity identity){
+  if(!BuildConfig.UNIFIED_MODELLAB||identity==null)return false;
+  var entry=harnessModels().store().find(identity.id());
+  return entry!=null&&entry.vision()&&entry.modelSha.equals(identity.sha256());
+ }
+ @Override public boolean supportsNesGame(org.localpilot.shared.NesModelHost.ModelIdentity identity,String romSha){
+  if(!BuildConfig.UNIFIED_MODELLAB||identity==null)return false;
+  var entry=harnessModels().store().find(identity.id());
+  return entry!=null&&entry.modelSha.equals(identity.sha256())&&
+    (entry.vision()||org.localpilot.shared.VoidLancerGameState.ROM_SHA.equals(romSha));
+ }
  @Override public boolean nesLibraryBusy(){return models!=null&&models.libraryBusy();}
  @Override public boolean nesModelRemovable(org.localpilot.shared.NesModelHost.ModelIdentity identity){
   if(!BuildConfig.UNIFIED_MODELLAB||identity==null)return false;

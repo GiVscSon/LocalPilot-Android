@@ -69,4 +69,15 @@ assert.equal(crypto.createHash("sha256").update(pixels).digest("hex"),initialPix
 context.retroStop();assert.equal(step("RIGHT",4),false,"no step after STOP ACK");
 assert.equal(context.retroLoadRom(encoded,false,false,"4243"),true);tick(45);
 assert.equal(context.retroEnterStepMode(),false,"unprofiled ROM has no autonomous adapter");
+assert.equal(context.retroEnterVisionStepMode(),false,"page cannot grant its own vision profile");
+context.GameLabBridge.allowVisionProfile=s=>s==="4243";
+assert.equal(context.retroEnterVisionStepMode(),true,"native-selected vision adapter freezes the same user ROM");
+const genericBefore=metrics().frames,genericGoals=events.filter(e=>e[0]==="goal"||e[0]==="right-progress").length;
+lease={session:"4243",frames:16,nonce:String(++serial).padStart(22,"n")};
+assert.equal(context.retroAiStep("RIGHT",16,lease.nonce),true,"generic adapter executes actual 6502 frames under the existing permit");
+assert.equal(metrics().frames-genericBefore,16);
+assert.equal(events.filter(e=>e[0]==="goal"||e[0]==="right-progress").length,genericGoals,"generic pixel actions must never fabricate homebrew reward callbacks");
+context.GameLabBridge.allowVisionProfile=()=>false;
+lease={session:"4243",frames:16,nonce:String(++serial).padStart(22,"n")};
+assert.equal(context.retroAiStep("RIGHT",16,lease.nonce),false,"revoked vision profile cannot keep stepping");
 console.log("NES_REAL_FROZEN_STEP_STOP_PASS durations=4,8,16 replay_rejected=true partial_reward=false deterministic_reset=true android_bridge_modeled=true");

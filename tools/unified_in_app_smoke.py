@@ -142,11 +142,21 @@ def dump_ui() -> str:
 
 def write_failure_diagnostics(output: Path, error: Exception) -> None:
     """Capture bounded emulator evidence without modifying system settings."""
+    if not is_emulator():
+        return # This CI helper never captures a user's physical-device UI.
     directory = output.parent
     directory.mkdir(parents=True, exist_ok=True)
     evidence = {"result": "FAIL", "exception": str(error)[:1800],
                 "source": "isolated Android CI emulator", "releaseReady": False}
     evidence["harness_navigation"] = HARNESS_NAVIGATION[-8:]
+    try:
+        xml = dump_ui()
+        (directory / "failure-ui.xml").write_text(xml, encoding="utf-8")
+        labels = [n.get("text") or n.get("content-desc") for n in ET.fromstring(xml).iter("node")]
+        evidence["fresh_failure_ui_text"] = " | ".join(x for x in labels if x)[:6000]
+        print("ISOLATED_EMULATOR_FAILURE_UI " + evidence["fresh_failure_ui_text"], flush=True)
+    except (RuntimeError, OSError, ET.ParseError, subprocess.TimeoutExpired) as diagnostic:
+        evidence["fresh_failure_ui_error"] = str(diagnostic)[-500:]
     if LAST_HARNESS_UI:
         (directory / "last-harness-ui.xml").write_text(LAST_HARNESS_UI, encoding="utf-8")
     for name, args in (

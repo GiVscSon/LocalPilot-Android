@@ -8,6 +8,7 @@ class NesBridgeVerify {
   if(ToolProvider.getSystemJavaCompiler()==null||
      ToolProvider.getSystemJavaCompiler().run(null,System.out,System.err,
       "--release","17","-d",output.toString(),
+    "shared/src/main/java/org/localpilot/shared/ConsoleAgentContract.java",
       "shared/src/main/java/org/localpilot/shared/NesTrial.java",
       "tests/NesBridgeTest.java")!=0)
    throw new AssertionError("NES bridge contract compilation");

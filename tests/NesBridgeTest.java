@@ -14,6 +14,19 @@ public final class NesBridgeTest {
   yes(threw,name);
  }
  public static void main(String[] args)throws Exception{
+  var wait=NesTrial.create("USER_ROM","WAIT",30,46,123,123);
+  yes(NesTrial.parse(wait.serialize()).button.equals("WAIT")&&wait.status.equals("NO_VISUAL_CHANGE"),"neutral frames preserve actual unchanged pixels");
+  boolean homebrewWait=false;try{NesTrial.create("HOMEBREW","WAIT",30,46,123,123);}catch(IllegalArgumentException expected){homebrewWait=true;}
+  yes(homebrewWait,"neutral full-game command cannot enter old homebrew schema");
+  var chord=NesTrial.create("USER_ROM","RIGHT+A",30,46,123,456);
+  if(!NesTrial.parse(chord.serialize()).button.equals("RIGHT+A"))throw new AssertionError("Actual game chord codec lost canonical action");
+  for(String button:new String[]{"UP+DOWN","A+RIGHT","START+A"}){
+   boolean refused=false;try{NesTrial.create("USER_ROM",button,30,46,123,456);}catch(IllegalArgumentException expected){refused=true;}
+   if(!refused)throw new AssertionError("Invalid chord entered evidence");
+  }
+  boolean homebrewChord=false;try{NesTrial.create("HOMEBREW","RIGHT+A",30,46,123,456);}catch(IllegalArgumentException expected){homebrewChord=true;}
+  if(!homebrewChord)throw new AssertionError("Game chord leaked into homebrew action space");
+
   NesTrial demo=NesTrial.create("HOMEBREW","A",150,182,12731371,-4312416);
   String line=demo.serialize();
   NesTrial decoded=NesTrial.parse(line);

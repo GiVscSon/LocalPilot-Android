@@ -172,6 +172,41 @@ public final class HarnessCoordinatorTest {
   check(c.start(HarnessCoordinator.Actor.MANUAL,"1301","A",30,123,0,12003)==null,"ROM reset cannot bypass maintenance");
   check(!c.endMaintenance(null)&&c.endMaintenance(maintenance)&&!c.endMaintenance(maintenance),"only exact lease releases maintenance once");
   check(!c.hasPending()&&!c.consume(t.nonce,"1301",30,123,12004),"maintenance release does not restore old input authority");
+  c.reset("1400",HarnessCoordinator.Mode.STEP_MODE);
+  var basic=c.begin("1400",30,123,13000);
+  check(!basic.gameControls&&c.consume(basic.nonce,"1400",30,123,13001),"legacy observation keeps six-button scope");
+  check(c.start(HarnessCoordinator.Actor.GGUF,"1400","START",30,123,16,13002)==null,"legacy observation cannot gain menu buttons");
+  c.reset("1401",HarnessCoordinator.Mode.STEP_MODE);
+  var game=c.beginGame("1401",30,123,14000);
+  check(game.gameControls&&c.consume(game.nonce,"1401",30,123,14001),"ordinary game ticket explicitly scopes menu controls");
+  check(c.start(HarnessCoordinator.Actor.STUDENT,"1401","START",30,123,16,14002)==null,"Student cannot steal a game menu capability");
+  var menu=c.start(HarnessCoordinator.Actor.GGUF,"1401","START",30,123,16,14003);
+  check(menu!=null&&c.authorizesStep("1401",menu.nonce,16,14004),"same unique permit authorizes actual game START");
+  c.stop("MENU_STOP");
+  check(!c.authorizesStep("1401",menu.nonce,16,14005)&&!c.consume(game.nonce,"1401",30,123,14005),"STOP revokes menu input and original ticket");
+  c.reset("1402",HarnessCoordinator.Mode.REALTIME_MODE);
+  boolean liveRefused=false;try{c.beginGame("1402",30,123,15000);}catch(IllegalStateException expected){liveRefused=true;}
+  check(liveRefused,"ordinary model menu observation requires frozen mode");
+  c.reset("1500",HarnessCoordinator.Mode.STEP_MODE);
+  var chordTicket=c.beginGame("1500",30,123,16000);
+  check(c.consume(chordTicket.nonce,"1500",30,123,16001),"chord consumes one observation only");
+  check(c.start(HarnessCoordinator.Actor.GGUF,"1500","UP+DOWN+A",30,123,16,16002)==null,"opposing axes cannot consume a prepared chord ticket");
+  var chord=c.start(HarnessCoordinator.Actor.GGUF,"1500","RIGHT+A",30,123,16,16003);
+  check(chord!=null&&!c.hasPending()&&c.actionInFlight(),"one unique permit covers the complete chord");
+  c.stop("CHORD_STOP");
+  check(!c.authorizesStep("1500",chord.nonce,16,16004),"STOP revokes every component through one permit");
+  c.reset("1600",HarnessCoordinator.Mode.STEP_MODE);
+  var waitTicket=c.beginGame("1600",30,123,17000);
+  check(c.consume(waitTicket.nonce,"1600",30,123,17001),"WAIT consumes a real full-game observation");
+  var waiting=c.start(HarnessCoordinator.Actor.GGUF,"1600","WAIT",30,123,16,17002);
+  check(waiting!=null&&c.authorizesStep("1600",waiting.nonce,16,17003),"WAIT needs the same unique frame permit");
+  check(c.complete(waiting,"1600",46,123,true,true,17004),"exact16 released frames may have unchanged pixels; no reward implied");
+  c.reset("1601",HarnessCoordinator.Mode.STEP_MODE);
+  var stoppedWait=c.beginGame("1601",30,123,18000);
+  check(c.consume(stoppedWait.nonce,"1601",30,123,18001),"second WAIT requires a new observation");
+  var waitPermit=c.start(HarnessCoordinator.Actor.GGUF,"1601","WAIT",30,123,16,18002);
+  c.stop("WAIT_STOP");
+  check(!c.authorizesStep("1601",waitPermit.nonce,16,18003),"STOP revokes neutral frames too");
   System.out.println("HARNESS_COORDINATOR_PASS checks="+checks);
  }
 }

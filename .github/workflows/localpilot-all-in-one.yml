@@ -17,8 +17,17 @@ on:
       - 'tools/harness_student_device_acceptance.py'
       - 'tools/run_harness_runtime_acceptance.py'
       - 'tools/run_g2_direct_gguf_acceptance.py'
+      - 'tests/test_g2_visible_saf.py'
+      - 'tools/verify_native_inference_optimization.py'
+      - 'tests/test_native_inference_optimization.py'
+      - 'tests/native_controller_format_test.cpp'
+      - 'tools/run_real_nes_vision_acceptance.py'
+      - 'tests/nes_real_game_profile_smoke.cjs'
+      - 'tests/nes_ai_action_smoke.cjs'
+      - 'tests/nes_controller_framehold.cjs'
       - 'tests/test_harness_runtime_acceptance.py'
       - 'tests/NesModelHost*.java'
+      - 'tests/NesAgentTools*.java'
       - 'tools/harness_student_candidate_evaluation.py'
       - 'tests/test_harness_student_candidate_evaluation.py'
       - 'tests/AndroidCandidateReplayExport.java'
@@ -92,7 +101,15 @@ jobs:
           java tests/HarnessModelExecutionLogVerify.java
           java tests/HarnessCoordinatorVerify.java
           java tests/NesModelHostVerify.java
+          java tests/NesAgentToolsVerify.java
           python3 -m unittest discover -s tests -p 'test_harness_runtime_acceptance.py' -v
+          python3 -m unittest discover -s tests -p 'test_g2_visible_saf.py' -v
+          python3 -m unittest discover -s tests -p 'test_native_inference_optimization.py' -v
+          c++ -std=c++17 -Wall -Wextra -Werror tests/native_controller_format_test.cpp -o /tmp/localpilot-native-controller-format-test
+          /tmp/localpilot-native-controller-format-test
+          node tests/nes_controller_framehold.cjs
+          node tests/nes_ai_action_smoke.cjs
+          node tests/nes_visual_bridge_smoke.cjs
           java tests/ConsoleAgentContractVerify.java
           java tests/ConsoleExperienceMemoryVerify.java
           java tests/HomebrewGoalRewardVerify.java
@@ -120,6 +137,8 @@ jobs:
           ./gradlew --no-daemon --max-workers=2 --no-parallel \
             -Dorg.gradle.jvmargs='-Xmx4096m -XX:MaxMetaspaceSize=768m -Dfile.encoding=UTF-8' \
             -PunifiedModelLab=true :app:assembleDebug :app:lintDebug
+      - name: Audit actual optimized ARM64 inference compiler commands
+        run: python3 tools/verify_native_inference_optimization.py --root app/.cxx --abi arm64-v8a --output build/all-in-one/NATIVE-COMPILER-OPTIONS.json
       - name: Verify single launcher, bundled NES+JNI, package and debug signer
         run: |
           set -euo pipefail
@@ -145,6 +164,7 @@ jobs:
             --output build/all-in-one/G0-CANDIDATE-EVIDENCE.json
           mkdir -p dist/all-in-one
           cp build/all-in-one/ELF16K.json dist/all-in-one/
+          cp build/all-in-one/NATIVE-COMPILER-OPTIONS.json dist/all-in-one/
           cp build/all-in-one/APK-PACKAGING.json dist/all-in-one/
           cp build/all-in-one/G0-CANDIDATE-EVIDENCE.json dist/all-in-one/
           cp "$APK" dist/all-in-one/LocalPilot-All-in-One-TEST-ONLY.apk
@@ -230,6 +250,8 @@ jobs:
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging \
             app/build/outputs/apk/debug/app-debug.apk \
             | grep "^package: name='org.localpilot.android.dev.unified' "
+      - name: Audit actual optimized x86 inference compiler commands
+        run: python3 tools/verify_native_inference_optimization.py --root app/.cxx --abi x86_64 --output build/x86-native-compiler-options.json
       - name: Audit the actual emulator native ELF and ZIP alignment
         run: python3 tools/verify_android_elf.py app/build/outputs/apk/debug/app-debug.apk --abi x86_64 --report build/x86-elf16k.json
       - name: Preserve one identical x86 APK for every emulator acceptance
@@ -446,3 +468,56 @@ jobs:
           retention-days: 14
           if-no-files-found: warn
           path: sustained-nes-evidence/
+
+  real-game-agent:
+    strategy:
+      fail-fast: false
+      matrix:
+        model: [qwen35, lfm350, lfm1200]
+    needs: unified-emulator-build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/download-artifact@v4
+        with:
+          name: LocalPilot-One-APK-X86-TEST-ONLY-${{ github.sha }}
+          path: app/build/outputs/apk/debug/
+      - name: Prepare exact real VOID LANCER and existing pinned game model
+        run: python3 tools/run_real_nes_vision_acceptance.py prepare --model-profile ${{ matrix.model }}
+      - name: Verify actual real-game ship, fire and bomb memory semantics in the packaged core
+        run: |
+          python3 - <<'PY'
+          import pathlib,zipfile
+          target=pathlib.Path('build/real-nes-core/jsnes.min.cjs');target.parent.mkdir(parents=True,exist_ok=True)
+          with zipfile.ZipFile('app/build/outputs/apk/debug/app-debug.apk') as apk:
+              target.write_bytes(apk.read('assets/nes/jsnes.min.js'))
+          PY
+          node tests/nes_real_game_profile_smoke.cjs build/real-nes-core/jsnes.min.cjs build/real-nes-vision/VOID-LANCER-v1.0.0.nes
+      - name: Require isolated KVM
+        run: |
+          test -c /dev/kvm
+          sudo chmod 666 /dev/kvm
+      - name: Play current real game through visible SAF, model, controller and STOP
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: default
+          profile: pixel_2
+          disable-animations: true
+          emulator-boot-timeout: 600
+          emulator-options: -no-window -gpu software -no-snapshot -noaudio -no-boot-anim -camera-back none
+          script: python3 tools/run_real_nes_vision_acceptance.py verify --model-profile ${{ matrix.model }} --apk app/build/outputs/apk/debug/app-debug.apk
+      - name: Preserve real-game evidence on success or failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: LocalPilot-Real-NES-Game-${{ matrix.model }}-${{ github.sha }}
+          retention-days: 14
+          if-no-files-found: warn
+          path: real-nes-evidence/

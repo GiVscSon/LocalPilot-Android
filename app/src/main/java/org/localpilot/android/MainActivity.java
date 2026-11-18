@@ -20,7 +20,8 @@ public class MainActivity extends Activity {
   if(BuildConfig.UNIFIED_MODELLAB){
    LinearLayout allSections=new LinearLayout(this);allSections.setOrientation(LinearLayout.VERTICAL);
    allSections.setVisibility(android.view.View.GONE);
-   button(box,"Рабочее окно · игра и агент",()->startActivity(new Intent(this,org.localpilot.gamelab.NesEmulatorActivity.class)));
+   button(box,"Рабочее окно · игра и агент",()->startActivity(new Intent(this,org.localpilot.gamelab.NesEmulatorActivity.class)
+     .putExtra(org.localpilot.shared.NesModelHost.EXTRA_REAL_GAMES_ONLY,true)));
    Button more=new Button(this);more.setText("Ещё");more.setContentDescription("Открыть дополнительные настройки");
    more.setOnClickListener(v->{boolean open=allSections.getVisibility()!=android.view.View.VISIBLE;
     allSections.setVisibility(open?android.view.View.VISIBLE:android.view.View.GONE);
@@ -34,11 +35,14 @@ public class MainActivity extends Activity {
   TextView panelHelp=new TextView(this);panelHelp.setText("Панель можно свернуть. STOP всегда остаётся доступным.");box.addView(panelHelp);
   section(box,"02 · Модели и обучение");
   if(BuildConfig.UNIFIED_MODELLAB)
-   button(box,"🎮 Harness Console · модели, NES, эпизоды, STOP, GPU",
+   if(BuildConfig.HARNESS_TEST_FIXTURES)button(box,"🎮 Harness Console · модели, NES, эпизоды, STOP, GPU",
      ()->startActivity(new Intent(this,HarnessDashboardActivity.class)));
   if(BuildConfig.UNIFIED_MODELLAB) {
-   button(box,"🧠 ModelLab · GGUF, загрузка моделей и анализ фото",
+   if(BuildConfig.HARNESS_TEST_FIXTURES)button(box,"🧠 ModelLab · GGUF, загрузка моделей и анализ фото",
      ()->startActivity(new Intent(this,ModelLabActivity.class)));
+   else button(box,"Модели и игровое окно",()->startActivity(new Intent(this,org.localpilot.gamelab.NesEmulatorActivity.class)
+     .putExtra(org.localpilot.shared.NesModelHost.EXTRA_REAL_GAMES_ONLY,true)
+     .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP|Intent.FLAG_ACTIVITY_SINGLE_TOP)));
   }else {
   button(box,"Локальное ИИ-ядро · MNN-Pocket (English)",()->startActivity(new Intent(this,LocalCoreActivity.class)));
   }
@@ -49,7 +53,7 @@ public class MainActivity extends Activity {
   TextView autoHelp=new TextView(this);autoHelp.setText("Для сетки фишек: Игра → Мэтч Ворлд · обмен соседей или Фишки · удалить группу → выберите 6×6, 7×7 либо другой размер → обведите клетки → Старт. Настройки и типы фишек сохраняются. Поддерживаются различимые цветные фишки без специальных эффектов; цели уровня и усилители пока не распознаются. Для аркад другого оформления: Ещё → Настроить распознавание. Для разных игр одного браузера: Игра → Имя игры. STOP всегда останавливает ввод.");box.addView(autoHelp);
   section(box,"03 · Консольная лаборатория");
   TextView labCaption=new TextView(this);
-  labCaption.setText("Единый APK: NES/Денди и ModelLab. NES работает локально; модель пока анализирует кадры и эпизоды, но не управляет игрой. DOS пока только проверяет образы. Симуляторы мини-игр Яндекс Маркета выведены из основного интерфейса.");
+  labCaption.setText("NES/Денди работает локально. Программа передаёт нейросети данные игры, выполняет разрешённые инструменты через единый контроллер и проверяет результат. Поддержка каждой игры проверяется отдельно.");
   labCaption.setTextColor(HubContract.SECONDARY);box.addView(labCaption);
   button(box,"Открыть консольную лабораторию · NES / Денди",this::openGameLab);
   consoleExperience=new TextView(this);
@@ -64,9 +68,11 @@ public class MainActivity extends Activity {
   button(box,"Дополнительные инструменты ▾",()->advanced.setVisibility(
     advanced.getVisibility()==android.view.View.VISIBLE?android.view.View.GONE:android.view.View.VISIBLE));
   box.addView(advanced);
+  if(BuildConfig.HARNESS_TEST_FIXTURES){
   button(advanced,"Внешний GameLab · только тест Accessibility",this::openExternalGameLab);
   button(advanced,"Архив прежнего обучения · DQN симуляторов (не NES)",
     ()->startActivity(new Intent(this,TrainingActivity.class)));
+  }
   button(advanced,"Включить сбор примеров",()->{if(PilotService.instance==null){toast("Сначала включите службу");return;}new AlertDialog.Builder(this).setTitle("Сохранять игровые примеры?").setMessage("В памяти приложения останутся только распознанные поля до/после и проверенное действие, без снимков. До 256 примеров / 256 КиБ. Это не обучение. При заполнении сбор выключается, игра продолжается. При ошибке записи управление остановится.").setPositiveButton("Включить",(d,w)->{if(PilotService.instance!=null)PilotService.instance.enableExamples();else toast("Служба отключена");}).setNegativeButton("Отмена",null).show();});
   button(advanced,"Выключить сбор примеров",()->{if(PilotService.instance!=null)PilotService.instance.disableExamples();});
   button(advanced,"Экспорт примеров",()->{if(PilotService.instance==null){toast("Сначала включите службу");return;}try{PilotService.instance.exportExamples();startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT).setType("text/plain").addCategory(Intent.CATEGORY_OPENABLE).putExtra(Intent.EXTRA_TITLE,"localpilot-experience-v1.log"),11);}catch(java.io.IOException e){toast("Хранилище недоступно; исходник сохранён");}});
@@ -101,7 +107,13 @@ public class MainActivity extends Activity {
  }
  @Override public void onResume(){super.onResume();if(automatic!=null)automatic.setChecked(getSharedPreferences(PREF,MODE_PRIVATE).getBoolean("auto_control",true));if(status!=null)status.setText(CrashDiagnostics.connectionHint(this));
   if(consoleExperience!=null){
-   try{consoleExperience.setText(ConsoleExperienceMemory.summary(getFilesDir().toPath()));}
+   try{
+    // The primary screen always describes actual user games, including the
+    // x86 test derivative. Internal fixture evidence stays in Harness Console.
+    var rows=ConsoleExperienceMemory.readGeneric(getFilesDir().toPath());
+    consoleExperience.setText(rows.isEmpty()?"Нет сохранённых результатов настоящей NES-игры":
+      rows.get(rows.size()-1).after()==null?"Для последней NES-игры счёт и результат не распознаны":rows.get(rows.size()-1).after().display());
+   }
    catch(java.io.IOException invalid){
     consoleExperience.setText("STOP: общий журнал NES повреждён; автоматические выводы по опыту запрещены");
    }

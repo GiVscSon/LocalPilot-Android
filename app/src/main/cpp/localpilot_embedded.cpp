@@ -3,19 +3,53 @@
 #include "ggml-backend.h"
 #include "mtmd.h"
 #include "mtmd-helper.h"
+#include "controller_chat_format.h"
+#include "controller_grammar.h"
+#include "controller_sampling.h"
 #include <cstdint>
 #include <algorithm>
 #include <atomic>
 #include <mutex>
 #include <string>
 #include <vector>
+#include <chrono>
+#include <cstdio>
+#include <unistd.h>
+#ifdef __ANDROID__
+#include <android/log.h>
+#endif
 
 namespace {
+// Timings contain phase names/durations only: never prompts, paths, frames or weights.
+struct NativeStage {
+ const char *name;
+ std::chrono::steady_clock::time_point started=std::chrono::steady_clock::now();
+ explicit NativeStage(const char *phase):name(phase){write("begin",0);}
+ ~NativeStage(){
+  auto ms=std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now()-started).count();
+  write("end",static_cast<long long>(ms));
+ }
+ void write(const char *event,long long ms){
+#ifdef __ANDROID__
+  __android_log_print(ANDROID_LOG_INFO,"LocalPilotNative","phase=%s event=%s elapsed_ms=%lld",name,event,ms);
+#else
+  std::fprintf(stderr,"LocalPilotNative phase=%s event=%s elapsed_ms=%lld\n",name,event,ms);
+#endif
+ }
+};
 std::mutex lock;
 std::atomic<bool> cancelled(false);
 llama_model * model=nullptr;
 llama_context * ctx=nullptr;
+mtmd_context * visionContext=nullptr;
+std::string visionPath;
+int visionMaxTokens=0;
 std::string path;
+uint32_t nextGameSamplingSeed=42; // serialized by the existing inference lock
+int workerThreads(){
+ const long online=sysconf(_SC_NPROCESSORS_ONLN);
+ return static_cast<int>(std::max(1L,std::min(4L,online)));
+}
 int gpuLayersRequested=0;
 int gpuLayersLoaded=0;
 bool anyGpu(){
@@ -51,12 +85,15 @@ struct Utf {
 };
 
 void unload(){
+ if(visionContext){mtmd_free(visionContext);visionContext=nullptr;}
+ visionPath.clear();visionMaxTokens=0;
  if(ctx){llama_free(ctx);ctx=nullptr;}
  if(model){llama_model_free(model);model=nullptr;}
  path.clear();gpuLayersLoaded=0;
 }
 
 bool init(const std::string &name){
+ NativeStage timing("model_prepare");
  if(model&&ctx&&name==path&&gpuLayersLoaded==gpuLayersRequested)return true;
  unload();
  if(name.empty())return false;
@@ -74,7 +111,7 @@ bool init(const std::string &name){
  if(!model)return false;
  auto cp=llama_context_default_params();
  cp.n_ctx=4096; cp.n_batch=512; cp.n_ubatch=256;
- cp.n_threads=4; cp.n_threads_batch=4;
+ cp.n_threads=workerThreads(); cp.n_threads_batch=cp.n_threads;
  ctx=llama_init_from_model(model,cp);
  if(!ctx&&mp.n_gpu_layers>0){
   llama_model_free(model);model=nullptr;
@@ -87,7 +124,7 @@ bool init(const std::string &name){
  path=name;return true;
 }
 
-std::string chat(const std::string &sys,const std::string &usr){
+std::string chat(const std::string &sys,const std::string &usr,int controller=0){
  const char *tmpl=llama_model_chat_template(model,nullptr);
  if(!tmpl)return "";
  llama_chat_message msg[2]={{"system",sys.c_str()},{"user",usr.c_str()}};
@@ -96,7 +133,16 @@ std::string chat(const std::string &sys,const std::string &usr){
  std::vector<char> buf(size+1,0);
  int n=llama_chat_apply_template(tmpl,msg,2,true,buf.data(),buf.size());
  if(n<1||n>size)return "";
- return std::string(buf.data(),n);
+ const std::string raw(buf.data(),n);
+ const std::string formatted=localpilot::controller_chat_format(raw,tmpl,controller);
+ if(controller){
+#ifdef __ANDROID__
+  __android_log_print(ANDROID_LOG_INFO,"LocalPilotNative","controller_mode=%d chatml_thinking_closed=%d controller_prefix_prefilled=%d",controller,formatted!=raw,controller>=2);
+#else
+  std::fprintf(stderr,"LocalPilotNative controller_mode=%d chatml_thinking_closed=%d controller_prefix_prefilled=%d\n",controller,formatted!=raw,controller>=2);
+#endif
+ }
+ return localpilot::controller_prompt_prefix(formatted,controller);
 }
 
 bool run_batch(llama_batch_ext *batch,const llama_token *tokens,int count,int offset,bool logits){
@@ -110,23 +156,43 @@ bool run_batch(llama_batch_ext *batch,const llama_token *tokens,int count,int of
  return llama_process(ctx,LLAMA_PROCESS_TYPE_DECODE,batch)==0;
 }
 
-std::string generate_from_logits(int pos,int limit,float temp){
+
+std::string generate_from_logits(int pos,int limit,float temp,int nesController=0,bool imageInput=false){
+ NativeStage timing("token_decode");
  if(!ctx||pos<1||limit<1||limit>192)return "";
  const auto *vocab=llama_model_get_vocab(model);
+ char architecture[80]={0};
+ int architectureSize=llama_model_meta_val_str(model,"general.architecture",architecture,sizeof(architecture));
+ const auto sampling=localpilot::controller_sampling(nesController,
+   architectureSize>0&&architectureSize<static_cast<int>(sizeof(architecture))?std::string(architecture):std::string(),imageInput,temp);
  auto *batch=llama_batch_ext_init(ctx);
  if(!batch)return "";
  bool ok=true;
+ const std::string rules=nesController?localpilot::controller_grammar(nesController):"";
  auto *sampler=llama_sampler_chain_init(llama_sampler_chain_default_params());
  if(!sampler)ok=false;
  if(ok){
+  if(nesController){
+   auto *grammar=llama_sampler_init_grammar(vocab,rules.c_str(),"root");
+   if(grammar)llama_sampler_chain_add(sampler,grammar);else ok=false;
+  }
   llama_sampler_chain_add(sampler,llama_sampler_init_penalties(
-   llama_vocab_n_tokens(vocab),64,1.18f,0.0f,0.0f));
-  if(temp<=0.0f)llama_sampler_chain_add(sampler,llama_sampler_init_greedy());
+   llama_vocab_n_tokens(vocab),64,sampling.repeat,0.0f,sampling.presence));
+  if(sampling.temperature<=0.0f)llama_sampler_chain_add(sampler,llama_sampler_init_greedy());
   else{
-   llama_sampler_chain_add(sampler,llama_sampler_init_top_k(20));
-   llama_sampler_chain_add(sampler,llama_sampler_init_top_p(0.8f,1));
-   llama_sampler_chain_add(sampler,llama_sampler_init_temp(temp));
-   llama_sampler_chain_add(sampler,llama_sampler_init_dist(42));
+   llama_sampler_chain_add(sampler,llama_sampler_init_top_k(sampling.top_k));
+   llama_sampler_chain_add(sampler,llama_sampler_init_top_p(sampling.top_p,1));
+   llama_sampler_chain_add(sampler,llama_sampler_init_temp(sampling.temperature));
+   const uint32_t seed=nesController>=2?nextGameSamplingSeed++:42;
+   if(nextGameSamplingSeed==LLAMA_DEFAULT_SEED)nextGameSamplingSeed=0;
+   llama_sampler_chain_add(sampler,llama_sampler_init_dist(seed));
+   if(nesController>=2){
+#ifdef __ANDROID__
+    __android_log_print(ANDROID_LOG_INFO,"LocalPilotNative","controller_sampler=%s temperature=%.2f top_k=%d top_p=%.2f repeat=%.2f presence=%.2f seed=%u",sampling.profile,sampling.temperature,sampling.top_k,sampling.top_p,sampling.repeat,sampling.presence,seed);
+#else
+    std::fprintf(stderr,"LocalPilotNative controller_sampler=%s temperature=%.2f top_k=%d top_p=%.2f repeat=%.2f presence=%.2f seed=%u\n",sampling.profile,sampling.temperature,sampling.top_k,sampling.top_p,sampling.repeat,sampling.presence,seed);
+#endif
+   }
   }
  }
  std::string output;
@@ -146,12 +212,12 @@ std::string generate_from_logits(int pos,int limit,float temp){
  llama_batch_ext_free(batch);
  if(!ok||cancelled.load())return "";
  if(!ended)return ""; // No EOS: fail closed instead of accepting a sentinel as text
- return output;
+ return localpilot::controller_reply(output,nesController);
 }
 
-std::string infer(const std::string &sys,const std::string &usr,int limit,float temp){
+std::string infer(const std::string &sys,const std::string &usr,int limit,float temp,int controller=0){
  if(!ctx||limit<1||limit>192)return "";
- std::string formatted=chat(sys,usr);
+ std::string formatted=chat(sys,usr,controller);
  if(formatted.empty())return "";
  const auto *vocab=llama_model_get_vocab(model);
  int required=llama_tokenize(vocab,formatted.c_str(),formatted.size(),nullptr,0,true,true);
@@ -165,13 +231,16 @@ std::string infer(const std::string &sys,const std::string &usr,int limit,float 
  auto *batch=llama_batch_ext_init(ctx);
  if(!batch)return "";
  bool ok=true;
- for(int i=0;i<n && ok && !cancelled.load();i+=256){
-  int length=std::min(256,n-i);
-  ok=run_batch(batch,tokens.data()+i,length,i,i+length==n);
+ {
+  NativeStage timing("text_prefill");
+  for(int i=0;i<n && ok && !cancelled.load();i+=256){
+   int length=std::min(256,n-i);
+   ok=run_batch(batch,tokens.data()+i,length,i,i+length==n);
+  }
  }
  if(!ok||cancelled.load()){llama_batch_ext_free(batch);return "";}
  llama_batch_ext_free(batch);
- return generate_from_logits(n,limit,temp);
+ return generate_from_logits(n,controller?std::min(controller>=2?64:16,limit):limit,temp,controller);
 
 }
 }
@@ -213,11 +282,12 @@ Java_org_localpilot_android_EmbeddedGgufRuntime_nativeResetInterrupt(JNIEnv *,jc
 }
 extern "C" JNIEXPORT jstring JNICALL
 Java_org_localpilot_android_EmbeddedGgufRuntime_nativeInfer(
- JNIEnv *e,jclass,jstring filename,jstring system,jstring question,jint maxTokens,jfloat temperature){
+ JNIEnv *e,jclass,jstring filename,jstring system,jstring question,jint maxTokens,jfloat temperature,jint controllerMode){
  Utf f(e,filename),s(e,system),q(e,question);
  std::lock_guard<std::mutex> guard(lock);
  std::string result;
- if(!cancelled.load()&&init(f.str()))result=infer(s.str(),q.str(),maxTokens,temperature);
+ if(controllerMode<0||controllerMode>4)return e->NewStringUTF("");
+ if(!cancelled.load()&&init(f.str()))result=infer(s.str(),q.str(),maxTokens,temperature,controllerMode);
  // JNI NewStringUTF expects Modified UTF-8, not 4-byte emoji sequences.
  // Reject unsupported supplementary characters rather than risking a VM abort.
  for(unsigned char byte:result){
@@ -229,9 +299,9 @@ Java_org_localpilot_android_EmbeddedGgufRuntime_nativeInfer(
 extern "C" JNIEXPORT jstring JNICALL
 Java_org_localpilot_android_EmbeddedGgufRuntime_nativeAnalyzeImage(
  JNIEnv *e,jclass,jstring filename,jstring mmproj,jstring prompt,
- jbyteArray pixelData,jint width,jint height){
+ jbyteArray pixelData,jint width,jint height,jint controllerMode){
  Utf f(e,filename),m(e,mmproj),p(e,prompt);
- if(!pixelData||width<1||height<1||width>640||height>640||
+ if(controllerMode<0||controllerMode>4||!pixelData||width<1||height<1||width>640||height>640||
     e->GetArrayLength(pixelData)!=width*height*3)
   return e->NewStringUTF("");
  std::vector<uint8_t> pixels(static_cast<size_t>(width)*height*3);
@@ -241,36 +311,49 @@ Java_org_localpilot_android_EmbeddedGgufRuntime_nativeAnalyzeImage(
  std::lock_guard<std::mutex> guard(lock);
  std::string reply;
  if(!cancelled.load()&&init(f.str())&&!cancelled.load()){
+  const int controller=controllerMode;
   auto params=mtmd_context_params_default();
   params.use_gpu=gpuLayersLoaded>0;
-  params.n_threads=4;
+  params.n_threads=workerThreads();
   params.warmup=false;
-  params.image_max_tokens=512;
-  mtmd_context *vision=mtmd_init_from_file(m.str().c_str(),model,params);
+  params.image_max_tokens=controller?128:512;
+  if(!visionContext||visionPath!=m.str()||visionMaxTokens!=params.image_max_tokens){
+   if(visionContext)mtmd_free(visionContext);
+   NativeStage timing("vision_prepare");
+   visionContext=mtmd_init_from_file(m.str().c_str(),model,params);
+   visionPath=m.str();visionMaxTokens=params.image_max_tokens;
+  }
+  mtmd_context *vision=visionContext;
   if(vision){
    if(mtmd_support_vision(vision)){
     mtmd_bitmap *bitmap=mtmd_bitmap_init(width,height,pixels.data());
     mtmd_input_chunks *chunks=mtmd_input_chunks_init();
     if(bitmap&&chunks){
      std::string user="Analyze the attached game screenshot. <__media__>\n"+p.str();
-     std::string formatted=chat(
+     const std::string controlInstructions=controller>=2?
+       "Choose one JSON NES tool call from the available catalog in the request. Return no other text. Never issue Android or shell commands.":
+       "Control NES from the screenshot. Return exactly BUTTON=A, BUTTON=B, BUTTON=UP, BUTTON=DOWN, BUTTON=LEFT, BUTTON=RIGHT or BUTTON=NONE. No explanations or Android commands.";
+     std::string formatted=chat(controller?controlInstructions:
        "You are a game vision diagnostician. Describe only visible objects "
-       "and uncertainty. Never issue a gesture, coordinates or action commands.",user);
+       "and uncertainty. Never issue a gesture, coordinates or action commands.",user,controller);
      mtmd_input_text input{formatted.data(),formatted.size(),true,true};
      const mtmd_bitmap *bitmapArray[]={bitmap};
      if(!formatted.empty()&&
          mtmd_tokenize(vision,chunks,&input,bitmapArray,1)==0){
       llama_memory_clear(llama_get_memory(ctx),true);
       llama_pos after=0;
-      if(mtmd_helper_eval_chunks(vision,ctx,chunks,0,0,512,true,&after)==0
-          &&after>0&&after+128<4096&&!cancelled.load())
-       reply=generate_from_logits(after,128,0.1f);
+      int evaluated;
+      {
+       NativeStage timing("vision_prefill");
+       evaluated=mtmd_helper_eval_chunks(vision,ctx,chunks,0,0,512,true,&after);
+      }
+      if(evaluated==0&&after>0&&after+(controller>=2?64:controller?16:128)<4096&&!cancelled.load())
+       reply=generate_from_logits(after,controller>=2?64:controller?16:128,controller?0.0f:0.1f,controller,true);
      }
     }
     if(chunks)mtmd_input_chunks_free(chunks);
     if(bitmap)mtmd_bitmap_free(bitmap);
    }
-   mtmd_free(vision);
   }
  }
  for(unsigned char c:reply)if((c&0xF8)==0xF0){reply.clear();break;}

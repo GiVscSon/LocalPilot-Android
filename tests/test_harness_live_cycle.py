@@ -19,6 +19,18 @@ class HarnessLiveCycle(unittest.TestCase):
   self.assertNotIn('new HarnessCoordinator()',self.nes)
   self.assertIn('EXTRA_MODE',self.contract)
   self.assertIn('GGUF_MAX_STEPS=4',self.contract)
+ def test_activity_admits_full_game_actions_through_shared_parser(self):
+  gate=self.nes.split('private void acceptAiProposal(',1)[1].split('aiTicketNonce=null;',1)[0]
+  self.assertIn('genericVisionEpisode?ConsoleAgentContract.gamePlayable(button):ConsoleAgentContract.playable(button)',gate)
+  self.assertIn('harness.consume(',gate)
+ def test_real_model_prompt_uses_current_facts_without_an_example_action(self):
+  runtime=read('model-lab/src/main/java/org/localpilot/android/HarnessModelRuntime.java')
+  engine=read('app/src/main/java/org/localpilot/android/EmbeddedGgufRuntime.java')
+  self.assertIn('call.observation.game().modelPrompt(history)',runtime)
+  self.assertIn('runtime.proposeNesTools(',runtime)
+  self.assertIn('NesAgentTools.parse(answer,toolScope)',runtime)
+  self.assertIn('NesAgentTools.systemPrompt(toolScope)',engine)
+  self.assertNotIn('Example: BUTTON=',engine)
  def test_only_real_emulator_data_starts_autonomous_play(self):
   self.assertIn('launchRom(HomebrewNes.cartridge(),true)',self.nes)
   self.assertIn('if(autoStartArmed&&count>=15&&homebrewRom',self.nes)

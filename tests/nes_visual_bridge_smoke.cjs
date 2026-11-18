@@ -10,6 +10,8 @@ const start=source.indexOf("window.retroSnapshot=function(token){");
 const end=source.indexOf("window.retroMetrics=function()",start);
 assert(start>=0&&end>start,"NES snapshot implementation is missing");
 const snippet=source.slice(start,end);
+const gameReader=source.match(/function readActualGameState\(\)\{[\s\S]*?\n\}/);
+assert(gameReader,"NES read-only game adapter is missing");
 let frame="data:image/png;base64,"+Buffer.from("NES frame sentinel").toString("base64");
 let received=[];
 const ctx={
@@ -26,7 +28,7 @@ const ctx={
   },toDataURL(mime){assert.equal(mime,"image/png");return frame;}};
  }}
 };
-vm.runInNewContext(snippet,ctx,{timeout:1000});
+vm.runInNewContext(gameReader[0]+"\n"+snippet,ctx,{timeout:1000});
 assert.equal(ctx.window.retroSnapshot("42"),true,"NES screenshot should be captured");
 assert.deepEqual(received,[[frame.split(",")[1],"42"]],"bridge lost snapshot token");
 assert.equal(ctx.window.retroSnapshot("42.0"),false,"reject invalid request token");

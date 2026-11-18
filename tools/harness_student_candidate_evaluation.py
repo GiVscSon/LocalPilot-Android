@@ -62,7 +62,7 @@ def main(apk, output):
             p.write_bytes(b);p.chmod(0o600)
         base=Path('shared/src/main/java/org/localpilot/shared')
         sources=[base/(n+'.java') for n in ('ConsoleAgentContract','NesTrial','HomebrewGoalReward',
-            'ConsoleExperienceMemory','VerifiedReplayFilter','VerifiedPpoReplayStore','StudentPolicyNet',
+            'ConsoleExperienceMemory','VoidLancerGameState','VerifiedReplayFilter','VerifiedPpoReplayStore','StudentPolicyNet',
             'HomebrewObs64','StudentEvaluationGate')]
         sources += [Path('game-lab/src/main/java/org/localpilot/gamelab')/(n+'.java') for n in ('HomebrewNes','HomebrewRamReward')]
         sources += [Path('tests')/(n+'.java') for n in ('ExportHomebrewNes','StudentPolicyCli','AndroidCandidateReplayExport','StudentHoldoutRealNesVerify')]

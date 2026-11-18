@@ -13,11 +13,23 @@ public interface NesModelHost {
     throw new IllegalArgumentException("Invalid model binding");
   }
  }
- record Observation(HarnessCoordinator.Ticket ticket,String romSha256,ModelIdentity binding,int ramX,int ramY,byte[] png) {
+ enum TaskProfile { HOMEBREW_RAM, VISION_EXPLORATION, GAME_RAM }
+ record Observation(HarnessCoordinator.Ticket ticket,String romSha256,ModelIdentity binding,int ramX,int ramY,byte[] png,TaskProfile profile,VoidLancerGameState game) {
+  public Observation(HarnessCoordinator.Ticket ticket,String romSha256,ModelIdentity binding,int ramX,int ramY,byte[] png,TaskProfile profile){
+   this(ticket,romSha256,binding,ramX,ramY,png,profile,null);
+  }
+  public Observation(HarnessCoordinator.Ticket ticket,String romSha256,ModelIdentity binding,int ramX,int ramY,byte[] png){
+   this(ticket,romSha256,binding,ramX,ramY,png,TaskProfile.HOMEBREW_RAM);
+  }
   public Observation {
-   if(ticket==null||binding==null||romSha256==null||!romSha256.matches("[0-9a-f]{64}")||
+   if(ticket==null||binding==null||profile==null||romSha256==null||!romSha256.matches("[0-9a-f]{64}")||
       !((ramX==-1&&ramY==-1)||(ramX>=0&&ramX<=255&&ramY>=0&&ramY<=255)))
     throw new IllegalArgumentException("Invalid typed NES observation");
+   if(profile==TaskProfile.HOMEBREW_RAM&&ticket.gameControls)throw new IllegalArgumentException("Game controls cannot enter homebrew policy");
+   if(profile!=TaskProfile.HOMEBREW_RAM&&(ramX!=-1||ramY!=-1||png==null))
+    throw new IllegalArgumentException("Generic NES requires pixels and UNKNOWN RAM");
+   if((profile==TaskProfile.GAME_RAM)!=(game!=null)||game!=null&&!VoidLancerGameState.ROM_SHA.equals(romSha256))
+    throw new IllegalArgumentException("Game memory profile differs from ROM identity");
    if(png!=null){NesFrameTransfer.verify(png);png=png.clone();}
   }
   @Override public byte[] png(){return png==null?null:png.clone();}
@@ -28,7 +40,7 @@ public interface NesModelHost {
    if(observation==null||status==null||latencyMs<0)throw new IllegalArgumentException("Invalid model reply");
    if(status==Status.PROPOSAL&&(modelId==null||!modelId.matches("[A-Za-z0-9:_.-]{1,96}")||
       modelSha256==null||!modelSha256.matches("[0-9a-f]{64}")||
-      !(ConsoleAgentContract.playable(button)||"NONE".equals(button))))
+      !(ConsoleAgentContract.playable(button)||"NONE".equals(button)||observation.profile()!=TaskProfile.HOMEBREW_RAM&&observation.ticket().gameControls&&ConsoleAgentContract.gamePlayable(button))))
     throw new IllegalArgumentException("Unverified model proposal identity/action");
    if(status==Status.PROPOSAL&&(!modelId.equals(observation.binding().id())||
       !modelSha256.equals(observation.binding().sha256())))throw new IllegalArgumentException("Reply model differs from requested binding");
@@ -45,6 +57,11 @@ public interface NesModelHost {
  }
  default java.util.List<ModelChoice> nesModels(){return java.util.List.of();}
  default boolean selectNesModel(ModelIdentity identity){return false;}
+ default boolean nesVisionModel(ModelIdentity identity){return false;}
+ default boolean supportsNesGame(ModelIdentity identity,String romSha){return nesVisionModel(identity);}
+ String EXTRA_REAL_GAMES_ONLY="org.localpilot.shared.REAL_GAMES_ONLY";
+ /** Internal x86 acceptance only; never enabled in the user ARM64 APK. */
+ default boolean nesTestFixturesAllowed(){return false;}
 
  /** File/catalog operations have no input authority and never start inference. */
  enum LibraryOperation { IMPORT_MODEL, IMPORT_PROJECTOR, DOWNLOAD_PRESET, VERIFY, DELETE, UNBIND }

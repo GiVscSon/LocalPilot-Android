@@ -98,6 +98,42 @@ public final class ConsoleExperienceMemoryTest {
     .digest(oldBody.getBytes(StandardCharsets.UTF_8)));
   Files.writeString(goal,oldBody+"|"+oldHash+"\n",StandardCharsets.UTF_8);
   require(ConsoleExperienceMemory.readGoals(temp).get(0).reward()==16,"Legacy V1 task journal remains readable");
+  Path generic=Files.createTempDirectory("user-rom-memory-test");
+  NesTrial user=NesTrial.create("USER_ROM","RIGHT",20,36,44,55);
+  ConsoleExperienceMemory.appendGeneric(generic,new ConsoleExperienceMemory.GenericEpisode(sha,"1234","import:alpha",other,user));
+  require(ConsoleExperienceMemory.readGeneric(generic).size()==1,"user-ROM evidence persisted");
+  var shipBefore=new VoidLancerGameState(1,100,180,3,3,1,0,0,0,0);
+  var shipAfter=new VoidLancerGameState(1,116,180,3,3,1,0,0,1,1);
+  ConsoleExperienceMemory.appendGeneric(generic,new ConsoleExperienceMemory.GenericEpisode(VoidLancerGameState.ROM_SHA,"1235","import:alpha",other,user,shipBefore,shipAfter));
+  require(ConsoleExperienceMemory.readGeneric(generic).get(1).after().confirms("RIGHT",shipBefore),"actual RAM controls survive journal verification");
+  String actualContext=ConsoleExperienceMemory.genericContext(generic,VoidLancerGameState.ROM_SHA,"import:alpha",other);
+  require(actualContext.contains("dx=16 dy=0 scoreDelta=0 killsDelta=0 livesDelta=0"),"actual outcome deltas reach model history without invented reward");
+  var titleState=new VoidLancerGameState(0,0,0,0,0,0,0,0,0,0);
+  var startTrial=NesTrial.create("USER_ROM","START",52,68,66,77);
+  ConsoleExperienceMemory.appendGeneric(generic,new ConsoleExperienceMemory.GenericEpisode(VoidLancerGameState.ROM_SHA,"1236","import:alpha",other,startTrial,titleState,shipBefore));
+  var startRecord=ConsoleExperienceMemory.readGeneric(generic).get(2);
+  require(startRecord.trial().button.equals("START")&&startRecord.after().confirms("START",startRecord.before()),"real-game START survives the outer evidence journal with its actual phase change");
+  String startedContext=ConsoleExperienceMemory.genericContext(generic,VoidLancerGameState.ROM_SHA,"import:alpha",other);
+  require(startedContext.contains("phase=0->1 GAME_STARTED")&&!startedContext.contains("livesDelta=3"),"inactive title counters do not masquerade as life gain or ship movement");
+  var chordTrial=NesTrial.create("USER_ROM","RIGHT+A",68,84,77,88);
+  ConsoleExperienceMemory.appendGeneric(generic,new ConsoleExperienceMemory.GenericEpisode(VoidLancerGameState.ROM_SHA,"1236","import:alpha",other,chordTrial,shipBefore,shipAfter));
+  require(ConsoleExperienceMemory.readGeneric(generic).get(3).trial().button.equals("RIGHT+A"),"canonical game chord survives both nested integrity layers");
+  expectFailure(()->new ConsoleExperienceMemory.GenericEpisode(sha,"1235","import:alpha",other,user,shipBefore,shipAfter));
+  require(ConsoleExperienceMemory.read(generic).isEmpty()&&ConsoleExperienceMemory.readGoals(generic).isEmpty()&&
+    ConsoleExperienceMemory.readHomebrewGoals(generic).isEmpty(),"unknown generic reward cannot enter any trusted homebrew stream");
+  require(ConsoleExperienceMemory.genericContext(generic,sha,"import:alpha",other).contains("RIGHT:PIXELS_DIFFER"),"same exact ROM/model receives its observations");
+  require(!ConsoleExperienceMemory.genericContext(generic,other,"import:alpha",other).contains("RIGHT"),"another ROM cannot receive that history");
+  expectFailure(()->new ConsoleExperienceMemory.GenericEpisode(sha,"1234","import:alpha",other,changed));
+  var waitTrial=NesTrial.create("USER_ROM","WAIT",84,100,88,88);
+  ConsoleExperienceMemory.appendGeneric(generic,new ConsoleExperienceMemory.GenericEpisode(VoidLancerGameState.ROM_SHA,"1236","import:alpha",other,waitTrial,shipAfter,shipAfter));
+  var waitRecord=ConsoleExperienceMemory.readGeneric(generic).get(4);
+  require(waitRecord.trial().button.equals("WAIT")&&waitRecord.trial().status.equals("NO_VISUAL_CHANGE")&&!waitRecord.after().confirms("WAIT",waitRecord.before()),"neutral frames retain unchanged pixels without fabricated control progress");
+  Path genericFile=generic.resolve("console-ai-user-rom-v1.log");
+  String originalGeneric=Files.readString(genericFile);Files.writeString(genericFile,originalGeneric.replace("|NULL|","|1|"));
+  byte[] brokenGeneric=Files.readAllBytes(genericFile);boolean refusedGeneric=false;
+  try{ConsoleExperienceMemory.appendGeneric(generic,new ConsoleExperienceMemory.GenericEpisode(sha,"1234","import:alpha",other,user));}
+  catch(IOException invalid){refusedGeneric=true;}
+  require(refusedGeneric&&java.util.Arrays.equals(brokenGeneric,Files.readAllBytes(genericFile)),"generic corruption/reward forgery fails closed before append");
   System.out.println("CONSOLE_SHARED_MEMORY_PASS");
  }
 }
