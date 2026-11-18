@@ -37,6 +37,9 @@ def discover(reports):
         best='A'
         for variant in 'BC':
             if rank(found[model,variant])>rank(found[model,best]):best=variant
+        # Fewer lost lives with no verified goal event is not gameplay improvement.
+        # Do not spend 20 held-out runs on a candidate with zero real progress.
+        if best!='A' and found[model,best]['successC']==0:best='A'
         selections.append(dict(model=model,variant=best,ranking={v:found[model,v] for v in 'ABCDE'}))
         if best!='A':matrix.extend(dict(model=model,variant=best,pair=i) for i in range(20))
     return dict(result='DISCOVERY_COMPLETE',sourceSha=source,apkSha256=apk,discoverySnapshots=snapshots,selections=selections,

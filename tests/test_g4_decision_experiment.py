@@ -96,6 +96,27 @@ class G4EvidenceTests(unittest.TestCase):
     for case in report['cases']:case['C']=True;case['scoreDelta']=100
   result=summary.discover(reports)
   self.assertFalse(result['hasCandidates']);self.assertTrue(all(s['variant']=='A' for s in result['selections']))
+ def test_survival_without_real_game_progress_cannot_be_selected(self):
+  reports=self.discovery()
+  for report in reports:
+   if report['variant']=='C':
+    for case in report['cases']:
+     if case['episode']:case['livesLost']=0  # 0 score, 0 verified C progress
+  result=summary.discover(reports)
+  self.assertFalse(result['hasCandidates'])
+  self.assertEqual(result['holdoutMatrix']['include'],[])
+  self.assertTrue(all(s['variant']=='A' for s in result['selections']))
+ def test_positive_game_progress_is_still_eligible_for_holdout(self):
+  reports=self.discovery()
+  for report in reports:
+   if report['variant']=='C':
+    for case in report['cases']:
+     if case['episode']:
+      case['livesLost']=0;case['C']=True;case['scoreDelta']=100
+  result=summary.discover(reports)
+  self.assertTrue(result['hasCandidates'])
+  self.assertEqual(len(result['holdoutMatrix']['include']),60)
+  self.assertTrue(all(s['variant']=='C' for s in result['selections']))
  def test_holdout_missing_pair_blocks_improvement(self):
   reports=self.discovery()
   for report in reports:
