@@ -205,9 +205,24 @@ public final class ModelLabActivity extends Activity {
   presetPicker=new Spinner(this);
   List<String> recommended=new ArrayList<>();
   for(ModelLabPresetCatalog.Preset p:ModelLabPresetCatalog.ALL)recommended.add(p.description());
-  presetPicker.setAdapter(new ArrayAdapter<>(this,
-    android.R.layout.simple_spinner_dropdown_item,recommended));
-  presetPicker.setSelection(1); // Qwen text is the recommended default, no auto-download.
+  // Keep rows readable at large Android font scales and in landscape.
+  ArrayAdapter<String> presetAdapter=new ArrayAdapter<String>(this,
+    android.R.layout.simple_spinner_item,recommended){
+   @Override public View getDropDownView(int position,View recycled,ViewGroup parent){
+    TextView text=(TextView)super.getDropDownView(position,recycled,parent);
+    text.setSingleLine(false);
+    text.setHorizontallyScrolling(false);
+    text.setMaxLines(3);
+    text.setEllipsize(null);
+    int padding=Math.round(12*getResources().getDisplayMetrics().density);
+    text.setPadding(padding,padding,padding,padding);
+    return text;
+   }
+  };
+  presetAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+  presetPicker.setAdapter(presetAdapter);
+  presetPicker.setDropDownWidth(ViewGroup.LayoutParams.MATCH_PARENT);
+  presetPicker.setSelection(0); // Pocket first; user-initiated download only.
   col.addView(presetPicker);
   presetStatus=line(col,"Ничего не загружено автоматически. Подключение нужно только для скачивания.");
   button(col,"Скачать выбранную модель по проверенной ссылке",()->{
