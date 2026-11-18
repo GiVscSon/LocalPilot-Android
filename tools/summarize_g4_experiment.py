@@ -38,6 +38,11 @@ def discover(reports):
         for variant in 'BC':
             if rank(found[model,variant])>rank(found[model,best]):best=variant
         selections.append(dict(model=model,variant=best,ranking={v:found[model,v] for v in 'ABCDE'}))
+        # A reduced lives-loss without a verified goal event is not gameplay improvement.
+        # Preserve the baseline instead of spending holdout runs on an idle-only candidate.
+        if best!='A' and found[model,best]['successC']==0:
+            best='A'
+            selections[-1]['variant']=best
         if best!='A':matrix.extend(dict(model=model,variant=best,pair=i) for i in range(20))
     return dict(result='DISCOVERY_COMPLETE',sourceSha=source,apkSha256=apk,discoverySnapshots=snapshots,selections=selections,
                 holdoutMatrix=dict(include=matrix),hasCandidates=bool(matrix),promotion='BLOCKED_PENDING_HOLDOUT',weightsTrained=False)
