@@ -151,6 +151,7 @@ jobs:
           python3 -m unittest discover -s tests -p 'test_g4_decision_experiment.py' -v
           python3 -m unittest discover -s tests -p 'test_pocket_real_game_profile.py' -v
           python3 -m unittest discover -s tests -p 'test_modellab_cancel_verifier.py' -v
+          python3 -m unittest discover -s tests -p 'test_model_lab_preset_ui.py' -v
           python3 -m unittest discover -s tests -p 'test_harness_runtime_acceptance.py' -v
           python3 -m unittest discover -s tests -p 'test_g2_visible_saf.py' -v
           python3 -m unittest discover -s tests -p 'test_native_inference_optimization.py' -v
