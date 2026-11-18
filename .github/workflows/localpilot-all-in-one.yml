@@ -27,6 +27,8 @@ on:
       - 'tests/nes_ai_action_smoke.cjs'
       - 'tests/nes_controller_framehold.cjs'
       - 'tests/test_harness_runtime_acceptance.py'
+      - 'shared/src/main/java/org/localpilot/shared/FastMotorContract.java'
+      - 'tests/FastMotorContract*.java'
       - 'tests/NesModelHost*.java'
       - 'tests/NesAgentTools*.java'
       - 'tools/harness_student_candidate_evaluation.py'
@@ -101,6 +103,7 @@ jobs:
           java tests/NesExperienceArchiveVerify.java
           java tests/HarnessModelExecutionLogVerify.java
           java tests/HarnessCoordinatorVerify.java
+          java tests/FastMotorContractVerify.java
           java tests/NesModelHostVerify.java
           java tests/NesAgentToolsVerify.java
           python3 -m unittest discover -s tests -p 'test_harness_runtime_acceptance.py' -v
