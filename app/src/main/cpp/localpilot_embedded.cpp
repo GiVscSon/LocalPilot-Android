@@ -137,9 +137,9 @@ std::string chat(const std::string &sys,const std::string &usr,int controller=0)
  const std::string formatted=localpilot::controller_chat_format(raw,tmpl,controller);
  if(controller){
 #ifdef __ANDROID__
-  __android_log_print(ANDROID_LOG_INFO,"LocalPilotNative","controller_mode=%d chatml_thinking_closed=%d controller_prefix_prefilled=%d",controller,formatted!=raw,controller==2);
+  __android_log_print(ANDROID_LOG_INFO,"LocalPilotNative","controller_mode=%d chatml_thinking_closed=%d controller_prefix_prefilled=%d",controller,formatted!=raw,controller>=2);
 #else
-  std::fprintf(stderr,"LocalPilotNative controller_mode=%d chatml_thinking_closed=%d controller_prefix_prefilled=%d\n",controller,formatted!=raw,controller==2);
+  std::fprintf(stderr,"LocalPilotNative controller_mode=%d chatml_thinking_closed=%d controller_prefix_prefilled=%d\n",controller,formatted!=raw,controller>=2);
 #endif
  }
  return localpilot::controller_prompt_prefix(formatted,controller);
@@ -183,10 +183,10 @@ std::string generate_from_logits(int pos,int limit,float temp,int nesController=
    llama_sampler_chain_add(sampler,llama_sampler_init_top_k(sampling.top_k));
    llama_sampler_chain_add(sampler,llama_sampler_init_top_p(sampling.top_p,1));
    llama_sampler_chain_add(sampler,llama_sampler_init_temp(sampling.temperature));
-   const uint32_t seed=nesController==2?nextGameSamplingSeed++:42;
+   const uint32_t seed=nesController>=2?nextGameSamplingSeed++:42;
    if(nextGameSamplingSeed==LLAMA_DEFAULT_SEED)nextGameSamplingSeed=0;
    llama_sampler_chain_add(sampler,llama_sampler_init_dist(seed));
-   if(nesController==2){
+   if(nesController>=2){
 #ifdef __ANDROID__
     __android_log_print(ANDROID_LOG_INFO,"LocalPilotNative","controller_sampler=%s temperature=%.2f top_k=%d top_p=%.2f repeat=%.2f presence=%.2f seed=%u",sampling.profile,sampling.temperature,sampling.top_k,sampling.top_p,sampling.repeat,sampling.presence,seed);
 #else
@@ -240,7 +240,7 @@ std::string infer(const std::string &sys,const std::string &usr,int limit,float 
  }
  if(!ok||cancelled.load()){llama_batch_ext_free(batch);return "";}
  llama_batch_ext_free(batch);
- return generate_from_logits(n,controller?std::min(controller==2?24:16,limit):limit,temp,controller);
+ return generate_from_logits(n,controller?std::min(controller>=2?64:16,limit):limit,temp,controller);
 
 }
 }
@@ -286,7 +286,7 @@ Java_org_localpilot_android_EmbeddedGgufRuntime_nativeInfer(
  Utf f(e,filename),s(e,system),q(e,question);
  std::lock_guard<std::mutex> guard(lock);
  std::string result;
- if(controllerMode<0||controllerMode>2)return e->NewStringUTF("");
+ if(controllerMode<0||controllerMode>4)return e->NewStringUTF("");
  if(!cancelled.load()&&init(f.str()))result=infer(s.str(),q.str(),maxTokens,temperature,controllerMode);
  // JNI NewStringUTF expects Modified UTF-8, not 4-byte emoji sequences.
  // Reject unsupported supplementary characters rather than risking a VM abort.
@@ -301,7 +301,7 @@ Java_org_localpilot_android_EmbeddedGgufRuntime_nativeAnalyzeImage(
  JNIEnv *e,jclass,jstring filename,jstring mmproj,jstring prompt,
  jbyteArray pixelData,jint width,jint height,jint controllerMode){
  Utf f(e,filename),m(e,mmproj),p(e,prompt);
- if(controllerMode<0||controllerMode>2||!pixelData||width<1||height<1||width>640||height>640||
+ if(controllerMode<0||controllerMode>4||!pixelData||width<1||height<1||width>640||height>640||
     e->GetArrayLength(pixelData)!=width*height*3)
   return e->NewStringUTF("");
  std::vector<uint8_t> pixels(static_cast<size_t>(width)*height*3);
@@ -330,9 +330,8 @@ Java_org_localpilot_android_EmbeddedGgufRuntime_nativeAnalyzeImage(
     mtmd_input_chunks *chunks=mtmd_input_chunks_init();
     if(bitmap&&chunks){
      std::string user="Analyze the attached game screenshot. <__media__>\n"+p.str();
-     const std::string controlInstructions=controller==2?
-       "Control NES from the screenshot. Return BUTTON=<command>: one button or a chord ordered vertical(UP/DOWN), horizontal(LEFT/RIGHT), A, B. "
-       "START/SELECT stand alone. WAIT advances16 frames with all buttons released. NONE stops. No explanations or Android commands.":
+     const std::string controlInstructions=controller>=2?
+       "Choose one JSON NES tool call from the available catalog in the request. Return no other text. Never issue Android or shell commands.":
        "Control NES from the screenshot. Return exactly BUTTON=A, BUTTON=B, BUTTON=UP, BUTTON=DOWN, BUTTON=LEFT, BUTTON=RIGHT or BUTTON=NONE. No explanations or Android commands.";
      std::string formatted=chat(controller?controlInstructions:
        "You are a game vision diagnostician. Describe only visible objects "
@@ -348,8 +347,8 @@ Java_org_localpilot_android_EmbeddedGgufRuntime_nativeAnalyzeImage(
        NativeStage timing("vision_prefill");
        evaluated=mtmd_helper_eval_chunks(vision,ctx,chunks,0,0,512,true,&after);
       }
-      if(evaluated==0&&after>0&&after+(controller==2?24:controller?16:128)<4096&&!cancelled.load())
-       reply=generate_from_logits(after,controller==2?24:controller?16:128,controller?0.0f:0.1f,controller,true);
+      if(evaluated==0&&after>0&&after+(controller>=2?64:controller?16:128)<4096&&!cancelled.load())
+       reply=generate_from_logits(after,controller>=2?64:controller?16:128,controller?0.0f:0.1f,controller,true);
      }
     }
     if(chunks)mtmd_input_chunks_free(chunks);

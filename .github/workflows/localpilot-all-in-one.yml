@@ -27,6 +27,7 @@ on:
       - 'tests/nes_controller_framehold.cjs'
       - 'tests/test_harness_runtime_acceptance.py'
       - 'tests/NesModelHost*.java'
+      - 'tests/NesAgentTools*.java'
       - 'tools/harness_student_candidate_evaluation.py'
       - 'tests/test_harness_student_candidate_evaluation.py'
       - 'tests/AndroidCandidateReplayExport.java'
@@ -100,6 +101,7 @@ jobs:
           java tests/HarnessModelExecutionLogVerify.java
           java tests/HarnessCoordinatorVerify.java
           java tests/NesModelHostVerify.java
+          java tests/NesAgentToolsVerify.java
           python3 -m unittest discover -s tests -p 'test_harness_runtime_acceptance.py' -v
           python3 -m unittest discover -s tests -p 'test_g2_visible_saf.py' -v
           python3 -m unittest discover -s tests -p 'test_native_inference_optimization.py' -v

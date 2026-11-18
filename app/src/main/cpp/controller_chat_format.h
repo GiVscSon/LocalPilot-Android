@@ -19,11 +19,11 @@ inline std::string controller_chat_format(const std::string &formatted,
  if(ends(assistant+"<think>\n"))return formatted+"\n</think>\n\n";
  return formatted; // unknown/already-complete templates are not rewritten
 }
-// Only the protocol key is supplied. The grammar/model selects every action.
+// Only the JSON protocol key is supplied. The model selects the tool and arguments.
 inline std::string controller_prompt_prefix(const std::string &formatted,int mode){
- return mode==2?formatted+"BUTTON=":formatted;
+ return mode>=2?formatted+"{\"tool\":":formatted;
 }
 inline std::string controller_reply(const std::string &generated,int mode){
- return mode==2&&!generated.empty()?"BUTTON="+generated:generated;
+ return mode>=2&&!generated.empty()?"{\"tool\":"+generated:generated;
 }
 }

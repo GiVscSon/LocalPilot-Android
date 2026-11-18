@@ -64,6 +64,10 @@ public final class EmbeddedGgufRuntime {
     byte[] rgb,int width,int height,int requestedGpuLayers,boolean gameControls,Result callback){
   throw new IllegalStateException("NES agent is available only in the unified LocalPilot APK");
  }
+ public void proposeNesTools(File weights,File projector,String observation,
+    byte[] rgb,int width,int height,int requestedGpuLayers,int toolScope,Result callback){
+  throw new IllegalStateException("NES tools are available only in the unified LocalPilot APK");
+ }
   public void probeGpu(Result callback){
   submit(callback,()->{
    if(!BuildConfig.VULKAN_COMPILED)

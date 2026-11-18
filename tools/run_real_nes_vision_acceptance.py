@@ -126,6 +126,21 @@ def correlate_inference(raw, rows, model_sha):
         row['inferenceElapsedMs']=matches[0][3]
     return len(calls)
 
+def verified_tool_calls(raw,rows,model_sha):
+    calls=re.findall(r'chosen=(nes_start|nes_press|nes_wait|agent_stop) button=([A-Z+]+) frames=(\d+) frame=(\d+) hash=(\d+) model=([0-9a-f]{64})',raw)
+    result=[]
+    for row in rows:
+        matches=[c for c in calls if (int(c[3]),c[4],c[1],c[5])==(row['beforeFrame'],row['beforeHash'],row['button'],model_sha)]
+        if len(matches)!=1:raise ValueError('Action lacks a unique actual model tool invocation')
+        name,button,frames,frame,hash_,sha=matches[0]
+        expected='nes_wait' if button=='WAIT' else 'nes_start' if row['gameBefore']['state']!=1 and button=='START' else 'nes_press'
+        if name!=expected or int(frames)!=16 or row['gameBefore']['state']!=1 and name=='nes_press':
+            raise ValueError('Tool precondition or frame arguments differ from actual transition')
+        if row['gameBefore']['state']==1 and button in ('START','SELECT'):
+            raise ValueError('Playing tool cannot use known inactive menu controls')
+        result.append(dict(tool=name,button=button,frames=int(frames),beforeFrame=int(frame),beforeHash=hash_,modelSha256=sha))
+    return result
+
 def verified_controller_settings(raw,profile,minimum_calls):
     expected={
         'qwen35':('QWEN35_TEXT',1.0,20,1.0,1.0,2.0),
@@ -200,18 +215,21 @@ def verify(apk,directory,output,attempt=None):
     else:raise RuntimeError('Real game did not confirm model-driven score/kill progress')
     started_by_model=any(row['button']=='START' and row['gameBefore']['state']==0 and row['gameAfter']['state']==1 for row in rows)
     if not started_by_model:raise RuntimeError('Real game did not start through a correlated model START')
-    if not any(row['semanticControl'] for row in rows):
+    if not any(row['semanticControl'] and row['gameBefore']['state']==1 and row['gameAfter']['state']==1 for row in rows):
         raise RuntimeError('Frames changed but ship movement, firing or bomb use was not confirmed')
     ui.tap_text('STOP',swipes=0)
     before=private_file('files/console-ai-user-rom-v1.log',262144);time.sleep(1)
     if before!=private_file('files/console-ai-user-rom-v1.log',262144):raise RuntimeError('Action completed after real-game STOP')
     native_settings=ui.adb('shell','logcat','-d','-s','LocalPilotNative:I','*:S')
     native_sampling=verified_controller_settings(native_settings,MODEL_PROFILE,len(rows))
+    tool_log=ui.adb('shell','logcat','-d','-s','LocalPilotTools:I','*:S')
+    tool_calls=verified_tool_calls(tool_log,rows,FILES[MODEL][1])
+    (output.parent/'model-tool-invocations.log').write_text(tool_log)
     (output.parent/'native-controller-settings.log').write_text('\n'.join(line for line in native_settings.splitlines() if 'controller_sampler=' in line)+'\n')
     report=dict(result='REAL_ROM_GGUF_GAME_PROGRESS_PASS',modelProfile=MODEL_PROFILE,modelRepository=REPO,modelRevision=REVISION,sourceSha=source,
                 apkSha256=hashlib.sha256(apk.read_bytes()).hexdigest(),romSha256=ROM_SHA,
                 modelSha256=FILES[MODEL][1],modelKind='TEXT_GGUF_WITH_VERIFIED_GAME_RAM',
-                transitions=rows,inferenceCallsForModel=calls,nativeSamplingStarted=native_sampling,exactModelActionAndFrameMatch=True,semanticGameControlVerified=True,
+                transitions=rows,inferenceCallsForModel=calls,nativeSamplingStarted=native_sampling,modelToolCalls=tool_calls,exactModelActionAndFrameMatch=True,semanticGameControlVerified=True,
                 realScoreBefore=rows[0]['gameBefore']['score'],realScoreAfter=rows[-1]['gameAfter']['score'],
                 gameProgressVerified=True,
                 modelTransport='VISIBLE_SAF',romTransport='VISIBLE_SAF',decisionInput='VERIFIED_ROM_RAM',visionInferencePerformed=False,
@@ -243,7 +261,7 @@ if __name__=='__main__':
                     (a.output.parent/'real-game-inference.log').write_bytes(inference)
                     print('ACTUAL_GAME_INFERENCE_DIAGNOSTIC '+inference.decode()[-12000:],flush=True)
                 except EvidencePending:pass
-                timing=ui.adb('shell','logcat','-d','-s','LocalPilotNative:I','LocalPilotObservation:I','*:S')[-16000:]
+                timing=ui.adb('shell','logcat','-d','-s','LocalPilotNative:I','LocalPilotObservation:I','LocalPilotTools:I','*:S')[-16000:]
                 (a.output.parent/'native-phase-timings.log').write_text(timing)
                 print('ACTUAL_NATIVE_PHASE_TIMINGS '+timing,flush=True)
                 ui.write_failure_diagnostics(a.output,error)

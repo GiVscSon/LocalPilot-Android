@@ -11,6 +11,7 @@ import java.security.MessageDigest;
 import java.util.HashMap;
 import java.util.Map;
 import org.json.JSONObject;
+import org.localpilot.shared.NesAgentTools;
 import org.json.JSONArray;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.ExecutorService;
@@ -21,8 +22,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 /**
  * Offline GGUF JNI runtime. Supports both pre-bundled diagnostics and explicit
  * ModelLab-on-demand GGUF imports inside the same Android package.
- * JNI model is loaded lazily. The only caller is the diagnostics screen;
- * model outputs have NO route into PilotService/gesture dispatch.
+ * JNI is loaded lazily. NES tool proposals remain untrusted until the existing
+ * coordinator-backed host validates them. No model route into PilotService or
+ * global Android gesture dispatch is provided.
  */
 public final class EmbeddedGgufRuntime {
  public interface Callback { void complete(String result); }
@@ -289,6 +291,13 @@ public final class EmbeddedGgufRuntime {
  }
  public void proposeNesButton(File weights,File projector,String observation,
     byte[] rgb,int width,int height,int requestedGpuLayers,boolean gameControls,Result callback){
+  proposeNesTools(weights,projector,observation,rgb,width,height,requestedGpuLayers,
+    gameControls?NesAgentTools.GENERIC:NesAgentTools.LEGACY,callback);
+ }
+ public void proposeNesTools(File weights,File projector,String observation,
+    byte[] rgb,int width,int height,int requestedGpuLayers,int toolScope,Result callback){
+  if(toolScope<NesAgentTools.LEGACY||toolScope>NesAgentTools.PLAYING)throw new IllegalArgumentException("Invalid NES tool scope");
+  final boolean gameControls=toolScope>=NesAgentTools.GENERIC;
   if(!BuildConfig.UNIFIED_MODELLAB||requestedGpuLayers!=0)
    throw new IllegalStateException("Unified NES agent requires a CPU model for now");
   if(weights==null||!weights.isFile()||observation==null||observation.isBlank()||
@@ -298,10 +307,7 @@ public final class EmbeddedGgufRuntime {
       width>640||height>640||(long)width*height*3!=rgb.length))
    throw new IllegalArgumentException("Invalid visual model/projector or NES RGB");
   final byte[] pixels=projector!=null?rgb.clone():null;
-  final String instructions=gameControls?
-   "You control the current NES game for16 frames. Reply exactly BUTTON=<command>. "+
-   "Use one button or a chord ordered vertical(UP/DOWN), horizontal(LEFT/RIGHT), A, B. Join chord buttons with +. "+
-   "START and SELECT stand alone. WAIT advances16 frames with all buttons released. NONE stops. No explanations or Android commands; never invent success.":
+  final String instructions=gameControls?NesAgentTools.systemPrompt(toolScope):
    "You are a one-step controller for the current NES game. Reply with EXACTLY one of "+
    "BUTTON=A, BUTTON=B, BUTTON=UP, BUTTON=DOWN, BUTTON=LEFT, BUTTON=RIGHT, BUTTON=NONE. "+
    "Do not explain or issue Android commands. Do not claim success or reward. ";
@@ -310,9 +316,9 @@ public final class EmbeddedGgufRuntime {
     android.os.SystemClock.elapsedRealtime()-started),()->{
    prepareNativeInference();
    String proposal=projector==null?
-     nativeInfer(weights.getAbsolutePath(),instructions,observation,gameControls?24:16,0.0f,gameControls?2:1):
+     nativeInfer(weights.getAbsolutePath(),instructions,observation,gameControls?NesAgentTools.MAX_REPLY_TOKENS:16,0.0f,toolScope):
      nativeAnalyzeImage(weights.getAbsolutePath(),projector.getAbsolutePath(),
-       instructions+observation,pixels,width,height,gameControls?2:1);
+       instructions+"\n"+observation,pixels,width,height,toolScope);
    return LocalCoreContract.visibleAnswer(proposal);
   });
  }
