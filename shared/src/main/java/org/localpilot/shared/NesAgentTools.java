@@ -53,6 +53,14 @@ public final class NesAgentTools {
   if(menus){result.add("\"START\"");result.add("\"SELECT\"");}
   return result;
  }
+ /** Diagnostic metadata, never an input permit. Scope5 exists only in test inference. */
+ public static List<String> legalButtons(int scope){
+  if(scope==MENU)return List.of("START","WAIT","NONE");
+  if(scope!=PLAYING&&scope!=GENERIC&&scope!=5)throw new IllegalArgumentException("Invalid vocabulary scope");
+  var result=new ArrayList<String>();
+  for(String quoted:buttons(scope!=PLAYING))result.add(quoted.substring(1,quoted.length()-1));
+  result.add("WAIT");result.add("NONE");return List.copyOf(result);
+ }
  public static String systemPrompt(int scope){
   if(scope<GENERIC||scope>PLAYING)throw new IllegalArgumentException("No tool authority for this scope");
   String frame="\"frames\":{\"type\":\"integer\",\"enum\":[16]}";

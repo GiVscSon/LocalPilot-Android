@@ -15,6 +15,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  */
 public final class EmbeddedGgufRuntime {
  public interface Result { void complete(String answer,long elapsedMs); }
+ public interface ExperimentResult { void complete(String answer,long elapsedMs,Long prefillMs,Long decodeMs); }
  private static native String nativeInfer(String model,String system,String question,int tokens,float temperature,int controllerMode);
  private static native String nativeAnalyzeImage(String model,String projector,String question,
    byte[] rgb,int width,int height,int controllerMode);
@@ -67,6 +68,9 @@ public final class EmbeddedGgufRuntime {
  public void proposeNesTools(File weights,File projector,String observation,
     byte[] rgb,int width,int height,int requestedGpuLayers,int toolScope,Result callback){
   throw new IllegalStateException("NES tools are available only in the unified LocalPilot APK");
+ }
+ public void proposeNesExperiment(File weights,String observation,int toolScope,boolean phaseGrammar,int seed,ExperimentResult callback){
+  throw new SecurityException("Diagnostic cases require the unified isolated test APK");
  }
   public void probeGpu(Result callback){
   submit(callback,()->{

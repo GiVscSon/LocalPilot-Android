@@ -18,6 +18,7 @@ import org.localpilot.shared.HomebrewObs64;
 import org.localpilot.shared.NesFrameTransfer;
 import org.localpilot.shared.NesModelHost;
 import org.localpilot.shared.NesAgentTools;
+import org.localpilot.shared.NesDecisionExperiment;
 
 /** Application composition: reuses the existing registry and JNI class.
  * No Activity, emulator, trainer or action executor is retained here.
@@ -32,11 +33,18 @@ public final class HarnessModelRuntime {
  });
  private Call active;
  private boolean libraryBusy;
+ private NesDecisionExperiment.Options experiment;
+ private int experimentIndex;
+ private Call experimentProposal;
  private NesModelHost.State state=new NesModelHost.State("IDLE","","","",0,0);
  private static final class Call {
   final NesModelHost.Observation observation;final Consumer<NesModelHost.Reply> callback;
   volatile boolean cancelled,nativeStarted;ModelLabStore.Entry model;
-  Call(NesModelHost.Observation o,Consumer<NesModelHost.Reply> c){observation=o;callback=c;}
+  final NesDecisionExperiment.Options experiment;final int seed;
+  String prompt,answer;Long prefillMs,decodeMs;
+  Call(NesModelHost.Observation o,Consumer<NesModelHost.Reply> c,NesDecisionExperiment.Options options,int index){
+   observation=o;callback=c;experiment=options;seed=options==null?-1:options.seed(index);
+  }
  }
  public HarnessModelRuntime(Context context){
   application=context.getApplicationContext();store=new ModelLabStore(application);
@@ -47,6 +55,34 @@ public final class HarnessModelRuntime {
   return owner.harnessModels();
  }
  public ModelLabStore store(){return store;}
+ /** Test instrumentation only; production applications cannot enable this path. */
+ public synchronized boolean configureExperiment(NesDecisionExperiment.Options options){
+  if(!(application instanceof NesModelHost host)||!host.nesTestFixturesAllowed())return false;
+  var s=HarnessCoordinator.nes().snapshot();
+  if(active!=null||libraryBusy||s.waiting()||s.actionInFlight()||!s.owner().equals("NONE")||engine!=null&&engine.busy())return false;
+  experiment=options;experimentIndex=0;experimentProposal=null;return true;
+ }
+ public synchronized boolean recordExperimentTransition(NesModelHost.ExperimentTransition t){
+  if(experiment==null)return true;
+  Call c=experimentProposal;
+  if(c==null||t==null||!t.epoch().equals(c.observation.ticket().epoch)||
+    !java.util.Objects.equals(t.observationNonce(),c.observation.ticket().nonce)||
+    !ConsoleAgentContract.tokenValid(t.actionNonce())||!t.romSha().equals(c.observation.romSha256())||
+    !t.modelId().equals(c.model.id)||!t.modelSha().equals(c.model.modelSha)||
+    t.beforeFrame()!=c.observation.ticket().frame||t.beforeHash()!=c.observation.ticket().hash||
+    t.afterFrame()-t.beforeFrame()!=16||!java.util.Objects.equals(t.beforeGame(),c.observation.game().wire())||
+    !c.observation.game().phaseAllows(t.action()))return false;
+  try{
+   var call=NesAgentTools.parse(c.answer,NesAgentTools.scope(true,c.observation.game()));
+   if(call==null||!call.button().equals(t.action()))return false;
+   var row=new org.json.JSONObject().put("epoch",t.epoch()).put("observationNonce",t.observationNonce()).put("actionNonce",t.actionNonce())
+    .put("romSha256",t.romSha()).put("modelSha256",t.modelSha()).put("modelId",t.modelId()).put("action",t.action())
+    .put("beforeFrame",t.beforeFrame()).put("afterFrame",t.afterFrame()).put("beforeHash",Integer.toUnsignedString(t.beforeHash()))
+    .put("afterHash",Integer.toUnsignedString(t.afterHash())).put("beforeGame",t.beforeGame()).put("afterGame",t.afterGame());
+   if(!appendExperiment(c.experiment.caseId()+".transitions.jsonl",row))return false;
+   experimentProposal=null;return true;
+  }catch(Exception invalid){return false;}
+ }
  public synchronized boolean libraryBusy(){return libraryBusy;}
  public synchronized boolean select(NesModelHost.ModelIdentity identity){
   var snapshot=HarnessCoordinator.nes().snapshot();
@@ -143,7 +179,10 @@ public final class HarnessModelRuntime {
  public synchronized void infer(NesModelHost.Observation observation,Consumer<NesModelHost.Reply> callback){
   if(observation==null||callback==null)throw new IllegalArgumentException("Observation and callback required");
   if(active!=null||libraryBusy){main.post(()->callback.accept(new NesModelHost.Reply(observation,NesModelHost.Status.BUSY,null,null,null,0)));return;}
-  Call call=new Call(observation,callback);active=call;phase(call,"VERIFYING");
+  if(experiment!=null&&(observation.profile()!=NesModelHost.TaskProfile.GAME_RAM||experimentIndex>=64)){
+   main.post(()->callback.accept(new NesModelHost.Reply(observation,NesModelHost.Status.UNAVAILABLE,null,null,null,0)));return;
+  }
+  Call call=new Call(observation,callback,experiment,experiment==null?0:experimentIndex++);active=call;phase(call,"VERIFYING");
   files.execute(()->prepare(call));
  }
  private void prepare(Call call){
@@ -188,7 +227,9 @@ public final class HarnessModelRuntime {
     (generic?"Choose one available NES tool for the visible game. ":"Choose one allowed BUTTON for rightward progress without crossing a RAM edge. ")+
     "Input ACK is not a reward. "+history;
    if(gameRam)observation=call.observation.game().modelPrompt(history);
+   if(call.experiment!=null)observation=call.experiment.prompt(call.observation.game(),history);
    final String modelObservation=observation.substring(0,Math.min(900,observation.length()));
+   call.prompt=modelObservation;
    final File mmproj=projector;final byte[] rgb=pixels;
    main.post(()->{
     try{
@@ -200,8 +241,10 @@ public final class HarnessModelRuntime {
        " hash="+Integer.toUnsignedString(t.hash)+" gameControls="+t.gameControls+
        " game="+(call.observation.game()==null?"UNKNOWN":call.observation.game().wire()));
      phase(call,gameRam?"GAME_RAM_INFERENCE":"INFERENCING");
-     runtime.proposeNesTools(weights,mmproj,modelObservation,rgb,NesFrameTransfer.WIDTH,NesFrameTransfer.HEIGHT,0,NesAgentTools.scope(generic&&t.gameControls,call.observation.game()),
+     if(call.experiment==null)runtime.proposeNesTools(weights,mmproj,modelObservation,rgb,NesFrameTransfer.WIDTH,NesFrameTransfer.HEIGHT,0,NesAgentTools.scope(generic&&t.gameControls,call.observation.game()),
        (answer,elapsed)->completed(call,answer,elapsed));
+     else runtime.proposeNesExperiment(weights,modelObservation,NesAgentTools.scope(true,call.observation.game()),call.experiment.phaseGrammar(),call.seed,
+       (answer,elapsed,prefill,decode)->{call.prefillMs=prefill;call.decodeMs=decode;completed(call,answer,elapsed);});
      call.nativeStarted=true;
     }catch(RuntimeException unavailable){finish(call,NesModelHost.Status.UNAVAILABLE,null,0);}
    });
@@ -215,14 +258,19 @@ public final class HarnessModelRuntime {
   }catch(RuntimeException unavailable){return false;}
  }
  private void completed(Call call,String answer,long elapsed){
+  call.answer=answer;
   files.execute(()->recordCompleted(call,answer,elapsed));
  }
  private void recordCompleted(Call call,String answer,long elapsed){
-  if(call.cancelled){finish(call,NesModelHost.Status.CANCELLED,null,elapsed);return;}
-  if(!current(call)||!sameBinding(call)){finish(call,NesModelHost.Status.STALE,null,elapsed);return;}
+  if(call.cancelled){trace(call,answer,elapsed,"CANCELLED");finish(call,NesModelHost.Status.CANCELLED,null,elapsed);return;}
+  if(!current(call)||!sameBinding(call)){trace(call,answer,elapsed,"STALE");finish(call,NesModelHost.Status.STALE,null,elapsed);return;}
   int toolScope=NesAgentTools.scope(call.observation.profile()!=NesModelHost.TaskProfile.HOMEBREW_RAM&&call.observation.ticket().gameControls,call.observation.game());
   NesAgentTools.Call tool=toolScope>=NesAgentTools.GENERIC?NesAgentTools.parse(answer,toolScope):null;
   String button=toolScope==NesAgentTools.LEGACY?ConsoleAgentContract.parseButton(answer):tool==null?null:tool.button();
+  String rejection=button==null&&(NesAgentTools.parse(answer,NesAgentTools.GENERIC)!=null||NesAgentTools.parse(answer,NesAgentTools.MENU)!=null)?"REJECTED_PHASE":"REJECTED_SCHEMA";
+  if(!trace(call,answer,elapsed,button==null?rejection:call.observation.game()!=null&&!call.observation.game().phaseAllows(button)?"REJECTED_PHASE":button.equals("NONE")?"MODEL_STOP":"PROPOSAL_NOT_YET_EXECUTED")){
+   finish(call,NesModelHost.Status.IO_FAILURE,null,elapsed);return;
+  }
   if(tool!=null&&application instanceof NesModelHost host&&host.nesTestFixturesAllowed())
    android.util.Log.i("LocalPilotTools","chosen="+tool.name()+" button="+tool.button()+" frames="+tool.frames()+
      " frame="+call.observation.ticket().frame+" hash="+Integer.toUnsignedString(call.observation.ticket().hash)+" model="+call.model.modelSha);
@@ -238,6 +286,31 @@ public final class HarnessModelRuntime {
   }catch(IOException|IllegalArgumentException failed){finish(call,NesModelHost.Status.IO_FAILURE,null,elapsed);return;}
   finish(call,button==null?NesModelHost.Status.INVALID_OUTPUT:NesModelHost.Status.PROPOSAL,button,elapsed);
  }
+ private boolean trace(Call call,String answer,long elapsed,String reason){
+  if(call.experiment==null)return true;
+  try{
+   var t=call.observation.ticket();var o=call.experiment;
+   int scope=NesAgentTools.scope(true,call.observation.game());
+   org.json.JSONObject row=new org.json.JSONObject().put("schema","nes-decision-experiment-v1")
+    .put("caseId",o.caseId()).put("variant",o.variant().name()).put("seed",call.seed)
+    .put("snapshotSha256",o.snapshotSha()).put("historySource",o.historySource())
+    .put("romSha256",call.observation.romSha256()).put("modelId",call.model.id).put("modelSha256",call.model.modelSha)
+    .put("epoch",t.epoch).put("nonce",t.nonce).put("frame",t.frame).put("frameHash",Integer.toUnsignedString(t.hash))
+    .put("gameBefore",call.observation.game().wire()).put("grammarScope",o.phaseGrammar()?scope:5)
+    .put("nativeLegalButtons",new org.json.JSONArray(NesAgentTools.legalButtons(o.phaseGrammar()?scope:5)))
+    .put("systemPrompt",NesAgentTools.systemPrompt(scope)).put("userPrompt",call.prompt)
+    .put("rawReply",answer==null?org.json.JSONObject.NULL:answer).put("elapsedMs",elapsed)
+    .put("prefillMs",call.prefillMs==null?org.json.JSONObject.NULL:call.prefillMs)
+    .put("decodeMs",call.decodeMs==null?org.json.JSONObject.NULL:call.decodeMs).put("reason",reason);
+   return appendExperiment(o.caseId()+".jsonl",row);
+  }catch(Exception invalid){return false;}
+ }
+ private boolean appendExperiment(String name,org.json.JSONObject row)throws java.io.IOException{
+  File dir=new File(application.getFilesDir(),"g4-traces");if(!dir.isDirectory()&&!dir.mkdirs())return false;
+  File file=new File(dir,name);byte[] data=(row.toString()+"\n").getBytes(java.nio.charset.StandardCharsets.UTF_8);
+  if(file.length()+data.length>4*1024*1024)return false;
+  try(var out=new java.io.FileOutputStream(file,true)){out.write(data);out.getFD().sync();}return true;
+ }
  private void finish(Call call,NesModelHost.Status status,String button,long elapsed){
   main.post(()->{
    synchronized(this){
@@ -246,6 +319,7 @@ public final class HarnessModelRuntime {
    }
    NesModelHost.Status effective=call.cancelled?NesModelHost.Status.CANCELLED:status;
    if(effective==NesModelHost.Status.PROPOSAL&&(!current(call)||!sameBinding(call)))effective=NesModelHost.Status.STALE;
+   if(effective==NesModelHost.Status.PROPOSAL&&call.experiment!=null)experimentProposal=call;
    call.callback.accept(new NesModelHost.Reply(call.observation,effective,
     call.model==null?null:call.model.id,call.model==null?null:call.model.modelSha,
     effective==NesModelHost.Status.PROPOSAL?button:null,Math.max(0,elapsed)));

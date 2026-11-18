@@ -62,6 +62,10 @@ public interface NesModelHost {
  String EXTRA_REAL_GAMES_ONLY="org.localpilot.shared.REAL_GAMES_ONLY";
  /** Internal x86 acceptance only; never enabled in the user ARM64 APK. */
  default boolean nesTestFixturesAllowed(){return false;}
+ /** Optional diagnostic receipt; provides no input authority. */
+ record ExperimentTransition(String epoch,String observationNonce,String actionNonce,String romSha,String modelId,String modelSha,
+   String action,int beforeFrame,int afterFrame,int beforeHash,int afterHash,String beforeGame,String afterGame){}
+ default boolean recordNesExperimentTransition(ExperimentTransition transition){return true;}
 
  /** File/catalog operations have no input authority and never start inference. */
  enum LibraryOperation { IMPORT_MODEL, IMPORT_PROJECTOR, DOWNLOAD_PRESET, VERIFY, DELETE, UNBIND }

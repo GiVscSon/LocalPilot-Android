@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Guard cancellation against JNI reset races and accidental game-input access."""
 from pathlib import Path
+import re
 
 cpp = Path("app/src/main/cpp/localpilot_embedded.cpp").read_text(encoding="utf-8")
 runtime = Path("model-lab/src/main/java/org/localpilot/android/EmbeddedGgufRuntime.java").read_text(encoding="utf-8")
@@ -40,13 +41,26 @@ check("private static native void nativeResetInterrupt();" in app_runtime,
       "embedded LocalPilot adapter missing native reset declaration")
 check("private void prepareNativeInference()" in app_runtime,
       "embedded LocalPilot adapter has no safe request start")
-# The unified APK has four embedded jobs, two manual ModelLab jobs
-# and one bounded console-agent inference job. Every entrypoint must reset
-# only at job start and re-check STOP before entering JNI.
+# Every actual public inference job must reset exactly once before its first
+# JNI dispatch. Inspect method bodies rather than a fixed global call count:
+# a new diagnostic job must not make an unrelated safe job hide a missing reset.
 check("public void proposeNesButton(" in app_runtime,
       "bounded console-agent inference entrypoint missing")
-check(app_runtime.count("prepareNativeInference();")==7,
-      "not every embedded or unified inference job resets stale cancellation")
+masked=re.sub(r'//[^\n]*|/\*.*?\*/|"(?:\\.|[^"\\])*"',lambda m:' '*len(m.group()),app_runtime,flags=re.S)
+checked=set()
+for method in re.finditer(r'public\s+(?:synchronized\s+)?void\s+(\w+)\s*\(',masked):
+    opening=masked.index('{',method.end());depth=1;end=opening+1
+    while depth and end<len(masked):
+        depth+=(masked[end]=='{')-(masked[end]=='}');end+=1
+    body=masked[opening:end]
+    calls=list(re.finditer(r'\bnative(?:Infer(?:Experiment)?|AnalyzeImage)\s*\(',body))
+    if not calls:continue
+    resets=list(re.finditer(r'\bprepareNativeInference\s*\(\s*\)\s*;',body))
+    check(len(resets)==1 and resets[0].start()<calls[0].start(),
+          'unsafe cancellation start in inference job '+method.group(1))
+    checked.add(method.group(1))
+check({'text','image','proposeNesTools','proposeNesExperiment','selfTest','ask','adviseStrategy','analyzeImage'}<=checked,
+      'a reviewed inference entrypoint is missing')
 check("if(closed||cancelRequested.get()){\n   nativeInterrupt();" in app_runtime,
       "unified engine must re-interrupt when STOP races with JNI reset")
 check("public synchronized boolean requestCancel()" in app_runtime and

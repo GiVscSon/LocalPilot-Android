@@ -1,0 +1,215 @@
+name: LocalPilot G4 controlled real-model experiment
+on:
+  workflow_call:
+    inputs:
+      build_run_id:
+        type: string
+        required: true
+      source_sha:
+        type: string
+        required: true
+  workflow_dispatch:
+    inputs:
+      build_run_id:
+        description: Completed All-in-One run containing the matching APK/test companion
+        required: true
+      source_sha:
+        description: Exact tested40-character merge/source SHA, also used in artifact names
+        required: true
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: localpilot-g4-experiment-${{ inputs.source_sha }}
+  cancel-in-progress: false
+jobs:
+  fixtures:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_sha }}
+      - name: Validate immutable inputs
+        env:
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          BUILD_RUN_ID: ${{ inputs.build_run_id }}
+        run: |
+          python3 - <<'PY'
+          import os,re,subprocess
+          assert re.fullmatch('[0-9a-f]{40}',os.environ['SOURCE_SHA'])
+          assert re.fullmatch('[0-9]+',os.environ['BUILD_RUN_ID'])
+          assert subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()==os.environ['SOURCE_SHA']
+          PY
+      - uses: actions/download-artifact@v4
+        with:
+          name: LocalPilot-One-APK-X86-TEST-ONLY-${{ inputs.source_sha }}
+          path: dist/app
+          run-id: ${{ inputs.build_run_id }}
+          github-token: ${{ github.token }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: LocalPilot-Runtime-Contract-Test-Only-${{ inputs.source_sha }}
+          path: dist/test
+          run-id: ${{ inputs.build_run_id }}
+          github-token: ${{ github.token }}
+      - run: python3 tools/run_real_nes_vision_acceptance.py prepare --model-profile qwen35
+      - run: test -c /dev/kvm && sudo chmod 666 /dev/kvm
+      - name: Capture real model-produced common states and predefined holdouts
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: default
+          profile: pixel_2
+          disable-animations: true
+          emulator-options: -no-window -gpu software -no-snapshot -noaudio -no-boot-anim
+          script: python3 tools/run_g4_decision_experiment.py bootstrap --apk dist/app/app-debug.apk --test-apk dist/test/app-debug-androidTest.apk --output g4-fixtures
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: G4-fixtures-${{ inputs.source_sha }}
+          path: g4-fixtures/
+          if-no-files-found: error
+          retention-days: 14
+  discovery:
+    needs: fixtures
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        model: [qwen35, lfm350, lfm1200]
+        variant: [A, B, C, D, E]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_sha }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: LocalPilot-One-APK-X86-TEST-ONLY-${{ inputs.source_sha }}
+          path: dist/app
+          run-id: ${{ inputs.build_run_id }}
+          github-token: ${{ github.token }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: LocalPilot-Runtime-Contract-Test-Only-${{ inputs.source_sha }}
+          path: dist/test
+          run-id: ${{ inputs.build_run_id }}
+          github-token: ${{ github.token }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: G4-fixtures-${{ inputs.source_sha }}
+          path: fixtures
+      - run: python3 tools/run_real_nes_vision_acceptance.py prepare --model-profile ${{ matrix.model }}
+      - run: test -c /dev/kvm && sudo chmod 666 /dev/kvm
+      - name: Actual same-state probes and independent episodes
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: default
+          profile: pixel_2
+          disable-animations: true
+          emulator-options: -no-window -gpu software -no-snapshot -noaudio -no-boot-anim
+          script: python3 tools/run_g4_decision_experiment.py matrix --model-profile ${{ matrix.model }} --variant ${{ matrix.variant }} --fixtures fixtures/fixtures.tar --apk dist/app/app-debug.apk --test-apk dist/test/app-debug-androidTest.apk --output g4-cases
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: G4-cases-${{ matrix.model }}-${{ matrix.variant }}-${{ inputs.source_sha }}
+          path: g4-cases/
+          if-no-files-found: error
+          retention-days: 14
+  selection:
+    if: always()
+    needs: discovery
+    runs-on: ubuntu-24.04
+    outputs:
+      has_candidates: ${{ steps.select.outputs.has_candidates }}
+      matrix: ${{ steps.select.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_sha }}
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: G4-cases-*-${{ inputs.source_sha }}
+          path: reports
+      - id: select
+        run: python3 tools/summarize_g4_experiment.py discovery --reports reports --output selection/discovery.json --github-output "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: G4-selection-${{ inputs.source_sha }}
+          path: selection/
+          if-no-files-found: error
+  holdout:
+    if: needs.selection.outputs.has_candidates == 'true'
+    needs: selection
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix: ${{ fromJSON(needs.selection.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_sha }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: LocalPilot-One-APK-X86-TEST-ONLY-${{ inputs.source_sha }}
+          path: dist/app
+          run-id: ${{ inputs.build_run_id }}
+          github-token: ${{ github.token }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: LocalPilot-Runtime-Contract-Test-Only-${{ inputs.source_sha }}
+          path: dist/test
+          run-id: ${{ inputs.build_run_id }}
+          github-token: ${{ github.token }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: G4-fixtures-${{ inputs.source_sha }}
+          path: fixtures
+      - run: python3 tools/run_real_nes_vision_acceptance.py prepare --model-profile ${{ matrix.model }}
+      - run: test -c /dev/kvm && sudo chmod 666 /dev/kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          target: default
+          profile: pixel_2
+          disable-animations: true
+          emulator-options: -no-window -gpu software -no-snapshot -noaudio -no-boot-anim
+          script: python3 tools/run_g4_decision_experiment.py matrix --model-profile ${{ matrix.model }} --variant ${{ matrix.variant }} --holdout-index ${{ matrix.pair }} --fixtures fixtures/fixtures.tar --apk dist/app/app-debug.apk --test-apk dist/test/app-debug-androidTest.apk --output g4-holdout
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: G4-holdout-${{ matrix.model }}-${{ matrix.pair }}-${{ inputs.source_sha }}
+          path: g4-holdout/
+          if-no-files-found: error
+  evaluation:
+    if: always() && needs.selection.outputs.has_candidates == 'true'
+    needs: [selection, holdout]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_sha }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: G4-selection-${{ inputs.source_sha }}
+          path: selection
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: G4-holdout-*-${{ inputs.source_sha }}
+          path: reports
+      - run: python3 tools/summarize_g4_experiment.py holdout --reports reports --discovery selection/discovery.json --output evaluation/evaluation.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: G4-evaluation-${{ inputs.source_sha }}
+          path: evaluation/
+          if-no-files-found: error

@@ -22,6 +22,13 @@ on:
       - 'tests/test_native_inference_optimization.py'
       - 'tests/native_controller_format_test.cpp'
       - 'tools/run_real_nes_vision_acceptance.py'
+      - 'tools/run_g4_decision_experiment.py'
+      - 'tools/summarize_g4_experiment.py'
+      - 'tests/test_g4_decision_experiment.py'
+      - 'tests/test_modellab_cancel_verifier.py'
+      - 'tools/verify_modellab_cancel.py'
+      - 'tests/NesDecisionExperiment*.java'
+      - '.github/workflows/localpilot-g4-experiment.yml'
       - 'tests/nes_real_game_profile_smoke.cjs'
       - 'tests/nes_ai_action_smoke.cjs'
       - 'tests/nes_controller_framehold.cjs'
@@ -58,6 +65,7 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+  actions: read
 concurrency:
   group: localpilot-unified-${{ github.event.pull_request.number || github.ref_name }}
   cancel-in-progress: true
@@ -74,11 +82,48 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
+      - name: Make pinned SDK cache paths runner-owned
+        run: |
+          set -euo pipefail
+          for sdk_part in ndk/27.2.12479018 cmake/3.22.1 platforms/android-35 build-tools/35.0.0; do
+            if [ -e "$ANDROID_HOME/$sdk_part" ]; then
+              sudo chown -R "$(id -u):$(id -g)" "$ANDROID_HOME/$sdk_part"
+            fi
+          done
+      - name: Restore pinned native SDK cache
+        id: native-sdk-cache
+        uses: actions/cache/restore@v4
+        with:
+          key: localpilot-linux-sdk35-ndk27.2.12479018-cmake3.22.1-v1
+          path: |
+            /usr/local/lib/android/sdk/ndk/27.2.12479018
+            /usr/local/lib/android/sdk/cmake/3.22.1
+            /usr/local/lib/android/sdk/platforms/android-35
+            /usr/local/lib/android/sdk/build-tools/35.0.0
       - name: Install SDK + pinned native toolchain
+        if: steps.native-sdk-cache.outputs.cache-hit != 'true'
+        timeout-minutes: 15
         run: |
           set -euo pipefail
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
             'platforms;android-35' 'build-tools;35.0.0' 'cmake;3.22.1' 'ndk;27.2.12479018'
+      - name: Verify pinned SDK metadata
+        run: |
+          test -s "$ANDROID_HOME/platforms/android-35/android.jar"
+          test -x "$ANDROID_HOME/build-tools/35.0.0/apksigner"
+          test -x "$ANDROID_HOME/cmake/3.22.1/bin/cmake"
+          test -x "$ANDROID_HOME/ndk/27.2.12479018/toolchains/llvm/prebuilt/linux-x86_64/bin/clang"
+          grep -Fxq 'Pkg.Revision = 27.2.12479018' "$ANDROID_HOME/ndk/27.2.12479018/source.properties"
+      - name: Share verified SDK with dependent ABI build
+        if: steps.native-sdk-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          key: localpilot-linux-sdk35-ndk27.2.12479018-cmake3.22.1-v1
+          path: |
+            /usr/local/lib/android/sdk/ndk/27.2.12479018
+            /usr/local/lib/android/sdk/cmake/3.22.1
+            /usr/local/lib/android/sdk/platforms/android-35
+            /usr/local/lib/android/sdk/build-tools/35.0.0
       - name: Test one-APK source contract, fail closed
         run: |
           set -euo pipefail
@@ -102,6 +147,9 @@ jobs:
           java tests/HarnessCoordinatorVerify.java
           java tests/NesModelHostVerify.java
           java tests/NesAgentToolsVerify.java
+          java tests/NesDecisionExperimentVerify.java
+          python3 -m unittest discover -s tests -p 'test_g4_decision_experiment.py' -v
+          python3 -m unittest discover -s tests -p 'test_modellab_cancel_verifier.py' -v
           python3 -m unittest discover -s tests -p 'test_harness_runtime_acceptance.py' -v
           python3 -m unittest discover -s tests -p 'test_g2_visible_saf.py' -v
           python3 -m unittest discover -s tests -p 'test_native_inference_optimization.py' -v
@@ -224,11 +272,34 @@ jobs:
           test -s dist/original-arm64/LocalPilot-All-in-One-TEST-ONLY.apk
           test -s dist/original-arm64/TEST-ONLY-MANIFEST.json
           grep -q '"releaseReady": false' dist/original-arm64/TEST-ONLY-MANIFEST.json
-      - name: Install native SDK for x86_64 emulator-only derivative
+      - name: Make pinned SDK cache paths runner-owned
         run: |
           set -euo pipefail
-          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
-            'platforms;android-35' 'build-tools;35.0.0' 'cmake;3.22.1' 'ndk;27.2.12479018'
+          for sdk_part in ndk/27.2.12479018 cmake/3.22.1 platforms/android-35 build-tools/35.0.0; do
+            if [ -e "$ANDROID_HOME/$sdk_part" ]; then
+              sudo chown -R "$(id -u):$(id -g)" "$ANDROID_HOME/$sdk_part"
+            fi
+          done
+      - name: Restore same verified SDK used by ARM64
+        id: native-sdk-cache
+        uses: actions/cache/restore@v4
+        with:
+          key: localpilot-linux-sdk35-ndk27.2.12479018-cmake3.22.1-v1
+          fail-on-cache-miss: true
+          path: |
+            /usr/local/lib/android/sdk/ndk/27.2.12479018
+            /usr/local/lib/android/sdk/cmake/3.22.1
+            /usr/local/lib/android/sdk/platforms/android-35
+            /usr/local/lib/android/sdk/build-tools/35.0.0
+      - name: Verify pinned native SDK for x86_64 emulator-only derivative
+        timeout-minutes: 15
+        run: |
+          set -euo pipefail
+          test -s "$ANDROID_HOME/platforms/android-35/android.jar"
+          test -x "$ANDROID_HOME/build-tools/35.0.0/apksigner"
+          test -x "$ANDROID_HOME/cmake/3.22.1/bin/cmake"
+          test -x "$ANDROID_HOME/ndk/27.2.12479018/toolchains/llvm/prebuilt/linux-x86_64/bin/clang"
+          grep -Fxq 'Pkg.Revision = 27.2.12479018' "$ANDROID_HOME/ndk/27.2.12479018/source.properties"
       - name: Fetch identical pinned llama.cpp commit
         run: |
           set -euo pipefail
@@ -521,3 +592,11 @@ jobs:
           retention-days: 14
           if-no-files-found: warn
           path: real-nes-evidence/
+
+  g4-experiment:
+    if: github.event_name == 'pull_request' && contains(github.event.pull_request.title, '[G4-EXPERIMENT]')
+    needs: unified-emulator-build
+    uses: ./.github/workflows/localpilot-g4-experiment.yml
+    with:
+      build_run_id: ${{ format('{0}', github.run_id) }}
+      source_sha: ${{ github.sha }}
