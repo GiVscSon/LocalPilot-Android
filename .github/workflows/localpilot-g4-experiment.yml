@@ -80,7 +80,10 @@ jobs:
       fail-fast: false
       max-parallel: 3
       matrix:
-        model: [qwen35, lfm350, lfm1200]
+        # E1 primary cohort: Pocket first; Qwen/LFM1200 are productive controls.
+        # LFM350 has 0 verified goals in 15 discovery episodes in #198.
+        # Keep it in ordinary acceptance/diagnostics, not costly candidate ranking.
+        model: [pocket, qwen35, lfm1200]
         variant: [A, B, C, D, E]
     steps:
       - uses: actions/checkout@v4
