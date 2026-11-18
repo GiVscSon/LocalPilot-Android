@@ -236,6 +236,7 @@ jobs:
           test -s dist/original-arm64/TEST-ONLY-MANIFEST.json
           grep -q '"releaseReady": false' dist/original-arm64/TEST-ONLY-MANIFEST.json
       - name: Install native SDK for x86_64 emulator-only derivative
+        timeout-minutes: 15
         run: |
           set -euo pipefail
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
