@@ -27,7 +27,7 @@ MODEL_PROFILES={
     # This is llama.cpp inference, not a native MNN engine or vision inference.
     'pocket':('taobao-mnn/MNN-Pocket-0.3B-GGUF','MNN-Pocket-0.3B-Instruct-Q4_1.gguf',
               '791b7e92fa790a5ca5bbd7604feb1ce1d2429d14',
-              (191896672,'a281c127e388b16537fd3f87739e6dc514ac1093c80d9eac8d097')),
+              (191896672,'a281c127e388b16537fd3f5d31ab32d3f87739e6dc514ac1093c80d9eac8d097')),
     'qwen35':bundled_profile('ggml-org/Qwen3.5-0.8B-GGUF','Qwen3.5-0.8B-Q4_0.gguf'),
     'lfm350':bundled_profile('LiquidAI/LFM2.5-350M-GGUF','LFM2.5-350M-Q4_0.gguf'),
     # Reviewed on-demand pin; does not add weights to the bundled APK budget.
