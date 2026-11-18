@@ -82,11 +82,40 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
+      - name: Restore pinned native SDK cache
+        id: native-sdk-cache
+        uses: actions/cache/restore@v4
+        with:
+          key: localpilot-linux-sdk35-ndk27.2.12479018-cmake3.22.1-v1
+          path: |
+            /usr/local/lib/android/sdk/ndk/27.2.12479018
+            /usr/local/lib/android/sdk/cmake/3.22.1
+            /usr/local/lib/android/sdk/platforms/android-35
+            /usr/local/lib/android/sdk/build-tools/35.0.0
       - name: Install SDK + pinned native toolchain
+        if: steps.native-sdk-cache.outputs.cache-hit != 'true'
+        timeout-minutes: 15
         run: |
           set -euo pipefail
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
             'platforms;android-35' 'build-tools;35.0.0' 'cmake;3.22.1' 'ndk;27.2.12479018'
+      - name: Verify pinned SDK metadata
+        run: |
+          test -s "$ANDROID_HOME/platforms/android-35/android.jar"
+          test -x "$ANDROID_HOME/build-tools/35.0.0/apksigner"
+          test -x "$ANDROID_HOME/cmake/3.22.1/bin/cmake"
+          test -x "$ANDROID_HOME/ndk/27.2.12479018/toolchains/llvm/prebuilt/linux-x86_64/bin/clang"
+          grep -Fxq 'Pkg.Revision = 27.2.12479018' "$ANDROID_HOME/ndk/27.2.12479018/source.properties"
+      - name: Share verified SDK with dependent ABI build
+        if: steps.native-sdk-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          key: localpilot-linux-sdk35-ndk27.2.12479018-cmake3.22.1-v1
+          path: |
+            /usr/local/lib/android/sdk/ndk/27.2.12479018
+            /usr/local/lib/android/sdk/cmake/3.22.1
+            /usr/local/lib/android/sdk/platforms/android-35
+            /usr/local/lib/android/sdk/build-tools/35.0.0
       - name: Test one-APK source contract, fail closed
         run: |
           set -euo pipefail
@@ -235,12 +264,26 @@ jobs:
           test -s dist/original-arm64/LocalPilot-All-in-One-TEST-ONLY.apk
           test -s dist/original-arm64/TEST-ONLY-MANIFEST.json
           grep -q '"releaseReady": false' dist/original-arm64/TEST-ONLY-MANIFEST.json
-      - name: Install native SDK for x86_64 emulator-only derivative
+      - name: Restore same verified SDK used by ARM64
+        id: native-sdk-cache
+        uses: actions/cache/restore@v4
+        with:
+          key: localpilot-linux-sdk35-ndk27.2.12479018-cmake3.22.1-v1
+          fail-on-cache-miss: true
+          path: |
+            /usr/local/lib/android/sdk/ndk/27.2.12479018
+            /usr/local/lib/android/sdk/cmake/3.22.1
+            /usr/local/lib/android/sdk/platforms/android-35
+            /usr/local/lib/android/sdk/build-tools/35.0.0
+      - name: Verify pinned native SDK for x86_64 emulator-only derivative
         timeout-minutes: 15
         run: |
           set -euo pipefail
-          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
-            'platforms;android-35' 'build-tools;35.0.0' 'cmake;3.22.1' 'ndk;27.2.12479018'
+          test -s "$ANDROID_HOME/platforms/android-35/android.jar"
+          test -x "$ANDROID_HOME/build-tools/35.0.0/apksigner"
+          test -x "$ANDROID_HOME/cmake/3.22.1/bin/cmake"
+          test -x "$ANDROID_HOME/ndk/27.2.12479018/toolchains/llvm/prebuilt/linux-x86_64/bin/clang"
+          grep -Fxq 'Pkg.Revision = 27.2.12479018' "$ANDROID_HOME/ndk/27.2.12479018/source.properties"
       - name: Fetch identical pinned llama.cpp commit
         run: |
           set -euo pipefail
