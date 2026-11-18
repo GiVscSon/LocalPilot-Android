@@ -18,6 +18,14 @@ class PocketProfileTest(unittest.TestCase):
         self.assertEqual(game.REVISION,"791b7e92fa790a5ca5bbd7604feb1ce1d2429d14")
         self.assertEqual(game.FILES[game.MODEL],(191896672,"a281c127e388b16537fd3f5d31ab32d3f87739e6dc514ac1093c80d9eac8d097"))
 
+    def test_pocket_pin_matches_android_catalogue(self):
+        game.select_model("pocket")
+        catalogue=(Path(__file__).resolve().parents[1]/
+                   "model-lab/src/main/java/org/localpilot/android/ModelLabPresetCatalog.java").read_text()
+        self.assertIn(game.REVISION,catalogue)
+        self.assertIn(game.FILES[game.MODEL][1],catalogue)
+        self.assertIn(str(game.FILES[game.MODEL][0])+"L",catalogue)
+
     def test_native_greedy_receipts_are_required_and_no_fake_rng_seed(self):
         line="I LocalPilotNative: controller_sampler=REQUESTED temperature=0.00 top_k=20 top_p=0.80 repeat=1.18 presence=0.00 seed=0 greedy=1\n"
         self.assertEqual(len(game.verified_controller_settings(line*2,"pocket",2)),2)
