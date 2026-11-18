@@ -22,6 +22,7 @@ on:
       - 'tests/test_native_inference_optimization.py'
       - 'tests/native_controller_format_test.cpp'
       - 'tools/run_real_nes_vision_acceptance.py'
+      - 'tests/test_pocket_real_game_profile.py'
       - 'tests/nes_real_game_profile_smoke.cjs'
       - 'tests/nes_ai_action_smoke.cjs'
       - 'tests/nes_controller_framehold.cjs'
@@ -105,6 +106,7 @@ jobs:
           python3 -m unittest discover -s tests -p 'test_harness_runtime_acceptance.py' -v
           python3 -m unittest discover -s tests -p 'test_g2_visible_saf.py' -v
           python3 -m unittest discover -s tests -p 'test_native_inference_optimization.py' -v
+          python3 -m unittest discover -s tests -p 'test_pocket_real_game_profile.py' -v
           c++ -std=c++17 -Wall -Wextra -Werror tests/native_controller_format_test.cpp -o /tmp/localpilot-native-controller-format-test
           /tmp/localpilot-native-controller-format-test
           node tests/nes_controller_framehold.cjs
@@ -473,7 +475,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        model: [qwen35, lfm350, lfm1200]
+        model: [qwen35, lfm350, lfm1200, pocket]
     needs: unified-emulator-build
     runs-on: ubuntu-24.04
     timeout-minutes: 40

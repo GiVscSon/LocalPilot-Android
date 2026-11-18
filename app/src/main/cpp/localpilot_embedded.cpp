@@ -178,7 +178,17 @@ std::string generate_from_logits(int pos,int limit,float temp,int nesController=
   }
   llama_sampler_chain_add(sampler,llama_sampler_init_penalties(
    llama_vocab_n_tokens(vocab),64,sampling.repeat,0.0f,sampling.presence));
-  if(sampling.temperature<=0.0f)llama_sampler_chain_add(sampler,llama_sampler_init_greedy());
+  if(sampling.temperature<=0.0f){
+   llama_sampler_chain_add(sampler,llama_sampler_init_greedy());
+   // Record the actual native deterministic sampler: RNG seed never advances.
+   if(nesController>=2){
+#ifdef __ANDROID__
+    __android_log_print(ANDROID_LOG_INFO,"LocalPilotNative","controller_sampler=%s temperature=%.2f top_k=%d top_p=%.2f repeat=%.2f presence=%.2f seed=0 greedy=1",sampling.profile,sampling.temperature,sampling.top_k,sampling.top_p,sampling.repeat,sampling.presence);
+#else
+    std::fprintf(stderr,"LocalPilotNative controller_sampler=%s temperature=%.2f top_k=%d top_p=%.2f repeat=%.2f presence=%.2f seed=0 greedy=1\n",sampling.profile,sampling.temperature,sampling.top_k,sampling.top_p,sampling.repeat,sampling.presence);
+#endif
+   }
+  }
   else{
    llama_sampler_chain_add(sampler,llama_sampler_init_top_k(sampling.top_k));
    llama_sampler_chain_add(sampler,llama_sampler_init_top_p(sampling.top_p,1));
