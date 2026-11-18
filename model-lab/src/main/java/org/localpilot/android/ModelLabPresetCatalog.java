@@ -25,7 +25,9 @@ public final class ModelLabPresetCatalog {
    return vision()?"https://huggingface.co/"+repository+"/resolve/"+revision+"/"+projectorName:null;
   }
   public String description(){
-   return label+" · "+(totalBytes()/1_000_000)+" МБ"+(vision()?" (модель + mmproj)":"");
+   // Short label fits the selector; accompanying explanation still states that
+   // vision presets include a separately verified mmproj download.
+   return label+" · "+(totalBytes()/1_000_000)+" МБ";
   }
  }
  public static final List<Preset> ALL=List.of(
