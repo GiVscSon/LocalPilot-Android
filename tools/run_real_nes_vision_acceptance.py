@@ -23,6 +23,10 @@ def bundled_profile(repository,filename):
     return repository,filename,models.PINNED_REVISIONS[repository],models.PINNED_FILES[filename]
 
 MODEL_PROFILES={
+    # Exact existing ModelLab pin; llama.cpp GGUF, not MNN native or Dec LoRA.
+    'pocket':('taobao-mnn/MNN-Pocket-0.3B-GGUF','MNN-Pocket-0.3B-Instruct-Q4_1.gguf',
+              '791b7e92fa790a5ca5bbd7604feb1ce1d2429d14',
+              (191896672,'a281c127e388b16537fd3f5d31ab32d3f87739e6dc514ac1093c80d9eac8d097')),
     'qwen35':bundled_profile('ggml-org/Qwen3.5-0.8B-GGUF','Qwen3.5-0.8B-Q4_0.gguf'),
     'lfm350':bundled_profile('LiquidAI/LFM2.5-350M-GGUF','LFM2.5-350M-Q4_0.gguf'),
     # Reviewed on-demand pin; does not add weights to the bundled APK budget.
@@ -143,6 +147,7 @@ def verified_tool_calls(raw,rows,model_sha):
 
 def verified_controller_settings(raw,profile,minimum_calls):
     expected={
+        'pocket':('REQUESTED',0.0,20,0.8,1.18,0.0),
         'qwen35':('QWEN35_TEXT',1.0,20,1.0,1.0,2.0),
         'lfm350':('LFM2_TEXT',0.1,50,1.0,1.05,0.0),
         'lfm1200':('LFM2_TEXT',0.1,50,1.0,1.05,0.0),
@@ -153,8 +158,14 @@ def verified_controller_settings(raw,profile,minimum_calls):
         actual=(name,float(temp),int(top_k),float(top_p),float(repeat),float(presence))
         if actual!=expected:raise ValueError('Actual native sampling differs from selected model preset')
         records.append(dict(profile=name,temperature=float(temp),topK=int(top_k),topP=float(top_p),repeat=float(repeat),presence=float(presence),seed=int(seed)))
-    if minimum_calls<1 or len(records)<minimum_calls or len({r['seed'] for r in records})!=len(records):
-        raise ValueError('Missing actual native sampling calls or replayed sampling seed')
+    if minimum_calls<1 or len(records)<minimum_calls:
+        raise ValueError('Missing actual native sampling calls')
+    if profile=='pocket':
+        receipts=re.findall(r'controller_sampler=REQUESTED [^\n]*seed=0 greedy=1',raw)
+        if len(receipts)<minimum_calls or any(r['seed']!=0 for r in records):
+            raise ValueError('Missing actual Pocket greedy sampler receipts')
+    elif len({r['seed'] for r in records})!=len(records):
+        raise ValueError('Replayed stochastic sampling seed')
     return records
 
 def verify(apk,directory,output,attempt=None):
