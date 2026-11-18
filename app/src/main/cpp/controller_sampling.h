@@ -17,7 +17,7 @@ struct ControllerSampling {
 inline ControllerSampling controller_sampling(int mode,const std::string &architecture,
                                                bool image,float requested_temperature){
  ControllerSampling requested{requested_temperature,20,0.8f,1.18f,0.0f,"REQUESTED"};
- if(mode!=2)return requested; // diagnostics and legacy six-button behavior
+ if(mode<2)return requested; // diagnostics and legacy six-button behavior
  if(architecture=="qwen35"||architecture=="qwen35moe")
   return image?ControllerSampling{0.7f,20,0.8f,1.0f,1.5f,"QWEN35_IMAGE"}:
                ControllerSampling{1.0f,20,1.0f,1.0f,2.0f,"QWEN35_TEXT"};

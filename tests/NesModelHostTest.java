@@ -108,6 +108,9 @@ public final class NesModelHostTest {
   HarnessCoordinator gameGate=new HarnessCoordinator();gameGate.reset("2000",HarnessCoordinator.Mode.STEP_MODE);
   var full=gameGate.beginGame("2000",30,123,2000);
   var gameObs=new NesModelHost.Observation(full,VoidLancerGameState.ROM_SHA,model,-1,-1,unitPng,NesModelHost.TaskProfile.GAME_RAM,realBefore);
+  refuses(()->new NesModelHost.Observation(full,"a".repeat(64),model,-1,-1,unitPng,NesModelHost.TaskProfile.GAME_RAM,realBefore),"unknown ROM cannot borrow VOID RAM or its phase grammar");
+  refuses(()->new NesModelHost.Observation(full,VoidLancerGameState.ROM_SHA,model,-1,-1,unitPng,NesModelHost.TaskProfile.VISION_EXPLORATION,realBefore),"vision profile cannot smuggle ROM-specific RAM");
+  check(new NesModelHost.Observation(full,"a".repeat(64),model,-1,-1,unitPng,NesModelHost.TaskProfile.VISION_EXPLORATION).game()==null,"unknown ROM keeps an honest image-only observation");
   check(new NesModelHost.Reply(gameObs,NesModelHost.Status.PROPOSAL,model.id(),model.sha256(),"START",1).button().equals("START"),"typed full-game reply permits NES menu control");
   check(new NesModelHost.Reply(gameObs,NesModelHost.Status.PROPOSAL,model.id(),model.sha256(),"RIGHT+A",1).button().equals("RIGHT+A"),"typed full-game reply keeps the exact bounded chord");
   refuses(()->new NesModelHost.Observation(full,"a".repeat(64),model,128,112,null),"full-game capability cannot enter the homebrew profile");

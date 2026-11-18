@@ -8,6 +8,17 @@ from run_g2_direct_gguf_acceptance import exact_target
 from run_real_nes_vision_acceptance import confirms_control,parse_game_state,correlate_inference,verified_game_progress,valid_game_button
 
 class VisibleSafTargets(unittest.TestCase):
+    def test_actual_tool_receipts_bind_function_model_frame_and_precondition(self):
+        from run_real_nes_vision_acceptance import verified_tool_calls
+        sha='a'*64
+        row=dict(beforeFrame=30,beforeHash='123',button='START',gameBefore=dict(state=0))
+        receipt='chosen=nes_start button=START frames=16 frame=30 hash=123 model='+sha
+        self.assertEqual(verified_tool_calls(receipt,[row],sha)[0]['tool'],'nes_start')
+        for raw in (receipt.replace('nes_start','nes_press'),receipt.replace('frames=16','frames=8'),receipt+'\n'+receipt,receipt.replace('hash=123','hash=124'),receipt.replace(sha,'b'*64)):
+            with self.subTest(raw=raw),self.assertRaises(ValueError):verified_tool_calls(raw,[row],sha)
+        active=dict(beforeFrame=46,beforeHash='456',button='RIGHT+A',gameBefore=dict(state=1))
+        self.assertEqual(verified_tool_calls('chosen=nes_press button=RIGHT+A frames=16 frame=46 hash=456 model='+sha,[active],sha)[0]['button'],'RIGHT+A')
+
     def test_native_sampling_receipt_requires_actual_preset_and_fresh_seeds(self):
         from run_real_nes_vision_acceptance import verified_controller_settings
         first='controller_sampler=QWEN35_TEXT temperature=1.00 top_k=20 top_p=1.00 repeat=1.00 presence=2.00 seed=42'
