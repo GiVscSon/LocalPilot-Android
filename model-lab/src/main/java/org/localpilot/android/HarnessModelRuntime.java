@@ -226,7 +226,7 @@ public final class HarnessModelRuntime {
     (generic?" ":call.observation.ramX()<0?" RAM UNKNOWN. ":" verified RAM x="+call.observation.ramX()+" y="+call.observation.ramY()+". ")+
     (generic?"Choose one available NES tool for the visible game. ":"Choose one allowed BUTTON for rightward progress without crossing a RAM edge. ")+
     "Input ACK is not a reward. "+history;
-   if(gameRam)observation=call.observation.game().modelPrompt(history);
+   if(gameRam)observation=NesDecisionExperiment.productionPrompt(call.observation.game(),history,model.modelSha);
    if(call.experiment!=null)observation=call.experiment.prompt(call.observation.game(),history);
    final String modelObservation=observation.substring(0,Math.min(900,observation.length()));
    call.prompt=modelObservation;
