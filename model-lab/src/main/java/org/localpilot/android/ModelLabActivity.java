@@ -214,7 +214,7 @@ public final class ModelLabActivity extends Activity {
     text.setHorizontallyScrolling(false);
     text.setMaxLines(3);
     text.setEllipsize(null);
-    int padding=Math.round(12*getResources().getDisplayMetrics().density);
+    int padding=Math.round(12*getContext().getResources().getDisplayMetrics().density);
     text.setPadding(padding,padding,padding,padding);
     return text;
    }
