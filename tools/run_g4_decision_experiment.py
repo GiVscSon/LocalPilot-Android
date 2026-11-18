@@ -40,7 +40,8 @@ def setup(apk,test_apk,directory,profile,output):
     real.select_model(profile);real.prepare(directory)
     identity=dict(sourceSha=source,apkSha256=digest(apk.read_bytes()),testApkSha256=digest(test_apk.read_bytes()),
                   modelProfile=profile,modelSha256=real.FILES[real.MODEL][1],romSha256=real.ROM_SHA,
-                  evidenceType='EMULATOR_ANDROID',physicalDevice=False,weightsTrained=False,releaseReady=False)
+                  evidenceType='EMULATOR_ANDROID',physicalDevice=False,weightsTrained=False,releaseReady=False,
+                  samplerMode='GREEDY_NO_RNG' if profile=='pocket' else 'STOCHASTIC_SEEDED')
     output.mkdir(parents=True,exist_ok=True);(output/'attempt-identity.json').write_text(json.dumps(identity,indent=2))
     command('adb','install','-r',str(apk),timeout=120);command('adb','install','-r','-t',str(test_apk),timeout=120)
     ui.adb('shell','am','start','-W','-n',PACKAGE+'/'+ui.MAIN);ui.wait_activity(ui.MAIN)
@@ -187,5 +188,5 @@ if __name__=='__main__':
     p=argparse.ArgumentParser(description=__doc__);p.add_argument('mode',choices=['bootstrap','matrix'])
     p.add_argument('--apk',type=Path,required=True);p.add_argument('--test-apk',type=Path,required=True)
     p.add_argument('--directory',type=Path,default=Path('build/real-nes-vision'));p.add_argument('--output',type=Path,required=True)
-    p.add_argument('--model-profile',choices=['qwen35','lfm350','lfm1200'],default='qwen35');p.add_argument('--variant',choices=list('ABCDE'),default='A')
+    p.add_argument('--model-profile',choices=['pocket','qwen35','lfm1200'],default='pocket');p.add_argument('--variant',choices=list('ABCDE'),default='A')
     p.add_argument('--fixtures',type=Path);p.add_argument('--holdout-index',type=int,choices=range(20));a=p.parse_args();main(a)
