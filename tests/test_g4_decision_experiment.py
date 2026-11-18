@@ -89,5 +89,29 @@ class G4EvidenceTests(unittest.TestCase):
     for case in report['cases']:case['C']=True;case['scoreDelta']=100
   discovery=summary.discover(reports)
   with self.assertRaises(ValueError):summary.evaluate(discovery,[])
+ def holdout(self,old_score=100,new_score=110):
+  reports=self.discovery()
+  for report in reports:
+   if report['variant']=='C':
+    for case in report['cases']:case['C']=True;case['scoreDelta']=100
+  discovery=summary.discover(reports);pairs=[]
+  for model in summary.MODELS:
+   for i in range(20):
+    cases=[dict(variant=v,snapshot='HOLDOUT_'+str(i),snapshotSha256=f'{100+i:064x}',seed=10042+1000*i,
+      episode=True,C=True,livesLost=1,scoreDelta=s) for v,s in [('A',old_score),('C',new_score)]]
+    pairs.append(dict(identity=dict(modelProfile=model,sourceSha='a'*40,apkSha256='b'*64),holdoutIndex=i,
+      result='DIAGNOSTICS_COMPLETED',errors=[],cases=cases))
+  return discovery,pairs
+ def test_complete_independent_pairs_can_verify_prompt_improvement(self):
+  result=summary.evaluate(*self.holdout())
+  self.assertTrue(all(p['result']=='IMPROVEMENT_VERIFIED' for p in result['policies']))
+  self.assertFalse(result['automaticallyActivated']);self.assertFalse(result['weightsTrained'])
+ def test_less_than_five_percent_does_not_promote(self):
+  result=summary.evaluate(*self.holdout(new_score=104))
+  self.assertTrue(all(p['result']=='NO_PROVEN_IMPROVEMENT' for p in result['policies']))
+ def test_discovery_state_cannot_be_used_in_holdout(self):
+  discovery,pairs=self.holdout()
+  for case in pairs[0]['cases']:case['snapshotSha256']='1'*64
+  with self.assertRaises(ValueError):summary.evaluate(discovery,pairs)
 
 if __name__=='__main__':unittest.main()

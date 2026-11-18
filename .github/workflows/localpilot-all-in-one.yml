@@ -25,6 +25,8 @@ on:
       - 'tools/run_g4_decision_experiment.py'
       - 'tools/summarize_g4_experiment.py'
       - 'tests/test_g4_decision_experiment.py'
+      - 'tests/test_modellab_cancel_verifier.py'
+      - 'tools/verify_modellab_cancel.py'
       - 'tests/NesDecisionExperiment*.java'
       - '.github/workflows/localpilot-g4-experiment.yml'
       - 'tests/nes_real_game_profile_smoke.cjs'
@@ -110,6 +112,7 @@ jobs:
           java tests/NesAgentToolsVerify.java
           java tests/NesDecisionExperimentVerify.java
           python3 -m unittest discover -s tests -p 'test_g4_decision_experiment.py' -v
+          python3 -m unittest discover -s tests -p 'test_modellab_cancel_verifier.py' -v
           python3 -m unittest discover -s tests -p 'test_harness_runtime_acceptance.py' -v
           python3 -m unittest discover -s tests -p 'test_g2_visible_saf.py' -v
           python3 -m unittest discover -s tests -p 'test_native_inference_optimization.py' -v

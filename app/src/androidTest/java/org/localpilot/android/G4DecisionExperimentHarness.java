@@ -52,6 +52,8 @@ final class G4DecisionExperimentHarness {
  private static String sha(byte[] data)throws Exception{
   StringBuilder result=new StringBuilder();for(byte b:MessageDigest.getInstance("SHA-256").digest(data))result.append(String.format(java.util.Locale.ROOT,"%02x",b&255));return result.toString();
  }
+ private static String readText(Path path)throws Exception{return new String(Files.readAllBytes(path),java.nio.charset.StandardCharsets.UTF_8);}
+ private static void writeText(Path path,String text)throws Exception{Files.write(path,text.getBytes(java.nio.charset.StandardCharsets.UTF_8));}
  private static void require(boolean ok,String reason){if(!ok)throw new IllegalStateException(reason);}
  private void stop()throws Exception{
   main(()->{invoke("stopCpuExperiment",new Class<?>[]{String.class},"STOP: bounded G4 diagnostic case");return null;});
@@ -72,7 +74,7 @@ final class G4DecisionExperimentHarness {
  }
  private Path slot(String name){return fixtures.resolve(name);}
  private Path savedFile(String name){return slot(name).resolve("console/nes/latest.nss");}
- private JSONObject metadata(String name)throws Exception{return new JSONObject(Files.readString(slot(name).resolve("metadata.json")));}
+ private JSONObject metadata(String name)throws Exception{return new JSONObject(readText(slot(name).resolve("metadata.json")));}
  private void capture(String name)throws Exception{
   call("freezeAndSave");
   await(()->main(()->!(Boolean)field("progressBusy")&&(Boolean)field("aiFrozen")),10000,"Snapshot not saved");
@@ -83,7 +85,7 @@ final class G4DecisionExperimentHarness {
    .put("snapshotSha256",sha(Files.readAllBytes(savedFile(name)))).put("romSha256",sha(save.rom()))
    .put("coreSha256",NesSaveStore.CORE_SHA256).put("frame",save.frame()).put("frameHash",Integer.toUnsignedString(save.frameHash()))
    .put("game",state.wire()).put("history",history).put("historySource",model.id()+"/"+model.sha256());
-  Files.writeString(slot(name).resolve("metadata.json"),meta.toString());
+  writeText(slot(name).resolve("metadata.json"),meta.toString());
  }
  private JSONObject restore(String name)throws Exception{
   stop();clearJournals();
@@ -150,7 +152,7 @@ final class G4DecisionExperimentHarness {
   require(!runtime.configureExperiment(cancellation),"Configuration changed during native inference");
   stop();require(ConsoleExperienceMemory.readGeneric(root).isEmpty(),"Late completed transition after inference STOP");
   Files.copy(root.resolve("g4-traces/negative_cancel.jsonl"),proof.resolve("negative_cancel.jsonl"),StandardCopyOption.REPLACE_EXISTING);
-  Files.writeString(fixtures.resolve("manifest.json"),new JSONObject().put("schema","g4-fixtures-v1")
+  writeText(fixtures.resolve("manifest.json"),new JSONObject().put("schema","g4-fixtures-v1")
    .put("producerModelSha",model.sha256())
    .put("fixtureNames",new JSONArray(new String[]{"TITLE","PLAYING","THREAT"})).put("holdoutCount",20)
    .put("negativeStopNoTransition",true).put("busyConfigurationRejected",true).put("scriptedActions",false).toString());
@@ -180,7 +182,7 @@ final class G4DecisionExperimentHarness {
    byte[] after=Files.exists(root.resolve("console-ai-user-rom-v1.log"))?Files.readAllBytes(root.resolve("console-ai-user-rom-v1.log")):new byte[0];
    require(java.util.Arrays.equals(before,after),"Completed transition after STOP");report.put("stopNoLateTransition",true);
   }catch(Exception e){report.put("error",e.toString());stop();}
-  Path out=root.resolve("g4-results");Files.createDirectories(out);Files.writeString(out.resolve(id+".json"),report.toString());
+  Path out=root.resolve("g4-results");Files.createDirectories(out);writeText(out.resolve(id+".json"),report.toString());
   return report;
  }
  void run(){
@@ -211,7 +213,7 @@ final class G4DecisionExperimentHarness {
    completed=true;
   }catch(Throwable e){try{summary.put("result","FAIL").put("error",e.toString());}catch(Exception ignored){}}
   try{summary.put("modelSha256",model==null?JSONObject.NULL:model.sha256()).put("physicalDevice",false).put("weightsTrained",false).put("releaseReady",false);
-   if(root!=null){Files.createDirectories(root.resolve("g4-results"));Files.writeString(root.resolve("g4-results/summary.json"),summary.toString());}
+   if(root!=null){Files.createDirectories(root.resolve("g4-results"));writeText(root.resolve("g4-results/summary.json"),summary.toString());}
   }catch(Exception ignored){}
   result.putString("evidence_json",summary.toString());test.finish(completed?Activity.RESULT_OK:Activity.RESULT_CANCELED,result);
  }
