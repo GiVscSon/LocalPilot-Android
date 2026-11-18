@@ -31,6 +31,13 @@ public final class NesDecisionExperimentTest {
   refuses(()->new NesDecisionExperiment.Options(NesDecisionExperiment.Variant.A,-1,"a","a".repeat(64),null,""));
   refuses(()->new NesDecisionExperiment.Options(NesDecisionExperiment.Variant.A,42,"../a","a".repeat(64),null,""));
   refuses(()->new NesDecisionExperiment.Options(NesDecisionExperiment.Variant.A,42,"a","UNKNOWN",null,""));
+  var c=new NesDecisionExperiment.Options(NesDecisionExperiment.Variant.C,42,"c","a".repeat(64),null,"");
+  check(NesDecisionExperiment.productionPrompt(game,history,"57d1997790d1744fba5b40a7317df71ea5e2acee28c47e78f0cce39c0703f8cf").equals(c.prompt(game,history)),"Qwen uses the exact held-out winner");
+  check(NesDecisionExperiment.productionPrompt(game,history,"2ea801949d760cdf1a2cc04a54262c22c3c0c54f0769d57760c9adeb0e59233f").equals(c.prompt(game,history)),"LFM1200 uses the exact held-out winner");
+  for(String sha:new String[]{"a281c127e388b16537fd3f5d31ab32d3f87739e6dc514ac1093c80d9eac8d097","85e32858daafad55b7bcd6b97a1343ee0661188e8036f9862d14d6b563142f50","Qwen3.5","a".repeat(64),null})
+   check(NesDecisionExperiment.productionPrompt(game,history,sha).equals(a.prompt(game,history)),"unproven weights retain A; a filename cannot opt in");
+  check(a.prompt(game,history).equals(game.modelPrompt(history)),"frozen diagnostic A remains the pre-adoption reference");
+  refuses(()->NesDecisionExperiment.productionPrompt(null,history,"a".repeat(64)));
   System.out.println("NES_DECISION_EXPERIMENT_HOST_PASS checks="+checks+" nativeInference=false");
  }
 }
