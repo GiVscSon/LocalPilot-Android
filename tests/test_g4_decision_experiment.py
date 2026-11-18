@@ -81,6 +81,10 @@ class G4EvidenceTests(unittest.TestCase):
     reports.append(dict(result='DIAGNOSTICS_COMPLETED',errors=[],holdoutIndex=None,variant=variant,cases=cases,
      identity=dict(modelProfile=model,sourceSha='a'*40,apkSha256='b'*64)))
   return reports
+ def test_pocket_is_first_priority_cohort_and_unproductive_lfm_is_diagnostic_only(self):
+  self.assertEqual(summary.MODELS,('pocket','qwen35','lfm1200'))
+  self.assertIn('pocket',run.real.MODEL_PROFILES)
+  self.assertNotIn('lfm350',summary.MODELS)
  def test_incomplete_arm_cannot_select_candidate(self):
   with self.assertRaises(ValueError):summary.discover(self.discovery()[:-1])
  def test_mixed_snapshots_rejected(self):
