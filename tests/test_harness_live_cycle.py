@@ -26,7 +26,12 @@ class HarnessLiveCycle(unittest.TestCase):
  def test_real_model_prompt_uses_current_facts_without_an_example_action(self):
   runtime=read('model-lab/src/main/java/org/localpilot/android/HarnessModelRuntime.java')
   engine=read('app/src/main/java/org/localpilot/android/EmbeddedGgufRuntime.java')
-  self.assertIn('call.observation.game().modelPrompt(history)',runtime)
+  self.assertIn('if(gameRam)observation=NesDecisionExperiment.productionPrompt(call.observation.game(),history,model.modelSha);',runtime)
+  recipes=read('shared/src/main/java/org/localpilot/shared/NesDecisionExperiment.java')
+  self.assertIn('return game.modelPrompt(history);',recipes)
+  self.assertIn('game.state()',recipes)
+  self.assertIn('game.score()',recipes)
+  self.assertNotIn('Example: BUTTON=',recipes)
   self.assertIn('runtime.proposeNesTools(',runtime)
   self.assertIn('NesAgentTools.parse(answer,toolScope)',runtime)
   self.assertIn('NesAgentTools.systemPrompt(toolScope)',engine)

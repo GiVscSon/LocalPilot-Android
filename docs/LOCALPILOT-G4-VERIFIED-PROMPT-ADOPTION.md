@@ -57,7 +57,8 @@ production choice. D/E cannot become production choices. Native grammar,
 sampling, STOP, deadlines, phase checks, input executor and training are unchanged.
 
 Changed files: shared prompt formatter, existing HarnessModelRuntime call site,
-its Java contract test, and this evidence handoff. No UI/catalogue expansion.
+its Java contract test, the existing live-cycle source contract, and this evidence
+handoff. No UI/catalogue expansion.
 
 ## Verification and next gate
 
@@ -77,3 +78,15 @@ Pocket stays on A unless its own independent held-out gate proves improvement.
 
 VERIFIED_TRAINING, PHYSICAL_ANDROID (POCO X7 Pro) and RELEASE_SIGNED: NOT_RUN.
 No universal-agent, motor-training, completed-level or Yandex-game acceptance.
+
+## Initial child CI failure retained
+
+Initial child6630b545c7305615d37f6a090991c8e8725abcb4 run44420871232 stopped in
+HOST_UNIT, before Android compilation: test_harness_live_cycle expected the old
+direct modelPrompt call. The source contract now requires the new formatter call
+under the existing gameRam guard with the verified model SHA, retains the A
+fallback, and checks state/score facts and absence of an example answer. All21
+Python host groups from the actual All-in-One source-check step PASS locally
+(including all7 live-cycle checks). No native/controller behavior changed in this
+follow-up. The original failed run remains visible; new-source Android/model
+evidence must come from the retry's own APK.
