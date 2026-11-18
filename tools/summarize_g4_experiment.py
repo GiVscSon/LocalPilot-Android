@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 import statistics
 
-MODELS=('qwen35','lfm350','lfm1200')
+MODELS=('pocket','qwen35','lfm1200')
 
 def discover(reports):
     found={};snapshots={};source=None;apk=None
