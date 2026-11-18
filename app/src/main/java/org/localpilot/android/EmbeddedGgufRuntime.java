@@ -29,6 +29,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 public final class EmbeddedGgufRuntime {
  public interface Callback { void complete(String result); }
  public interface Result { void complete(String answer,long elapsedMs); }
+ public interface ExperimentResult { void complete(String answer,long elapsedMs,Long prefillMs,Long decodeMs); }
  private static final String NAME="MNN-Pocket-0.3B-Instruct-Q4_1.gguf";
  private static final String ASSET="models/"+NAME;
  private static final int MAX_COPY_BYTES=900_000_000;
@@ -57,6 +58,7 @@ public final class EmbeddedGgufRuntime {
  private static final AtomicBoolean NATIVE_JOB_ACTIVE=new AtomicBoolean();
 
  private static native String nativeInfer(String model,String system,String question,int maxTokens,float temp,int controllerMode);
+ private static native String nativeInferExperiment(String model,String system,String question,int scope,int seed,long[] measured);
  private static native String nativeAnalyzeImage(String model,String projector,String question,
    byte[] rgb,int width,int height,int controllerMode);
  private static native void nativeInterrupt();
@@ -320,6 +322,20 @@ public final class EmbeddedGgufRuntime {
      nativeAnalyzeImage(weights.getAbsolutePath(),projector.getAbsolutePath(),
        instructions+"\n"+observation,pixels,width,height,toolScope);
    return LocalCoreContract.visibleAnswer(proposal);
+  });
+ }
+ public void proposeNesExperiment(File weights,String observation,int toolScope,boolean phaseGrammar,int seed,ExperimentResult callback){
+  if(!BuildConfig.HARNESS_TEST_FIXTURES||!BuildConfig.UNIFIED_MODELLAB)
+   throw new SecurityException("Diagnostic cases require the isolated test APK");
+  if(weights==null||!weights.isFile()||observation==null||observation.isBlank()||observation.length()>900||
+     (toolScope!=NesAgentTools.MENU&&toolScope!=NesAgentTools.PLAYING)||seed<0||callback==null)
+   throw new IllegalArgumentException("Invalid diagnostic inference");
+  final long[] measured={-1,-1};final String[] raw={null};final long start=android.os.SystemClock.elapsedRealtime();
+  submit(answer->callback.complete(raw[0]==null?answer:raw[0],android.os.SystemClock.elapsedRealtime()-start,
+    measured[0]<0?null:measured[0],measured[1]<0?null:measured[1]),()->{
+   prepareNativeInference();
+   raw[0]=nativeInferExperiment(weights.getAbsolutePath(),NesAgentTools.systemPrompt(toolScope),observation,
+     phaseGrammar?toolScope:5,seed,measured);return raw[0];
   });
  }
   public void probeGpu(Result callback){

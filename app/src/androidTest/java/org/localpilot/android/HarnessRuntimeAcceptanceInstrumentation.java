@@ -19,13 +19,16 @@ import org.localpilot.shared.NesModelHost;
 public final class HarnessRuntimeAcceptanceInstrumentation extends Instrumentation {
  private volatile Activity latest;
  private boolean preparePinnedModel,localFixture;
+ private Bundle g4Args;
  private volatile CountDownLatch resumed=new CountDownLatch(1);
  @Override public void onCreate(Bundle args){super.onCreate(args);
   String mode=args==null?null:args.getString("mode");
+  if("g4-bootstrap".equals(mode)||"g4-matrix".equals(mode)){g4Args=new Bundle(args);start();return;}
   localFixture="import-local-pocket".equals(mode);
   preparePinnedModel=localFixture||"import-pinned-pocket".equals(mode);start();
  }
  @Override public void onStart(){
+  if(g4Args!=null){new G4DecisionExperimentHarness(this,g4Args).run();return;}
   if(preparePinnedModel){prepareModel();return;}
   Bundle result=new Bundle();JSONObject evidence=new JSONObject();boolean pass=false;
   Application app=(Application)getTargetContext().getApplicationContext();

@@ -22,6 +22,11 @@ on:
       - 'tests/test_native_inference_optimization.py'
       - 'tests/native_controller_format_test.cpp'
       - 'tools/run_real_nes_vision_acceptance.py'
+      - 'tools/run_g4_decision_experiment.py'
+      - 'tools/summarize_g4_experiment.py'
+      - 'tests/test_g4_decision_experiment.py'
+      - 'tests/NesDecisionExperiment*.java'
+      - '.github/workflows/localpilot-g4-experiment.yml'
       - 'tests/nes_real_game_profile_smoke.cjs'
       - 'tests/nes_ai_action_smoke.cjs'
       - 'tests/nes_controller_framehold.cjs'
@@ -58,6 +63,7 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+  actions: read
 concurrency:
   group: localpilot-unified-${{ github.event.pull_request.number || github.ref_name }}
   cancel-in-progress: true
@@ -102,6 +108,8 @@ jobs:
           java tests/HarnessCoordinatorVerify.java
           java tests/NesModelHostVerify.java
           java tests/NesAgentToolsVerify.java
+          java tests/NesDecisionExperimentVerify.java
+          python3 -m unittest discover -s tests -p 'test_g4_decision_experiment.py' -v
           python3 -m unittest discover -s tests -p 'test_harness_runtime_acceptance.py' -v
           python3 -m unittest discover -s tests -p 'test_g2_visible_saf.py' -v
           python3 -m unittest discover -s tests -p 'test_native_inference_optimization.py' -v
@@ -521,3 +529,11 @@ jobs:
           retention-days: 14
           if-no-files-found: warn
           path: real-nes-evidence/
+
+  g4-experiment:
+    if: github.event_name == 'pull_request' && contains(github.event.pull_request.title, '[G4-EXPERIMENT]')
+    needs: unified-emulator-build
+    uses: ./.github/workflows/localpilot-g4-experiment.yml
+    with:
+      build_run_id: ${{ format('{0}', github.run_id) }}
+      source_sha: ${{ github.sha }}

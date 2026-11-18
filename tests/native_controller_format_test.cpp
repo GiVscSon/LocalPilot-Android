@@ -44,6 +44,10 @@ int main(){
  assert(std::count(menu.begin(),menu.end(),'|')==2); // start/wait/stop, no fixed choice
  assert(playing.find("nes_press")!=std::string::npos&&playing.find("START")==std::string::npos&&playing.find("SELECT")==std::string::npos);
  assert(std::count(playing.begin(),playing.end(),'|')==36);
+ const auto common=localpilot::controller_grammar(5);
+ assert(common.find("nes_start")!=std::string::npos&&common.find("nes_press")!=std::string::npos);
+ assert(common.find("START")!=std::string::npos&&common.find("SELECT")!=std::string::npos);
+ assert(std::count(common.begin(),common.end(),'|')==39);
  assert(localpilot::controller_prompt_prefix(direct,3).find("nes_start")==std::string::npos);
  const auto qwen=localpilot::controller_sampling(2,"qwen35",false,0.0f);
  assert(qwen.temperature==1.0f&&qwen.top_p==1.0f&&qwen.repeat==1.0f&&qwen.presence==2.0f);

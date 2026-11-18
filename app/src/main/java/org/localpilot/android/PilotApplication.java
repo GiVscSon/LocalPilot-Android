@@ -28,6 +28,9 @@ public final class PilotApplication extends android.app.Application implements H
  }
  @Override public boolean nesLibraryAvailable(){return BuildConfig.UNIFIED_MODELLAB;}
  @Override public boolean nesTestFixturesAllowed(){return BuildConfig.HARNESS_TEST_FIXTURES;}
+ @Override public boolean recordNesExperimentTransition(org.localpilot.shared.NesModelHost.ExperimentTransition t){
+  return models==null||models.recordExperimentTransition(t);
+ }
  @Override public boolean nesVisionModel(org.localpilot.shared.NesModelHost.ModelIdentity identity){
   if(!BuildConfig.UNIFIED_MODELLAB||identity==null)return false;
   var entry=harnessModels().store().find(identity.id());

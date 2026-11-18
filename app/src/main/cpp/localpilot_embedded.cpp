@@ -23,11 +23,13 @@ namespace {
 // Timings contain phase names/durations only: never prompts, paths, frames or weights.
 struct NativeStage {
  const char *name;
+ long long *receipt;
  std::chrono::steady_clock::time_point started=std::chrono::steady_clock::now();
- explicit NativeStage(const char *phase):name(phase){write("begin",0);}
+ explicit NativeStage(const char *phase,long long *measured=nullptr):name(phase),receipt(measured){write("begin",0);}
  ~NativeStage(){
   auto ms=std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now()-started).count();
   write("end",static_cast<long long>(ms));
+  if(receipt)*receipt=static_cast<long long>(ms);
  }
  void write(const char *event,long long ms){
 #ifdef __ANDROID__
@@ -157,8 +159,8 @@ bool run_batch(llama_batch_ext *batch,const llama_token *tokens,int count,int of
 }
 
 
-std::string generate_from_logits(int pos,int limit,float temp,int nesController=0,bool imageInput=false){
- NativeStage timing("token_decode");
+std::string generate_from_logits(int pos,int limit,float temp,int nesController=0,bool imageInput=false,int64_t requestedSeed=-1,long long *decodeMs=nullptr){
+ NativeStage timing("token_decode",decodeMs);
  if(!ctx||pos<1||limit<1||limit>192)return "";
  const auto *vocab=llama_model_get_vocab(model);
  char architecture[80]={0};
@@ -183,7 +185,7 @@ std::string generate_from_logits(int pos,int limit,float temp,int nesController=
    llama_sampler_chain_add(sampler,llama_sampler_init_top_k(sampling.top_k));
    llama_sampler_chain_add(sampler,llama_sampler_init_top_p(sampling.top_p,1));
    llama_sampler_chain_add(sampler,llama_sampler_init_temp(sampling.temperature));
-   const uint32_t seed=nesController>=2?nextGameSamplingSeed++:42;
+   const uint32_t seed=requestedSeed>=0?static_cast<uint32_t>(requestedSeed):nesController>=2?nextGameSamplingSeed++:42;
    if(nextGameSamplingSeed==LLAMA_DEFAULT_SEED)nextGameSamplingSeed=0;
    llama_sampler_chain_add(sampler,llama_sampler_init_dist(seed));
    if(nesController>=2){
@@ -215,7 +217,7 @@ std::string generate_from_logits(int pos,int limit,float temp,int nesController=
  return localpilot::controller_reply(output,nesController);
 }
 
-std::string infer(const std::string &sys,const std::string &usr,int limit,float temp,int controller=0){
+std::string infer(const std::string &sys,const std::string &usr,int limit,float temp,int controller=0,int64_t seed=-1,long long *prefillMs=nullptr,long long *decodeMs=nullptr){
  if(!ctx||limit<1||limit>192)return "";
  std::string formatted=chat(sys,usr,controller);
  if(formatted.empty())return "";
@@ -232,7 +234,7 @@ std::string infer(const std::string &sys,const std::string &usr,int limit,float 
  if(!batch)return "";
  bool ok=true;
  {
-  NativeStage timing("text_prefill");
+  NativeStage timing("text_prefill",prefillMs);
   for(int i=0;i<n && ok && !cancelled.load();i+=256){
    int length=std::min(256,n-i);
    ok=run_batch(batch,tokens.data()+i,length,i,i+length==n);
@@ -240,7 +242,7 @@ std::string infer(const std::string &sys,const std::string &usr,int limit,float 
  }
  if(!ok||cancelled.load()){llama_batch_ext_free(batch);return "";}
  llama_batch_ext_free(batch);
- return generate_from_logits(n,controller?std::min(controller>=2?64:16,limit):limit,temp,controller);
+ return generate_from_logits(n,controller?std::min(controller>=2?64:16,limit):limit,temp,controller,false,seed,decodeMs);
 
 }
 }
@@ -293,6 +295,22 @@ Java_org_localpilot_android_EmbeddedGgufRuntime_nativeInfer(
  for(unsigned char byte:result){
   if((byte&0xF8)==0xF0){result.clear();break;}
  }
+ return e->NewStringUTF(result.c_str());
+}
+
+// Same model/context/lock/infer function as production. Only the test APK's
+// guarded Java method exposes explicit seeds and the common-vocabulary arm.
+extern "C" JNIEXPORT jstring JNICALL
+Java_org_localpilot_android_EmbeddedGgufRuntime_nativeInferExperiment(
+ JNIEnv *e,jclass,jstring filename,jstring system,jstring question,jint scope,jint seed,jlongArray measured){
+ if((scope!=3&&scope!=4&&scope!=5)||seed<0||!measured||e->GetArrayLength(measured)!=2)return e->NewStringUTF("");
+ Utf f(e,filename),s(e,system),q(e,question);
+ std::lock_guard<std::mutex> guard(lock);
+ long long prefill=-1,decode=-1;std::string result;
+ if(!cancelled.load()&&init(f.str()))result=infer(s.str(),q.str(),64,0.0f,scope,seed,&prefill,&decode);
+ jlong values[]={static_cast<jlong>(prefill),static_cast<jlong>(decode)};
+ e->SetLongArrayRegion(measured,0,2,values);
+ for(unsigned char byte:result)if((byte&0xF8)==0xF0){result.clear();break;}
  return e->NewStringUTF(result.c_str());
 }
 

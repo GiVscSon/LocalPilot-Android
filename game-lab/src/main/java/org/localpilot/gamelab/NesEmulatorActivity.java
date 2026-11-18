@@ -107,6 +107,7 @@ public final class NesEmulatorActivity extends Activity {
  private TaskObservation taskObservation;
  private record RealGameObservation(String token,String epoch,VoidLancerGameState state){}
  private RealGameObservation realGameObservation;
+ private String diagnosticObservationNonce;
  private final HarnessCoordinator harness=HarnessCoordinator.nes();
  private HarnessCoordinator.ActionPermit pendingPermit;
  private boolean aiSnapshot,aiRunning,aiFrozen,studentStepRequested;
@@ -139,6 +140,7 @@ public final class NesEmulatorActivity extends Activity {
   int studentActionId=-1,studentLegalMask;
   String studentPolicySha;
   VoidLancerGameState gameBefore,gameAfter;
+  String observationNonce,actionNonce;
   TrialPending(String button,int frame,int hash){
    this.button=button;this.frame=frame;this.hash=hash;
   }
@@ -487,6 +489,7 @@ public final class NesEmulatorActivity extends Activity {
         pendingTrial==null||pendingPermit==null||!pendingPermit.nonce.equals(nonce)||pendingTrial.frame!=start||finish-start!=16)return;
      try{
       pendingTrial.gameBefore=VoidLancerGameState.parse(before);pendingTrial.gameAfter=VoidLancerGameState.parse(after);
+      pendingTrial.actionNonce=nonce;
       if(getApplication() instanceof NesModelHost host&&host.nesTestFixturesAllowed())
        android.util.Log.i("LocalPilotObservation","transition_staged=true start="+start+" finish="+finish+
         " before="+pendingTrial.gameBefore.wire()+" after="+pendingTrial.gameAfter.wire());
@@ -1578,7 +1581,11 @@ public final class NesEmulatorActivity extends Activity {
   try{
    if(!homebrewRom){
     ConsoleExperienceMemory.appendGeneric(getFilesDir().toPath(),new ConsoleExperienceMemory.GenericEpisode(
-      activeRomSha,frameEpoch.token(),aiModelId,aiModelSha,episode,current.gameBefore,current.gameAfter));return true;
+      activeRomSha,frameEpoch.token(),aiModelId,aiModelSha,episode,current.gameBefore,current.gameAfter));
+    return !(getApplication() instanceof NesModelHost host)||host.recordNesExperimentTransition(
+      new NesModelHost.ExperimentTransition(frameEpoch.token(),current.observationNonce,current.actionNonce,
+        activeRomSha,aiModelId,aiModelSha,episode.button,episode.frameBefore,episode.frameAfter,episode.hashBefore,episode.hashAfter,
+        current.gameBefore==null?null:current.gameBefore.wire(),current.gameAfter==null?null:current.gameAfter.wire()));
    }
    // The SAME bounded, verified source is consumed by ModelLab and the main
    // console status. Old JSONL is retained read-only as legacy diagnostics.
@@ -1633,6 +1640,7 @@ public final class NesEmulatorActivity extends Activity {
    return;
   }
   aiModelId=modelId;aiModelSha=modelSha;aiHoldFrames=proposedFrames;
+  diagnosticObservationNonce=nonce;
   if("NONE".equals(button)){
    if(autoGgufRemaining>0){stopCpuExperiment("STOP: модель выбрала NONE");return;}
    harness.stopForEpoch(frameEpoch.token(),"MODEL_SELECTED_NONE");
@@ -1665,6 +1673,7 @@ public final class NesEmulatorActivity extends Activity {
   }
   aiRunning=true;
   directModelBinding=null;
+  pendingTrial.observationNonce=diagnosticObservationNonce;
   showState("ИИ "+aiModelId+" · STEP_MODE "+button+" на "+aiHoldFrames+" реальных кадров; проверяю");
   final String executingNonce=pendingPermit.nonce;
   web.evaluateJavascript("window.retroAiStep("+
