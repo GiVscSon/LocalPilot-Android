@@ -182,7 +182,10 @@ final class G4DecisionExperimentHarness {
    byte[] after=Files.exists(root.resolve("console-ai-user-rom-v1.log"))?Files.readAllBytes(root.resolve("console-ai-user-rom-v1.log")):new byte[0];
    require(java.util.Arrays.equals(before,after),"Completed transition after STOP");report.put("stopNoLateTransition",true);
   }catch(Exception e){report.put("error",e.toString());stop();}
-  Path out=root.resolve("g4-results");Files.createDirectories(out);writeText(out.resolve(id+".json"),report.toString());
+  Path out=root.resolve("g4-results");Files.createDirectories(out);
+  for(String[] names:new String[][]{{"console-ai-user-rom-v1.log",".journal.log"},{"harness-model-execution-v1.log",".inference.log"}})
+   if(Files.exists(root.resolve(names[0])))Files.copy(root.resolve(names[0]),out.resolve(id+names[1]),StandardCopyOption.REPLACE_EXISTING);
+  writeText(out.resolve(id+".json"),report.toString());
   return report;
  }
  void run(){

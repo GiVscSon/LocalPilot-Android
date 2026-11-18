@@ -6,11 +6,25 @@ from pathlib import Path
 import sys
 import tarfile
 import unittest
+from unittest.mock import patch
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'tools'))
 import run_g4_decision_experiment as run
 import summarize_g4_experiment as summary
 
 class G4EvidenceTests(unittest.TestCase):
+ def test_binary_upload_uses_non_pty_shell_and_preserves_bytes(self):
+  import subprocess
+  with patch.object(run.subprocess,'run',return_value=subprocess.CompletedProcess([],0,b'',b'')) as command:
+   run.push_private(b'\x00\r\n\xff','tee','files/unit.nes')
+   self.assertEqual(command.call_args.args[0],['adb','shell','-T','run-as',run.PACKAGE,'tee','files/unit.nes'])
+   self.assertEqual(command.call_args.kwargs['input'],b'\x00\r\n\xff')
+ def test_setup_refuses_preexisting_app_data(self):
+  def adb(*args,**kwargs):
+   if args[-1]=='ro.product.cpu.abi':return 'x86_64'
+   if args[-1]=='ro.build.version.sdk':return '35'
+   return 'package:'+run.PACKAGE
+  with patch.object(run.ui,'is_emulator',return_value=True),patch.object(run.ui,'adb',side_effect=adb):
+   with self.assertRaisesRegex(RuntimeError,'existing app data'):run.setup(None,None,None,'qwen35',None)
  def sample(self):
   before='0,0,0,0,0,0,0,0,0,0,-1,-1,-1,-1';after='1,120,200,3,3,1,0,0,0,0,-1,-1,-1,-1'
   identity=dict(modelProfile='qwen35',modelSha256='a'*64,romSha256=run.real.ROM_SHA)

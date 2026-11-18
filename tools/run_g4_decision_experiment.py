@@ -33,6 +33,8 @@ def validate_tar(raw,prefix):
 def setup(apk,test_apk,directory,profile,output):
     if not ui.is_emulator() or ui.adb('shell','getprop','ro.product.cpu.abi').strip()!='x86_64' or ui.adb('shell','getprop','ro.build.version.sdk').strip()!='35':
         raise RuntimeError('Isolated API35 x86_64 required')
+    if ui.adb('shell','pm','list','packages',PACKAGE).strip():
+        raise RuntimeError('Fresh isolated AVD required; refusing existing app data')
     with zipfile.ZipFile(apk) as z:source=json.loads(z.read('assets/localpilot-source.json'))['sourceSha']
     if source!=command('git','rev-parse','HEAD').strip():raise RuntimeError('Checked-out source differs from actual APK')
     real.select_model(profile);real.prepare(directory)
@@ -49,7 +51,7 @@ def setup(apk,test_apk,directory,profile,output):
     return identity
 
 def push_private(raw,*args):
-    p=subprocess.run(['adb','exec-out','run-as',PACKAGE,*args],input=raw,capture_output=True,timeout=90)
+    p=subprocess.run(['adb','shell','-T','run-as',PACKAGE,*args],input=raw,capture_output=True,timeout=90)
     if p.returncode:raise RuntimeError(p.stderr.decode(errors='replace')[-1000:])
 
 def instrument(mode,profile,output,variant=None,pair=None):
@@ -131,6 +133,18 @@ def read_archive(raw):
     with tarfile.open(fileobj=io.BytesIO(raw)) as archive:
         return {m.name:archive.extractfile(m).read() for m in archive.getmembers() if m.isfile()}
 
+def validate_journals(report,traces,journal,inference,model_sha):
+    rows=real.verified_generic_rows(journal,model_sha)
+    if len(rows)!=len(report['transitions']):raise ValueError('Actual journal rows missing')
+    if real.correlate_inference(inference,rows,model_sha)!=len(traces):raise ValueError('Actual inference journal calls missing')
+    epochs=[line.decode().split('|')[2] for line in journal.splitlines()]
+    for actual,claimed,epoch in zip(rows,report['transitions'],epochs):
+        if epoch!=claimed['epoch'] or actual['button']!=claimed['action']:raise ValueError('Journal actor/epoch differs')
+        for key in ('beforeFrame','afterFrame','beforeHash','afterHash'):
+            if actual[key]!=claimed[key]:raise ValueError('Journal frame/hash differs')
+        if actual['gameBefore']!=parse_wire(claimed['beforeGame']) or actual['gameAfter']!=parse_wire(claimed['afterGame']):
+            raise ValueError('Journal RAM differs')
+
 def summarize(files,identity,variant,pair=None):
     result=[];errors=[]
     cases=[(seed,snapshot,episode,variant) for seed in SEEDS for snapshot,episode in [(s,False) for s in SNAPSHOTS]+[('TITLE',True)]] if pair is None else [
@@ -141,6 +155,8 @@ def summarize(files,identity,variant,pair=None):
                 report=json.loads(files['files/g4-results/'+case+'.json'])
                 traces=[json.loads(s) for s in files.get('files/g4-traces/'+case+'.jsonl',b'').splitlines()]
                 receipts=[json.loads(s) for s in files.get('files/g4-traces/'+case+'.transitions.jsonl',b'').splitlines()]
+                validate_journals(report,traces,files.get('files/g4-results/'+case+'.journal.log',b''),
+                                  files.get('files/g4-results/'+case+'.inference.log',b''),identity['modelSha256'])
                 result.append(validate_case(report,traces,receipts,identity,arm,seed,snapshot,episode))
             except Exception as error:errors.append(dict(caseId=case,error=str(error)))
     return dict(result='DIAGNOSTICS_COMPLETED' if not errors else 'INCOMPLETE_DIAGNOSTICS',identity=identity,variant=variant,cases=result,errors=errors,
