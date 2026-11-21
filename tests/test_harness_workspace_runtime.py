@@ -30,6 +30,15 @@ class WorkspaceRuntimeAcceptance(unittest.TestCase):
   self.assertIn('if(!HarnessWorkspaceEngine.inspect(this).canStartNes())',d)
   self.assertIn('if (!HarnessWorkspaceEngine.inspect(this).canStartAndroid())',p)
   self.assertIn('if(HarnessWorkspaceEngine.inspect(this).nesBusy())',s)
+ def test_real_harness_console_available_in_production_unified_apk(self):
+  main=source("app/src/main/java/org/localpilot/android/MainActivity.java")
+  manifest=source("app/src/main/AndroidManifest.xml")
+  self.assertIn('if(BuildConfig.UNIFIED_MODELLAB) {',main)
+  self.assertIn('new Intent(this,HarnessDashboardActivity.class)',main)
+  self.assertIn('new Intent(this,ModelLabActivity.class)',main)
+  self.assertNotIn('if(BuildConfig.HARNESS_TEST_FIXTURES)button(box,"🎮 Harness Console',main)
+  self.assertIn('android:name=".HarnessDashboardActivity" android:exported="false"',manifest)
+  self.assertIn('pilot.showPanel()',main)
  def test_no_new_input_owner_or_fake_success_path(self):
   e=source("app/src/main/java/org/localpilot/android/HarnessWorkspaceEngine.java")
   p=source("app/src/main/java/org/localpilot/android/HarnessWorkspacePolicy.java")
