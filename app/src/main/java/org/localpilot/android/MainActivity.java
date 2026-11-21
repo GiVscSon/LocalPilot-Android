@@ -31,18 +31,16 @@ public class MainActivity extends Activity {
   TextView help=new TextView(this);help.setText("1. Откройте игру и выберите её профиль: «Игра».\n2. Нажмите «Окно» и выберите приложение с игрой.\n3. Нажмите «Старт» и разрешите показ экрана.\n\nSTOP останавливает игру агента. В первый раз включите управление кнопкой ниже.");box.addView(help);
   section(box,"01 · Системное управление · дополнительные возможности");
   button(box,"Включить управление",()->startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)));
-  button(box,"Показать панель",()->{PilotService pilot=PilotService.instance;if(pilot==null){toast(CrashDiagnostics.connectionHint(this));return;}pilot.recoverPanel();status.setText(CrashDiagnostics.connectionHint(this));});
+  button(box,"Показать панель",()->{PilotService pilot=PilotService.instance;if(pilot==null){toast(CrashDiagnostics.connectionHint(this));return;}pilot.showPanel();status.setText(CrashDiagnostics.connectionHint(this));});
   TextView panelHelp=new TextView(this);panelHelp.setText("Панель можно свернуть. STOP всегда остаётся доступным.");box.addView(panelHelp);
   section(box,"02 · Модели и обучение");
-  if(BuildConfig.UNIFIED_MODELLAB)
-   if(BuildConfig.HARNESS_TEST_FIXTURES)button(box,"🎮 Harness Console · модели, NES, эпизоды, STOP, GPU",
-     ()->startActivity(new Intent(this,HarnessDashboardActivity.class)));
   if(BuildConfig.UNIFIED_MODELLAB) {
-   if(BuildConfig.HARNESS_TEST_FIXTURES)button(box,"🧠 ModelLab · GGUF, загрузка моделей и анализ фото",
+   // Production and test APKs share the same operational Harness workspace.
+   // HARNESS_TEST_FIXTURES may enable tests, never decide whether real tools exist in the UI.
+   button(box,"🎮 Harness Console · окружения, NES/Android, модели, обучение, STOP",
+     ()->startActivity(new Intent(this,HarnessDashboardActivity.class)));
+   button(box,"🧠 ModelLab · GGUF, загрузка моделей и анализ фото",
      ()->startActivity(new Intent(this,ModelLabActivity.class)));
-   else button(box,"Модели и игровое окно",()->startActivity(new Intent(this,org.localpilot.gamelab.NesEmulatorActivity.class)
-     .putExtra(org.localpilot.shared.NesModelHost.EXTRA_REAL_GAMES_ONLY,true)
-     .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP|Intent.FLAG_ACTIVITY_SINGLE_TOP)));
   }else {
   button(box,"Локальное ИИ-ядро · MNN-Pocket (English)",()->startActivity(new Intent(this,LocalCoreActivity.class)));
   }
@@ -53,7 +51,7 @@ public class MainActivity extends Activity {
   TextView autoHelp=new TextView(this);autoHelp.setText("Для сетки фишек: Игра → Мэтч Ворлд · обмен соседей или Фишки · удалить группу → выберите 6×6, 7×7 либо другой размер → обведите клетки → Старт. Настройки и типы фишек сохраняются. Поддерживаются различимые цветные фишки без специальных эффектов; цели уровня и усилители пока не распознаются. Для аркад другого оформления: Ещё → Настроить распознавание. Для разных игр одного браузера: Игра → Имя игры. STOP всегда останавливает ввод.");box.addView(autoHelp);
   section(box,"03 · Консольная лаборатория");
   TextView labCaption=new TextView(this);
-  labCaption.setText("NES/Денди работает локально. Программа передаёт нейросети данные игры, выполняет разрешённые инструменты через единый контроллер и проверяет результат. Поддержка каждой игры проверяется отдельно.");
+  labCaption.setText("В Harness Console: реальные окружения NES и Android, выбранная модель, запуск, STOP, журналы и обучение. Отдельные NES-эпизоды GGUF подтверждены; NFS и универсальное зрение MNN-Pocket пока не проверены. Для каждой Android-игры нужен совместимый профиль и свежий кадр.");
   labCaption.setTextColor(HubContract.SECONDARY);box.addView(labCaption);
   button(box,"Открыть консольную лабораторию · NES / Денди",this::openGameLab);
   consoleExperience=new TextView(this);
