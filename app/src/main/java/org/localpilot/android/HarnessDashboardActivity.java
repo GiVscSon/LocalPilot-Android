@@ -59,7 +59,11 @@ public final class HarnessDashboardActivity extends Activity {
   screen.setPadding(dp(12),dp(18),dp(12),dp(6));
   TextView title=label("LocalPilot · Harness Console",23,TEXT,true);
   screen.addView(title);
-  screen.addView(label("Один APK · один NES-контроллер · проверенный опыт",12,MUTED,false));
+  screen.addView(label("Один APK · NES + Android · реальные исполнители и журнал",12,MUTED,false));
+  // Global, permanently visible STOP. Reuses the existing NES + Android release path.
+  Button universalStop=button("■ STOP · NES + Android",this::stopWorkspace);
+  universalStop.setLayoutParams(new LinearLayout.LayoutParams(-1,dp(48)));
+  screen.addView(universalStop);
   HorizontalScrollView tabs=new HorizontalScrollView(this);
   tabs.setHorizontalScrollBarEnabled(false);
   LinearLayout rail=new LinearLayout(this);
