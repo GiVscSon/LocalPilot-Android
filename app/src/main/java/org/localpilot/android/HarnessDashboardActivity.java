@@ -296,13 +296,14 @@ public final class HarnessDashboardActivity extends Activity {
     "Один экран управления существующими JSNES, ModelLab и PilotService. Состояния читаются из настоящих владельцев.");
   row(runtimeCard,"Активная работа: "+runtime.runningLabel());
   row(runtimeCard,"NES · "+runtime.nesMode()+" · владелец "+runtime.nesOwner());
-  row(runtimeCard,"NES · эпоха "+runtime.nesEpoch()+" · ожидает "+runtime.nesWaiting()+
+  row(runtimeCard,"NES · эпоха "+(runtime.nesEpoch().isEmpty()?"НЕ ЗАПУЩЕНА":runtime.nesEpoch())+" · ожидает "+runtime.nesWaiting()+
     " · жест в процессе "+runtime.nesAction());
   row(runtimeCard,"Android · "+runtime.androidPackage()+" · "+runtime.androidProfile());
   row(runtimeCard,"Android · окно привязано "+runtime.androidArmed()+
     " · захват/игра "+runtime.androidRunning());
   row(runtimeCard,"Android · реальные кадры "+runtime.androidFrames()+
-    " · визуально подтверждённые реакции "+runtime.androidVerified());
+    " · визуально подтверждённые реакции "+
+    (runtime.androidVerified()<0?"НЕ ПРОВЕРЕНО":Long.toString(runtime.androidVerified())));
   row(runtimeCard,"Последний STOP Android: "+runtime.androidStopReason());
   LinearLayout nes=card("NES · действительный движок",
     "JSNES + HarnessCoordinator + назначенная GGUF + проверка ROM/RAM. Не создаём второе ядро.");
