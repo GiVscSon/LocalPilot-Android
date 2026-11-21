@@ -396,6 +396,10 @@ public class PilotService extends AccessibilityService {
   arm();return gate.armed();
  }
  private void startSelected(){
+  // A NES model owner cannot be raced by a newly selected installed game.
+  if(HarnessWorkspaceEngine.inspect(this).nesBusy()){
+   note="STOP: NES-агент активен · завершите его перед Android-управлением";update();return;
+  }
   if(!bindSelectedWindow())return;
   if(!playingJumper&&!playingGrid&&!playing2048&&!playingMini){
    int saved=getSharedPreferences("game-profiles",MODE_PRIVATE).getInt(profileChoiceKey(target),-1);
@@ -2094,6 +2098,15 @@ public class PilotService extends AccessibilityService {
 
  private void compact(boolean on){if(panel==null)return;panelCompact=on;for(int i=0;i<panel.getChildCount();i++){View child=panel.getChildAt(i);child.setVisibility(child==miniBar?(on?View.VISIBLE:View.GONE):(on?View.GONE:View.VISIBLE));}panel.setPadding(on?0:8,on?0:4,on?0:8,on?0:4);panel.setBackgroundColor(on?0x8C202830:0xA6202830);if(layout!=null){layout.width=dp(on?160:240);updatePanelLayout();}}
  private Rect panelBounds(){if(panel==null||consentPanelDetached)return new Rect();int[] p=new int[2];panel.getLocationOnScreen(p);return new Rect(p[0],p[1],p[0]+panel.getWidth(),p[1]+panel.getHeight());}
+ /** Actual Android executor's immutable snapshot for the Harness environment view. */
+ public record HarnessAndroidState(String packageName,String profile,boolean windowArmed,
+   boolean capturing,long frames,long verifiedResponses,String lastStopReason) {}
+ public HarnessAndroidState harnessEnvironmentState(){
+  boolean running=playingJumper||playingGrid||playing2048||playingMini;
+  long confirmed=playingGrid?gridVerified:playingJumper?arcadeVerified:-1;
+  return new HarnessAndroidState(target,profileLabel(),gate.armed(),running,
+    captureFrames,confirmed,lastStopReason);
+ }
  /** Read-only projection for the existing single Harness Console; grants no input. */
  public String installedGameReadiness(String selectedPackage){
   if(selectedPackage==null||selectedPackage.isEmpty())return "Игра не выбрана.";
