@@ -200,6 +200,10 @@ public final class GamePickerActivity extends Activity {
     }
 
     private void launch(Entry entry) {
+        if (!HarnessWorkspaceEngine.inspect(this).canStartAndroid()) {
+            toast("NES-агент занят. Используйте общий STOP перед сменой окружения.");
+            return;
+        }
         // Never bind/launch a system UI masquerading as an installed game.
         if (!VisualGameTarget.allowed(entry.packageName, getPackageName())) {
             toast("Недопустимое системное окно. Выберите настоящую игру.");

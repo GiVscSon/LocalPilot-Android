@@ -33,7 +33,7 @@ public final class HarnessDashboardActivity extends Activity {
  private static final int BG=0xff0a1422,CARD=0xff132237,BORDER=0xff304862;
  private static final int TEXT=0xffedf4ff,MUTED=0xffa7b8cf,ACCENT=0xff87b6ff;
  private static final String[] TABS={
-   "Обзор","Модели","Консоли","Эпизоды","Обучение","GPU и STOP"};
+   "Обзор","Окружения","Модели","Консоли","Эпизоды","Обучение","GPU и STOP"};
  private LinearLayout content;
  private String tab="Обзор";
  private boolean destroyed;
@@ -59,7 +59,11 @@ public final class HarnessDashboardActivity extends Activity {
   screen.setPadding(dp(12),dp(18),dp(12),dp(6));
   TextView title=label("LocalPilot · Harness Console",23,TEXT,true);
   screen.addView(title);
-  screen.addView(label("Один APK · один NES-контроллер · проверенный опыт",12,MUTED,false));
+  screen.addView(label("Один APK · NES + Android · реальные исполнители и журнал",12,MUTED,false));
+  // Global, permanently visible STOP. Reuses the existing NES + Android release path.
+  Button universalStop=button("■ STOP · NES + Android",this::stopWorkspace);
+  universalStop.setLayoutParams(new LinearLayout.LayoutParams(-1,dp(48)));
+  screen.addView(universalStop);
   HorizontalScrollView tabs=new HorizontalScrollView(this);
   tabs.setHorizontalScrollBarEnabled(false);
   LinearLayout rail=new LinearLayout(this);
@@ -131,6 +135,7 @@ public final class HarnessDashboardActivity extends Activity {
   info("Только локальные подтверждённые данные. Нет фиктивных наград или обучения GGUF.");
   try{
    switch(tab){
+    case "Окружения"->environments();
     case "Модели"->models();
     case "Консоли"->consoles();
     case "Эпизоды"->episodes();
@@ -209,11 +214,17 @@ public final class HarnessDashboardActivity extends Activity {
   row(installed,androidPilot==null?"Accessibility-служба выключена. Ввод невозможен.":
     androidPilot.installedGameReadiness(gamePackage));
   row(installed,"MNN-Pocket сейчас проверена на NES/RAM. Для NFS зрительный ввод и моторная политика НЕ ПОДТВЕРЖДЕНЫ.");
-  installed.addView(button("Выбрать установленную игру",()->startActivity(new Intent(this,GamePickerActivity.class))));
+  installed.addView(button("Выбрать установленную игру",()->{
+   if(!HarnessWorkspaceEngine.inspect(this).canStartAndroid()){
+    info("STOP: NES-агент занят. Остановите его перед переключением в Android");return;
+   }
+   startActivity(new Intent(this,GamePickerActivity.class));
+  }));
+  installed.addView(button("Открыть окружения Harness",()->{tab="Окружения";render();}));
   installed.addView(button("Показать существующую панель Android",()->{
    PilotService pilot=PilotService.instance;
    if(pilot==null){info("STOP: сначала включите Accessibility-службу LocalPilot");return;}
-   pilot.recoverPanel();
+   pilot.showPanel();
    info("Панель Android открыта · выберите механику и окно игры");
   }));
   LinearLayout launch=card("Играть и продолжать","Автоигра Student — встроенная NES-ROM. Свои ROM доступны для ручной игры.");
@@ -278,6 +289,54 @@ public final class HarnessDashboardActivity extends Activity {
    try{HarnessModelBinding.clear(this);render();}
    catch(RuntimeException failure){info("STOP: не удалось отозвать назначение");}
   }));
+ }
+ private void environments(){
+  HarnessWorkspaceEngine.Live runtime=HarnessWorkspaceEngine.inspect(this);
+  LinearLayout runtimeCard=card("Harness Runtime · живые окружения",
+    "Один экран управления существующими JSNES, ModelLab и PilotService. Состояния читаются из настоящих владельцев.");
+  row(runtimeCard,"Активная работа: "+runtime.runningLabel());
+  row(runtimeCard,"NES · "+runtime.nesMode()+" · владелец "+runtime.nesOwner());
+  row(runtimeCard,"NES · эпоха "+(runtime.nesEpoch().isEmpty()?"НЕ ЗАПУЩЕНА":runtime.nesEpoch())+" · ожидает "+runtime.nesWaiting()+
+    " · жест в процессе "+runtime.nesAction());
+  row(runtimeCard,"Android · "+runtime.androidPackage()+" · "+runtime.androidProfile());
+  row(runtimeCard,"Android · окно привязано "+runtime.androidArmed()+
+    " · захват/игра "+runtime.androidRunning());
+  row(runtimeCard,"Android · реальные кадры "+runtime.androidFrames()+
+    " · визуально подтверждённые реакции "+
+    (runtime.androidVerified()<0?"НЕ ПРОВЕРЕНО":Long.toString(runtime.androidVerified())));
+  row(runtimeCard,"Последний STOP Android: "+runtime.androidStopReason());
+  LinearLayout nes=card("NES · действительный движок",
+    "JSNES + HarnessCoordinator + назначенная GGUF + проверка ROM/RAM. Не создаём второе ядро.");
+  ModelLabStore.Entry model=boundModel();
+  row(nes,model==null?"GGUF не назначена; выберите её в Модели":
+    "Назначена GGUF: "+model.label+" · "+model.modelSha.substring(0,12));
+  nes.addView(button("Открыть NES и ROM",this::openNES));
+  nes.addView(button("▶ NES · реальная GGUF, 4 проверяемых шага",
+    ()->startTrustedNesWorkflow(HarnessDemoWorkflow.GGUF_PLAY_4)));
+  nes.addView(button("Выбрать GGUF / MNN-Pocket",this::openModelLab));
+  LinearLayout android=card("Android · установленные игры",
+    "Настоящий GamePicker → PilotService → ROI → ActionGate → fresh-frame verifier.");
+  row(android,runtime.androidPackage().isEmpty()?"Сторонняя игра не выбрана":
+    runtime.androidPackage());
+  row(android,runtime.androidReadiness());
+  row(android,"NFS: управление автомобилем и зрение Pocket пока не проверены. Без совместимого профиля жесты запрещены.");
+  android.addView(button("Выбрать установленную игру",()->{
+   if(!runtime.canStartAndroid()){info("STOP: сначала завершите текущий NES-агент");return;}
+   startActivity(new Intent(this,GamePickerActivity.class));
+  }));
+  android.addView(button("Открыть рабочую панель Android",()->{
+   if(!HarnessWorkspaceEngine.inspect(this).canStartAndroid()){
+    info("STOP: сначала завершите текущий NES-агент");return;
+   }
+   PilotService pilot=PilotService.instance;
+   if(pilot==null){info("Accessibility-служба не подключена");return;}
+   pilot.showPanel();
+  }));
+  LinearLayout safety=card("Управление и доказательства",
+    "STOP не подменяет проверку результата. Нет ACK→награда, нет имитации инференса.");
+  safety.addView(button("STOP · оба игровых окружения",this::stopWorkspace));
+  safety.addView(button("Эпизоды и подтверждённый опыт",()->{tab="Эпизоды";render();}));
+  safety.addView(button("Обучение и веса Student",()->{tab="Обучение";render();}));
  }
  private void consoles(){
   LinearLayout nes=card("NES / Денди · JSNES",
@@ -458,7 +517,9 @@ public final class HarnessDashboardActivity extends Activity {
    "Отзывает NES и Android ввод через их существующих владельцев, без нового исполнителя.");
   row(stop,"Владелец: "+s.owner()+" · ожидает решение: "+s.waiting());
   row(stop,"Последний отказ: "+s.lastStopReason());
-  stop.addView(button("STOP · NES и установленные Android-игры",()->{
+  stop.addView(button("STOP · NES и установленные Android-игры",this::stopWorkspace));
+ }
+ private void stopWorkspace(){
    // Stop the actual Accessibility/MediaProjection owner before returning to NES.
    PilotService androidPilot=PilotService.instance;
    if(androidPilot!=null)androidPilot.stopFromHarness();
@@ -476,10 +537,12 @@ public final class HarnessDashboardActivity extends Activity {
     catch(RuntimeException failure){info("STOP зарегистрирован; NES недоступна для подтверждения отпускания.");}
    }
    render();
-  }));
  }
  private void startTrustedNesWorkflow(String mode){
   if(archiveBusy){info("Сначала заверши сохранение архива опыта");return;}
+  if(!HarnessWorkspaceEngine.inspect(this).canStartNes()){
+   info("STOP: Android-игра занимает окно/ввод. Сначала нажмите общий STOP");return;
+  }
   if(!HarnessDemoWorkflow.supported(mode)||!BuildConfig.UNIFIED_MODELLAB){
    info("STOP: этот режим не поддерживается текущим единым APK");return;
   }
@@ -498,6 +561,9 @@ public final class HarnessDashboardActivity extends Activity {
  }
  private void openNES(){
   if(archiveBusy){info("Сначала заверши сохранение архива опыта");return;}
+  if(!HarnessWorkspaceEngine.inspect(this).canStartNes()){
+   info("STOP: Android-игра уже занимает ввод. Нажмите общий STOP");return;
+  }
   startActivity(new Intent(this,org.localpilot.gamelab.RetroLibraryActivity.class));
  }
  private void openModelLab(){if(archiveBusy){info("Сначала заверши сохранение архива опыта");return;}startActivity(new Intent(this,ModelLabActivity.class));}
