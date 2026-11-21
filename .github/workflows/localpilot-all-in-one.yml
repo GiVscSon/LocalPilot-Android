@@ -142,6 +142,8 @@ jobs:
           python3 -m unittest discover -s tests -p 'test_harness_single_panel.py' -v
           java tests/InstalledGameRouteVerify.java
           python3 -m unittest discover -s tests -p 'test_installed_game_live_integration.py' -v
+          java tests/HarnessWorkspacePolicyVerify.java
+          python3 -m unittest discover -s tests -p 'test_harness_workspace_runtime.py' -v
           python3 -m unittest discover -s tests -p 'test_harness_live_cycle.py' -v
           java tests/VerifiedPpoReplayStoreVerify.java
           java tests/NesExperienceArchiveVerify.java
