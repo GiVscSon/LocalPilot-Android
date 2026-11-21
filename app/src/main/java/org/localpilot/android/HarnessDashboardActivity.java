@@ -198,6 +198,24 @@ public final class HarnessDashboardActivity extends Activity {
    row(experience,ConsoleExperienceMemory.goalSummary(getFilesDir().toPath()));
   }catch(IOException invalid){row(experience,"STOP: целостность опыта или игровой награды не пройдена.");}
   experience.addView(button("Открыть эпизоды",()->{tab="Эпизоды";render();}));
+  // Installed Android games use the existing GamePicker → PilotService → capture /
+  // ActionGate → verified-response pipeline, never another model or gesture owner.
+  LinearLayout installed=card("Игры на телефоне · тот же LocalPilot",
+    "Установленная игра не означает совместимое управление. Никаких фиктивных NFS-профилей.");
+  String gamePackage=getSharedPreferences(MainActivity.PREF,MODE_PRIVATE).getString("selected_game_package","");
+  String gameLabel=getSharedPreferences(MainActivity.PREF,MODE_PRIVATE).getString("selected_game_label",gamePackage);
+  row(installed,gamePackage.isEmpty()?"Игра ещё не выбрана":"Выбрана: "+gameLabel+" · "+gamePackage);
+  PilotService androidPilot=PilotService.instance;
+  row(installed,androidPilot==null?"Accessibility-служба выключена. Ввод невозможен.":
+    androidPilot.installedGameReadiness(gamePackage));
+  row(installed,"MNN-Pocket сейчас проверена на NES/RAM. Для NFS зрительный ввод и моторная политика НЕ ПОДТВЕРЖДЕНЫ.");
+  installed.addView(button("Выбрать установленную игру",()->startActivity(new Intent(this,GamePickerActivity.class))));
+  installed.addView(button("Показать существующую панель Android",()->{
+   PilotService pilot=PilotService.instance;
+   if(pilot==null){info("STOP: сначала включите Accessibility-службу LocalPilot");return;}
+   pilot.recoverPanel();
+   info("Панель Android открыта · выберите механику и окно игры");
+  }));
   LinearLayout launch=card("Играть и продолжать","Автоигра Student — встроенная NES-ROM. Свои ROM доступны для ручной игры.");
   launch.addView(button("▶ Автоигра Student · 256 ходов с сохранением",
     ()->startTrustedNesWorkflow(HarnessDemoWorkflow.STUDENT_AUTOPLAY)));
@@ -437,10 +455,13 @@ public final class HarnessDashboardActivity extends Activity {
   row(device,"GPU-слоёв в действующей модели: "+HarnessModelRuntime.from(this).lastGpuLayers());
   row(device,"Физический сравнительный GPU/CPU тест: НЕ ПОДТВЕРЖДЁН");
   LinearLayout stop=card("STOP · единый контур безопасности",
-   "Не разрешает модельный ввод и не меняет Accessibility. Отзыв разрешений принадлежит HarnessCoordinator.");
+   "Отзывает NES и Android ввод через их существующих владельцев, без нового исполнителя.");
   row(stop,"Владелец: "+s.owner()+" · ожидает решение: "+s.waiting());
   row(stop,"Последний отказ: "+s.lastStopReason());
-  stop.addView(button("STOP · отозвать ввод NES",()->{
+  stop.addView(button("STOP · NES и установленные Android-игры",()->{
+   // Stop the actual Accessibility/MediaProjection owner before returning to NES.
+   PilotService androidPilot=PilotService.instance;
+   if(androidPilot!=null)androidPilot.stopFromHarness();
    HarnessCoordinator.Snapshot before=HarnessCoordinator.nes().snapshot();
    if(before.waiting()||before.actionInFlight())
     HarnessCoordinator.nes().requestStop(before.epoch(),"DASHBOARD_USER_STOP");
