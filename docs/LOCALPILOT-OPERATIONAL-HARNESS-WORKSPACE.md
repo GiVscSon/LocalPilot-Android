@@ -25,6 +25,7 @@ The **workspace** is not an image/mock: it reads the existing shared NES control
 - Existing GamePicker can open genuine installed apps; no inference of control compatibility from the package or app label.
 - Installed game selection passes the exact-window and profile admission gate introduced in #205. A configured profile continues through PilotService's current camera/gesture/semantic verifier.
 - New `Окружения` tab shows real live controller state, NES epoch, active owner, selected model, Android package/profile/window/capture status, frame counter and semantic verification count (UNKNOWN shown as -1).
+- **Production UI unblocker:** `MainActivity` now launches the real unified Harness Console whenever `UNIFIED_MODELLAB` is enabled, **not** only for emulator-test fixture variants (`HARNESS_TEST_FIXTURES`). ModelLab opens from the same APK; the standard non-unified build retains its explicit fallback. Reopening an existing Android overlay no longer resets active capture.
 - The same console starts existing NES workflows and opens installed Android games, checks occupancy before routing, exposes ModelLab and actual experiences, and routes common STOP.
 - A new `HarnessWorkspacePolicy` prevents starting the opposite environment while an active control session is detected; for all other entry paths, each engine's original independent STOP/TTL/InputPermit/epoch checks remain authoritative.
 
