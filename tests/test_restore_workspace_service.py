@@ -20,12 +20,17 @@ class RestoreWorkspaceServiceTest(unittest.TestCase):
    service=root/'app/src/main/java/org/localpilot/android/PilotService.java'
    expected=service.read_bytes()
    service.write_text('class PilotService { /* historical overlay */ }')
+   dependencies={}
+   for name in ('WindowFocus','BubbleVision','GridPuzzleVision'):
+    path=root/('app/src/main/java/org/localpilot/android/'+name+'.java')
+    dependencies[path]=path.read_bytes();path.write_text('class '+name+' {}')
    # Preserve additive model code while restoring the one actual executor.
    model=root/'app/src/main/java/org/localpilot/android/learning/OverlayModel.java'
    model.parent.mkdir(parents=True,exist_ok=True);model.write_text('class OverlayModel {}')
    previous=restore.ROOT;restore.ROOT=root
    try:
     restore.restore();self.assertEqual(service.read_bytes(),expected)
+    for path,reviewed in dependencies.items():self.assertEqual(path.read_bytes(),reviewed)
     restore.restore();self.assertEqual(service.read_bytes(),expected)
     self.assertEqual(model.read_text(),'class OverlayModel {}')
    finally:restore.ROOT=previous

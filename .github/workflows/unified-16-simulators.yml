@@ -134,7 +134,7 @@ jobs:
           set -euo pipefail
           python3 ci/restore_unified_one_apk.py
           python3 -m unittest discover -s tests -p test_restore_workspace_service.py -v
-          git diff --exit-code -- app/src/main/java/org/localpilot/android/PilotService.java
+          git diff --exit-code -- app/src/main/java/org/localpilot/android/PilotService.java app/src/main/java/org/localpilot/android/WindowFocus.java app/src/main/java/org/localpilot/android/BubbleVision.java app/src/main/java/org/localpilot/android/GridPuzzleVision.java
           ./gradlew --no-daemon :app:mergeDebugAssets
       - name: Assemble ONE user APK and optional external-only GameLab test target
         run: |

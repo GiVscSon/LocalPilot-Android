@@ -17,6 +17,9 @@ import sys
 ROOT=pathlib.Path(__file__).resolve().parents[1]
 PROTECTED=(
     "app/src/main/java/org/localpilot/android/PilotService.java",
+    "app/src/main/java/org/localpilot/android/WindowFocus.java",
+    "app/src/main/java/org/localpilot/android/BubbleVision.java",
+    "app/src/main/java/org/localpilot/android/GridPuzzleVision.java",
     "app/build.gradle",
     "app/src/main/AndroidManifest.xml",
     "app/src/main/java/org/localpilot/android/MainActivity.java",
@@ -24,6 +27,9 @@ PROTECTED=(
     "game-lab/src/main/java/org/localpilot/gamelab/TestDeviceActivity.java",
 )
 REQUIRED={
+    "app/src/main/java/org/localpilot/android/WindowFocus.java":(b"class WindowFocus", b"RebindStability"),
+    "app/src/main/java/org/localpilot/android/BubbleVision.java":(b"class BubbleVision",),
+    "app/src/main/java/org/localpilot/android/GridPuzzleVision.java":(b"class GridPuzzleVision",b"cellReasonDetails"),
     "app/src/main/java/org/localpilot/android/PilotService.java":(
         b"public HarnessAndroidState harnessEnvironmentState()",
         b"public String installedGameReadiness(", b"public void stopFromHarness()",
