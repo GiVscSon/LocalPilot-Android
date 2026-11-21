@@ -12,7 +12,7 @@ class WorkspaceRuntimeAcceptance(unittest.TestCase):
   self.assertIn("HarnessCoordinator.nes()",e)
   self.assertIn("PilotService.instance",e)
   self.assertIn("android.harnessEnvironmentState()",e)
-  self.assertIn("nes.hasPending()||nes.actionInFlight()",e)
+  self.assertIn("n.waiting()||n.actionInFlight()",e)
   self.assertIn("public HarnessAndroidState harnessEnvironmentState()",s)
   self.assertIn("captureFrames,confirmed,lastStopReason",s)
  def test_one_real_console_and_operational_engines(self):

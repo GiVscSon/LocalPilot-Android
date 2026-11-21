@@ -357,6 +357,19 @@ def verify(apk: Path, output: Path) -> dict:
     checks.append({"name": "native_harness_console_screen", "status": "PASS",
                    "boundedNavigationRetries": harness_navigation_retries})
 
+    tap_text("Окружения", swipes=0)
+    workspace = dump_ui()
+    if target_bounds(workspace, "Активная работа:") is None:
+        raise RuntimeError("Harness environment state did not render")
+    stop_reason = "Последний STOP NES: DASHBOARD_USER_STOP"
+    if target_bounds(workspace, stop_reason) is not None:
+        raise RuntimeError("Expected a fresh coordinator before tapping global STOP")
+    tap_text("■ STOP · NES + Android", swipes=0)
+    if target_bounds(dump_ui(), stop_reason) is None:
+        raise RuntimeError("Global STOP did not reach the idle NES coordinator")
+    checks.append({"name": "workspace_visible_stop_reaches_idle_nes", "status": "PASS"})
+    tap_text("Обзор", swipes=0)
+
     tap_text("Открыть ModelLab")
     wait_activity(MODEL)
     if one_process() != process:
