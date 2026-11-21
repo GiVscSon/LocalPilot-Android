@@ -2094,6 +2094,25 @@ public class PilotService extends AccessibilityService {
 
  private void compact(boolean on){if(panel==null)return;panelCompact=on;for(int i=0;i<panel.getChildCount();i++){View child=panel.getChildAt(i);child.setVisibility(child==miniBar?(on?View.VISIBLE:View.GONE):(on?View.GONE:View.VISIBLE));}panel.setPadding(on?0:8,on?0:4,on?0:8,on?0:4);panel.setBackgroundColor(on?0x8C202830:0xA6202830);if(layout!=null){layout.width=dp(on?160:240);updatePanelLayout();}}
  private Rect panelBounds(){if(panel==null||consentPanelDetached)return new Rect();int[] p=new int[2];panel.getLocationOnScreen(p);return new Rect(p[0],p[1],p[0]+panel.getWidth(),p[1]+panel.getHeight());}
+ /** Read-only projection for the existing single Harness Console; grants no input. */
+ public String installedGameReadiness(String selectedPackage){
+  if(selectedPackage==null||selectedPackage.isEmpty())return "Игра не выбрана.";
+  if(!VisualGameTarget.allowed(selectedPackage,getPackageName()))return "Выбрано запрещённое системное приложение: STOP";
+  if(!gate.armed()||!selectedPackage.equals(target))return "Ожидается привязка окна выбранной игры через PilotService.";
+  int saved=getSharedPreferences("game-profiles",MODE_PRIVATE).getInt(profileChoiceKey(selectedPackage),-1);
+  InstalledGameRoute.State state=InstalledGameRoute.inspect(getPackageName(),selectedPackage,target,saved,
+    targetIsBrowser,browserProfileConfirmed&&profileChoiceKey(target).equals(confirmedProfileScope));
+  if(state!=InstalledGameRoute.State.PROFILE_CONFIGURED)return InstalledGameRoute.explanation(state);
+  if(playingJumper)return "Захват запущен · "+captureProfile.label+
+    " · кадров "+captureFrames+" · подтверждённых реакций "+arcadeVerified+
+    ". Жест разрешён только после проверки свежего кадра.";
+  if(playingGrid||playing2048||playingMini)return "Игровой профиль запущен · кадров "+captureFrames+
+    " · проверенных ответов "+(playingGrid?gridVerified:playing2048?captureCompleted:miniMoves)+
+    ". Android ACK не является доказательством движения.";
+  return "Профиль назначен · игра не запущена. Нажмите Старт на панели; затем нужен свежий кадр.";
+ }
+ /** Existing Android STOP, also reachable from the single Harness Console. */
+ public void stopFromHarness(){stop("DASHBOARD_USER_STOP_ANDROID");}
  /** Choosing an installed game prepares observation only; it never grants input. */
  public void selectInstalledTarget(String packageName,String label){
   stop("Открываю выбранную игру; ввод выключен");showPanel();
@@ -2108,7 +2127,23 @@ public class PilotService extends AccessibilityService {
   try{if(root!=null&&unlocked()&&expected.equals(String.valueOf(root.getPackageName()))){window=root.getWindowId();bounds=windowBounds(root);}}
   finally{if(root!=null)root.recycle();}
   if(bounds!=null&&window==seenWindow&&bounds.equals(seenBounds)){
-   arm();if(gate.armed()){if(!gate.matches(expected,window,bounds.width(),bounds.height())||!bounds.equals(armedBounds)){stop("Окно изменилось во время выбора игры; привяжите нужное окно заново");return;}note="Игра выбрана: "+label;update();if(automatic())startPickedProfile();}return;
+   arm();if(gate.armed()){
+    if(!gate.matches(expected,window,bounds.width(),bounds.height())||!bounds.equals(armedBounds)){
+     stop("Окно изменилось во время выбора игры; привяжите нужное окно заново");return;
+    }
+    // One real Android pipeline. A launchable app is not yet a supported game:
+    // do not start the previous game's controller or guess NFS touch controls.
+    int saved=getSharedPreferences("game-profiles",MODE_PRIVATE).getInt(profileChoiceKey(expected),-1);
+    InstalledGameRoute.State route=InstalledGameRoute.inspect(getPackageName(),expected,target,
+      saved,targetIsBrowser,browserProfileConfirmed&&profileChoiceKey(expected).equals(confirmedProfileScope));
+    if(route!=InstalledGameRoute.State.PROFILE_CONFIGURED){
+     permit.revoke();
+     note="Игра выбрана: "+label+" · "+InstalledGameRoute.explanation(route);update();return;
+    }
+    note="Игра выбрана: "+label+" · профиль сохранён, проверяю сцену перед вводом";update();
+    if(automatic())startPickedProfile();
+   }
+   return;
   }
   if(SystemClock.elapsedRealtime()>=until){stop("Не дождался окна игры. Откройте её и нажмите «Окно»");return;}
   note="Жду окно выбранной игры: "+label;update();final int nextWindow=window;final Rect nextBounds=bounds;
