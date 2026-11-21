@@ -1,6 +1,6 @@
 package org.localpilot.android;
 
-import android.app.Activity;
+import android.content.Context;
 import org.localpilot.shared.HarnessCoordinator;
 
 /** True read-only live workspace over the existing executors, not another
@@ -16,13 +16,13 @@ public final class HarnessWorkspaceEngine {
   public boolean canStartAndroid(){return occupancy.canStartAndroid();}
   public String runningLabel(){return occupancy.activeLabel();}
  }
- public static Live inspect(Activity activity){
+ public static Live inspect(Context activity){
   HarnessCoordinator nes=HarnessCoordinator.nes();
   HarnessCoordinator.Snapshot n=nes.snapshot();
   boolean nesBusy=nes.hasPending()||nes.actionInFlight();
   PilotService android=PilotService.instance;
   PilotService.HarnessAndroidState a=android==null?null:android.harnessEnvironmentState();
-  String selected=activity.getSharedPreferences(MainActivity.PREF,Activity.MODE_PRIVATE)
+  String selected=activity.getSharedPreferences(MainActivity.PREF,Context.MODE_PRIVATE)
     .getString("selected_game_package","");
   boolean armed=a!=null&&a.windowArmed(),running=a!=null&&a.capturing();
   boolean androidBusy=armed||running;
