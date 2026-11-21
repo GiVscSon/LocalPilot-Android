@@ -220,7 +220,7 @@ public final class HarnessDashboardActivity extends Activity {
   installed.addView(button("Показать существующую панель Android",()->{
    PilotService pilot=PilotService.instance;
    if(pilot==null){info("STOP: сначала включите Accessibility-службу LocalPilot");return;}
-   pilot.recoverPanel();
+   pilot.showPanel();
    info("Панель Android открыта · выберите механику и окно игры");
   }));
   LinearLayout launch=card("Играть и продолжать","Автоигра Student — встроенная NES-ROM. Свои ROM доступны для ручной игры.");
@@ -325,7 +325,7 @@ public final class HarnessDashboardActivity extends Activity {
    }
    PilotService pilot=PilotService.instance;
    if(pilot==null){info("Accessibility-служба не подключена");return;}
-   pilot.recoverPanel();
+   pilot.showPanel();
   }));
   LinearLayout safety=card("Управление и доказательства",
     "STOP не подменяет проверку результата. Нет ACK→награда, нет имитации инференса.");
