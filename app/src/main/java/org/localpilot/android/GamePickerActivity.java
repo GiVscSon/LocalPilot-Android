@@ -62,7 +62,7 @@ public final class GamePickerActivity extends Activity {
         content.addView(title);
 
         TextView help = new TextView(this);
-        help.setText("Выберите установленную игру. Для браузера нажмите «Все приложения» и откройте сайт с игрой. На панели выберите подходящий профиль распознавания. В разных играх одного браузера задавайте разные имена через Игра → Имя игры. Поддержка окна не гарантирует распознавание любой графики: если сцена неизвестна, ввод ожидает подтверждения. STOP завершает сеанс.");
+        help.setText("Выберите установленную игру. Для браузера нажмите «Все приложения» и откройте сайт с игрой. На панели выберите подходящий профиль распознавания. В разных играх одного браузера задавайте разные имена через Игра → Имя игры. NFS и другие 3D-игры не получают профиль автоматически: сначала нужна совместимая схема управления и проверенное распознавание. Если сцена неизвестна, жесты запрещены. STOP завершает сеанс.");
         content.addView(help);
 
         search = new EditText(this);
@@ -200,6 +200,11 @@ public final class GamePickerActivity extends Activity {
     }
 
     private void launch(Entry entry) {
+        // Never bind/launch a system UI masquerading as an installed game.
+        if (!VisualGameTarget.allowed(entry.packageName, getPackageName())) {
+            toast("Недопустимое системное окно. Выберите настоящую игру.");
+            return;
+        }
         try {
             PackageManager manager = getPackageManager();
             Intent intent = manager.getLaunchIntentForPackage(entry.packageName);
