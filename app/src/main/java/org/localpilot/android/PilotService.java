@@ -501,10 +501,10 @@ public class PilotService extends AccessibilityService {
   row("Область",this::chooseRegion,"Старт",this::startSelected);
   row("Ещё",this::moreOptions,"Свернуть",()->compact(true));
   visionControlsRow();
-  Button stopButton=new Button(this);stopButton.setText("STOP");stopButton.setOnClickListener(v->stop("STOP"));panel.addView(stopButton,new LinearLayout.LayoutParams(-1,dp(44)));
+  Button stopButton=new Button(this);stopButton.setText("STOP");stopButton.setOnClickListener(v->stop("STOP",false));panel.addView(stopButton,new LinearLayout.LayoutParams(-1,dp(44)));
   miniBar=new LinearLayout(this);miniBar.setOrientation(LinearLayout.HORIZONTAL);miniBar.setVisibility(View.GONE);
   miniState=new TextView(this);miniState.setTextColor(Color.WHITE);miniState.setTextSize(9);miniState.setMaxLines(2);miniBar.addView(miniState,new LinearLayout.LayoutParams(0,dp(48),1));
-  Button miniStop=new Button(this);miniStop.setText("STOP");miniStop.setTextSize(10);miniStop.setPadding(0,0,0,0);miniStop.setMinWidth(0);miniStop.setOnClickListener(v->stop("STOP"));miniBar.addView(miniStop,new LinearLayout.LayoutParams(dp(48),dp(48)));
+  Button miniStop=new Button(this);miniStop.setText("STOP");miniStop.setTextSize(10);miniStop.setPadding(0,0,0,0);miniStop.setMinWidth(0);miniStop.setOnClickListener(v->stop("STOP",false));miniBar.addView(miniStop,new LinearLayout.LayoutParams(dp(48),dp(48)));
   Button expand=new Button(this);expand.setText("Развернуть");expand.setTextSize(8);expand.setPadding(0,0,0,0);expand.setMinWidth(0);expand.setOnClickListener(v->compact(false));miniBar.addView(expand,new LinearLayout.LayoutParams(dp(56),dp(48)));
   miniState.setOnTouchListener(new View.OnTouchListener(){float sx,sy;int ox,oy;public boolean onTouch(View v,MotionEvent e){if(layout==null)return true;if(e.getAction()==MotionEvent.ACTION_DOWN){sx=e.getRawX();sy=e.getRawY();ox=layout.x;oy=layout.y;return true;}if(e.getAction()==MotionEvent.ACTION_MOVE){layout.x=ox+(int)(e.getRawX()-sx);layout.y=oy+(int)(e.getRawY()-sy);updatePanelLayout();return true;}return true;}});
   panel.addView(miniBar);
@@ -724,7 +724,7 @@ public class PilotService extends AccessibilityService {
  private void manualRow(String a,Runnable ar,String b,Runnable br){row(a,ar,b,br,true);}
  private void single(String label,Runnable callback){Button v=new Button(this);v.setText(label);v.setTextSize(12);v.setOnClickListener(x->callback.run());controls.addView(v,new LinearLayout.LayoutParams(-1,dp(40)));}
  private void row(String a,Runnable ar,String b,Runnable br,boolean needsInput){LinearLayout line=new LinearLayout(this);for(int i=0;i<2;i++){Button v=new Button(this);v.setText(i==0?a:b);v.setTextSize(12);Runnable r=i==0?ar:br;v.setOnClickListener(x->r.run());if(needsInput)manualControls.add(v);line.addView(v,new LinearLayout.LayoutParams(0,dp(40),1));}(controls==null?panel:controls).addView(line);}
- public void hidePanel(){try{stop("STOP");}finally{clearPanel();}}
+ public void hidePanel(){try{stop("STOP",false);}finally{clearPanel();}}
  private String captureCounters(){return "Захват: кадры="+captureFrames+" · READ="+captureReads+" · решения="+captureDecisions+" · ввод="+captureSent+" · ACK="+captureCompleted+(playingJumper?" · MediaProjection pacerAccepted="+captureAcceptedFrames+" · skippedFrames="+captureSkippedFrames+" (pacing="+captureSkippedThrottle+", idle="+captureSkippedUnwanted+", clock="+captureSkippedClock+")":" · Accessibility capture (MediaProjection counters N/A)");}
  private void update(){
   boolean inputReady=gate.armed()&&!gate.paused()&&permit.allows(gate.epoch(),SystemClock.elapsedRealtime());for(Button control:manualControls)control.setEnabled(inputReady&&!busy);
@@ -749,7 +749,8 @@ public class PilotService extends AccessibilityService {
   }
   AccessibilityNodeInfo r=appRoot();try{if(r==null||!unlocked()){note="Нет активного приложения";update();return;}target=String.valueOf(r.getPackageName());targetLabel=applicationLabel(target);targetIsBrowser=browserTarget();armedBounds=windowBounds(r);if(armedBounds.isEmpty()){note="Нет границ окна";update();return;}retainVisualScope(r);gate.arm(target,r.getWindowId(),armedBounds.width(),armedBounds.height());if(automatic())permit.grantSession(gate.epoch(),SystemClock.elapsedRealtime());note=automatic()?"Окно выбрано · нажмите Старт":"Только наблюдение";update();}finally{if(r!=null)r.recycle();}}
  private String applicationLabel(String packageName){try{return String.valueOf(getPackageManager().getApplicationLabel(getPackageManager().getApplicationInfo(packageName,0)));}catch(Exception e){return packageName;}}
- private void stop(String reason){
+ private void stop(String reason){stop(reason,true);}
+ private void stop(String reason,boolean allowBoundsRebind){
   if(playingGrid&&selectedProfile==9)bubbleSession.stop();
   long stopEpoch=gate.epoch(),stopAt=SystemClock.uptimeMillis();
   boolean stoppedGame=playingJumper||playingGrid||playing2048||playingMini;
@@ -762,7 +763,7 @@ public class PilotService extends AccessibilityService {
   boolean boundsJustChanged=lastBoundsRejectionEpoch==stopEpoch
     &&lastBoundsRejectionUptimeMs>=0&&stopAt-lastBoundsRejectionUptimeMs>=0
     &&stopAt-lastBoundsRejectionUptimeMs<=750;
-  boolean rebindAfterStop=wasArmed&&"ru.beru.android".equals(target)
+  boolean rebindAfterStop=allowBoundsRebind&&wasArmed&&"ru.beru.android".equals(target)
     &&manualVisualRoi&&visualRoi!=null
     &&(reason.contains("TARGET_BOUNDS_CHANGED")||boundsJustChanged);
   Rect rebindRoi=visualRoi==null?null:new Rect(visualRoi);
@@ -1605,7 +1606,7 @@ public class PilotService extends AccessibilityService {
 
  public void onJumperCaptureDenied(long id,String reason){onCaptureStartupError(id,reason,"CONSENT_DENIED");}
  public void onJumperCaptureLost(long id,String reason){onCaptureStartupError(id,reason,"CAPTURE_LOST");}
- public void stopJumperFromNotification(long id){handler.post(()->{if(captureSessionActive(id))stop("STOP из уведомления Android");});}
+ public void stopJumperFromNotification(long id){handler.post(()->{if(captureSessionActive(id))stop("STOP из уведомления Android",false);});}
 
  /** Takes ownership of each frame; frames are discarded immediately when the analyzer is busy. */
  public void onCapturePacing(long id,long accepted,long skipped,long throttled,long unwanted,long invalidClock){if(id>0&&id==captureSession){captureAcceptedFrames=accepted;captureSkippedFrames=skipped;captureSkippedThrottle=throttled;captureSkippedUnwanted=unwanted;captureSkippedClock=invalidClock;}}
@@ -2130,7 +2131,7 @@ public class PilotService extends AccessibilityService {
   return "Профиль назначен · игра не запущена. Нажмите Старт на панели; затем нужен свежий кадр.";
  }
  /** Existing Android STOP, also reachable from the single Harness Console. */
- public void stopFromHarness(){stop("DASHBOARD_USER_STOP_ANDROID");}
+ public void stopFromHarness(){stop("DASHBOARD_USER_STOP_ANDROID",false);}
  /** Choosing an installed game prepares observation only; it never grants input. */
  public void selectInstalledTarget(String packageName,String label){
   stop("Открываю выбранную игру; ввод выключен");showPanel();

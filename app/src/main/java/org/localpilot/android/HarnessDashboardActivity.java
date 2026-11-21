@@ -298,6 +298,7 @@ public final class HarnessDashboardActivity extends Activity {
   row(runtimeCard,"NES · "+runtime.nesMode()+" · владелец "+runtime.nesOwner());
   row(runtimeCard,"NES · эпоха "+(runtime.nesEpoch().isEmpty()?"НЕ ЗАПУЩЕНА":runtime.nesEpoch())+" · ожидает "+runtime.nesWaiting()+
     " · жест в процессе "+runtime.nesAction());
+  row(runtimeCard,"Последний STOP NES: "+runtime.nesStopReason());
   row(runtimeCard,"Android · "+runtime.androidPackage()+" · "+runtime.androidProfile());
   row(runtimeCard,"Android · окно привязано "+runtime.androidArmed()+
     " · захват/игра "+runtime.androidRunning());
@@ -321,7 +322,9 @@ public final class HarnessDashboardActivity extends Activity {
   row(android,runtime.androidReadiness());
   row(android,"NFS: управление автомобилем и зрение Pocket пока не проверены. Без совместимого профиля жесты запрещены.");
   android.addView(button("Выбрать установленную игру",()->{
-   if(!runtime.canStartAndroid()){info("STOP: сначала завершите текущий NES-агент");return;}
+   if(!HarnessWorkspaceEngine.inspect(this).canStartAndroid()){
+    info("STOP: сначала завершите текущий NES-агент");return;
+   }
    startActivity(new Intent(this,GamePickerActivity.class));
   }));
   android.addView(button("Открыть рабочую панель Android",()->{

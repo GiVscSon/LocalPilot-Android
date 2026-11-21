@@ -12,7 +12,7 @@ class WorkspaceRuntimeAcceptance(unittest.TestCase):
   self.assertIn("HarnessCoordinator.nes()",e)
   self.assertIn("PilotService.instance",e)
   self.assertIn("android.harnessEnvironmentState()",e)
-  self.assertIn("nes.hasPending()||nes.actionInFlight()",e)
+  self.assertIn("n.waiting()||n.actionInFlight()",e)
   self.assertIn("public HarnessAndroidState harnessEnvironmentState()",s)
   self.assertIn("captureFrames,confirmed,lastStopReason",s)
  def test_one_real_console_and_operational_engines(self):
@@ -47,5 +47,13 @@ class WorkspaceRuntimeAcceptance(unittest.TestCase):
    self.assertNotIn(val,p)
   self.assertIn("Для NFS зрительный ввод и моторная политика НЕ ПОДТВЕРЖДЕНЫ",
     source("app/src/main/java/org/localpilot/android/HarnessDashboardActivity.java"))
+
+ def test_explicit_stop_cannot_schedule_bounds_rebind(self):
+  service=source("app/src/main/java/org/localpilot/android/PilotService.java")
+  self.assertIn('stopFromHarness(){stop("DASHBOARD_USER_STOP_ANDROID",false);}',service)
+  self.assertEqual(service.count('setOnClickListener(v->stop("STOP",false))'),2)
+  self.assertIn('stop("STOP из уведомления Android",false)',service)
+  self.assertIn('boolean rebindAfterStop=allowBoundsRebind&&wasArmed',service)
+  self.assertIn('if(rebindAfterStop&&rebindRoi!=null)beginBoundsRebind(',service)
 
 if __name__=="__main__":unittest.main()

@@ -9,7 +9,7 @@ import org.localpilot.shared.HarnessCoordinator;
 public final class HarnessWorkspaceEngine {
  private HarnessWorkspaceEngine(){}
  public record Live(String nesEpoch,String nesMode,String nesOwner,boolean nesWaiting,
-   boolean nesAction,boolean nesBusy,String androidPackage,String androidProfile,
+   boolean nesAction,boolean nesBusy,String nesStopReason,String androidPackage,String androidProfile,
    boolean androidArmed,boolean androidRunning,long androidFrames,long androidVerified,
    String androidStopReason,String androidReadiness,HarnessWorkspacePolicy.Occupancy occupancy){
   public boolean canStartNes(){return occupancy.canStartNes();}
@@ -19,7 +19,7 @@ public final class HarnessWorkspaceEngine {
  public static Live inspect(Context activity){
   HarnessCoordinator nes=HarnessCoordinator.nes();
   HarnessCoordinator.Snapshot n=nes.snapshot();
-  boolean nesBusy=nes.hasPending()||nes.actionInFlight();
+  boolean nesBusy=n.waiting()||n.actionInFlight();
   PilotService android=PilotService.instance;
   PilotService.HarnessAndroidState a=android==null?null:android.harnessEnvironmentState();
   String selected=activity.getSharedPreferences(MainActivity.PREF,Context.MODE_PRIVATE)
@@ -28,7 +28,7 @@ public final class HarnessWorkspaceEngine {
   boolean androidBusy=armed||running;
   String readiness=android==null?"Accessibility-служба не подключена":
     android.installedGameReadiness(selected);
-  return new Live(n.epoch(),n.mode(),n.owner(),n.waiting(),n.actionInFlight(),nesBusy,
+  return new Live(n.epoch(),n.mode(),n.owner(),n.waiting(),n.actionInFlight(),nesBusy,n.lastStopReason(),
     a==null?selected:a.packageName(),a==null?"UNKNOWN":a.profile(),armed,running,
     a==null?0:a.frames(),a==null?-1:a.verifiedResponses(),
     a==null?"Нет подключённой Android-службы":a.lastStopReason(),readiness,
